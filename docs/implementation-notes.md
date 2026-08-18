@@ -533,4 +533,247 @@ Gap yang diketahui (claim/lock, scheduler otomatis untuk escalation,
 migrasi permission produksi, cancel/reopen instance, smoke test visual
 browser) sudah dicatat eksplisit di atas, bukan diasumsikan selesai.
 
+---
+
+# Implementation Notes — Checkpoint 0E: Enterprise Shared Services
+
+**Status: COMPLETE**
+**Tanggal: 2026-08-18**
+
+## Apa yang dibangun
+
+Enam layanan bersama (cross-cutting), seluruhnya reusable oleh modul
+bisnis mana pun di masa depan dan TIDAK ada satu pun yang menyentuh
+Complaint, Survey, Procurement, atau modul bisnis apa pun, sesuai
+instruksi eksplisit Founder — pembuktian memakai `demo_transactions` dan
+Workflow Engine dari Checkpoint 0D:
+
+```
+Event Foundation -> Notification Engine -> Document/File Service
+  -> Scheduler/Background Jobs -> Integration Boundary
+  -> Logging/Observability -> RBAC -> Audit Trail -> PostgreSQL
+```
+
+- **Skema database** (migration `1755900000000`): `domain_events` (log
+  Event Foundation durable), `notification_templates` + `notifications`
+  (Notification Engine), `documents` (Document/File Service, referensi
+  polymorphic sama seperti Workflow Instance), `scheduled_jobs` +
+  `scheduled_job_runs` (Scheduler), `integration_endpoints` +
+  `integration_event_log` (Integration Boundary). Plus 8 permission baru
+  (`notification.template.manage`, `notification.read`,
+  `document.manage`/`.read`, `scheduler.manage`, `integration.manage`/
+  `.read`, `observability.read`). Plus dua kolom tambahan (murni aditif)
+  di `workflow_instance_assignments`: `claimed_by_user_id`, `claimed_at`
+  (ADR-0008).
+- **Event Foundation**: `EventBus` in-process (`application/event/
+  event-bus.ts`) — `publish()` menyimpan baris `domain_events` LALU
+  memanggil setiap subscriber yang cocok dengan `eventType` atau `'*'`
+  (wildcard). Subscriber yang gagal ditangkap dan dicatat, tidak pernah
+  menggagalkan operasi yang mempublikasikan event. `WorkflowService`
+  (0D) diberi dependency `EventBus` opsional (tidak breaking) dan
+  memanggil `publish()` di enam titik: assigned, approved, rejected,
+  returned, completed, escalated — payload memakai konvensi
+  `targetUserId`/`targetRoleCode`+`targetOrganizationUnitId` yang
+  dipakai ulang oleh Notification Engine.
+- **Notification Engine**: `notification_templates` adalah Tenant
+  Configuration (pola sama seperti dok 05) — `{{field}}` interpolation
+  sederhana (`template-renderer.ts`, sengaja minimal, filosofi anti-
+  overengineering sama seperti Condition Expression 0D) terhadap payload
+  Domain Event. `NotificationService.handleDomainEvent` (subscriber
+  wildcard) me-resolve penerima: `targetUserId` langsung, atau
+  `targetRoleCode`+scope lewat method baru `RbacRepository.
+  listUserIdsWithRoleInScope` (fan-out ke SEMUA pemegang role yang
+  cocok, bukan satu). Channel `in_app` benar-benar bisa dibaca dari
+  Dashboard; channel lain (email/push/whatsapp/sms) tetap "Notification-
+  ready" — template benar-benar di-render dan status `sent` tercatat,
+  tapi belum ada transport nyata.
+- **Document/File Service**: upload via `@fastify/multipart`, disimpan
+  di disk lokal (`LocalFileStorage`, path storage-agnostic — siap
+  diganti implementasi S3 tanpa migrasi skema), checksum SHA-256, cap
+  ukuran 20MB (Phase 0 fixed, belum Tenant Configuration). Akses
+  di-gate `document.manage`/`.read` di level Tenant saja — BELUM
+  mengikuti Data Scope entity induknya seperti diminta dok 06 (gap
+  terbuka, lihat di bawah). Soft-delete (`deleted_at`), bukan hard
+  delete — retensi file fisik tetap ada di disk setelah soft-delete.
+- **Scheduler / Background Jobs**: registry generik `scheduled_jobs`
+  (job_code → handler_key + interval) + riwayat `scheduled_job_runs`,
+  runner berupa interval loop in-process (`SchedulerService`, di-unref
+  agar tidak mengganjal shutdown/test). Satu job terdaftar:
+  `workflow-escalation-sweep` (interval 120 detik untuk keperluan
+  demo/pembuktian cepat), handler-nya (`job-handlers.ts`) melakukan
+  iterasi seluruh Tenant lalu memanggil method baru `WorkflowService.
+  escalateOverdueAssignmentsForTenant` (varian tanpa `ActorContext`,
+  logic sweep-nya persis sama dengan endpoint manual 0D). Endpoint
+  manual trigger (`/scheduler/jobs/:jobCode/trigger`) dan endpoint
+  manual sweep 0D (`/workflow/escalation-sweep`) tetap sama-sama
+  RBAC-gated dan hidup berdampingan.
+- **Integration Boundary**: `IntegrationService.handleDomainEvent`
+  (subscriber wildcard) mencatat entri log "sent" (stub, tanpa panggilan
+  HTTP nyata) untuk setiap Domain Event ke setiap Integration Endpoint
+  outbound yang aktif per Tenant. Endpoint inbound menerima webhook
+  sungguhan (`POST /integration/webhook/:tenantCode/:endpointCode`) —
+  validasi tanda tangan HMAC-SHA256 (`timingSafeEqual`, bukan
+  perbandingan string biasa) terhadap secret milik Endpoint SEBELUM
+  apa pun lain terjadi; sukses hanya menghasilkan satu Domain Event
+  baru, gagal dicatat sebagai entri `rejected` (bukan diam-diam
+  ditolak). Route webhook memakai plugin Fastify ter-encapsulate
+  (`addContentTypeParser` override lokal untuk raw body) agar override
+  parser JSON TIDAK memengaruhi route lain di aplikasi.
+- **Logging/Observability**: `genReqId` kustom (reuse header
+  `x-request-id` masuk bila ada, generate UUID bila tidak) sehingga
+  seluruh log pino per-request bisa dikorelasikan; endpoint
+  `GET /observability/events` membaca log `domain_events` (RBAC-gated
+  `observability.read`); riwayat run Scheduler (`scheduled_job_runs`)
+  berfungsi sebagai Observability untuk background job.
+- **ADR-0008 — Claim/Lock**: `WorkflowService.claimAssignment`/
+  `releaseClaim` (endpoint baru `/workflow/assignments/:id/claim` dan
+  `/release-claim`) — klaim atomik (`UPDATE ... WHERE status='pending'
+  AND (unclaimed OR milik sendiri OR TTL 15 menit lewat) RETURNING`,
+  eligibility dicek dengan helper `assertEligible` yang di-share dengan
+  `actOnAssignment` (diekstrak di checkpoint ini supaya kedua jalur
+  tidak pernah berbeda logic). `actOnAssignment` menolak (409) aktor
+  lain selama klaim masih segar. Evaluasi lengkap tiga opsi ada di ADR.
+- **API**: 5 route file baru (`notifications.ts`, `documents.ts`,
+  `scheduler.ts`, `integration.ts`, `observability.ts`) plus 2 endpoint
+  baru di `workflow.ts` (claim/release-claim) — seluruhnya di balik
+  `app.authenticate` kecuali webhook inbound (autentikasinya adalah
+  tanda tangan HMAC, bukan JWT, sesuai sifat webhook pihak ketiga).
+- **Thin Frontend — Shared Services panel**: ditambahkan ke Dashboard,
+  menampilkan Notifikasi masuk (dengan tombol mark-read), upload/lihat/
+  hapus Document per Workflow Instance, status Scheduled Job + riwayat
+  run + tombol trigger manual, daftar Integration Endpoint + log, dan
+  Domain Event log (Observability). Workflow panel (0D) diperbarui:
+  badge "claimed" pada My Tasks, tombol Claim/Release Claim, dan teks
+  Escalation Sweep diperbarui untuk menyebut bahwa sweep kini juga
+  berjalan otomatis.
+- **Seed script**: 3 Notification Template demo (`workflow.assigned`,
+  `workflow.completed`, `workflow.escalated`, channel `in_app`), 1
+  Integration Endpoint outbound (`demo-erp-sync`, stub) dan 1 inbound
+  (`demo-inbound`, dengan secret dev-only yang dicetak ke console untuk
+  keperluan smoke test `curl`). Role demo `WORKFLOW_REVIEWER`/
+  `WORKFLOW_MANAGER` (0D) diberi tambahan permission `notification.read`
+  dan `document.read` — ditemukan sebagai gap nyata saat smoke test:
+  tanpa ini, Notification yang benar-benar terkirim ke reviewer tidak
+  bisa dibaca lewat API oleh reviewer itu sendiri.
+- **Test**: 7 test integrasi baru
+  (`tests/integration/shared-services.test.ts`), membangun Workflow
+  Definition minimal-nya sendiri lewat HTTP API (dua Step: REVIEW→
+  COMPLETE), mencakup: Event Foundation (event tersimpan + payload
+  benar) yang mengalir ke Notification Engine (template ter-render,
+  status `sent`, mark-read, RBAC-403 tanpa `notification.read`, 403
+  saat user lain mencoba mark-read notifikasi yang bukan miliknya),
+  Document/File Service (upload multipart sungguhan, list, download,
+  delete, RBAC-403 untuk upload/delete tanpa `document.manage`, Audit
+  Trail), ADR-0008 claim/lock (klaim atomik, klaim ulang oleh user yang
+  sama idempotent, user kedua yang eligible diblokir 409 baik untuk
+  claim maupun act, release, release-tanpa-klaim ditolak 409, user lain
+  berhasil act setelah release), Scheduler (RBAC-403 tanpa
+  `scheduler.manage`, manual trigger tercatat sebagai run sukses,
+  Escalation Rule opt-in per Step tetap terbukti — Step tanpa
+  Escalation Rule TIDAK ikut ter-escalate), Integration Boundary
+  (outbound stub tercatat untuk Endpoint aktif, berhenti tercatat
+  setelah Endpoint dinonaktifkan, webhook inbound valid/invalid/tanpa
+  tanda tangan, endpoint/tenant tidak dikenal → 404). Total 40 test (33
+  lama + 7 baru) hijau, 0 regresi. `npm run test` di `apps/api`
+  sekarang otomatis menyetel `SCHEDULER_DISABLED=true` supaya interval
+  Scheduler sungguhan tidak pernah balapan dengan assertion test.
+
+## Pembuktian manual tambahan (di luar automated test)
+
+Smoke test manual lewat curl terhadap server yang berjalan, memakai
+tenant demo `demo-gs`, mencakup SELURUH enam layanan bersama secara
+end-to-end: start Workflow Instance → event `workflow.assigned`
+tersimpan di `domain_events` dengan `targetRoleCode` benar → Notification
+`in_app` sungguhan muncul di `/notifications/my` milik reviewer dengan
+body ter-render dari Template; upload Document sungguhan via multipart
+→ muncul di listing entity, ter-download persis isinya, tercatat di
+Audit Trail; webhook inbound dengan tanda tangan HMAC valid → 202 +
+Domain Event baru; tanda tangan invalid → 403 + log `rejected`; endpoint
+Integration outbound aktif → mencatat entri `sent` untuk SETIAP Domain
+Event yang lewat (termasuk secara emergent untuk event
+`integration.demo-inbound.received` dari webhook itu sendiri — bukti
+nyata bahwa Event Foundation benar-benar decoupled, publisher tidak
+tahu siapa saja subscriber-nya); Claim/Lock — reviewer klaim Assignment,
+klaim ulang oleh diri sendiri idempotent, release, lalu Approve
+berhasil; **pembuktian paling penting sesuai permintaan eksplisit
+Founder**: Assignment di-backdate `due_at`-nya lewat SQL langsung, LALU
+DITUNGGU (tanpa trigger manual apa pun) — setelah ±2 menit, riwayat run
+Scheduler menunjukkan entri baru dengan `trigger: "scheduler"` dan
+`triggeredBy: null`, mengeskalasi Assignment tsb secara otomatis,
+memicu Notification `workflow.escalated` ke Manager, dan tercatat di
+Audit Trail — seluruh rantai ini terjadi TANPA satu pun panggilan API
+manual dari operator.
+
+## Keterbatasan / gap yang diketahui di akhir Checkpoint 0E
+
+- **Kompresi foto otomatis & enkripsi at-rest untuk Document/File
+  Service** (diminta dok 06/09) belum diimplementasikan — tidak ada
+  infrastruktur image-processing/object-storage terenkripsi di
+  lingkungan implementasi ini.
+- **Akses Document belum mengikuti Data Scope entity induknya** — masih
+  di-gate di level Tenant saja (lihat decision log item #5); modul
+  bisnis nyata yang akan me-resolve Data Scope per entity belum ada di
+  Phase 0 (sengaja, sesuai instruksi Founder untuk tetap generic).
+- **Scheduler adalah in-process timer, bukan job runner yang tahan
+  restart proses** — bila proses API di-restart di tengah interval,
+  job berikutnya baru berjalan setelah proses baru selesai boot, tidak
+  ada mekanisme "mengejar" jadwal yang terlewat.
+- **Retry otomatis untuk Notification/Integration outbound yang gagal
+  belum ada** — status `failed` tercatat di log, tapi tidak ada sweep
+  retry seperti halnya Escalation sweep untuk Workflow.
+- **Claim/lock TTL (15 menit) masih konstanta kode**, belum Tenant
+  Configuration per Step; belum ada endpoint "force release" oleh admin
+  (lihat ADR-0008).
+- **Channel Notification selain `in_app`** (email/push/whatsapp/sms)
+  belum punya transport nyata — template benar-benar di-render dan
+  status `sent` tercatat, tapi tidak ada pengiriman sungguhan.
+- **Migrasi permission untuk tenant produksi yang sudah live** masih
+  belum ada — gap yang sama berulang dari 0C/0D, kini sudah tiga
+  checkpoint berturut-turut menggunakan pola reseed demo/dev-only.
+- **Frontend Shared Services panel belum melalui smoke test visual
+  browser sungguhan** — keterbatasan yang sama seperti 0C/0D
+  (lingkungan implementasi tidak punya akses browser ke dev server
+  container); diverifikasi lewat `typecheck`/`lint`/`build` sukses dan
+  pemanggilan API yang identik sudah diverifikasi hijau lewat curl.
+- **CI/CD masih belum ada** (carry-over dari 0A–0D).
+
+## Risk Note
+
+| Risiko | Dampak | Kemungkinan | Mitigasi saat ini / rencana |
+|---|---|---|---|
+| Scheduler berbasis in-process timer, hilang saat proses restart | Sedang — job terlewat tidak otomatis "dikejar" saat proses baru boot, bisa menunda Escalation sweep sampai siklus berikutnya | Rendah untuk Phase 0 (interval pendek, 2 menit) | Didokumentasikan eksplisit; migrasi ke job runner tahan-restart (pg-boss/BullMQ/cron eksternal) adalah penggantian implementasi murni, bukan desain ulang skema `scheduled_jobs` |
+| Document Service belum mengikuti Data Scope entity induknya | Sedang — siapa pun dengan `document.read` di Tenant bisa melihat/download Document milik entity mana pun di Tenant tsb, bukan hanya yang scope-nya sesuai | Rendah untuk Phase 0 (belum ada modul bisnis nyata yang memakainya) | Didokumentasikan eksplisit di decision log + ADR alur; wajib diselesaikan SEBELUM modul bisnis pertama (mis. Complaint) memakai Document Service untuk foto bukti |
+| Claim/lock TTL tetap (15 menit) mungkin tidak cocok untuk semua jenis Step (task cepat vs. review berhari-hari) | Rendah — TTL yang terlalu pendek/panjang hanya memengaruhi UX kolaborasi, bukan integritas data (claim tetap atomik) | Rendah | Didokumentasikan di ADR-0008 sebagai item terbuka; jadi Tenant/Step Configuration bila pola pemakaian nyata membuktikan perlu |
+| Notification/Integration outbound yang gagal tidak di-retry otomatis | Sedang — event penting bisa gagal terkirim tanpa upaya ulang, hanya tercatat status `failed`/`rejected` di log | Rendah–sedang, tergantung keandalan template/endpoint pihak ketiga nanti | Log lengkap tersedia untuk audit manual; sweep retry (pola sama seperti Escalation sweep) adalah pekerjaan tambahan yang jelas scope-nya, belum diminta di checkpoint ini |
+| Reseed tenant demo untuk menyebarkan permission `notification.*`/`document.*`/`scheduler.*`/`integration.*`/`observability.*` baru — pola ketiga kalinya berturut-turut (0C, 0D, 0E) | Tinggi bila pola ini ditiru di tenant produksi (kehilangan data) | Rendah (hanya dipakai di tenant demo), tapi konsistensi tiga-checkpoint-berturut-turut memperkuat urgensi | Sama seperti 0C/0D: didokumentasikan eksplisit; migrasi permission produksi tetap item terbuka prioritas tinggi, semakin mendesak |
+| Test integrasi menulis Tenant sungguhan ke database dev yang sama dipakai untuk development manual | Rendah | Rendah | Sama seperti 0B–0D — `afterAll` menghapus Tenant beserta seluruh data turunannya via cascade (kini termasuk seluruh tabel Shared Services berkat desain FK CASCADE yang konsisten sejak awal checkpoint ini) |
+
+## Kesiapan untuk Checkpoint 0F
+
+Enterprise Shared Services sudah stabil dan teruji end-to-end dari UI
+sampai PostgreSQL: Event Foundation, Notification Engine, Document/File
+Service, Scheduler/Background Jobs (termasuk pembuktian nyata escalation
+sweep berjalan OTOMATIS tanpa trigger manual, sesuai permintaan eksplisit
+Founder), Integration Boundary (outbound stub + inbound webhook
+tervalidasi tanda tangan), Logging/Observability, RBAC, dan Audit Trail
+seluruhnya terbukti lewat 40 test otomatis (0 regresi dari 0A–0D) plus
+smoke test manual curl yang mencakup jalur sukses, jalur RBAC-403, jalur
+validasi tanda tangan gagal, dan yang terpenting — satu siklus penuh
+Scheduler-triggered automatic escalation yang diamati langsung tanpa
+intervensi manual. ADR-0008 (claim/lock) dievaluasi dan diimplementasikan
+sebagai reservasi opt-in ber-TTL yang murni aditif terhadap desain
+Workflow Engine generik dari 0D — tidak ada satu pun keputusan/skema dari
+0A–0D yang diubah atau di-redesign, seluruhnya hanya diperluas. Seluruh
+pembuktian memakai objek dummy generik (`demo_transactions`) dan Workflow
+Engine 0D — TIDAK ada logic Complaint, Survey, atau Procurement yang
+masuk ke Phase 0, sesuai instruksi eksplisit Founder.
+
+Gap yang diketahui (Data Scope Document belum entity-aware, Scheduler
+belum tahan-restart, retry otomatis belum ada, claim/lock TTL masih
+konstanta, channel Notification selain in_app belum bertransport nyata,
+migrasi permission produksi, smoke test visual browser) sudah dicatat
+eksplisit di atas, bukan diasumsikan selesai.
+
+**Menunggu review Founder sebelum masuk Checkpoint 0F**, sesuai instruksi.
+
 **Menunggu review Founder sebelum masuk Checkpoint 0E**, sesuai instruksi.

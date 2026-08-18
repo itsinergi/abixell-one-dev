@@ -119,7 +119,18 @@ async function main() {
       [tenant.id],
     )
   ).rows[0];
-  const workflowPermissionCodes = ["workflow.instance.read", "workflow.instance.act"];
+  // Checkpoint 0E: also grant the two demo Workflow roles read access to
+  // their own Notifications and Documents — they are exactly the kind of
+  // recipient/attachment-reader these Shared Services exist for, and
+  // without this permission the events fired during the Workflow demo
+  // (e.g. workflow.assigned) create real `notifications` rows the demo
+  // user still can't view via the API — a real gap, not a nitpick.
+  const workflowPermissionCodes = [
+    "workflow.instance.read",
+    "workflow.instance.act",
+    "notification.read",
+    "document.read",
+  ];
   const workflowPermissions = (
     await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [workflowPermissionCodes])
   ).rows;
@@ -383,6 +394,41 @@ async function main() {
     [reviewStep.id],
   );
 
+  // --- Checkpoint 0E: Notification Templates + Integration Endpoints ---------
+  // Notification Templates are Tenant Configuration (doc 06) — these three
+  // prove the Notification Engine actually renders and delivers against
+  // the Workflow events 0D/0E now publish (workflow.assigned on Assignment
+  // creation, workflow.completed on terminal Step, workflow.escalated on
+  // the Scheduler-driven sweep), without any business-module involvement.
+  await pool.query(
+    `INSERT INTO notification_templates (tenant_id, event_type, channel, subject_template, body_template)
+     VALUES
+       ($1, 'workflow.assigned', 'in_app', 'New task assigned',
+        'A workflow task (instance {{workflowInstanceId}}) has been assigned to you.'),
+       ($1, 'workflow.completed', 'in_app', 'Workflow completed',
+        'Your submission (instance {{workflowInstanceId}}) has been {{terminalStatus}}.'),
+       ($1, 'workflow.escalated', 'in_app', 'Task escalated to you',
+        'A workflow task at step {{stepCode}} was escalated to your role after its SLA was exceeded.')`,
+    [tenant.id],
+  );
+
+  // Integration Boundary demo data (doc 07): one active outbound Endpoint
+  // (proves the EventBus wildcard subscriber logs a stub dispatch per
+  // Domain Event) and one active inbound Endpoint with a generated
+  // webhook secret (proves the signed webhook receiver end-to-end via
+  // `curl` — see docs/implementation-notes.md for a worked example).
+  await pool.query(
+    `INSERT INTO integration_endpoints (tenant_id, code, name, direction, base_url, is_active)
+     VALUES ($1, 'demo-erp-sync', 'Demo ERP Sync (outbound stub)', 'outbound', 'https://example-erp.local/api', true)`,
+    [tenant.id],
+  );
+  const inboundWebhookSecret = "demo-webhook-secret-0e";
+  await pool.query(
+    `INSERT INTO integration_endpoints (tenant_id, code, name, direction, webhook_secret, is_active)
+     VALUES ($1, 'demo-inbound', 'Demo Inbound Webhook', 'inbound', $2, true)`,
+    [tenant.id, inboundWebhookSecret],
+  );
+
   console.log("Seed complete:");
   console.log(`  Tenant code:        ${DEMO_TENANT_CODE}`);
   console.log(`  Legal Entity:       ${legalEntity.id}`);
@@ -398,6 +444,9 @@ async function main() {
     `  Manager login:      manager@demo.local / Manager12345! (WORKFLOW_MANAGER, tenant-wide scope)`,
   );
   console.log(`  Workflow demo:      demo_approval_workflow v1 (published)`);
+  console.log(`  Inbound webhook:    POST /integration/webhook/${DEMO_TENANT_CODE}/demo-inbound`);
+  console.log(`    Signature header: X-Webhook-Signature = HMAC-SHA256(secret, rawBody) hex`);
+  console.log(`    Secret (dev-only): ${inboundWebhookSecret}`);
 
   await pool.end();
 }

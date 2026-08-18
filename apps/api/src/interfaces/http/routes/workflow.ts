@@ -220,6 +220,27 @@ export function registerWorkflowRoutes(app: FastifyInstance, container: Containe
     return reply.send(list);
   });
 
+  // ADR-0008: opt-in claim/lock on top of the Role+Scope queue.
+  app.post(
+    "/workflow/assignments/:assignmentId/claim",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { assignmentId } = request.params as { assignmentId: string };
+      const result = await container.workflow.claimAssignment(request.actor!, assignmentId);
+      return reply.send(result);
+    },
+  );
+
+  app.post(
+    "/workflow/assignments/:assignmentId/release-claim",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { assignmentId } = request.params as { assignmentId: string };
+      const result = await container.workflow.releaseClaim(request.actor!, assignmentId);
+      return reply.send(result);
+    },
+  );
+
   app.post(
     "/workflow/assignments/:assignmentId/act",
     { preHandler: app.authenticate },

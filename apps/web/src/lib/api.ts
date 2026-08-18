@@ -29,6 +29,22 @@ async function request<T>(
   return data as T;
 }
 
+/** Multipart variant for the Document/File Service upload endpoint —
+ * deliberately does NOT set Content-Type so the browser fills in the
+ * multipart boundary itself. */
+async function requestForm<T>(path: string, token: string, form: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(response.status, data.error ?? `Request failed (${response.status})`);
+  }
+  return data as T;
+}
+
 export const api = {
   login: (payload: { tenantCode: string; email: string; password: string }) =>
     request<{
@@ -222,6 +238,65 @@ export const api = {
       method: "POST",
       token,
     }),
+
+  claimWorkflowAssignment: (token: string, assignmentId: string) =>
+    request<WorkflowAssignment>(`/workflow/assignments/${assignmentId}/claim`, { method: "POST", token }),
+
+  releaseWorkflowAssignmentClaim: (token: string, assignmentId: string) =>
+    request<WorkflowAssignment>(`/workflow/assignments/${assignmentId}/release-claim`, { method: "POST", token }),
+
+  // --- Checkpoint 0E: Enterprise Shared Services -----------------------------
+  notificationTemplates: (token: string) => request<NotificationTemplate[]>("/notifications/templates", { token }),
+
+  createNotificationTemplate: (
+    token: string,
+    payload: { eventType: string; channel: string; subjectTemplate?: string | null; bodyTemplate: string },
+  ) => request<NotificationTemplate>("/notifications/templates", { method: "POST", token, body: payload }),
+
+  myNotifications: (token: string) => request<Notification[]>("/notifications/my", { token }),
+
+  markNotificationRead: (token: string, id: string) =>
+    request<Notification>(`/notifications/${id}/read`, { method: "POST", token }),
+
+  documentsForEntity: (token: string, entityType: string, entityId: string) =>
+    request<DocumentRecord[]>(`/documents?entityType=${entityType}&entityId=${entityId}`, { token }),
+
+  uploadDocument: (token: string, entityType: string, entityId: string, file: File) => {
+    const form = new FormData();
+    form.append("entityType", entityType);
+    form.append("entityId", entityId);
+    form.append("file", file);
+    return requestForm<DocumentRecord>("/documents", token, form);
+  },
+
+  documentDownloadUrl: (id: string) => `${API_BASE}/documents/${id}/download`,
+
+  deleteDocument: (token: string, id: string) => request<DocumentRecord>(`/documents/${id}`, { method: "DELETE", token }),
+
+  scheduledJobs: (token: string) => request<ScheduledJob[]>("/scheduler/jobs", { token }),
+
+  scheduledJobRuns: (token: string, jobCode: string) =>
+    request<ScheduledJobRun[]>(`/scheduler/jobs/${jobCode}/runs`, { token }),
+
+  triggerScheduledJob: (token: string, jobCode: string) =>
+    request<ScheduledJobRun>(`/scheduler/jobs/${jobCode}/trigger`, { method: "POST", token }),
+
+  setScheduledJobEnabled: (token: string, jobCode: string, isEnabled: boolean) =>
+    request<ScheduledJob>(`/scheduler/jobs/${jobCode}/enabled`, { method: "POST", token, body: { isEnabled } }),
+
+  integrationEndpoints: (token: string) => request<IntegrationEndpoint[]>("/integration/endpoints", { token }),
+
+  createIntegrationEndpoint: (
+    token: string,
+    payload: { code: string; name: string; direction: "outbound" | "inbound"; baseUrl?: string | null; webhookSecret?: string | null },
+  ) => request<IntegrationEndpoint>("/integration/endpoints", { method: "POST", token, body: payload }),
+
+  setIntegrationEndpointActive: (token: string, code: string, isActive: boolean) =>
+    request<IntegrationEndpoint>(`/integration/endpoints/${code}/active`, { method: "POST", token, body: { isActive } }),
+
+  integrationLog: (token: string) => request<IntegrationLogEntry[]>("/integration/log", { token }),
+
+  observabilityEvents: (token: string) => request<DomainEvent[]>("/observability/events", { token }),
 };
 
 export type WorkflowInstance = {
@@ -253,4 +328,89 @@ export type WorkflowAssignment = {
   decidedAt: string | null;
   decisionActionCode: string | null;
   comment: string | null;
+  claimedByUserId: string | null;
+  claimedAt: string | null;
+};
+
+// --- Checkpoint 0E types ----------------------------------------------------
+
+export type NotificationTemplate = {
+  id: string;
+  eventType: string;
+  channel: "email" | "push" | "whatsapp" | "sms" | "in_app";
+  subjectTemplate: string | null;
+  bodyTemplate: string;
+  isActive: boolean;
+};
+
+export type Notification = {
+  id: string;
+  eventType: string;
+  channel: string;
+  subject: string | null;
+  body: string;
+  status: "sent" | "failed" | "skipped";
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type DocumentRecord = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+};
+
+export type ScheduledJob = {
+  id: string;
+  jobCode: string;
+  name: string;
+  description: string;
+  intervalSeconds: number;
+  isEnabled: boolean;
+  lastRunAt: string | null;
+  lastStatus: "running" | "success" | "failed" | null;
+  lastDurationMs: number | null;
+  lastError: string | null;
+};
+
+export type ScheduledJobRun = {
+  id: string;
+  trigger: "scheduler" | "manual";
+  startedAt: string;
+  finishedAt: string | null;
+  status: "running" | "success" | "failed";
+  resultSummary: Record<string, unknown> | null;
+  errorMessage: string | null;
+};
+
+export type IntegrationEndpoint = {
+  id: string;
+  code: string;
+  name: string;
+  direction: "outbound" | "inbound";
+  baseUrl: string | null;
+  isActive: boolean;
+};
+
+export type IntegrationLogEntry = {
+  id: string;
+  direction: "outbound" | "inbound";
+  eventType: string;
+  status: "sent" | "failed" | "received" | "rejected";
+  createdAt: string;
+};
+
+export type DomainEvent = {
+  id: string;
+  eventType: string;
+  entityType: string;
+  entityId: string | null;
+  payload: Record<string, unknown>;
+  occurredAt: string;
 };

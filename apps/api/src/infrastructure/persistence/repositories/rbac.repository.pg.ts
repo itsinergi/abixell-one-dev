@@ -84,4 +84,26 @@ export class PgRbacRepository implements RbacRepository {
       scopeOrganizationUnitId: row.scope_organization_unit_id,
     };
   }
+
+  async listUserIdsWithRoleInScope(
+    tenantId: string,
+    roleCode: string,
+    organizationUnitId: string | null,
+  ): Promise<string[]> {
+    const result = await this.pool.query(
+      `SELECT DISTINCT ura.user_id
+         FROM user_role_assignments ura
+         JOIN roles r ON r.id = ura.role_id
+         JOIN users u ON u.id = ura.user_id
+        WHERE r.tenant_id = $1
+          AND r.code = $2
+          AND u.tenant_id = $1
+          AND (
+            ura.scope_type = 'tenant'
+            OR ($3::uuid IS NOT NULL AND ura.scope_type = 'organization_unit' AND ura.scope_organization_unit_id = $3)
+          )`,
+      [tenantId, roleCode, organizationUnitId],
+    );
+    return result.rows.map((r) => r.user_id);
+  }
 }

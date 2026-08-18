@@ -1,5 +1,6 @@
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
+import type { EventBus } from "../event/event-bus.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 import {
   ConflictError,
@@ -21,6 +22,14 @@ import type {
   WorkflowVersion,
 } from "../../domain/workflow/workflow.entity.js";
 import { evaluateCondition } from "./condition-evaluator.js";
+
+/** ADR-0008: how long an opt-in claim (see `claimAssignment`) blocks
+ * other eligible users from acting, before it auto-expires and the task
+ * reverts to plain first-decision-wins. 15 minutes — long enough to
+ * cover reading + deciding on one task, short enough that an actor who
+ * closes their browser mid-review doesn't strand the task. Not yet
+ * Tenant Configuration (see docs/decision-log.md open items). */
+const CLAIM_TTL_SECONDS = 15 * 60;
 
 /**
  * Application-layer orchestration for the Workflow & Approval Engine
@@ -47,6 +56,12 @@ export class WorkflowService {
     private readonly repo: WorkflowRepository,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    /** Optional so 0D's existing integration test setup (constructed
+     * without an EventBus) keeps compiling — Checkpoint 0E additive
+     * dependency, not a breaking one. When absent, Event Foundation /
+     * Notification dispatch is simply skipped; `workflow_notification_hooks`
+     * (0D) still records every hook point regardless. */
+    private readonly eventBus?: EventBus,
   ) {}
 
   // ======================================================================
@@ -344,7 +359,7 @@ export class WorkflowService {
       metadata: { definitionCode: definition.code, versionNumber: version.versionNumber },
     });
 
-    const assignment = await this.createAssignmentForStep(instance, initialStep.id, initialStep.slaHours);
+    const assignment = await this.createAssignmentForStep(instance, initialStep.id, initialStep.code, initialStep.slaHours);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -398,6 +413,38 @@ export class WorkflowService {
     return mine;
   }
 
+  /**
+   * ADR-0008: claim a pending Assignment for `CLAIM_TTL_SECONDS`. Purely
+   * an opt-in courtesy reservation — nothing requires a claim before
+   * acting (see `actOnAssignment` below: a claim held by someone else
+   * blocks others only while it is still fresh; an unclaimed Assignment
+   * is exactly 0D's original first-decision-wins behavior). Eligibility
+   * is checked with the same Role+Scope / specific_user logic as acting,
+   * so a claim can never be taken by someone who couldn't act anyway.
+   */
+  async claimAssignment(actor: ActorContext, assignmentId: string) {
+    await this.rbac.requirePermission(actor.userId, "workflow.instance.act");
+    const assignment = await this.repo.findAssignmentById(assignmentId);
+    if (!assignment) throw new NotFoundError("WorkflowInstanceAssignment", assignmentId);
+    await this.getInstanceOrThrow(actor.tenantId, assignment.workflowInstanceId);
+    await this.assertEligible(actor, assignment);
+
+    const claimed = await this.repo.claimAssignment(assignmentId, actor.userId, CLAIM_TTL_SECONDS);
+    if (!claimed) {
+      throw new ConflictError("This task is already claimed by another user");
+    }
+    return claimed;
+  }
+
+  async releaseClaim(actor: ActorContext, assignmentId: string) {
+    await this.rbac.requirePermission(actor.userId, "workflow.instance.act");
+    const released = await this.repo.releaseClaim(assignmentId, actor.userId);
+    if (!released) {
+      throw new ConflictError("No active claim by you to release on this Assignment");
+    }
+    return released;
+  }
+
   async actOnAssignment(
     actor: ActorContext,
     assignmentId: string,
@@ -411,25 +458,19 @@ export class WorkflowService {
     if (assignment.status !== "pending") {
       throw new ConflictError(`This Assignment is already '${assignment.status}', not actionable`);
     }
+    if (
+      assignment.claimedByUserId &&
+      assignment.claimedByUserId !== actor.userId &&
+      assignment.claimedAt &&
+      Date.now() - assignment.claimedAt.getTime() < CLAIM_TTL_SECONDS * 1000
+    ) {
+      throw new ConflictError(
+        `This task is currently claimed by another user (claim expires ${CLAIM_TTL_SECONDS / 60} minutes after it was taken)`,
+      );
+    }
 
     const instance = await this.getInstanceOrThrow(actor.tenantId, assignment.workflowInstanceId);
-
-    if (assignment.assignmentType === "specific_user") {
-      if (assignment.assignedUserId !== actor.userId) {
-        throw new ForbiddenError("This task is assigned to a different user");
-      }
-    } else {
-      const covers = await this.rbac.hasRoleCoveringScope(
-        actor.userId,
-        assignment.assignedRoleCode!,
-        assignment.assignedOrganizationUnitId,
-      );
-      if (!covers) {
-        throw new ForbiddenError(
-          `You do not hold role '${assignment.assignedRoleCode}' in the scope this task is assigned to`,
-        );
-      }
-    }
+    await this.assertEligible(actor, assignment);
 
     const currentStep = await this.repo.findStepById(assignment.stepId);
     if (!currentStep) throw new NotFoundError("WorkflowStep", assignment.stepId);
@@ -471,6 +512,24 @@ export class WorkflowService {
       eventType: decidedStatus,
       payload: { fromStepCode: currentStep.code, toStepCode: nextStep.code, actorUserId: actor.userId, comment },
     });
+    await this.eventBus?.publish({
+      tenantId: actor.tenantId,
+      eventType: `workflow.${decidedStatus}`,
+      entityType: instance.entityType,
+      entityId: instance.entityId,
+      payload: {
+        workflowInstanceId: instance.id,
+        // Whoever started the instance is the natural recipient of a
+        // decision notice on their own submission — same "submitter"
+        // convention 0D's specific_user Assignment type already uses.
+        targetUserId: instance.startedBy,
+        fromStepCode: currentStep.code,
+        toStepCode: nextStep.code,
+        actorUserId: actor.userId,
+        comment,
+      },
+      createdBy: actor.userId,
+    });
 
     await this.repo.updateInstanceCurrentStep(instance.id, nextStep.id);
 
@@ -491,8 +550,16 @@ export class WorkflowService {
         eventType: "completed",
         payload: { terminalStatus: nextStep.terminalStatus },
       });
+      await this.eventBus?.publish({
+        tenantId: actor.tenantId,
+        eventType: "workflow.completed",
+        entityType: instance.entityType,
+        entityId: instance.entityId,
+        payload: { workflowInstanceId: instance.id, targetUserId: instance.startedBy, terminalStatus: nextStep.terminalStatus },
+        createdBy: actor.userId,
+      });
     } else {
-      newAssignment = await this.createAssignmentForStep(instance, nextStep.id, nextStep.slaHours);
+      newAssignment = await this.createAssignmentForStep(instance, nextStep.id, nextStep.code, nextStep.slaHours);
     }
 
     await this.audit.record({
@@ -522,7 +589,26 @@ export class WorkflowService {
    */
   async escalateOverdueAssignments(actor: ActorContext) {
     await this.rbac.requirePermission(actor.userId, "workflow.instance.manage");
-    const overdue = await this.repo.listOverdueAssignments(actor.tenantId);
+    return this.runEscalationSweep(actor.tenantId);
+  }
+
+  /**
+   * System-context variant of the escalation sweep — no `ActorContext`,
+   * no RBAC permission check, because there is no authenticated HTTP
+   * user when this runs: it exists solely so the Scheduler (Checkpoint
+   * 0E, a trusted internal component, never directly reachable by an
+   * end user) can invoke the exact same sweep logic the RBAC-gated
+   * `/workflow/escalation-sweep` endpoint uses for a manual trigger.
+   * `escalateOverdueAssignments` above remains the only HTTP-facing path
+   * and still requires `workflow.instance.manage` — this method is never
+   * registered as a route.
+   */
+  async escalateOverdueAssignmentsForTenant(tenantId: string) {
+    return this.runEscalationSweep(tenantId);
+  }
+
+  private async runEscalationSweep(tenantId: string) {
+    const overdue = await this.repo.listOverdueAssignments(tenantId);
     const escalated: WorkflowInstanceAssignment[] = [];
 
     for (const assignment of overdue) {
@@ -577,12 +663,26 @@ export class WorkflowService {
         },
       });
       await this.audit.record({
-        tenantId: actor.tenantId,
+        tenantId,
         actorUserId: null,
         action: "workflow.instance.escalated",
         entityType: "workflow_instance",
         entityId: instance.id,
         metadata: { stepCode: step.code, escalateToRoleCode: rule.escalateToRoleCode },
+      });
+      await this.eventBus?.publish({
+        tenantId,
+        eventType: "workflow.escalated",
+        entityType: instance.entityType,
+        entityId: instance.entityId,
+        payload: {
+          workflowInstanceId: instance.id,
+          newAssignmentId: newAssignment.id,
+          targetRoleCode: rule.escalateToRoleCode,
+          targetOrganizationUnitId: organizationUnitId,
+          stepCode: step.code,
+        },
+        createdBy: null,
       });
 
       escalated.push(newAssignment);
@@ -625,6 +725,28 @@ export class WorkflowService {
     return instance;
   }
 
+  /** Shared by `actOnAssignment` and `claimAssignment` (ADR-0008) — the
+   * same "can this actor touch this Assignment" check either way, so a
+   * claim can never be taken by someone who couldn't act on the task. */
+  private async assertEligible(actor: ActorContext, assignment: WorkflowInstanceAssignment): Promise<void> {
+    if (assignment.assignmentType === "specific_user") {
+      if (assignment.assignedUserId !== actor.userId) {
+        throw new ForbiddenError("This task is assigned to a different user");
+      }
+      return;
+    }
+    const covers = await this.rbac.hasRoleCoveringScope(
+      actor.userId,
+      assignment.assignedRoleCode!,
+      assignment.assignedOrganizationUnitId,
+    );
+    if (!covers) {
+      throw new ForbiddenError(
+        `You do not hold role '${assignment.assignedRoleCode}' in the scope this task is assigned to`,
+      );
+    }
+  }
+
   /** Resolves the Assignment Rule that matches (first Condition match
    * wins, per doc 04's "Dynamic Routing"), creates the resulting
    * Assignment + due date (SLA-ready hook), and fires the
@@ -632,6 +754,7 @@ export class WorkflowService {
   private async createAssignmentForStep(
     instance: WorkflowInstance,
     stepId: string,
+    stepCode: string,
     slaHours: number | null,
   ): Promise<WorkflowInstanceAssignment> {
     const rules = await this.repo.listAssignmentRules(stepId);
@@ -681,6 +804,23 @@ export class WorkflowService {
         userId: assignedUserId,
         dueAt,
       },
+    });
+    await this.eventBus?.publish({
+      tenantId: instance.tenantId,
+      eventType: "workflow.assigned",
+      entityType: instance.entityType,
+      entityId: instance.entityId,
+      payload: {
+        workflowInstanceId: instance.id,
+        assignmentId: assignment.id,
+        targetUserId: assignedUserId,
+        targetRoleCode: assignedRoleCode,
+        targetOrganizationUnitId: assignedOrganizationUnitId,
+        stepCode,
+        toStepCode: stepCode,
+        dueAt,
+      },
+      createdBy: null,
     });
 
     return assignment;

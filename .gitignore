@@ -11,3 +11,7 @@ coverage/
 apps/web/dist/
 apps/api/dist/
 *.tsbuildinfo
+
+# Document/File Service local storage (Checkpoint 0E) — runtime-uploaded
+# files, not source; see infrastructure/storage/local-file-storage.ts
+apps/api/storage/

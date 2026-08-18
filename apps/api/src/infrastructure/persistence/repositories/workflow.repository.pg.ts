@@ -448,6 +448,34 @@ export class PgWorkflowRepository implements WorkflowRepository {
     return result.rows.map(mapAssignment);
   }
 
+  async claimAssignment(id: string, userId: string, ttlSeconds: number): Promise<WorkflowInstanceAssignment | null> {
+    const result = await this.pool.query(
+      `UPDATE workflow_instance_assignments
+          SET claimed_by_user_id = $2, claimed_at = now()
+        WHERE id = $1
+          AND status = 'pending'
+          AND (
+            claimed_by_user_id IS NULL
+            OR claimed_by_user_id = $2
+            OR claimed_at < now() - ($3 || ' seconds')::interval
+          )
+        RETURNING *`,
+      [id, userId, ttlSeconds],
+    );
+    return result.rows[0] ? mapAssignment(result.rows[0]) : null;
+  }
+
+  async releaseClaim(id: string, userId: string): Promise<WorkflowInstanceAssignment | null> {
+    const result = await this.pool.query(
+      `UPDATE workflow_instance_assignments
+          SET claimed_by_user_id = NULL, claimed_at = NULL
+        WHERE id = $1 AND claimed_by_user_id = $2 AND status = 'pending'
+        RETURNING *`,
+      [id, userId],
+    );
+    return result.rows[0] ? mapAssignment(result.rows[0]) : null;
+  }
+
   async listOverdueAssignments(tenantId: string): Promise<WorkflowInstanceAssignment[]> {
     const result = await this.pool.query(
       `SELECT wia.* FROM workflow_instance_assignments wia
@@ -665,6 +693,8 @@ function mapAssignment(row: QueryResultRow): WorkflowInstanceAssignment {
     decidedAt: row.decided_at,
     decisionActionCode: row.decision_action_code,
     comment: row.comment,
+    claimedByUserId: row.claimed_by_user_id,
+    claimedAt: row.claimed_at,
   };
 }
 

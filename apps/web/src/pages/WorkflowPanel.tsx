@@ -123,6 +123,26 @@ export function WorkflowPanel({
     }
   }
 
+  async function handleClaim(assignmentId: string) {
+    try {
+      await api.claimWorkflowAssignment(token, assignmentId);
+      onMessage({ type: "success", text: "Task claimed — reserved for you for 15 minutes (ADR-0008)." });
+      refresh();
+    } catch (err) {
+      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
+    }
+  }
+
+  async function handleReleaseClaim(assignmentId: string) {
+    try {
+      await api.releaseWorkflowAssignmentClaim(token, assignmentId);
+      onMessage({ type: "success", text: "Claim released — any eligible teammate can now claim/act on it." });
+      refresh();
+    } catch (err) {
+      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-sm font-semibold text-slate-500">Workflow &amp; Approval Engine (Checkpoint 0D)</h2>
@@ -172,6 +192,7 @@ export function WorkflowPanel({
                 <div className="text-xs text-slate-500">
                   {a.assignmentType === "role" ? `Role: ${a.assignedRoleCode}` : "Assigned to you directly"}
                   {a.dueAt && <> — due {new Date(a.dueAt).toLocaleString()}</>}
+                  {a.claimedByUserId && <span className="ml-1 rounded bg-indigo-100 px-1 text-indigo-700">claimed</span>}
                 </div>
                 {canAct && (
                   <div className="mt-1 flex flex-wrap gap-2">
@@ -199,6 +220,21 @@ export function WorkflowPanel({
                     >
                       Resubmit
                     </button>
+                    {a.claimedByUserId ? (
+                      <button
+                        onClick={() => handleReleaseClaim(a.id)}
+                        className="rounded bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700"
+                      >
+                        Release claim
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleClaim(a.id)}
+                        className="rounded bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700"
+                      >
+                        Claim (ADR-0008)
+                      </button>
+                    )}
                   </div>
                 )}
               </li>
@@ -259,9 +295,9 @@ export function WorkflowPanel({
           <section className="rounded border border-slate-200 bg-white p-4 lg:col-span-2">
             <h3 className="mb-2 text-sm font-semibold">Escalation Sweep</h3>
             <p className="mb-2 text-xs text-slate-500">
-              Manually triggers the SLA-overdue sweep — reassigns every overdue pending Assignment per its
-              Step's Escalation Rule. No automatic scheduler exists yet in Phase 0 (documented gap); this
-              button proves the mechanism itself works end-to-end.
+              This sweep now also runs automatically every 2 minutes via the Scheduler (Checkpoint 0E) — see
+              the Shared Services panel below for job run history. This button triggers the exact same sweep
+              on demand.
             </p>
             <button onClick={handleEscalationSweep} className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
               Run Escalation Sweep

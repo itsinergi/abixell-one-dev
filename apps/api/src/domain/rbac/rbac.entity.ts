@@ -33,4 +33,20 @@ export interface RbacRepository {
   getAssignments(userId: string): Promise<UserRoleAssignment[]>;
   findRoleByCode(tenantId: string, code: string): Promise<Role | null>;
   assignRole(input: AssignRoleInput, createdBy: string | null): Promise<UserRoleAssignment>;
+
+  /**
+   * Every user who currently holds `roleCode` with a Data Scope covering
+   * `organizationUnitId` (same exact-match + tenant-wide-covers-narrower
+   * semantics as `RbacService.hasRoleCoveringScope`). `organizationUnitId
+   * = null` means the target is tenant-wide, so only tenant-wide holders
+   * of the role match. Added in Checkpoint 0E so the Notification Engine
+   * can resolve "who is in this role+scope queue" without duplicating
+   * ADR-0007's scope logic — used to fan out a Workflow role-Assignment
+   * notification to every eligible reviewer, not just whoever acts first.
+   */
+  listUserIdsWithRoleInScope(
+    tenantId: string,
+    roleCode: string,
+    organizationUnitId: string | null,
+  ): Promise<string[]>;
 }

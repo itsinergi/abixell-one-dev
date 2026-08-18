@@ -144,6 +144,13 @@ export interface WorkflowInstanceAssignment {
   decidedAt: Date | null;
   decisionActionCode: string | null;
   comment: string | null;
+  /** ADR-0008 (Checkpoint 0E): an opt-in, TTL-based reservation on top of
+   * ADR-0007's Role+Scope queue — see `workflow.service.ts#claimAssignment`
+   * and `docs/adr/0008-workflow-assignment-claim-lock.md`. Purely additive:
+   * a null `claimedByUserId` behaves exactly like 0D (first decision
+   * wins, no locking). */
+  claimedByUserId: string | null;
+  claimedAt: Date | null;
 }
 
 export interface WorkflowHistoryEntry {
@@ -286,6 +293,14 @@ export interface WorkflowRepository {
   listAssignmentsForInstance(workflowInstanceId: string): Promise<WorkflowInstanceAssignment[]>;
   listPendingAssignmentsByTenant(tenantId: string): Promise<WorkflowInstanceAssignment[]>;
   listOverdueAssignments(tenantId: string): Promise<WorkflowInstanceAssignment[]>;
+  /** ADR-0008: atomic optimistic claim. Succeeds (returns the row) only
+   * if the Assignment is still `pending` AND (unclaimed, already claimed
+   * by this same user, or the existing claim has expired past
+   * `ttlSeconds`) — a single `UPDATE ... WHERE ... RETURNING`, so two
+   * concurrent claims can never both succeed. Returns null if the claim
+   * was lost to someone else. */
+  claimAssignment(id: string, userId: string, ttlSeconds: number): Promise<WorkflowInstanceAssignment | null>;
+  releaseClaim(id: string, userId: string): Promise<WorkflowInstanceAssignment | null>;
   updateAssignmentStatus(
     id: string,
     fields: {

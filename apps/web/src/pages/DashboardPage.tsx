@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import { api, ApiError } from "../lib/api";
 import { ConfigurationPanel } from "./ConfigurationPanel";
 import { WorkflowPanel } from "./WorkflowPanel";
+import { SharedServicesPanel } from "./SharedServicesPanel";
 
 type OrgUnit = { id: string; parentId: string | null; name: string; unitType: string; legalEntityId: string };
 type LegalEntity = { id: string; name: string };
@@ -261,6 +262,15 @@ export function DashboardPage() {
         canStart={permissions.includes("workflow.instance.start")}
         canAct={permissions.includes("workflow.instance.act")}
         canManage={permissions.includes("workflow.instance.manage")}
+        onMessage={setMessage}
+      />
+
+      <SharedServicesPanel
+        token={token}
+        canManageDocuments={permissions.includes("document.manage")}
+        canManageScheduler={permissions.includes("scheduler.manage")}
+        canManageIntegration={permissions.includes("integration.read")}
+        canReadObservability={permissions.includes("observability.read")}
         onMessage={setMessage}
       />
     </div>
