@@ -41,11 +41,18 @@ npm install
 npm run db:up          # starts local PostgreSQL via Docker Compose
 cp apps/api/.env.example apps/api/.env
 npm run migrate -w apps/api
+npm run seed -w apps/api   # optional: demo Tenant + Admin/Supervisor users
 npm run dev:api         # http://localhost:4000
 npm run dev:web         # http://localhost:5173
 ```
 
+Demo login (after `npm run seed`): `admin@demo.local` / `Admin12345!`
+(tenant-wide) or `supervisor@demo.local` / `Supervisor12345!` (Site A scope
+only, read-only), Tenant code `demo-gs`.
+
 ## Status
 
-Checkpoint 0A — Project Bootstrap. See `docs/decision-log.md` for progress
-against the Phase 0 checkpoints (0A–0F).
+Checkpoint 0B — Identity & Organization Vertical Slice: COMPLETE. See
+`docs/decision-log.md` and `docs/implementation-notes.md` for progress
+against the Phase 0 checkpoints (0A–0F). Waiting on Founder review before
+Checkpoint 0C.

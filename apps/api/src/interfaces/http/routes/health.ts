@@ -5,7 +5,7 @@ export async function healthRoutes(app: FastifyInstance) {
   app.get("/health", async () => ({
     status: "ok",
     service: "abixell-one-api",
-    checkpoint: "0A",
+    checkpoint: "0B",
   }));
 
   app.get("/health/db", async (_req, reply) => {

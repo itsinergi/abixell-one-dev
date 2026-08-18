@@ -1,13 +1,29 @@
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { ApplicationShell } from "./shell/layout/ApplicationShell";
-import { DashboardPlaceholder } from "./pages/DashboardPlaceholder";
+import { LoginPage } from "./pages/LoginPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { useAuth } from "./auth/AuthContext";
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
+  if (!session) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
 
 export default function App() {
   return (
-    <ApplicationShell>
-      <Routes>
-        <Route path="/" element={<DashboardPlaceholder />} />
-      </Routes>
-    </ApplicationShell>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <ApplicationShell>
+              <DashboardPage />
+            </ApplicationShell>
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
 }
