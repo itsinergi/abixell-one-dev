@@ -189,3 +189,15 @@ perubahan:**
 Item MUST FIX yang tersisa tidak menghalangi dimulainya Phase 1, kecuali
 satu keputusan desain akses Document Service yang harus diambil di awal
 checkpoint pertama Phase 1 sebelum fitur lampiran bukti dibangun.
+
+---
+
+## FOUNDER DECISION (2026-08-18)
+
+> **Phase 0 — Enterprise Core Foundation dinyatakan COMPLETED.**
+
+Keputusan resmi Founder, dicatat lengkap di `docs/decision-log.md`
+(bagian "FOUNDER DECISION: Phase 0 dinyatakan COMPLETED"). Phase 0
+ditutup dengan status COMPLETED per tanggal ini. Kapan dan dengan
+instruksi seperti apa Phase 1 (Customer Complaint Management + Survey &
+Assessment) dimulai menunggu arahan eksplisit Founder berikutnya.

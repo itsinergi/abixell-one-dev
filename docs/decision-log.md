@@ -144,3 +144,40 @@ Service belum entity-scope-aware, migrasi permission Role kurasi, CORS
 allowlist, CI/CD, endpoint update/soft-delete, validasi rate limit
 dengan traffic nyata) dicatat eksplisit sebagai pekerjaan yang boleh
 berjalan PARALEL dengan Phase 1, bukan sebagai penghalang mulainya.
+
+## 2026-08-18 — FOUNDER DECISION: Phase 0 dinyatakan COMPLETED
+
+Setelah Founder Review atas `docs/phase0-final-review.md` (Self-Review,
+Gap Analysis, Risk Analysis, Security Review, Test Summary, Technical
+Debt Summary, Readiness Assessment), Founder menyatakan:
+
+> **Phase 0 — Enterprise Core Foundation dinyatakan COMPLETED.**
+
+Keputusan ini bersifat business/architecture-binding (Founder Decision),
+dicatat di sini sebagai referensi implementasi; keputusan resmi lengkap
+juga tercatat di `docs/phase0-final-review.md` bagian 7 (Readiness
+Assessment) yang merekomendasikan status ini.
+
+**Dasar keputusan:**
+- 0 item BLOCKER tersisa di seluruh Technical Debt Register.
+- Seluruh 6 checkpoint (0A–0F) selesai dengan self-review, test, gap
+  analysis, dan risk note masing-masing, mengikuti protokol IEP secara
+  konsisten.
+- 45/45 integration test lulus, typecheck/lint/build bersih, migration
+  chain tervalidasi penuh, security review tidak menemukan kerentanan
+  kritis, visual browser E2E pertama kali berhasil dan menemukan 3 bug
+  nyata yang sudah diperbaiki.
+
+**Implikasi:** enam Must Fix yang tersisa (Document Service belum
+entity-scope-aware, migrasi permission Role kurasi, CORS allowlist,
+CI/CD, endpoint update/soft-delete, validasi rate limit dengan traffic
+nyata) TIDAK menghalangi status COMPLETED ini — sudah diklasifikasikan
+eksplisit sebagai pekerjaan yang berjalan paralel dengan Phase 1, bukan
+prasyarat sebelum Phase 1 dimulai. Satu keputusan yang tetap WAJIB
+diambil secara eksplisit di checkpoint pertama Phase 1 (bukan diwarisi
+diam-diam): strategi akses Data Scope untuk Document Service, sebelum
+fitur lampiran bukti Complaint dibangun.
+
+Keputusan mengenai kapan dan dengan instruksi seperti apa Phase 1
+(Customer Complaint Management + Survey & Assessment) dimulai menunggu
+arahan eksplisit Founder berikutnya.
