@@ -42,3 +42,24 @@ Ringkasan keputusan implementasi pada Checkpoint 0B (Identity & Organization Ver
 - Endpoint update/delete (soft delete) untuk Tenant/Legal Entity/Organization Unit/User belum ada — 0B hanya membuktikan create+read sesuai target minimal yang diminta.
 - Penyimpanan token di frontend (in-memory only, hilang saat refresh halaman) — keputusan strategi persistensi token belum diambil, sengaja didokumentasikan sebagai gap, bukan diasumsikan.
 - CI/CD masih belum ada (carry-over dari 0A).
+
+## 2026-08-18 — Checkpoint 0C
+
+Ringkasan keputusan implementasi pada Checkpoint 0C (Configuration &
+Metadata Foundation). Detail lengkap ada di `docs/implementation-notes.md`.
+
+| # | Keputusan | Alasan | Referensi |
+|---|---|---|---|
+| 1 | Configuration Scope untuk Feature Flags disimpan sebagai satu baris per scope assignment (`tenant` atau `organization_unit`), bukan satu baris per flag, dengan dua partial unique index terpisah | Diperlukan agar satu flag bisa punya nilai tenant-wide DAN override per Organization Unit sekaligus; partial index (bukan unique constraint biasa) sengaja dipilih untuk menghindari kelas bug NULL-tidak-sama-dengan-NULL yang ditemukan di Checkpoint 0B | ADR-0006 |
+| 2 | Schema Registry (`metadata_registry`) divalidasi sungguhan pakai Ajv (compiled + cache per area/key), bukan hanya dokumentasi/konvensi | Membuat "metadata sebagai sumber kebenaran validasi" (dok 05) jadi mekanisme nyata — nilai Tenant Configuration yang gagal validasi ditolak dengan 400, bukan diterima lalu gagal diam-diam di lapisan lain | `src/application/configuration/schema-registry-validator.ts` |
+| 3 | Numbering sequence memakai satu `UPDATE ... RETURNING` atomik untuk increment, tanpa row locking eksplisit | PostgreSQL menjamin atomicity untuk single-statement UPDATE; menghindari kompleksitas `SELECT ... FOR UPDATE` + transaksi eksplisit yang belum diperlukan pada skala Phase 0 | `configuration.repository.pg.ts` → `incrementNumberingSequence` |
+| 4 | Terminology override Checkpoint 0C bersifat tenant-scope saja, belum per-Organization-Unit | Konsisten dengan target minimal 0C (membuktikan mekanisme override ada dan divalidasi), pola partial-unique-index yang sama (ADR-0006) bisa dipakai langsung bila Organization-Unit-level Terminology override diminta nanti — bukan re-desain skema | ADR-0006 (konsekuensi) |
+| 5 | Permission baru (`config.read`, `config.manage`) ditambahkan ke katalog global lewat migration, dan `demo-gs` tenant di-reseed (delete + seed ulang) agar role ADMIN yang sudah ada otomatis memilikinya | Seed script bersifat idempotent (skip bila tenant sudah ada) sehingga permission baru tidak otomatis "menempel" ke role lama; reseed adalah cara paling sederhana untuk lingkungan demo/dev, BUKAN pola migrasi permission untuk tenant produksi yang sudah live (lihat Risk Note) | `apps/api/scripts/seed.ts` |
+
+### Item terbuka yang dibawa ke checkpoint berikutnya
+
+- Terminology override baru tenant-scope; Organization-Unit-scope Terminology belum diimplementasikan (lihat ADR-0006).
+- Belum ada mekanisme migrasi permission otomatis untuk tenant yang SUDAH hidup di produksi saat permission baru ditambahkan lewat migration — reseed hanya valid untuk lingkungan demo/dev yang boleh dihapus-ulang.
+- Reference Data dan Numbering Sequence belum punya endpoint update/deactivate — 0C hanya membuktikan create+read+generate sesuai target minimal.
+- Frontend Configuration panel belum melalui smoke test visual browser sungguhan (lingkungan implementasi tidak punya akses browser ke dev server container) — hanya diverifikasi lewat `typecheck`, `lint`, `build` sukses dan pemanggilan endpoint API yang sama persis sudah diverifikasi lewat curl.
+- CI/CD masih belum ada (carry-over dari 0A/0B).

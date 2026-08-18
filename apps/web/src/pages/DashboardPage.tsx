@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { api, ApiError } from "../lib/api";
+import { ConfigurationPanel } from "./ConfigurationPanel";
 
 type OrgUnit = { id: string; parentId: string | null; name: string; unitType: string; legalEntityId: string };
 type LegalEntity = { id: string; name: string };
@@ -39,17 +40,19 @@ export function DashboardPage() {
   const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [auditLog, setAuditLog] = useState<AuditRow[]>([]);
+  const [orgUnitLabel, setOrgUnitLabel] = useState("Organization Units");
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [tenant, me, units, entities, userList, audit] = await Promise.all([
+      const [tenant, me, units, entities, userList, audit, terminology] = await Promise.all([
         api.tenant(token),
         api.me(token),
         api.organizationUnits(token),
         api.legalEntities(token),
         api.users(token),
         api.recentAuditLog(token),
+        api.configTerminology(token),
       ]);
       setTenantName(tenant.name);
       setPermissions(me.permissions);
@@ -57,6 +60,10 @@ export function DashboardPage() {
       setLegalEntities(entities);
       setUsers(userList);
       setAuditLog(audit);
+      // Terminology-driven label — proves this section header is not a
+      // hardcoded string but comes from the tenant's Configuration.
+      const orgUnitTerm = terminology.find((t) => t.code === "organization_unit.label");
+      if (orgUnitTerm) setOrgUnitLabel(`${orgUnitTerm.value}s`);
     } catch (err) {
       setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to load data" });
     }
@@ -148,7 +155,7 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="rounded border border-slate-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold">Organization Units</h2>
+          <h2 className="mb-2 text-sm font-semibold">{orgUnitLabel}</h2>
           <OrgUnitTree units={orgUnits} />
           <form onSubmit={handleCreateOrgUnit} className="mt-4 space-y-2 border-t border-slate-100 pt-3">
             <div className="text-xs font-medium text-slate-500">Create Organization Unit</div>
@@ -239,6 +246,13 @@ export function DashboardPage() {
           </ul>
         </section>
       </div>
+
+      <ConfigurationPanel
+        token={token}
+        orgUnits={orgUnits}
+        canManage={permissions.includes("config.manage")}
+        onMessage={setMessage}
+      />
     </div>
   );
 }

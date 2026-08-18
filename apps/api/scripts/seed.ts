@@ -80,9 +80,15 @@ async function main() {
     );
   }
 
-  // Supervisor: read-only. No *.create permissions — proves the backend
-  // rejects create attempts from this role, not just hides the button.
-  const readOnlyPermissionCodes = ["organization_unit.read", "user.read", "tenant.read"];
+  // Supervisor: read-only. No *.create/*.manage permissions — proves the
+  // backend rejects create/manage attempts from this role, not just
+  // hides the button.
+  const readOnlyPermissionCodes = [
+    "organization_unit.read",
+    "user.read",
+    "tenant.read",
+    "config.read",
+  ];
   const readOnlyPermissions = (
     await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [
       readOnlyPermissionCodes,
@@ -128,6 +134,79 @@ async function main() {
     `INSERT INTO audit_log (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
      VALUES ($1, NULL, 'tenant.seeded', 'tenant', $1, $2)`,
     [tenant.id, JSON.stringify({ source: "seed script" })],
+  );
+
+  // --- Checkpoint 0C: Configuration & Metadata demo data ---------------------
+  // Demonstrates that Module Activation, Feature Flags (with Configuration
+  // Scope precedence), Terminology, Reference Data, and Numbering are all
+  // genuinely tenant-specific -- nothing here is hardcoded in Product Core,
+  // it is all rows created for THIS demo tenant against the Product Core
+  // catalog seeded by the migration.
+
+  // Module Activation: activate "customer_complaint" for this tenant only.
+  const complaintModule = (
+    await pool.query(`SELECT id FROM modules WHERE code = 'customer_complaint'`)
+  ).rows[0];
+  if (complaintModule) {
+    await pool.query(
+      `INSERT INTO tenant_module_activations (tenant_id, module_id, is_active)
+       VALUES ($1, $2, true)`,
+      [tenant.id, complaintModule.id],
+    );
+  }
+
+  // Feature Flag: set a tenant-wide value, then override it at Site A to
+  // prove Configuration Scope precedence (Organization Unit > Tenant).
+  const offlineFlag = (
+    await pool.query(`SELECT id FROM feature_flags WHERE code = 'offline_field_mode'`)
+  ).rows[0];
+  if (offlineFlag) {
+    await pool.query(
+      `INSERT INTO tenant_feature_flags
+         (tenant_id, feature_flag_id, scope_type, scope_organization_unit_id, is_enabled)
+       VALUES ($1, $2, 'tenant', NULL, false)`,
+      [tenant.id, offlineFlag.id],
+    );
+    await pool.query(
+      `INSERT INTO tenant_feature_flags
+         (tenant_id, feature_flag_id, scope_type, scope_organization_unit_id, is_enabled)
+       VALUES ($1, $2, 'organization_unit', $3, true)`,
+      [tenant.id, offlineFlag.id, siteA.id],
+    );
+  }
+
+  // Terminology: rename "Organization Unit" to a client-specific term to
+  // prove UI labels come from Terminology, not hardcoded strings.
+  const orgUnitTerm = (
+    await pool.query(`SELECT id FROM terminology_keys WHERE code = 'organization_unit.label'`)
+  ).rows[0];
+  if (orgUnitTerm) {
+    await pool.query(
+      `INSERT INTO tenant_terminology_overrides (tenant_id, terminology_key_id, value)
+       VALUES ($1, $2, 'Site')`,
+      [tenant.id, orgUnitTerm.id],
+    );
+  }
+
+  // Reference Data: seed two Priority Level items for this tenant.
+  const priorityType = (
+    await pool.query(`SELECT id FROM reference_data_types WHERE code = 'priority_level'`)
+  ).rows[0];
+  if (priorityType) {
+    await pool.query(
+      `INSERT INTO tenant_reference_data_items
+         (tenant_id, reference_data_type_id, code, label, sort_order)
+       VALUES ($1, $2, 'high', 'High', 1), ($1, $2, 'low', 'Low', 2)`,
+      [tenant.id, priorityType.id],
+    );
+  }
+
+  // Numbering: a tenant-specific ticket numbering sequence, e.g.
+  // TCK-2026-00001, proving numbering patterns are per-tenant configuration.
+  await pool.query(
+    `INSERT INTO numbering_sequences (tenant_id, code, pattern, current_sequence)
+     VALUES ($1, 'demo_ticket', 'TCK-{YYYY}-{SEQ:5}', 0)`,
+    [tenant.id],
   );
 
   console.log("Seed complete:");

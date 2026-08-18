@@ -5,6 +5,7 @@ import { PgOrganizationUnitRepository } from "./infrastructure/persistence/repos
 import { PgUserRepository } from "./infrastructure/persistence/repositories/user.repository.pg.js";
 import { PgRbacRepository } from "./infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { PgAuditLogRepository } from "./infrastructure/persistence/repositories/audit-log.repository.pg.js";
+import { PgConfigurationRepository } from "./infrastructure/persistence/repositories/configuration.repository.pg.js";
 
 import { AuditService } from "./application/audit/audit.service.js";
 import { RbacService } from "./application/rbac/rbac.service.js";
@@ -13,6 +14,7 @@ import { LegalEntityService } from "./application/legal-entity/legal-entity.serv
 import { OrganizationUnitService } from "./application/organization-unit/organization-unit.service.js";
 import { UserService } from "./application/identity/user.service.js";
 import { AuthService } from "./application/identity/auth.service.js";
+import { ConfigurationService } from "./application/configuration/configuration.service.js";
 
 /**
  * Simple manual composition root (no DI framework — deliberate, per
@@ -27,6 +29,7 @@ export function buildContainer() {
   const userRepo = new PgUserRepository(pool);
   const rbacRepo = new PgRbacRepository(pool);
   const auditRepo = new PgAuditLogRepository(pool);
+  const configurationRepo = new PgConfigurationRepository(pool);
 
   const audit = new AuditService(auditRepo);
   const rbac = new RbacService(rbacRepo);
@@ -40,6 +43,7 @@ export function buildContainer() {
     organizationUnit: new OrganizationUnitService(organizationUnitRepo, audit, rbac, rbacRepo),
     user: new UserService(userRepo, rbacRepo, audit, rbac),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
+    configuration: new ConfigurationService(configurationRepo, audit, rbac),
   };
 }
 

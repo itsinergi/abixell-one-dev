@@ -29,3 +29,15 @@ export class UnauthorizedError extends Error {
     this.name = "UnauthorizedError";
   }
 }
+
+/** Thrown when a configuration value fails Schema Registry validation
+ * (05-Configuration-Metadata-Engine.md) — always maps to HTTP 400. */
+export class ValidationError extends Error {
+  constructor(
+    message: string,
+    public details?: unknown,
+  ) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}

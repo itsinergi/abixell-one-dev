@@ -5,6 +5,7 @@ import {
   ForbiddenError,
   NotFoundError,
   UnauthorizedError,
+  ValidationError,
 } from "../../domain/shared-kernel/errors.js";
 
 /**
@@ -26,6 +27,9 @@ export function registerErrorMapping(app: FastifyInstance): void {
     }
     if (error instanceof UnauthorizedError) {
       return reply.status(401).send({ error: error.message });
+    }
+    if (error instanceof ValidationError) {
+      return reply.status(400).send({ error: error.message, details: error.details });
     }
     if ("validation" in error && error.validation) {
       return reply.status(400).send({ error: error.message });

@@ -183,3 +183,170 @@ configuration, feature flags, configuration audit) begitu mendapat
 persetujuan review dari Founder.
 
 **Menunggu review Founder sebelum masuk Checkpoint 0C**, sesuai instruksi.
+
+---
+
+# Implementation Notes — Checkpoint 0C: Configuration & Metadata Foundation
+
+**Status: COMPLETE**
+**Tanggal: 2026-08-18**
+
+## Apa yang dibangun
+
+Alur end-to-end yang dibuktikan (sesuai target minimal Checkpoint 0C):
+
+```
+Schema Registry (Product Core, JSON Schema per area/key)
+  → Module Activation, Feature Flags (dengan Configuration Scope),
+    Terminology, Reference Data, Numbering (Tenant Configuration Store)
+  → Configuration API (13 endpoint, RBAC + Ajv validation)
+  → Thin Frontend (Configuration panel + label UI dari Terminology)
+  → Configuration Audit → PostgreSQL
+```
+
+- **Skema database** (migration `1755700000000`): tabel `metadata_registry`
+  (Schema Registry — Product Core, migration-seeded, tidak pernah bisa
+  diubah Tenant), `modules` + `tenant_module_activations`, `feature_flags`
+  + `tenant_feature_flags` (dengan dua partial unique index untuk
+  Configuration Scope, lihat ADR-0006), `terminology_keys` +
+  `tenant_terminology_overrides`, `reference_data_types` +
+  `tenant_reference_data_items`, `numbering_sequences`. Plus 2 permission
+  baru (`config.read`, `config.manage`) dan seed katalog Product Core
+  (2 module, 2 feature flag, 3 terminology key, 2 reference data type).
+- **Schema Registry sebagai mekanisme nyata**: `SchemaRegistryValidator`
+  memvalidasi setiap nilai Tenant Configuration terhadap JSON Schema yang
+  tersimpan di `metadata_registry` memakai Ajv (compiled validator
+  di-cache per area/key), dipanggil dari `ConfigurationService` SEBELUM
+  nilai ditulis ke database. Nilai yang gagal validasi ditolak dengan
+  HTTP 400 beserta detail error Ajv — bukan hanya konvensi dokumentasi.
+- **Module Activation**: aktivasi per-Tenant lewat
+  `tenant_module_activations`, tidak mengubah baris `modules` (katalog
+  Product Core) sama sekali.
+- **Feature Flags + Configuration Scope**: precedence
+  Organization Unit override > Tenant override > catalog default,
+  dibuktikan dengan `GET /config/feature-flags/effective` yang
+  mengembalikan `source` (`catalog_default` | `tenant` |
+  `organization_unit`) sehingga resolusi bisa diverifikasi independen,
+  bukan hanya dipercaya.
+- **Terminology**: override per-Tenant untuk label UI (mis.
+  "Organization Unit" → "Site"), divalidasi Ajv, dipakai langsung oleh
+  frontend Dashboard untuk judul section "Organization Units" — bukan
+  string hardcode.
+- **Reference Data**: tipe reference data adalah katalog Product Core
+  (`reference_data_types`), item-nya 100% milik Tenant
+  (`tenant_reference_data_items`), termasuk penanganan duplikat kode
+  sebagai HTTP 409 (`ConflictError` dari Postgres `23505`), bukan 500.
+- **Numbering**: pattern per-Tenant dengan token `{YYYY}`, `{MM}`,
+  `{SEQ}`/`{SEQ:N}`, increment atomik lewat satu `UPDATE ... RETURNING`
+  (tidak perlu row locking eksplisit).
+- **Configuration Audit**: setiap mutasi (module activation, feature
+  flag, terminology, reference data create, numbering sequence create,
+  numbering generate) memanggil `AuditService` dalam service call yang
+  sama, sama seperti pola 0B.
+- **RBAC**: seluruh endpoint baca butuh `config.read`, seluruh endpoint
+  tulis butuh `config.manage`; override di level Organization Unit juga
+  memanggil `requireOrganizationUnitScope` untuk role yang scope-nya
+  terbatas.
+- **Thin Frontend — Configuration panel**: ditambahkan ke Dashboard,
+  menampilkan Module Activation (toggle), Feature Flags dengan pemilih
+  Organization Unit untuk melihat resolusi efektif + tombol override,
+  Terminology (daftar + form override), Reference Data (daftar per tipe +
+  form create), dan Numbering (info sequence + tombol generate). Tombol
+  mutasi hanya aktif untuk user dengan `config.manage` (kontrol UI sebagai
+  kenyamanan, bukan pengganti enforcement backend — backend tetap
+  menolak 403 terlepas dari kondisi tombol).
+- **Seed script**: Supervisor role ditambah `config.read`; tenant demo
+  `demo-gs` mendapat data Configuration nyata — 1 module aktif, 1 feature
+  flag dengan nilai tenant + override di Site A (membuktikan
+  Configuration Scope end-to-end), 1 terminology override, 2 reference
+  data item, 1 numbering sequence. Tenant demo lama dihapus dan di-seed
+  ulang agar role ADMIN memiliki permission `config.*` yang baru (lihat
+  Risk Note untuk keterbatasan pendekatan ini di lingkungan produksi).
+- **Test**: 9 test integrasi baru
+  (`tests/integration/configuration.test.ts`), berjalan terhadap
+  PostgreSQL sungguhan, mencakup: katalog Module kosong di Tenant baru,
+  aktivasi Module tenant-specific, resolusi Configuration Scope penuh
+  (catalog default → tenant override → organization_unit override, dan
+  Organization Unit lain yang tidak di-override tetap jatuh ke nilai
+  tenant), penolakan Ajv untuk nilai Terminology tidak valid, penerimaan
+  override Terminology valid, create Reference Data + penolakan duplikat
+  (409, dan verifikasi tidak ada baris ganda di database), generate
+  Numbering dua kali berturut-turut dengan verifikasi increment atomik
+  langsung ke `numbering_sequences`, penolakan 403 untuk role read-only
+  yang mencoba mutasi (dengan verifikasi tidak ada baris tertulis), dan
+  verifikasi Configuration Audit mencatat seluruh aksi mutasi di atas.
+  Total 23 test (14 lama + 9 baru) tetap hijau, tidak ada regresi.
+
+## Pembuktian manual tambahan (di luar automated test)
+
+Smoke test manual lewat curl terhadap server yang berjalan: login admin,
+`GET /config/modules`, `GET /config/feature-flags`,
+`GET /config/feature-flags/effective` di dua Organization Unit berbeda
+(Site A vs Head Office, membuktikan Configuration Scope), penolakan
+Terminology dengan nilai kosong (400, Ajv), create Reference Data +
+percobaan duplikat (409), generate Numbering tiga kali berturut-turut
+(TCK-2026-00001 → 00003), login Supervisor lalu percobaan mutasi Module
+Activation dan Feature Flag di luar scope-nya (403 keduanya), dan
+verifikasi langsung ke `audit_log` bahwa mutasi lewat API benar-benar
+tercatat sedangkan percobaan yang gagal validasi (Terminology kosong)
+TIDAK tercatat (sesuai — error dilempar sebelum audit dipanggil).
+
+## Keterbatasan / gap yang diketahui di akhir Checkpoint 0C
+
+- **Terminology override baru tenant-scope**, belum per-Organization-Unit
+  — pola partial-unique-index (ADR-0006) sudah siap dipakai ulang bila
+  dibutuhkan nanti, tidak perlu desain ulang skema.
+- **Belum ada mekanisme migrasi permission otomatis** untuk tenant yang
+  SUDAH berjalan di produksi saat permission baru (`config.read`,
+  `config.manage`) ditambahkan lewat migration — pendekatan "hapus lalu
+  seed ulang" yang dipakai di sesi ini HANYA valid untuk tenant demo/dev.
+  Tenant produksi butuh strategi migrasi permission terpisah (mis. script
+  backfill `role_permissions` untuk role yang sudah ada), belum
+  diimplementasikan, dicatat sebagai gap eksplisit — bukan diasumsikan
+  otomatis.
+- **Reference Data dan Numbering Sequence belum punya endpoint
+  update/deactivate** — 0C hanya membuktikan create+read+generate sesuai
+  target minimal.
+- **Frontend Configuration panel belum melalui smoke test visual browser
+  sungguhan** — lingkungan implementasi ini tidak memiliki akses browser
+  ke dev server yang berjalan di dalam container, sehingga verifikasi
+  frontend berhenti di: `typecheck` bersih, `lint` bersih, `build`
+  produksi sukses, dan pemanggilan API yang identik dengan yang dipanggil
+  komponen frontend sudah diverifikasi hijau lewat curl. Verifikasi
+  visual sungguhan (klik tombol di browser nyata) disarankan sebagai
+  langkah manual oleh Founder atau di checkpoint berikutnya.
+- **Resolusi Configuration Scope belum di-cache** — setiap panggilan
+  `/config/feature-flags/effective` query database langsung. Cukup untuk
+  skala Phase 0, dicatat sebagai titik optimasi masa depan jika
+  benchmark membuktikan perlu (bukan diasumsikan sekarang).
+- **CI/CD masih belum ada** (carry-over dari 0A/0B).
+
+## Risk Note
+
+| Risiko | Dampak | Kemungkinan | Mitigasi saat ini / rencana |
+|---|---|---|---|
+| Reseed tenant (delete + seed ulang) dipakai untuk menyebarkan permission baru ke role yang sudah ada | Tinggi bila pola ini ditiru di tenant produksi — kehilangan seluruh data tenant | Rendah untuk 0C (hanya dipakai di tenant demo `demo-gs`), tapi risikonya nyata bila tim lain meniru pola ini tanpa membaca catatan ini | Didokumentasikan eksplisit di decision log dan di sini sebagai "khusus demo/dev, bukan pola migrasi produksi"; strategi migrasi permission produksi (backfill `role_permissions`) dicatat sebagai item terbuka, bukan diasumsikan selesai |
+| Schema Registry entry yang hilang (area/key belum di-seed migration) menyebabkan seluruh operasi terkait gagal keras (`ValidationError`, bukan fallback diam-diam) | Sedang — mencegah data tidak tervalidasi masuk, tapi berarti setiap area/key konfigurasi baru WAJIB migration terlebih dulu sebelum dipakai | Rendah (disengaja, sesuai filosofi "metadata sebagai sumber kebenaran validasi" dok 05) | Perilaku ini disengaja dan didokumentasikan di komentar kode `schema-registry-validator.ts`; tim yang menambah area/key konfigurasi baru harus tahu migration adalah langkah wajib pertama |
+| Frontend Configuration panel belum diverifikasi visual di browser sungguhan | Sedang — bug UI (styling, interaksi) mungkin belum terlihat meski `build` dan panggilan API sudah hijau | Sedang | Dicatat eksplisit sebagai gap di atas; direkomendasikan verifikasi manual oleh Founder di lingkungan yang punya akses browser, atau smoke test visual di checkpoint berikutnya |
+| Resolusi Configuration Scope tanpa cache berpotensi jadi bottleneck bila jumlah feature flag atau frekuensi pemanggilan `/effective` bertambah besar | Rendah pada skala pilot | Rendah untuk Phase 0 | Trade-off sengaja dipilih demi kesederhanaan (pola sama seperti keputusan permission-tidak-di-JWT di 0B); dapat dioptimalkan dengan caching nanti bila terbukti perlu lewat benchmark |
+| Test integrasi menulis Tenant sungguhan ke database dev yang sama dipakai untuk development manual | Rendah | Rendah | Sama seperti 0B — `afterAll` menghapus Tenant beserta seluruh data turunannya via cascade |
+
+## Kesiapan untuk Checkpoint 0D
+
+Configuration & Metadata Foundation sudah stabil dan teruji end-to-end
+dari UI sampai PostgreSQL: Module Activation, Feature Flags dengan
+Configuration Scope, Terminology, Reference Data, Numbering, Schema
+Registry (Ajv), dan Configuration Audit seluruhnya terbukti lewat 23 test
+otomatis (0 regresi dari 0A/0B) plus smoke test manual curl yang
+mencakup jalur sukses, jalur validasi gagal, jalur konflik, dan jalur
+RBAC-403. Tidak ada konfigurasi yang di-hardcode untuk client tertentu —
+seluruh nilai Tenant Configuration berasal dari baris yang dibuat lewat
+API/seed, divalidasi terhadap Schema Registry yang sepenuhnya
+migration-seeded (Product Core).
+
+Gap yang diketahui (migrasi permission produksi, Terminology belum
+per-Organization-Unit, endpoint update/deactivate Reference
+Data/Numbering, smoke test visual browser, caching resolusi scope) sudah
+dicatat eksplisit di atas, bukan diasumsikan selesai.
+
+**Menunggu review Founder sebelum masuk Checkpoint 0D**, sesuai instruksi.
