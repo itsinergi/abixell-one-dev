@@ -5,7 +5,12 @@ export async function healthRoutes(app: FastifyInstance) {
   app.get("/health", async () => ({
     status: "ok",
     service: "abixell-one-api",
-    checkpoint: "0B",
+    checkpoint: "0F",
+    // Observability (Checkpoint 0F): process uptime, so a monitoring
+    // probe or a Founder checking a deployment can tell "just started"
+    // (possible crash-loop) apart from "been running fine for days"
+    // without needing log access.
+    uptimeSeconds: Math.round(process.uptime()),
   }));
 
   app.get("/health/db", async (_req, reply) => {

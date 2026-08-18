@@ -63,11 +63,16 @@ export function registerIntegrationRoutes(app: FastifyInstance, container: Conta
       const { tenantCode, endpointCode } = request.params as { tenantCode: string; endpointCode: string };
       const rawBody = typeof request.body === "string" ? request.body : "";
       const signature = request.headers["x-webhook-signature"];
+      // Reliability/Idempotency (Checkpoint 0F): optional sender-supplied
+      // dedupe key for a retried delivery — see IntegrationService.
+      // receiveWebhook and migration 1756000000000 for the full design.
+      const idempotencyKey = request.headers["x-idempotency-key"];
       const entry = await container.integration.receiveWebhook(
         tenantCode,
         endpointCode,
         rawBody,
         typeof signature === "string" ? signature : undefined,
+        typeof idempotencyKey === "string" ? idempotencyKey : undefined,
       );
       return reply.status(202).send({ received: true, logId: entry.id });
     });

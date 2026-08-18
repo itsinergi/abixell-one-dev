@@ -1,4 +1,5 @@
 import type { RbacRepository } from "../../domain/rbac/rbac.entity.js";
+import type { OrganizationUnitRepository } from "../../domain/organization-unit/organization-unit.entity.js";
 import { ForbiddenError } from "../../domain/shared-kernel/errors.js";
 
 /**
@@ -8,7 +9,10 @@ import { ForbiddenError } from "../../domain/shared-kernel/errors.js";
  * hand-roll their own permission checks.
  */
 export class RbacService {
-  constructor(private readonly repo: RbacRepository) {}
+  constructor(
+    private readonly repo: RbacRepository,
+    private readonly orgUnits: OrganizationUnitRepository,
+  ) {}
 
   async getEffectivePermissions(userId: string): Promise<Set<string>> {
     return this.repo.getEffectivePermissionCodes(userId);
@@ -27,25 +31,42 @@ export class RbacService {
   /**
    * Throws ForbiddenError unless the user has an assignment whose Data
    * Scope covers `targetOrganizationUnitId` — either a tenant-wide
-   * assignment, or an organization_unit assignment matching exactly
-   * (0B scope is exact-match only, see docs/decision-log.md gap analysis).
+   * assignment, or an organization_unit assignment on
+   * `targetOrganizationUnitId` itself OR on any of its ANCESTORS
+   * (Checkpoint 0F / ADR-0009, Hierarchical Data Scope — supersedes
+   * ADR-0005's exact-match-only rule from 0B: a Data Scope assigned to a
+   * parent Organization Unit now also covers every descendant, e.g. a
+   * Regional Manager scoped to "Region" automatically covers every
+   * "Site" under it, without a separate assignment per Site).
    */
   async requireOrganizationUnitScope(
     userId: string,
     targetOrganizationUnitId: string,
   ): Promise<void> {
-    const assignments = await this.repo.getAssignments(userId);
-    const covered = assignments.some(
-      (a) =>
-        a.scopeType === "tenant" ||
-        (a.scopeType === "organization_unit" &&
-          a.scopeOrganizationUnitId === targetOrganizationUnitId),
-    );
+    const covered = await this.isOrganizationUnitScopeCovered(userId, targetOrganizationUnitId);
     if (!covered) {
       throw new ForbiddenError(
         "Your assigned Data Scope does not cover this Organization Unit",
       );
     }
+  }
+
+  private async isOrganizationUnitScopeCovered(
+    userId: string,
+    targetOrganizationUnitId: string,
+  ): Promise<boolean> {
+    const [assignments, ancestorIds] = await Promise.all([
+      this.repo.getAssignments(userId),
+      this.orgUnits.listAncestorIds(targetOrganizationUnitId),
+    ]);
+    const ancestorSet = new Set(ancestorIds);
+    return assignments.some(
+      (a) =>
+        a.scopeType === "tenant" ||
+        (a.scopeType === "organization_unit" &&
+          a.scopeOrganizationUnitId !== null &&
+          ancestorSet.has(a.scopeOrganizationUnitId)),
+    );
   }
 
   /** True if the user holds at least one tenant-wide assignment. */
@@ -65,8 +86,10 @@ export class RbacService {
    *   must hold `roleCode` with a tenant-wide assignment.
    * - `targetOrganizationUnitId` set: the actor must hold `roleCode` with
    *   either a tenant-wide assignment, or an organization_unit assignment
-   *   matching exactly (0B/ADR-0005 exact-match scope — a broader,
-   *   tenant-wide role holder can still act on a narrower-scoped task).
+   *   on the target unit itself OR on any of its ANCESTORS (Checkpoint
+   *   0F / ADR-0009 — a broader, tenant-wide role holder can still act on
+   *   a narrower-scoped task, and now so can a holder scoped to any
+   *   parent Organization Unit of the task's target).
    */
   async hasRoleCoveringScope(
     userId: string,
@@ -74,14 +97,19 @@ export class RbacService {
     targetOrganizationUnitId: string | null,
   ): Promise<boolean> {
     const assignments = await this.repo.getAssignments(userId);
-    return assignments.some((a) => {
-      if (a.roleCode !== roleCode) return false;
-      if (targetOrganizationUnitId === null) return a.scopeType === "tenant";
-      return (
+    const roleAssignments = assignments.filter((a) => a.roleCode === roleCode);
+    if (roleAssignments.length === 0) return false;
+    if (targetOrganizationUnitId === null) {
+      return roleAssignments.some((a) => a.scopeType === "tenant");
+    }
+    const ancestorIds = await this.orgUnits.listAncestorIds(targetOrganizationUnitId);
+    const ancestorSet = new Set(ancestorIds);
+    return roleAssignments.some(
+      (a) =>
         a.scopeType === "tenant" ||
         (a.scopeType === "organization_unit" &&
-          a.scopeOrganizationUnitId === targetOrganizationUnitId)
-      );
-    });
+          a.scopeOrganizationUnitId !== null &&
+          ancestorSet.has(a.scopeOrganizationUnitId)),
+    );
   }
 }

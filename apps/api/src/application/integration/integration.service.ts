@@ -106,6 +106,7 @@ export class IntegrationService {
     endpointCode: string,
     rawBody: string,
     signatureHeader: string | undefined,
+    idempotencyKey?: string | null,
   ): Promise<IntegrationLogEntry> {
     const tenant = await this.tenantRepo.findByCode(tenantCode);
     if (!tenant) throw new NotFoundError("Tenant", tenantCode);
@@ -128,16 +129,53 @@ export class IntegrationService {
       throw new ForbiddenError("Invalid webhook signature");
     }
 
+    // Reliability/Idempotency (Checkpoint 0F): a sender that provides an
+    // idempotency key and retries the SAME delivery gets back the
+    // original logged entry, unchanged — no second Domain Event is
+    // published. A sender that never sends a key keeps the pre-0F
+    // behavior (every signature-valid delivery is processed), which is
+    // an explicit, documented trade-off: idempotency here is opt-in by
+    // the sender, not enforced platform-wide, because there is no
+    // reliable dedupe key to fall back to (payload hash would reject
+    // legitimately-identical-but-distinct events).
+    if (idempotencyKey) {
+      const existing = await this.repo.findByIdempotencyKey(endpoint.id, idempotencyKey);
+      if (existing) return existing;
+    }
+
     const payload = safeParseJson(rawBody);
-    const entry = await this.repo.logEvent({
-      tenantId: tenant.id,
-      integrationEndpointId: endpoint.id,
-      direction: "inbound",
-      eventType: `integration.${endpointCode}.received`,
-      payload,
-      status: "received",
-      errorMessage: null,
-    });
+    let entry: IntegrationLogEntry;
+    try {
+      entry = await this.repo.logEvent({
+        tenantId: tenant.id,
+        integrationEndpointId: endpoint.id,
+        direction: "inbound",
+        eventType: `integration.${endpointCode}.received`,
+        payload,
+        status: "received",
+        errorMessage: null,
+        idempotencyKey: idempotencyKey ?? null,
+      });
+    } catch (error) {
+      // Race window: two concurrent deliveries with the same key both
+      // passed the findByIdempotencyKey check above before either
+      // inserted — the partial unique index (migration 1756000000000)
+      // rejects the second insert (Postgres error code 23505). Treat
+      // that as "someone else already logged this delivery" and return
+      // the row that won, rather than surfacing a 500 to a webhook
+      // sender that did nothing wrong.
+      if (
+        idempotencyKey &&
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "23505"
+      ) {
+        const winner = await this.repo.findByIdempotencyKey(endpoint.id, idempotencyKey);
+        if (winner) return winner;
+      }
+      throw error;
+    }
 
     await this.eventBus.publish({
       tenantId: tenant.id,

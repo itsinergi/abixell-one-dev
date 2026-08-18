@@ -38,6 +38,10 @@ export interface IntegrationLogEntry {
   payload: Record<string, unknown>;
   status: IntegrationLogStatus;
   errorMessage: string | null;
+  /** Checkpoint 0F — optional dedupe key for inbound webhook deliveries
+   * (see migration 1756000000000). Null for outbound stub entries and
+   * for inbound deliveries whose sender didn't provide one. */
+  idempotencyKey: string | null;
   createdAt: Date;
 }
 
@@ -63,7 +67,17 @@ export interface IntegrationRepository {
     payload: Record<string, unknown>;
     status: IntegrationLogStatus;
     errorMessage: string | null;
+    idempotencyKey?: string | null;
   }): Promise<IntegrationLogEntry>;
+
+  /** Checkpoint 0F — the existing log entry for a prior inbound delivery
+   * with this exact (endpointId, idempotencyKey) pair, if any. Used to
+   * make webhook redelivery a safe no-op instead of a duplicate Domain
+   * Event. Only meaningful when `idempotencyKey` is non-null. */
+  findByIdempotencyKey(
+    integrationEndpointId: string,
+    idempotencyKey: string,
+  ): Promise<IntegrationLogEntry | null>;
 
   listLog(tenantId: string, limit: number): Promise<IntegrationLogEntry[]>;
 }

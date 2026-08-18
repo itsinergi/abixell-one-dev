@@ -776,4 +776,158 @@ eksplisit di atas, bukan diasumsikan selesai.
 
 **Menunggu review Founder sebelum masuk Checkpoint 0F**, sesuai instruksi.
 
-**Menunggu review Founder sebelum masuk Checkpoint 0E**, sesuai instruksi.
+---
+
+# Implementation Notes — Checkpoint 0F: Phase 0 Stabilization
+
+**Status: COMPLETE**
+**Tanggal: 2026-08-18**
+
+## Apa yang dibangun
+
+Checkpoint 0F TIDAK menambah capability bisnis baru — fokusnya
+konsolidasi, keamanan, dan kesiapan Phase 0 sebelum Complaint/Survey,
+persis sesuai instruksi Founder. Sembilan area yang diminta eksplisit,
+seluruhnya dikerjakan terhadap objek generik yang sama seperti 0A–0E:
+
+- **Security review menyeluruh**: RBAC (`requirePermission`/
+  `requireOrganizationUnitScope`) diverifikasi sebagai satu-satunya jalur
+  otorisasi (tidak ada route yang hand-roll pengecekan sendiri); JWT
+  access token TETAP tidak menyimpan permission (keputusan 0B,
+  terbukti murah lewat performance baseline); refresh token TETAP opaque
+  + di-hash + rotate-on-use (keputusan 0B, tidak diubah). Tiga perbaikan
+  keamanan nyata ditambahkan: `@fastify/helmet` (security header
+  standar), rate limiting (`@fastify/rate-limit` — global 1200/menit,
+  `/auth/login` 10/menit terpisah), dan `POST /auth/logout` (revoke
+  refresh token server-side). npm audit produksi (`--omit=dev`): 0
+  vulnerability.
+- **Hierarchical Data Scope (ADR-0009)**: menyelesaikan item terbuka
+  ADR-0005 sejak 0B. Assignment di Organization Unit induk kini otomatis
+  mencakup seluruh descendant-nya — dibuktikan lewat test yang membangun
+  hierarki 4 level (Region → Site → Sub-Site → Leaf) dan satu Region
+  sibling terpisah, memverifikasi Regional Manager yang di-scope ke
+  Region bisa listing DAN membuat Organization Unit dua level di bawah
+  scope aslinya, sekaligus tetap 403 saat mencoba masuk ke Region
+  sibling yang tidak berelasi.
+- **Production permission migration (ADR-0010)**: kolom
+  `roles.is_full_access` + script idempoten
+  `scripts/sync-role-permissions.ts`, menyelesaikan pola reseed yang
+  berulang di 0C/0D/0E untuk kasus Role Administrator. Dibuktikan
+  langsung terhadap database sungguhan: satu grant permission dihapus
+  manual dari Role ADMIN tenant demo, script dijalankan, grant
+  dipulihkan; run kedua melaporkan "0 grant baru" (idempoten, tidak
+  merusak apa pun yang sudah benar).
+- **Frontend token/session persistence**: `AuthContext` kini
+  menyimpan sesi di `localStorage`, merehidrasi + langsung menukar
+  refresh token untuk access token baru saat aplikasi dimuat ulang.
+  `ProtectedRoute` menunggu proses ini selesai (state `initializing`)
+  sebelum memutuskan redirect ke `/login`, mencegah "kedipan" ke halaman
+  login bagi user yang sesinya sebenarnya masih valid.
+- **Validasi database/migration**: migration Checkpoint 0F
+  (`1756000000000_phase0-stabilization`) diuji siklus up→down→up
+  terhadap database dev; SELURUH RANTAI migration (0A–0F, 7 file) diuji
+  dari nol di database sementara terpisah — up bersih, down bersih
+  sampai kosong, up lagi menghasilkan jumlah tabel yang identik. Seluruh
+  19 tabel ber-scope Tenant diverifikasi memiliki `ON DELETE CASCADE`
+  yang benar dari `tenants` (dasar mekanisme cleanup test sejak 0B).
+- **Performance baseline**: diukur dengan `autocannon` terhadap 6
+  endpoint representatif (baca, tulis, RBAC re-fetch, Scheduler). Seluruh
+  p99 di bawah 45ms pada skala data demo — lihat
+  `docs/performance-baseline.md` untuk detail dan batasannya. Proses
+  benchmark ini SENDIRI menemukan rate limit global awal (300/menit)
+  terlalu ketat, langsung diperbaiki (lihat decision-log #7).
+- **Reliability/Idempotency**: inbound Integration webhook mendukung
+  idempotency key opsional (partial unique index di database — migration
+  0F) sehingga redelivery aman; Scheduler mendapat overlap guard
+  in-process sehingga job yang sama tidak pernah berjalan dua kali
+  bersamaan (dibuktikan: dua trigger manual bersamaan menghasilkan satu
+  200 dan satu 409).
+- **Observability**: `LOG_LEVEL` kini bisa di-override lewat env var
+  tanpa code change; `GET /health` menampilkan `uptimeSeconds`; label
+  `checkpoint` di health check diperbarui (sebelumnya masih tertulis
+  "0B", stale sejak beberapa checkpoint — kosmetik tapi menyesatkan bila
+  dibaca operator).
+- **Full regression test**: 45 test terintegrasi lulus (40 dari 0A–0E, 5
+  baru dari 0F), 0 regresi. Typecheck, lint, dan production build bersih
+  di `apps/api` maupun `apps/web`.
+- **Visual browser smoke/E2E**: untuk PERTAMA KALINYA sejak 0C
+  (gap yang tercatat berulang di setiap checkpoint sebelumnya —
+  lingkungan implementasi sebelumnya tidak punya akses browser), sebuah
+  test Playwright+Chromium sungguhan dijalankan: login lewat form nyata,
+  screenshot dashboard penuh (seluruh panel 0B–0E terverifikasi visual
+  benar, termasuk label dinamis dari Terminology Configuration),
+  reload-untuk-membuktikan-persistence, logout, dan verifikasi akses
+  benar-benar dicabut setelah logout. Ditemukan DAN diperbaiki dua bug
+  nyata lewat proses ini (lihat "Temuan" di bawah) — script tersimpan di
+  `apps/web/e2e/smoke.mjs`, screenshot di `docs/evidence/`.
+- **Technical Debt Register**: `docs/technical-debt-register.md`,
+  konsolidasi seluruh gap 0A–0F menjadi 4 kategori
+  (Blocker/Must Fix/Technical Debt/Future Enhancement) sesuai instruksi
+  Founder.
+
+## Temuan nyata selama Checkpoint 0F (bukan hipotesis)
+
+1. **Bug nyata**: error handler global membuang status code asli dari
+   plugin Fastify manapun (bukan hanya rate-limit) — request yang
+   di-throttle (429) diteruskan ke client sebagai 500. Ditemukan oleh
+   test rate-limiting 0F sendiri, diperbaiki di `error-mapping.ts`.
+2. **Bug nyata**: route yang didaftarkan langsung ke instance `app` root
+   bisa selesai terdaftar SEBELUM plugin `@fastify/rate-limit` (yang
+   di-`register()` tanpa `await`) selesai menempelkan hook-nya — akibatnya
+   limit per-route `/auth/login` diam-diam tidak pernah aktif. Ditemukan
+   oleh test yang sama, diperbaiki dengan membungkus SELURUH route dalam
+   `app.register(async (scoped) => {...})` bersarang.
+3. **Bug nyata**: React StrictMode (development) memanggil efek
+   rehidrasi sesi dua kali per mount; karena refresh token bersifat
+   single-use, panggilan kedua gagal 401 memakai token yang sudah
+   di-rotate panggilan pertama — muncul sebagai error nyata di console
+   browser saat Playwright E2E reload halaman. Diperbaiki dengan guard
+   `useRef`.
+
+Ketiga temuan ini TIDAK akan terdeteksi oleh test integrasi backend saja
+(temuan #2 dan #3 khususnya baru terlihat lewat pengujian end-to-end
+sungguhan) — inilah alasan checkpoint ini secara eksplisit meminta visual
+browser smoke test, bukan sekadar mengandalkan `typecheck`/`lint`/`build`
+seperti checkpoint-checkpoint sebelumnya.
+
+## Keterbatasan / gap yang diketahui di akhir Checkpoint 0F
+
+Lihat `docs/technical-debt-register.md` untuk daftar lengkap
+terklasifikasi. Ringkasan MUST FIX yang paling relevan untuk kesiapan
+Complaint/Survey: Document Service belum mengikuti Data Scope entity
+induknya (wajib diputuskan eksplisit di awal Phase 1), migrasi
+permission untuk Role kurasi (non-`is_full_access`) masih manual, CORS
+masih permisif (`origin: true`), CI/CD masih belum ada.
+
+## Risk Note
+
+| Risiko | Dampak | Kemungkinan | Mitigasi saat ini / rencana |
+|---|---|---|---|
+| Document Service belum entity-scope-aware, dan Complaint/Survey akan memakainya untuk lampiran bukti | Tinggi — siapa pun dengan `document.read` bisa melihat lampiran Complaint milik Site mana pun, bukan hanya yang scope-nya sesuai | Sedang, begitu Complaint/Survey mulai dibangun | Dicatat sebagai MUST FIX di Technical Debt Register; Phase 1 checkpoint pertama WAJIB memutuskan ini secara eksplisit sebelum lampiran bukti Complaint pertama diunggah |
+| Rate limit (global 1200/menit, login 10/menit) belum divalidasi dengan traffic pilot nyata | Sedang — terlalu ketat akan mengganggu user asli, terlalu longgar tidak melindungi dari abuse | Rendah untuk beberapa minggu pertama pilot, meningkat seiring adopsi | Angka awal sudah berbasis bukti (performance baseline), bukan tebakan; dicatat eksplisit untuk ditinjau ulang setelah ada data pemakaian nyata |
+| Sesi frontend di localStorage bisa dibaca oleh XSS jika ada kerentanan XSS di tempat lain pada frontend | Tinggi JIKA ada XSS — refresh token 7 hari bisa dicuri | Rendah (React meng-escape output secara default, helmet menambah header keamanan standar, tidak ada `dangerouslySetInnerHTML` di codebase) | Risiko yang sama persis ada untuk token in-memory sekalipun (skrip yang di-inject bisa membaca state React juga) — mitigasi sesungguhnya ada di level "cegah XSS terjadi", bukan di lokasi penyimpanan token; didokumentasikan sebagai trade-off sadar, bukan diabaikan |
+| CI/CD masih belum ada — carry-over dari 0A, kini enam checkpoint berturut-turut | Sedang — seluruh gate lulus manual setiap checkpoint, tapi tidak ada jaring pengaman otomatis bila lebih dari satu implementor bekerja paralel di Phase 1 | Meningkat begitu tim bertambah | Ditandai MUST FIX; wajib diselesaikan sebelum Phase 1 melibatkan lebih dari satu kontributor kode |
+| Test integrasi menulis Tenant sungguhan ke database dev yang sama dipakai untuk development manual | Rendah | Rendah | Sama seperti 0B–0E — `afterAll` menghapus Tenant beserta seluruh data turunannya via cascade (diverifikasi ulang secara sistematis di 0F: 19 tabel, seluruhnya CASCADE dari `tenants`) |
+
+## Kesiapan untuk Phase 1 (Customer Complaint Management & Survey/Assessment)
+
+Phase 0 Enterprise Core Foundation (Checkpoint 0A–0F) sudah stabil dan
+teruji end-to-end dari UI sampai PostgreSQL: Tenant/Legal Entity/
+Organization Unit, Identity/Auth/RBAC dengan Data Scope HIERARKIS,
+Configuration & Metadata Engine, Workflow & Approval Engine dengan
+claim/lock, dan seluruh Enterprise Shared Services (Event, Notification,
+Document, Scheduler, Integration, Observability) — 45 test otomatis (0
+regresi sepanjang 0A–0F), typecheck/lint/build bersih di kedua
+workspace, migration chain penuh terbukti reversible dari nol, dan untuk
+pertama kalinya divalidasi lewat browser sungguhan (Playwright), bukan
+hanya lewat API.
+
+Tidak ada item BLOCKER yang tersisa untuk memulai Phase 1. Item MUST FIX
+(lihat Technical Debt Register) dicatat eksplisit sebagai pekerjaan yang
+boleh berjalan paralel dengan Phase 1, dengan SATU pengecualian yang
+wajib diputuskan di awal: strategi akses Data Scope untuk Document
+Service, karena Complaint/Survey akan langsung memakai Document Service
+untuk lampiran bukti sejak checkpoint pertamanya.
+
+**Menunggu Founder Review untuk menyatakan Phase 0 COMPLETED dan
+memberikan keputusan apakah Phase 1 boleh dimulai.**

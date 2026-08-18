@@ -57,6 +57,20 @@ export const api = {
   me: (token: string) =>
     request<{ userId: string; tenantId: string; permissions: string[] }>("/me", { token }),
 
+  // Frontend token/session persistence (Checkpoint 0F): `refresh` trades
+  // the opaque refresh token for a new access token AND a rotated
+  // refresh token (never reused — see refresh-token.ts); `logout`
+  // revokes the refresh token server-side so a persisted-but-stale
+  // token in localStorage can't be replayed after the user signs out.
+  refresh: (refreshToken: string) =>
+    request<{ accessToken: string; refreshToken: string }>("/auth/refresh", {
+      method: "POST",
+      body: { refreshToken },
+    }),
+
+  logout: (refreshToken: string) =>
+    request<void>("/auth/logout", { method: "POST", body: { refreshToken } }),
+
   tenant: (token: string) =>
     request<{ id: string; code: string; name: string; status: string }>("/tenants/me", {
       token,

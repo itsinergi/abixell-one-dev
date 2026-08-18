@@ -1,6 +1,11 @@
 # ADR-0005: Data Scope in Checkpoint 0B is Exact-Match Only (Not Descendant-Aware)
 
-- **Status:** APPROVED for Checkpoint 0B, EXPECTED TO CHANGE in a later checkpoint
+- **Status:** SUPERSEDED by [ADR-0009](0009-hierarchical-data-scope.md)
+  (Checkpoint 0F, 2026-08-18) — Data Scope is now hierarchical
+  (descendant-aware). This ADR is kept as the historical record of why
+  0B shipped exact-match-only and what was explicitly deferred; it no
+  longer describes current behavior.
+- **Status (original):** APPROVED for Checkpoint 0B, EXPECTED TO CHANGE in a later checkpoint
 - **Date:** 2026-08-18
 - **Source:** `01-Tenant-Legal-Entity-Organization-Model.md`,
   `02-Identity-Security-RBAC-Foundation.md`

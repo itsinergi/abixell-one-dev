@@ -5,7 +5,11 @@ import type { AuditService } from "../audit/audit.service.js";
 import { UnauthorizedError } from "../../domain/shared-kernel/errors.js";
 import { verifyPassword } from "../../infrastructure/security/password.js";
 import { signAccessToken, verifyAccessToken } from "../../infrastructure/security/jwt.js";
-import { consumeRefreshToken, issueRefreshToken } from "../../infrastructure/security/refresh-token.js";
+import {
+  consumeRefreshToken,
+  issueRefreshToken,
+  revokeRefreshToken,
+} from "../../infrastructure/security/refresh-token.js";
 
 export interface LoginInput {
   tenantCode: string;
@@ -89,5 +93,9 @@ export class AuthService {
 
   verifyAccessToken(token: string) {
     return verifyAccessToken(token);
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    await revokeRefreshToken(this.pool, refreshToken);
   }
 }

@@ -59,14 +59,27 @@ export class OrganizationUnitService {
     const hasTenantScope = await this.rbac.hasTenantScope(actor.userId);
     if (hasTenantScope) return all;
 
-    // Exact-match scope filter for non-tenant-wide assignments (0B scope
-    // model — see docs/decision-log.md).
+    // Hierarchical scope filter (Checkpoint 0F / ADR-0009, supersedes the
+    // 0B exact-match-only rule): a unit is visible if the actor's Data
+    // Scope covers the unit itself OR any of its ANCESTORS — e.g. an
+    // assignment on "Region" now also surfaces every "Site" under it.
+    // Walked in-memory against the tenant's full unit list (already
+    // fetched above) rather than one SQL round-trip per unit.
     const assignments = await this.rbacRepo.getAssignments(actor.userId);
-    const allowedIds = new Set(
+    const scopeIds = new Set(
       assignments
-        .filter((a) => a.scopeType === "organization_unit")
-        .map((a) => a.scopeOrganizationUnitId),
+        .filter((a) => a.scopeType === "organization_unit" && a.scopeOrganizationUnitId)
+        .map((a) => a.scopeOrganizationUnitId as string),
     );
-    return all.filter((u) => allowedIds.has(u.id));
+    const byId = new Map(all.map((u) => [u.id, u]));
+    const isCovered = (unitId: string): boolean => {
+      let current = byId.get(unitId);
+      while (current) {
+        if (scopeIds.has(current.id)) return true;
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+      }
+      return false;
+    };
+    return all.filter((u) => isCovered(u.id));
   }
 }

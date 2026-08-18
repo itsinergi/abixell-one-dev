@@ -1,0 +1,122 @@
+/**
+ * Checkpoint 0F visual browser smoke/E2E test.
+ *
+ * Prerequisites: PostgreSQL running + migrated + seeded, the API dev
+ * server on :4000, and the web dev server on :5173 (`npm run dev` in
+ * each of apps/api and apps/web). Not wired into `npm test` — this is a
+ * manual/CI-optional smoke check against a REAL browser (Playwright +
+ * Chromium), not a unit/integration test; see docs/implementation-notes.md
+ * Checkpoint 0F section for how it was run and what it found.
+ *
+ * Usage: node e2e/smoke.mjs   (from apps/web)
+ */
+import playwright from "playwright";
+import { mkdirSync } from "node:fs";
+
+const { chromium } = playwright;
+
+const BASE = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const SCREENSHOT_DIR = process.env.E2E_SCREENSHOT_DIR ?? "/tmp/e2e-screenshots";
+mkdirSync(SCREENSHOT_DIR, { recursive: true });
+
+const launchOptions = process.env.PLAYWRIGHT_CHROMIUM_PATH
+  ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+  : {};
+const browser = await chromium.launch(launchOptions);
+const page = await browser.newPage();
+const consoleErrors = [];
+page.on("console", (msg) => {
+  if (msg.type() === "error") {
+    console.log("   [console] " + msg.text());
+    consoleErrors.push(msg.text());
+  }
+});
+page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
+page.on("response", (res) => {
+  if (res.status() >= 400) {
+    const line = `HTTP ${res.status()} ${res.url()}`;
+    consoleErrors.push(line);
+    console.log("   [network] " + line);
+  }
+});
+
+let step = 0;
+function shot(name) {
+  step += 1;
+  return page.screenshot({ path: `${SCREENSHOT_DIR}/${String(step).padStart(2, "0")}-${name}.png`, fullPage: true });
+}
+
+console.log("1. Navigating to app root (should redirect to /login)...");
+await page.goto(BASE + "/", { waitUntil: "networkidle" });
+await page.waitForURL(/\/login/, { timeout: 5000 });
+await shot("login-page");
+console.log("   OK — redirected to /login as expected (no session yet).");
+
+console.log("2. Filling login form and signing in as admin@demo.local...");
+await page.fill('input[value="demo-gs"]', "demo-gs").catch(() => {});
+// Fill by label text since inputs aren't easily selected by placeholder alone.
+const tenantInput = page.locator("label", { hasText: "Tenant code" }).locator("input");
+const emailInput = page.locator("label", { hasText: "Email" }).locator("input");
+const passwordInput = page.locator("label", { hasText: "Password" }).locator("input");
+await tenantInput.fill("demo-gs");
+await emailInput.fill("admin@demo.local");
+await passwordInput.fill("Admin12345!");
+await page.click('button[type="submit"]');
+await page.waitForURL(BASE + "/", { timeout: 8000 });
+await page.waitForSelector("text=Demo Enterprise Client", { timeout: 8000 });
+await shot("dashboard-after-login");
+console.log("   OK — logged in, dashboard loaded, tenant name visible.");
+
+console.log("3. Verifying key Checkpoint 0A-0F sections render...");
+const sections = [
+  "Organization Units",
+  "Legal Entities",
+  "Users",
+  "Audit Trail (recent)",
+];
+for (const label of sections) {
+  const visible = await page.locator(`text=${label}`).first().isVisible().catch(() => false);
+  console.log(`   - "${label}": ${visible ? "visible" : "MISSING"}`);
+}
+// Note: "Organization Units" renders as "Sites" in this run because of a
+// Terminology Configuration override (Checkpoint 0C feature) on the demo
+// tenant — confirmed correct behavior via screenshot, not a defect.
+// WorkflowPanel and SharedServicesPanel headings (best-effort, structure may vary).
+const workflowVisible = await page.locator("text=/Workflow/i").first().isVisible().catch(() => false);
+const sharedServicesVisible = await page.locator("text=/Notification|Scheduler|Integration|Document/i").first().isVisible().catch(() => false);
+console.log(`   - Workflow section present: ${workflowVisible}`);
+console.log(`   - Shared Services section present: ${sharedServicesVisible}`);
+
+console.log("4. Checkpoint 0F: reloading the page — session should PERSIST (no bounce to /login)...");
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(500);
+const urlAfterReload = page.url();
+const stillOnDashboard = urlAfterReload === BASE + "/";
+await shot("dashboard-after-reload");
+console.log(`   URL after reload: ${urlAfterReload} — session persisted: ${stillOnDashboard}`);
+
+console.log("5. Checking localStorage for persisted session key...");
+const storedSession = await page.evaluate(() => window.localStorage.getItem("abixell.session"));
+console.log(`   localStorage 'abixell.session' present: ${storedSession !== null}`);
+
+console.log("6. Signing out...");
+await page.click('button:has-text("Sign out")');
+await page.waitForURL(/\/login/, { timeout: 5000 });
+const storedAfterLogout = await page.evaluate(() => window.localStorage.getItem("abixell.session"));
+await shot("after-logout");
+console.log(`   OK — redirected to /login. localStorage cleared: ${storedAfterLogout === null}`);
+
+console.log("7. Confirming a stale/revoked session no longer grants access after logout...");
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForURL(/\/login/, { timeout: 5000 });
+console.log("   OK — still on /login after reload post-logout.");
+
+console.log("\n=== Console errors captured during the whole run ===");
+if (consoleErrors.length === 0) {
+  console.log("(none)");
+} else {
+  consoleErrors.forEach((e) => console.log(" - " + e));
+}
+
+await browser.close();
+console.log("\nE2E smoke test finished. Screenshots in " + SCREENSHOT_DIR + "");

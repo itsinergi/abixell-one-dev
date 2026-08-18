@@ -27,6 +27,14 @@ export class SchedulerService {
   private readonly handlers = new Map<string, JobHandler>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private started = false;
+  // Reliability (Checkpoint 0F): in-process overlap guard. If a job's
+  // handler ever runs longer than its own interval — or a manual trigger
+  // lands while the timer-driven run is still in flight — a second
+  // concurrent run of the SAME job could double-process the same overdue
+  // Assignments (Escalation Sweep is not naturally idempotent against
+  // itself running twice at once). This makes "at most one run per
+  // jobCode at a time" a structural guarantee instead of an assumption.
+  private readonly runningJobCodes = new Set<string>();
 
   constructor(
     private readonly repo: SchedulerRepository,
@@ -114,6 +122,11 @@ export class SchedulerService {
     const handler = this.handlers.get(job.handlerKey);
     if (!handler) throw new ConflictError(`No handler registered for handlerKey '${job.handlerKey}'`);
 
+    if (this.runningJobCodes.has(jobCode)) {
+      throw new ConflictError(`Job '${jobCode}' is already running — skipping overlapping ${trigger} run`);
+    }
+    this.runningJobCodes.add(jobCode);
+
     const run = await this.repo.startRun(job.id, trigger, triggeredBy);
     const startedAt = Date.now();
     try {
@@ -136,6 +149,8 @@ export class SchedulerService {
         lastError: message,
       });
       return finished;
+    } finally {
+      this.runningJobCodes.delete(jobCode);
     }
   }
 }

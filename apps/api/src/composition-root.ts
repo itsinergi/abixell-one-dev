@@ -58,7 +58,7 @@ export function buildContainer() {
   const integrationRepo = new PgIntegrationRepository(pool);
 
   const audit = new AuditService(auditRepo);
-  const rbac = new RbacService(rbacRepo);
+  const rbac = new RbacService(rbacRepo, organizationUnitRepo);
 
   const eventBus = new EventBus(domainEventRepo, (eventType, error) => {
     console.error(`[EventBus] subscriber for '${eventType}' failed:`, error);

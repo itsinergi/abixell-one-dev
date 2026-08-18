@@ -38,3 +38,15 @@ export async function consumeRefreshToken(
 
   return { userId: result.rows[0].user_id };
 }
+
+/** Explicit logout (Checkpoint 0F): revoke a refresh token on request
+ * rather than waiting for it to be consumed/rotated or to expire.
+ * Idempotent by design — revoking an already-revoked or unknown token is
+ * a silent no-op, since logout should never leak whether a token was
+ * valid (same principle as login's generic "invalid credentials"). */
+export async function revokeRefreshToken(pool: Pool, token: string): Promise<void> {
+  await pool.query(
+    `UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL`,
+    [hashToken(token)],
+  );
+}

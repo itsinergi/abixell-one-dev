@@ -10,8 +10,9 @@ describe("GET /health", () => {
     expect(response.json()).toMatchObject({
       status: "ok",
       service: "abixell-one-api",
-      checkpoint: "0B",
+      checkpoint: "0F",
     });
+    expect(typeof response.json().uptimeSeconds).toBe("number");
 
     await app.close();
   });

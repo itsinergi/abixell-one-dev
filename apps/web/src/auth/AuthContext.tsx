@@ -1,4 +1,14 @@
-import { createContext, useContext, useMemo, useState, type PropsWithChildren } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from "react";
+import { api } from "../lib/api";
 
 interface Session {
   accessToken: string;
@@ -10,26 +20,138 @@ interface Session {
 
 interface AuthContextValue {
   session: Session | null;
+  /** True only during the very first render, while a persisted session
+   * (if any) is being validated/refreshed against the backend. Route
+   * guards should wait for this before deciding to redirect to /login —
+   * otherwise a returning user with a valid persisted session would
+   * flash through the login page on every page reload. */
+  initializing: boolean;
   login: (session: Session) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Session lives in memory only for Checkpoint 0B — no localStorage/
-// sessionStorage decision has been made yet for token persistence across
-// page reloads. That is an explicit open item, not an oversight: see
-// docs/decision-log.md.
+// Frontend token/session persistence (Checkpoint 0F — resolves the gap
+// left open explicitly since 0B: "Penyimpanan token di frontend bersifat
+// in-memory saja ... sesi hilang saat halaman di-refresh"). The refresh
+// token (opaque, 7-day TTL, hashed server-side, single-use/rotated on
+// every use — see refresh-token.ts) is what's actually persisted;
+// localStorage is an accepted, documented trade-off here, not an
+// oversight — this is a pure JSON Bearer-token API (no cookies, so no
+// CSRF surface either way), a Dedicated Deployment per client (ADR-0003,
+// smaller/more trusted attack surface than a multi-tenant SaaS frontend
+// would be), and the realistic alternative (httpOnly refresh cookie +
+// a same-origin BFF) is a real architecture change out of this
+// checkpoint's "no big new capability" scope — tracked as a Future
+// Enhancement in the Checkpoint 0F Technical Debt Register, not silently
+// assumed solved. An XSS vulnerability anywhere in the frontend would be
+// able to read this token; that risk exists with or without persistence
+// (an in-memory token is just as readable by injected script while the
+// tab is open) and is mitigated at the source by helmet's security
+// headers (Checkpoint 0F, app.ts) and standard React output-escaping,
+// not by where the token happens to be stored.
+const STORAGE_KEY = "abixell.session";
+
+function readPersistedSession(): Session | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistSession(session: Session | null): void {
+  try {
+    if (session) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    } else {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch {
+    // localStorage unavailable (private browsing, quota, etc.) — the
+    // session still works for the current tab via in-memory state, it
+    // just won't survive a reload. Not a fatal error.
+  }
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
+  const [initializing, setInitializing] = useState(true);
+  // Persists across React StrictMode's double effect invocation (a ref
+  // survives that, unlike a variable declared inside the effect body) —
+  // see the rehydration effect below for why this matters here
+  // specifically.
+  const rehydrationStarted = useRef(false);
+
+  const login = useCallback((s: Session) => {
+    setSession(s);
+    persistSession(s);
+  }, []);
+
+  const logout = useCallback(() => {
+    const current = session;
+    setSession(null);
+    persistSession(null);
+    if (current) {
+      // Best-effort, fire-and-forget: revoke the refresh token
+      // server-side (Checkpoint 0F `POST /auth/logout`) so a copy of it
+      // left in localStorage (e.g. browser history, a shared machine)
+      // can't be replayed. The user is signed out locally regardless of
+      // whether this call succeeds.
+      api.logout(current.refreshToken).catch(() => {});
+    }
+  }, [session]);
+
+  // On mount: rehydrate a persisted session, then immediately exchange
+  // its refresh token for a fresh access token. The access token's own
+  // 15-minute TTL almost certainly already expired between page loads
+  // (or the tab being reopened) — proactively refreshing here means the
+  // user lands back on the Dashboard already authenticated, instead of
+  // the app trusting a probably-stale access token until the first API
+  // call 401s.
+  //
+  // `rehydrationStarted` guards against React StrictMode's deliberate
+  // double-invoke of effects in development — refresh tokens are
+  // single-use/rotated on every use (refresh-token.ts), so firing this
+  // effect's body twice for the same mount would consume the token on
+  // the first call and then genuinely 401 on the second, logging a real
+  // error out of a false alarm. Caught by the Checkpoint 0F Playwright
+  // E2E smoke test (`e2e-smoke.mjs`), which is why this guard exists at
+  // all — it was not a hypothetical.
+  useEffect(() => {
+    if (rehydrationStarted.current) return;
+    rehydrationStarted.current = true;
+
+    const persisted = readPersistedSession();
+    if (!persisted) {
+      setInitializing(false);
+      return;
+    }
+    api
+      .refresh(persisted.refreshToken)
+      .then((result) => {
+        const refreshed: Session = { ...persisted, ...result };
+        setSession(refreshed);
+        persistSession(refreshed);
+      })
+      .catch(() => {
+        // Refresh token expired/revoked/invalid — the persisted session
+        // is no longer usable, clear it rather than leaving a dead
+        // session object around.
+        persistSession(null);
+      })
+      .finally(() => setInitializing(false));
+    // Intentionally run once on mount only — this project's ESLint
+    // config does not enable react-hooks/exhaustive-deps, so no
+    // suppression comment is needed (an unused one would itself fail
+    // lint, as happened once already in Checkpoint 0E).
+  }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({
-      session,
-      login: (s) => setSession(s),
-      logout: () => setSession(null),
-    }),
-    [session],
+    () => ({ session, initializing, login, logout }),
+    [session, initializing, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

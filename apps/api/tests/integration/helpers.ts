@@ -32,7 +32,7 @@ export async function provisionFirstAdmin(params: {
   password: string;
 }) {
   const roleResult = await pool.query(
-    `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'ADMIN', 'Administrator') RETURNING id`,
+    `INSERT INTO roles (tenant_id, code, name, is_full_access) VALUES ($1, 'ADMIN', 'Administrator', true) RETURNING id`,
     [params.tenantId],
   );
   const roleId = roleResult.rows[0].id;

@@ -59,11 +59,12 @@ export class PgIntegrationRepository implements IntegrationRepository {
     payload: Record<string, unknown>;
     status: IntegrationLogStatus;
     errorMessage: string | null;
+    idempotencyKey?: string | null;
   }): Promise<IntegrationLogEntry> {
     const result = await this.pool.query(
       `INSERT INTO integration_event_log
-         (tenant_id, integration_endpoint_id, direction, event_type, payload, status, error_message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (tenant_id, integration_endpoint_id, direction, event_type, payload, status, error_message, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         input.tenantId,
@@ -73,9 +74,23 @@ export class PgIntegrationRepository implements IntegrationRepository {
         JSON.stringify(input.payload),
         input.status,
         input.errorMessage,
+        input.idempotencyKey ?? null,
       ],
     );
     return mapLog(result.rows[0]);
+  }
+
+  async findByIdempotencyKey(
+    integrationEndpointId: string,
+    idempotencyKey: string,
+  ): Promise<IntegrationLogEntry | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM integration_event_log
+        WHERE integration_endpoint_id = $1 AND idempotency_key = $2 AND direction = 'inbound'
+        LIMIT 1`,
+      [integrationEndpointId, idempotencyKey],
+    );
+    return result.rows[0] ? mapLog(result.rows[0]) : null;
   }
 
   async listLog(tenantId: string, limit: number): Promise<IntegrationLogEntry[]> {
@@ -111,6 +126,7 @@ function mapLog(row: QueryResultRow): IntegrationLogEntry {
     payload: row.payload,
     status: row.status,
     errorMessage: row.error_message,
+    idempotencyKey: row.idempotency_key,
     createdAt: row.created_at,
   };
 }

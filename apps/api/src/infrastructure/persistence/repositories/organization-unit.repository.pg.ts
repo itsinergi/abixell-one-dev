@@ -58,4 +58,19 @@ export class PgOrganizationUnitRepository implements OrganizationUnitRepository 
     );
     return result.rows.map(mapRow);
   }
+
+  async listAncestorIds(id: string): Promise<string[]> {
+    const result = await this.pool.query(
+      `WITH RECURSIVE ancestors AS (
+         SELECT id, parent_id FROM organization_units WHERE id = $1
+         UNION ALL
+         SELECT ou.id, ou.parent_id
+           FROM organization_units ou
+           JOIN ancestors a ON ou.id = a.parent_id
+       )
+       SELECT id FROM ancestors`,
+      [id],
+    );
+    return result.rows.map((r) => r.id as string);
+  }
 }

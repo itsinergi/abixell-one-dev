@@ -58,9 +58,14 @@ async function main() {
     )
   ).rows[0];
 
+  // Checkpoint 0F / ADR-0010: ADMIN is marked is_full_access = true —
+  // its intent is "every permission that exists", so
+  // scripts/sync-role-permissions.ts can keep it in sync with new
+  // Product Core permissions on a LIVE tenant without ever deleting
+  // data, replacing the reseed pattern this exact role hit in 0C/0D/0E.
   const adminRole = (
     await pool.query(
-      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'ADMIN', 'Administrator') RETURNING id`,
+      `INSERT INTO roles (tenant_id, code, name, is_full_access) VALUES ($1, 'ADMIN', 'Administrator', true) RETURNING id`,
       [tenant.id],
     )
   ).rows[0];

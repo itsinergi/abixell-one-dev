@@ -90,8 +90,22 @@ export class PgRbacRepository implements RbacRepository {
     roleCode: string,
     organizationUnitId: string | null,
   ): Promise<string[]> {
+    // Checkpoint 0F / ADR-0009 (Hierarchical Data Scope): a role+scope
+    // holder assigned to any ANCESTOR of `organizationUnitId` is also
+    // eligible, not just an exact match — computed here with the same
+    // upward `parent_id` walk `OrganizationUnitRepository.listAncestorIds`
+    // uses, kept self-contained in this query (a single JOIN) rather than
+    // a second round-trip, since this method is already tenant/role
+    // scoped SQL.
     const result = await this.pool.query(
-      `SELECT DISTINCT ura.user_id
+      `WITH RECURSIVE ancestors AS (
+         SELECT id, parent_id FROM organization_units WHERE id = $3
+         UNION ALL
+         SELECT ou.id, ou.parent_id
+           FROM organization_units ou
+           JOIN ancestors a ON ou.id = a.parent_id
+       )
+       SELECT DISTINCT ura.user_id
          FROM user_role_assignments ura
          JOIN roles r ON r.id = ura.role_id
          JOIN users u ON u.id = ura.user_id
@@ -100,7 +114,11 @@ export class PgRbacRepository implements RbacRepository {
           AND u.tenant_id = $1
           AND (
             ura.scope_type = 'tenant'
-            OR ($3::uuid IS NOT NULL AND ura.scope_type = 'organization_unit' AND ura.scope_organization_unit_id = $3)
+            OR (
+              $3::uuid IS NOT NULL
+              AND ura.scope_type = 'organization_unit'
+              AND ura.scope_organization_unit_id IN (SELECT id FROM ancestors)
+            )
           )`,
       [tenantId, roleCode, organizationUnitId],
     );
