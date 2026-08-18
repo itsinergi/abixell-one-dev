@@ -1,4 +1,4 @@
-import type { RbacRepository } from "../../domain/rbac/rbac.entity.js";
+import type { RbacRepository, UserRoleAssignment } from "../../domain/rbac/rbac.entity.js";
 import type { OrganizationUnitRepository } from "../../domain/organization-unit/organization-unit.entity.js";
 import { ForbiddenError } from "../../domain/shared-kernel/errors.js";
 
@@ -145,6 +145,17 @@ export class RbacService {
     target: { customerId: string; ownerOrganizationUnitId: string | null },
   ): Promise<boolean> {
     const assignments = await this.repo.getAssignments(userId);
+    return this.isCustomerContextScopeCoveredByAssignments(assignments, target);
+  }
+
+  /** Checkpoint 1B hardening — same rule as `isCustomerContextScopeCovered`,
+   * taking a pre-fetched assignment list so a caller filtering a WHOLE
+   * LIST of Customers (e.g. `CustomerService.listForTenant`) fetches the
+   * actor's assignments exactly once instead of once per row. */
+  async isCustomerContextScopeCoveredByAssignments(
+    assignments: UserRoleAssignment[],
+    target: { customerId: string; ownerOrganizationUnitId: string | null },
+  ): Promise<boolean> {
     if (assignments.some((a) => a.scopeType === "tenant")) return true;
     if (
       assignments.some(
@@ -154,8 +165,22 @@ export class RbacService {
       return true;
     }
     if (target.ownerOrganizationUnitId) {
-      return this.isOrganizationUnitScopeCovered(userId, target.ownerOrganizationUnitId);
+      const orgUnitAssignments = assignments.filter((a) => a.scopeType === "organization_unit");
+      if (orgUnitAssignments.length === 0) return false;
+      const ancestorIds = await this.orgUnits.listAncestorIds(target.ownerOrganizationUnitId);
+      const ancestorSet = new Set(ancestorIds);
+      return orgUnitAssignments.some(
+        (a) => a.scopeOrganizationUnitId !== null && ancestorSet.has(a.scopeOrganizationUnitId),
+      );
     }
     return false;
+  }
+
+  /** Passthrough — see `RbacRepository.getAssignments`. Exposed so a
+   * caller can fetch once and reuse across several scope checks (e.g.
+   * `CustomerService.listForTenant`, `WorkflowService.isActorAssociatedWithInstance`
+   * callers) instead of re-querying per item. */
+  async getAssignments(userId: string): Promise<UserRoleAssignment[]> {
+    return this.repo.getAssignments(userId);
   }
 }

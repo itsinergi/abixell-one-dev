@@ -278,6 +278,10 @@ export interface WorkflowRepository {
   listInstances(tenantId: string): Promise<WorkflowInstance[]>;
   updateInstanceCurrentStep(id: string, stepId: string): Promise<void>;
   completeInstance(id: string, status: WorkflowInstanceStatus): Promise<void>;
+  /** Checkpoint 1B — generic, entity-agnostic reopen: resets a completed
+   * Instance back to `in_progress` at `stepId`, clearing `completedAt`.
+   * See `WorkflowService.reopenInstance`. */
+  reopenInstance(id: string, stepId: string): Promise<void>;
 
   // --- Instance assignments --------------------------------------------------
   createAssignment(input: {

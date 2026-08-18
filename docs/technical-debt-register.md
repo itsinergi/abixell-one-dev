@@ -1,13 +1,14 @@
-# Technical Debt Register — Phase 0 (Checkpoint 0A–0F) + Phase 1 Checkpoint 1A
+# Technical Debt Register — Phase 0 (Checkpoint 0A–0F) + Phase 1 Checkpoint 1A–1B
 
 **Tanggal disusun:** 2026-08-18 (Checkpoint 0F — Phase 0 Stabilization),
 diperbarui 2026-08-18 (Checkpoint 1A — Document Scope & Customer
-Experience Foundation)
+Experience Foundation), diperbarui lagi 2026-08-18 (Checkpoint 1B —
+Generic Customer Complaint Engine)
 **Cakupan:** Konsolidasi SELURUH gap yang tercatat eksplisit di
 `docs/decision-log.md` dan `docs/implementation-notes.md` sepanjang
-Checkpoint 0A–0F dan 1A, diklasifikasikan ulang menjadi empat kategori
-sesuai instruksi Founder. Item yang sudah diselesaikan ditandai selesai,
-bukan dihapus dari catatan — riwayat keputusan tetap utuh.
+Checkpoint 0A–0F, 1A, dan 1B, diklasifikasikan ulang menjadi empat
+kategori sesuai instruksi Founder. Item yang sudah diselesaikan ditandai
+selesai, bukan dihapus dari catatan — riwayat keputusan tetap utuh.
 
 Klasifikasi:
 - **BLOCKER** — wajib selesai sebelum Phase 1 (Complaint/Survey) dimulai.
@@ -21,20 +22,24 @@ Klasifikasi:
 
 ---
 
-## BLOCKER sebelum Complaint/Survey (Checkpoint 1B/1D)
+## BLOCKER sebelum Survey/Assessment (Checkpoint 1D) atau UI Experience Layer
 
 Tidak ada.
 
 - Hierarchical Data Scope **SUDAH SELESAI** (ADR-0009, Checkpoint 0F) —
   prasyarat keras untuk role hierarkis (Regional Manager dsb.) yang akan
-  dipakai Complaint/Survey.
+  dipakai Survey.
 - Document Service belum mengikuti Data Scope entity induk **SUDAH
   DISELESAIKAN di Checkpoint 1A** lewat pola Entity Authorization
   Resolver (ADR-0012) + Customer Data Scope (ADR-0011) — lihat "Item yang
-  SUDAH DISELESAIKAN di Checkpoint 1A" di bawah. Complaint/Survey (1B/1D)
-  tinggal mendaftarkan resolver `entityType='complaint'`/`'survey'` yang
-  sama polanya dengan `'customer'`, bukan memutuskan mekanismenya dari
-  nol.
+  SUDAH DISELESAIKAN di Checkpoint 1A" di bawah. Survey (1D) tinggal
+  mendaftarkan resolver `entityType='survey'` yang sama polanya dengan
+  `'customer'`/`'complaint'`, bukan memutuskan mekanismenya dari nol.
+- Generic Customer Complaint Engine **SUDAH SELESAI di Checkpoint 1B**
+  (ADR-0013) — Workflow Reopen dan trusted-caller read/numbering
+  extensions sekarang tersedia generik untuk Survey (1D) tanpa perubahan
+  Workflow/Configuration Engine lagi, lihat "Item yang SUDAH
+  DISELESAIKAN di Checkpoint 1B" di bawah.
 
 ## MUST FIX sebelum pilot nyata (boleh dikerjakan selama Phase 1)
 
@@ -61,7 +66,9 @@ Tidak ada.
    sama berlaku untuk seluruh entity Customer Foundation (Customer,
    Contract, Project, Site, Service, Service Assignment) yang baru
    ditambahkan di 1A — belum ada endpoint update/soft-delete untuk
-   entity-entity ini juga. *(Asal: 1A.)*
+   entity-entity ini juga. *(Asal: 1A.)* Complaint (1B) mengikuti pola
+   yang sama — belum ada endpoint update/soft-delete untuk Complaint.
+   *(Asal: 1B.)*
 5. **Rate limit global (1200/menit) dan per-route (`/auth/login`
    10/menit) belum divalidasi dengan traffic pilot nyata** — angka
    dipilih dari baseline benchmark internal (lihat
@@ -104,18 +111,33 @@ Tidak ada.
 9. **Favicon hilang (`/favicon.ico` 404)** — kosmetik murni, ditemukan
    lewat browser console saat visual E2E smoke test 0F. Tidak
    mempengaruhi fungsi apa pun.
-10. **`GET /customers` belum difilter per Data Scope** — Tenant-permission-
-    gated saja (`customer.read`), sama seperti presedan
-    `GET /organization-units`/`GET /legal-entities` 0B. Bukan bug — path
-    single-entity (`getAuthorized`) sudah difilter Data Scope dan itulah
-    path yang benar-benar dilalui Customer User; penyempitan listing
-    itu sendiri direncanakan sebagai bagian Checkpoint 1C saat Customer
-    Portal role kurasi membutuhkannya. *(Asal: 1A.)*
-11. **Resolver Entity Authorization baru terdaftar untuk `entityType='customer'`** —
-    `contract`/`project`/`site` belum punya resolver sendiri karena belum
-    ada modul yang melampirkan dokumen langsung ke entity tsb (bukan
-    gap tersembunyi — mekanismenya sudah generik dan siap dipakai kapan
-    pun dibutuhkan, tinggal registrasi satu baris). *(Asal: 1A.)*
+10. ~~`GET /customers` belum difilter per Data Scope~~ — **SUDAH
+    DISELESAIKAN di Checkpoint 1B** (hardening yang diminta eksplisit
+    sebelum Complaint Engine dibangun). Lihat "Item yang SUDAH
+    DISELESAIKAN di Checkpoint 1B" di bawah. *(Asal: 1A, diselesaikan
+    1B.)*
+11. **Resolver Entity Authorization terdaftar untuk `entityType='customer'`
+    dan `'complaint'`** — `contract`/`project`/`site` belum punya
+    resolver sendiri karena belum ada modul yang melampirkan dokumen
+    langsung ke entity tsb (bukan gap tersembunyi — mekanismenya sudah
+    generik dan siap dipakai kapan pun dibutuhkan, tinggal registrasi
+    satu baris). *(Asal: 1A, diperluas 1B.)*
+12. **SLA Complaint tetap per-Step (`WorkflowStep.slaHours`), belum
+    matriks multi-dimensi** Customer×Contract×Service×Category×
+    Priority×Severity — keputusan proporsional yang disengaja (lihat
+    ADR-0013); Workflow Definition tetap 100% Tenant Configuration
+    sehingga upgrade nanti tidak butuh migrasi arsitektur. *(Asal: 1B.)*
+13. **`subcategory` Complaint masih free-text**, belum jadi reference
+    data type tersendiri seperti `category`/`severity`. Risiko rendah
+    (bukan field otorisasi atau routing). *(Asal: 1B.)*
+14. **Role internal dengan `workflow.instance.read` peninggalan Phase 0**
+    (mis. `WORKFLOW_MANAGER`) tetap bisa menelusuri seluruh Workflow
+    Instance tenant lewat route generic `/workflow/instances/...`,
+    termasuk milik Complaint — karakteristik generic engine yang sudah
+    ada sejak 0D, bukan diperkenalkan 1B. Mitigasi yang sudah berjalan:
+    demo seed 1B sengaja TIDAK memberi permission ini ke role Complaint
+    manapun (`CUSTOMER_USER`/`COMPLAINT_HANDLER`/`COMPLAINT_MANAGER`).
+    *(Asal: 0D, residual risk dicatat eksplisit di 1B, ADR-0013.)*
 
 ## FUTURE ENHANCEMENT
 
@@ -183,3 +205,39 @@ Tidak ada.
   kosong terpisah — jumlah tabel kembali persis ke titik awal.
 - Full regression Phase 0 (45 test) dijalankan ulang tanpa perubahan —
   0 regresi.
+
+## Item yang SUDAH DISELESAIKAN di Checkpoint 1B (bukti singkat)
+
+- **`GET /customers` sekarang difilter Data Scope per baris** —
+  `CustomerService.listForTenant` memfilter lewat
+  `isCustomerContextScopeCoveredByAssignments` (varian batch, satu query
+  assignment, bukan N+1), short-circuit untuk `scope_type='tenant'`.
+  Menyelesaikan item Technical Debt #10 di atas.
+- **Generic Customer Complaint Engine** (ADR-0013) — dibuktikan langsung:
+  seluruh Complaint Lifecycle (Draft s/d Closed, plus Reject/Cancel/
+  Reopen/Escalate) berjalan tanpa satu baris state-machine di
+  `ComplaintService`; mengubah actionCode Transition demo hanya butuh
+  perubahan data Tenant Configuration.
+- **Reopen generik untuk Instance terminal** (`WorkflowService.
+  reopenInstance`) — dibuktikan: Complaint Closed berhasil di-reopen ke
+  Step non-terminal oleh aktor berwenang, ditolak untuk aktor tidak
+  berwenang (403) dan untuk Complaint yang masih in_progress (409).
+- **Trusted-caller read/numbering** (`getInstanceForEntityOwner`,
+  `generateNumberForTenant`) — dibuktikan: Customer User dan internal
+  Handler bekerja penuh di Complaint mereka sendiri TANPA memegang
+  `workflow.instance.read` atau `config.manage`.
+- **Resolver Entity Authorization `entityType='complaint'`** (pola
+  ADR-0012 dipakai ulang) — dibuktikan: evidence/attachment Complaint
+  berhasil diunggah/dibaca tanpa permission `document.*` terpisah.
+- **Condition-based dynamic routing** untuk Complaint (severity=critical)
+  — dibuktikan: Complaint critical di-assign langsung ke role tenant-wide,
+  skip role Site-scoped default.
+- **SLA Escalation untuk Complaint** — dibuktikan lewat Scheduler sweep
+  yang sudah ada sejak 0D/0E, tanpa kode Scheduler baru; event
+  `workflow.escalated` diterjemahkan jadi `complaint.escalated` lewat
+  satu subscriber translation, tanpa mengubah Workflow Engine.
+- Full regression Phase 0 + 1A (61 test) dijalankan ulang tanpa
+  perubahan — 0 regresi; total suite setelah 1B: 77/77 lulus.
+- Migration 1B tervalidasi round-trip (up -> down -> up) dari database
+  kosong terpisah — jumlah tabel kembali persis ke titik awal (47 -> 48
+  -> 47 -> 48).

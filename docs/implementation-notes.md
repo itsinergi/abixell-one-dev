@@ -1047,3 +1047,197 @@ masuk cakupan 1C per urutan Founder).
 - Resolver Entity Authorization baru ada untuk `customer`; `contract`/
   `project`/`site` belum, karena belum ada modul yang melampirkan
   dokumen langsung ke entity tsb.
+
+## Checkpoint 1B — Generic Customer Complaint Engine
+
+Checkpoint kedua Phase 1, dikerjakan di session yang sama dengan 1A
+setelah 1A di-APPROVE Founder. Dimulai dengan hardening kecil yang
+diminta eksplisit sebelum Complaint Engine dibangun: `GET /customers`
+sekarang difilter Data Scope per baris (lihat decision-log.md).
+
+### Yang dibangun
+
+1. **Hardening `GET /customers`** — `CustomerService.listForTenant`
+   mengambil seluruh Data Scope assignment aktor sekali
+   (`RbacService.getAssignments`), lalu memfilter per Customer lewat
+   varian batch `isCustomerContextScopeCoveredByAssignments` (menghindari
+   N+1 query per baris), short-circuit untuk `scope_type='tenant'`.
+2. **Tabel `complaints`** (migration `1758000000000`) — field bisnis
+   (customer/contract/project/site/service context, category/subcategory/
+   description/priority/severity/source/channel, investigation fields,
+   verification fields, customer confirmation fields, closure date)
+   TANPA kolom lifecycle/assignment/SLA — semua itu hidup di Workflow
+   Instance yang direferensikan lewat `workflow_instance_id`.
+3. **`ComplaintService`** — deliberately thin: otorisasi Data-Scope-
+   specific (`getAuthorized`, gabungan Customer Data Scope/submitter/
+   workflow-association) dan data Complaint-specific saja; nol logika
+   state machine (lihat ADR-0013).
+4. **Dua ekstensi generic ke `WorkflowService`**: `reopenInstance`,
+   `isActorAssociatedWithInstance` — tidak mereferensikan `complaint`
+   sama sekali, reusable untuk Survey (1D+) tanpa perubahan lagi.
+5. **Dua method trusted-caller baru**: `WorkflowService.
+   getInstanceForEntityOwner` dan `ConfigurationService.
+   generateNumberForTenant` — menghindari kebutuhan permission Tenant-
+   wide (`workflow.instance.read`, `config.manage`) untuk Customer User
+   atau internal Handler biasa hanya untuk kerja di Complaint sendiri.
+6. **Resolver Entity Authorization untuk `entityType='complaint'`** (pola
+   ADR-0012, dipakai ulang persis) — evidence/attachment Complaint tidak
+   butuh permission `document.*` terpisah.
+7. Route HTTP baru: `POST /complaints`, `GET /complaints`,
+   `GET /complaints/:id`, `POST /complaints/:id/submit`,
+   `POST /complaints/:id/actions/:actionCode` (generic action dispatch —
+   actionCode datang langsung dari Transition yang dikonfigurasi Tenant),
+   `POST /complaints/:id/investigation`, `.../verification`,
+   `.../customer-confirmation`, `.../reopen`.
+8. Seed script (`scripts/seed.ts`) diperluas: Workflow Definition demo
+   `complaint_lifecycle` v1 published (11 Step, 10 Transition, 9
+   Assignment Rule termasuk 1 condition-based, 1 Escalation Rule),
+   Notification Template Complaint Event Catalog, reference data
+   `complaint_category`/`complaint_severity`, Numbering Sequence
+   `complaint_number`, role `COMPLAINT_HANDLER` (Site A org-unit scope)
+   dan `COMPLAINT_MANAGER` (tenant-wide), permission tambahan untuk
+   `CUSTOMER_USER`.
+
+### Bukti End-to-End (vertical slice, terhadap PostgreSQL nyata)
+
+Dua lapis pembuktian dilakukan: manual lewat HTTP nyata terhadap server
+dev + seed data (dicatat di bawah), lalu diformalkan jadi
+`tests/integration/complaint-engine.test.ts` (16 test, tenant terpisah,
+Workflow Definition dibangun dari nol lewat HTTP admin API — sama
+persis presedan 0D — bukan lewat seed).
+
+Manual (curl) end-to-end run terhadap `demo-gs`:
+
+```
+Customer User Submit Complaint (CMP-2026-00001, priority=high,
+severity=major) -> Customer/Data Scope Validation (lolos) -> SLA Started
+(Step SUBMITTED sla_hours=4, due_at terisi) -> Workflow Instance Started
+-> Assignment ke COMPLAINT_HANDLER (Site A, submitter_unit routing) ->
+Handler: acknowledge -> assign -> start_investigation -> catat Root
+Cause/Corrective Action/Preventive Action -> submit_corrective_action ->
+submit_for_verification (routing OTOMATIS ke COMPLAINT_MANAGER
+tenant-wide, BUKAN Handler yang sama — independent QA) -> Manager:
+verification note -> verify (routing kembali ke submitter) -> Customer:
+customer-confirmation note -> confirm -> Closed (closureDate terisi,
+instance.status='approved') -> Audit Trail (complaint.created s/d
+complaint.customer_confirmed) -> PostgreSQL
+```
+
+Poin pembuktian tambahan yang divalidasi manual maupun via test:
+
+- **Condition-based dynamic routing**: Complaint `severity=critical`
+  di-assign LANGSUNG ke `COMPLAINT_MANAGER` tenant-wide di Step ASSIGNED
+  (skip Handler lokal), Complaint non-critical tetap ke Handler — Rule
+  Condition dievaluasi terhadap `contextData`, bukan hardcode di
+  Complaint Service.
+- **Evidence**: Handler upload attachment ke `entityType='complaint'`
+  TANPA permission `document.*`, berhasil (resolver gate); Customer User
+  bisa list/download attachment yang sama.
+- **SLA Escalation**: Assignment di Step IN_INVESTIGATION yang `due_at`-
+  nya dibuat lampau (`now() - interval '1 hour'`, teknik yang sama
+  presedan 0D) ter-escalate lewat `POST /workflow/escalation-sweep` ke
+  `COMPLAINT_MANAGER` tenant-wide; event `workflow.escalated` DAN hasil
+  terjemahannya `complaint.escalated` (subscriber translation di
+  `composition-root.ts`, bukan perubahan Workflow Engine) sama-sama
+  tercatat di `domain_events`.
+- **Reopen authorization**: mencoba reopen Complaint yang masih
+  `in_progress` ditolak (409, "Only a Closed/Rejected/Cancelled Complaint
+  can be reopened"); aktor tanpa `complaint.manage` ditolak reopen (403);
+  aktor dengan `complaint.manage` (COMPLAINT_MANAGER) berhasil reopen
+  Complaint yang sudah Closed kembali ke Step ASSIGNED — Assignment baru
+  otomatis dibuat lewat Assignment Rule Step tsb.
+
+### Negative path (8 diminta eksplisit, semua dibuktikan)
+
+| Negative path | Hasil |
+|---|---|
+| Wrong tenant | Administrator Tenant lain mengakses Complaint id valid milik Tenant 1B -> 404 (bukan bocor lewat guess id) |
+| Unauthorized customer | Customer User A submit Complaint dengan `customerId` Customer B -> 403 |
+| Invalid workflow transition | actionCode yang tidak punya Transition dari Step saat ini -> 400 (`ValidationError` dari Workflow Engine sendiri) |
+| Duplicate submission / idempotency | Submit kedua kali -> 403 (Assignment pending sudah pindah ke Handler, Customer User tidak eligible lagi — bukan diproses dobel) |
+| Invalid attachment | Upload tanpa file part -> 400 |
+| RBAC denial | Aktor tanpa `complaint.manage` -> 403 saat create maupun reopen |
+| SLA escalation | Lihat di atas — berhasil ter-escalate + event ganda tercatat |
+| Reopen authorization | Lihat di atas — ditolak saat masih in_progress (409) DAN saat aktor tidak berwenang (403), berhasil saat aktor berwenang + sudah Closed |
+
+### Regression Phase 0 + 1A
+
+Full suite dijalankan ulang tanpa mengubah assertion checkpoint
+sebelumnya: **77/77 test lulus** (8 file: 6 file Phase 0 tetap 45, 1 file
+Checkpoint 1A tetap 16, 1 file Checkpoint 1B baru 16), 0 regresi.
+
+### Migration validation
+
+Migration `1758000000000` divalidasi up -> down -> up dari database
+kosong terpisah (disposable, `abixell_one_migration_check_1b`): jumlah
+tabel round-trip persis 47 -> 48 -> 47 -> 48 (bertambah satu tabel,
+`complaints`, konsisten dengan satu migration yang hanya menambah satu
+tabel + baris permission/reference-data-type).
+
+### Typecheck / Lint / Build
+
+Bersih di `apps/api` (frontend tidak disentuh — sama seperti 1A, UI
+Complaint masuk cakupan checkpoint UI Experience Layer berikutnya, di
+luar 1B per instruksi eksplisit Founder: "Jangan masuk ke ... UI
+Experience Layer").
+
+### Self-Review
+
+- **Tidak ada state machine yang di-hardcode** di `ComplaintService` —
+  diverifikasi langsung: mengubah actionCode manapun di Transition demo
+  (mis. rename `verify` -> `qa_pass`) hanya butuh perubahan data Tenant
+  Configuration, nol perubahan kode. Ini bukti konstruksi, bukan klaim.
+- **Priority dan Severity benar-benar dua field/catalog terpisah** —
+  Priority memakai ulang `priority_level` (generic, lintas-modul sejak
+  0C), Severity punya `complaint_severity` sendiri; keduanya tervalidasi
+  independen di test (`priority: "high"`, `severity: "major"` disimpan
+  dan dibaca terpisah).
+- **Semua field yang diminta configurable memang configurable**:
+  Category/Severity (reference data), SLA (per-Step `slaHours`),
+  Assignment Rule (role+scope atau specific_user, dengan/tanpa
+  Condition), Numbering (pattern per Tenant), Notification Template
+  (event_type + template per Tenant) — tidak satu pun perlu deploy ulang
+  kode untuk diubah per klien.
+- **Evidence path teruji lintas role** (Handler upload, Customer User
+  list/download) — membuktikan resolver `complaint` konsisten dengan
+  resolver `customer` 1A, bukan implementasi kedua yang mirip tapi
+  berbeda.
+
+### Gap Analysis
+
+- Belum ada endpoint update/soft-delete untuk Complaint (carry-over pola
+  yang sama sejak 0B).
+- SLA tetap per-Step (bukan matriks multi-dimensi) — keputusan sadar,
+  lihat ADR-0013 dan decision-log #5.
+- `subcategory` masih free-text, belum reference-data-typed.
+- Peran dengan `workflow.instance.read` peninggalan Phase 0 (mis.
+  `WORKFLOW_MANAGER`) masih bisa menelusuri seluruh Workflow Instance
+  tenant lewat route generic — bukan regresi baru 1B, tapi tetap dicatat
+  eksplisit sebagai residual risk (lihat ADR-0013 Consequences).
+- Belum ada UI Complaint (Portal Customer/Internal) — eksplisit di luar
+  cakupan 1B.
+
+### Risk Note
+
+Tidak ada risiko BLOCKER yang ditemukan. Risiko tersisa (semua sudah
+punya mitigasi eksplisit atau memang dicatat sebagai keputusan sadar,
+bukan gap tak disengaja):
+
+1. **Residual `workflow.instance.read` exposure** (lihat Gap Analysis) —
+   mitigasi: demo seed 1B sengaja tidak memberi permission ini ke role
+   Complaint manapun; risiko hanya muncul jika role internal lain
+   diberikan permission ini DAN kebetulan juga bekerja dengan Complaint.
+2. **SLA per-Step, bukan matriks** — mitigasi: keputusan proporsional
+   yang didokumentasikan (ADR-0013), Workflow Definition tetap 100%
+   Tenant Configuration sehingga upgrade ke matriks nanti tidak butuh
+   migrasi arsitektur, hanya penambahan mekanisme seleksi Definition.
+3. **`subcategory` free-text** — risiko rendah (bukan field otorisasi
+   atau routing), dicatat sebagai Technical Debt murni.
+
+### Kesiapan untuk Checkpoint 1C
+
+Checkpoint 1B dinyatakan selesai menunggu Founder Review. Tidak ada item
+BLOCKER yang menghalangi mulainya 1C. Rekomendasi eksplisit: keputusan
+soal Survey/Assessment (1C/1D per urutan Founder) dan UI Experience Layer
+sebaiknya menunggu instruksi lanjutan Founder, bukan diasumsikan otomatis
+lanjut tanpa arahan baru.

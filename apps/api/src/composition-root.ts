@@ -23,6 +23,7 @@ import {
   PgCustomerServiceLinkRepository,
   PgServiceRepository,
 } from "./infrastructure/persistence/repositories/service.repository.pg.js";
+import { PgComplaintRepository } from "./infrastructure/persistence/repositories/complaint.repository.pg.js";
 import { LocalFileStorage } from "./infrastructure/storage/local-file-storage.js";
 
 import { AuditService } from "./application/audit/audit.service.js";
@@ -45,6 +46,7 @@ import { ContractService } from "./application/customer/contract.service.js";
 import { ProjectService } from "./application/customer/project.service.js";
 import { SiteService } from "./application/customer/site.service.js";
 import { ServiceCatalogService } from "./application/customer/service-catalog.service.js";
+import { ComplaintService } from "./application/complaint/complaint.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -80,9 +82,11 @@ export function buildContainer() {
   const siteRepo = new PgSiteRepository(pool);
   const serviceRepo = new PgServiceRepository(pool);
   const customerServiceLinkRepo = new PgCustomerServiceLinkRepository(pool);
+  const complaintRepo = new PgComplaintRepository(pool);
 
   const audit = new AuditService(auditRepo);
   const rbac = new RbacService(rbacRepo, organizationUnitRepo);
+  const configuration = new ConfigurationService(configurationRepo, audit, rbac);
 
   const eventBus = new EventBus(domainEventRepo, (eventType, error) => {
     console.error(`[EventBus] subscriber for '${eventType}' failed:`, error);
@@ -107,10 +111,29 @@ export function buildContainer() {
     rbac,
   );
 
+  // Generic Customer Complaint Engine (Checkpoint 1B) — built on top of
+  // Customer Foundation (1A) + the generic Workflow Engine (0D/0E) +
+  // Configuration/Numbering (0C). Built before DocumentService so its
+  // own `complaint` Entity Authorization Resolver (ADR-0012 pattern) can
+  // close over `complaint.canAccessForDocument` below, same as `customer`.
+  const complaint = new ComplaintService(
+    complaintRepo,
+    customer,
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
       { canAccess: (actor, entityId) => customer.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "complaint",
+      { canAccess: (actor, entityId) => complaint.canAccessForDocument(actor, entityId) },
     ],
   ]);
   const document = new DocumentService(
@@ -129,6 +152,25 @@ export function buildContainer() {
   eventBus.subscribe("*", (event) => notification.handleDomainEvent(event));
   eventBus.subscribe("*", (event) => integration.handleDomainEvent(event));
 
+  // Checkpoint 1B: re-publish the generic Workflow Engine's
+  // `workflow.escalated` event under the Complaint Event Catalog name
+  // (`complaint.escalated`, doc section 33) WHEN it belongs to a
+  // Complaint — zero changes to the generic engine, zero Complaint-
+  // specific code inside it; this is purely a translation subscriber,
+  // the same "modul lain tanpa mengubah publisher" pattern as every
+  // other subscriber here.
+  eventBus.subscribe("workflow.escalated", async (event) => {
+    if (event.entityType !== "complaint") return;
+    await eventBus.publish({
+      tenantId: event.tenantId,
+      eventType: "complaint.escalated",
+      entityType: "complaint",
+      entityId: event.entityId,
+      payload: event.payload,
+      createdBy: event.createdBy,
+    });
+  });
+
   const scheduler = new SchedulerService(schedulerRepo, rbac, (jobCode, error) => {
     console.error(`[Scheduler] job '${jobCode}' failed:`, error);
   });
@@ -145,7 +187,7 @@ export function buildContainer() {
     organizationUnit: new OrganizationUnitService(organizationUnitRepo, audit, rbac, rbacRepo),
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
-    configuration: new ConfigurationService(configurationRepo, audit, rbac),
+    configuration,
     workflow,
     notification,
     document,
@@ -155,6 +197,7 @@ export function buildContainer() {
     project,
     site,
     serviceCatalog,
+    complaint,
   };
 }
 

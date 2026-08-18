@@ -273,12 +273,33 @@ export class ConfigurationService {
   /** Atomically generates the next formatted number for a sequence. */
   async generateNumber(actor: ActorContext, code: string): Promise<{ number: string; sequence: number }> {
     await this.rbac.requirePermission(actor.userId, "config.manage");
-    const updated = await this.repo.incrementNumberingSequence(actor.tenantId, code);
+    return this.generateNumberForTenant(actor.tenantId, code, actor.userId);
+  }
+
+  /**
+   * Checkpoint 1B — trusted-caller variant, same posture as
+   * `WorkflowService.reopenInstance`/`escalateOverdueAssignmentsForTenant`:
+   * a business module's own service (e.g. `ComplaintService.create`) needs
+   * to mint a Complaint Number on behalf of ANY authorized submitter,
+   * including a Customer User who legitimately creates a Complaint but
+   * does not (and should not) hold the broad `config.manage` permission
+   * `generateNumber` requires for direct/administrative use. Numbering
+   * itself stays exactly as configurable as before (Tenant-authored
+   * pattern via `createNumberingSequence`) — only the permission gate on
+   * THIS specific call is bypassed, because the caller has already
+   * authorized the actor for the business action that needs a number.
+   */
+  async generateNumberForTenant(
+    tenantId: string,
+    code: string,
+    actorUserId: string | null,
+  ): Promise<{ number: string; sequence: number }> {
+    const updated = await this.repo.incrementNumberingSequence(tenantId, code);
     const number = formatNumber(updated.pattern, updated.currentSequence, new Date());
 
     await this.audit.record({
-      tenantId: actor.tenantId,
-      actorUserId: actor.userId,
+      tenantId,
+      actorUserId,
       action: "config.numbering.generated",
       entityType: "numbering_sequence",
       entityId: updated.id,

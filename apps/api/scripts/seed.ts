@@ -555,6 +555,372 @@ async function main() {
     [tenant.id, customer.id, JSON.stringify({ source: "seed script", code: "CUST-001" })],
   );
 
+  // --- Checkpoint 1B: Generic Customer Complaint Engine demo data ------------
+  // Proves "Workflow tidak boleh hardcoded di Complaint Service" literally:
+  // every Step/Transition/Assignment Rule/Escalation Rule/SLA below is
+  // ordinary Tenant Configuration data for `entity_type='complaint'`,
+  // created through the exact same generic Workflow Engine tables 0D/0E
+  // already ship — ComplaintService only knows the Definition CODE
+  // (`complaint_lifecycle`), never the Step graph itself.
+  const complaintWorkflowDefinition = (
+    await pool.query(
+      `INSERT INTO workflow_definitions (tenant_id, code, name, entity_type, description, created_by)
+       VALUES ($1, 'complaint_lifecycle', 'Customer Complaint Lifecycle', 'complaint',
+               'Checkpoint 1B demo lifecycle — Draft -> Submitted -> Acknowledged -> Assigned -> Investigation -> Corrective Action -> Verification -> Customer Confirmation -> Closed, with Reject/Cancel/Escalate paths. 100% Tenant Configuration, zero hardcoded state machine in ComplaintService.',
+               $2)
+       RETURNING id`,
+      [tenant.id, admin.id],
+    )
+  ).rows[0];
+
+  const complaintWorkflowVersion = (
+    await pool.query(
+      `INSERT INTO workflow_versions (workflow_definition_id, version_number, status, is_current, created_by, published_at)
+       VALUES ($1, 1, 'published', true, $2, now())
+       RETURNING id`,
+      [complaintWorkflowDefinition.id, admin.id],
+    )
+  ).rows[0];
+
+  const stepDraft = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'DRAFT', 'Draft', 'task', true, false, 1) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepSubmitted = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sla_hours, sequence_order)
+       VALUES ($1, 'SUBMITTED', 'Submitted', 'task', false, false, 4, 2) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepAcknowledged = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'ACKNOWLEDGED', 'Acknowledged', 'task', false, false, 3) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepAssigned = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sla_hours, sequence_order)
+       VALUES ($1, 'ASSIGNED', 'Assigned', 'task', false, false, 8, 4) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepInvestigation = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sla_hours, sequence_order)
+       VALUES ($1, 'IN_INVESTIGATION', 'In Investigation', 'task', false, false, 48, 5) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepCorrectiveAction = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'CORRECTIVE_ACTION', 'Corrective Action', 'task', false, false, 6) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepVerification = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'VERIFICATION', 'Verification', 'approval', false, false, 7) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepCustomerConfirmation = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'CUSTOMER_CONFIRMATION', 'Customer Confirmation', 'approval', false, false, 8) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepClosed = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, terminal_status, sequence_order)
+       VALUES ($1, 'CLOSED', 'Closed', 'end', false, true, 'approved', 9) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepRejected = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, terminal_status, sequence_order)
+       VALUES ($1, 'REJECTED', 'Rejected', 'end', false, true, 'rejected', 10) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepCancelled = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, terminal_status, sequence_order)
+       VALUES ($1, 'CANCELLED', 'Cancelled', 'end', false, true, 'cancelled', 11) RETURNING id`,
+      [complaintWorkflowVersion.id],
+    )
+  ).rows[0];
+
+  await pool.query(
+    `INSERT INTO workflow_transitions (workflow_version_id, from_step_id, to_step_id, action_code, name, sort_order)
+     VALUES
+       ($1, $2,  $3,  'submit',                   'Submit',                     1),
+       ($1, $2,  $12, 'cancel',                    'Cancel',                     2),
+       ($1, $3,  $4,  'acknowledge',                'Acknowledge',                1),
+       ($1, $3,  $11, 'reject',                    'Reject',                     2),
+       ($1, $4,  $5,  'assign',                    'Assign',                     1),
+       ($1, $5,  $6,  'start_investigation',       'Start Investigation',        1),
+       ($1, $6,  $7,  'submit_corrective_action',  'Submit Corrective Action',   1),
+       ($1, $7,  $8,  'submit_for_verification',   'Submit for Verification',    1),
+       ($1, $8,  $9,  'verify',                    'Verify',                     1),
+       ($1, $9,  $10, 'confirm',                   'Customer Confirm & Close',   1)`,
+    [
+      complaintWorkflowVersion.id,
+      stepDraft.id,
+      stepSubmitted.id,
+      stepAcknowledged.id,
+      stepAssigned.id,
+      stepInvestigation.id,
+      stepCorrectiveAction.id,
+      stepVerification.id,
+      stepCustomerConfirmation.id,
+      stepClosed.id,
+      stepRejected.id,
+      stepCancelled.id,
+    ],
+  );
+
+  // Assignment Rules. DRAFT / CUSTOMER_CONFIRMATION route back to the
+  // Customer User who submitted the Complaint (`specific_user`/`submitter`
+  // — the same mechanism the 0D demo workflow's REVISE step uses).
+  // Internal steps route to COMPLAINT_HANDLER via `submitter_unit` (the
+  // Customer's own `ownerOrganizationUnitId`, passed as `organizationUnitId`
+  // in `contextData` by ComplaintService.create). ASSIGNED demonstrates
+  // Condition-based dynamic routing (doc 04): severity=critical skips the
+  // local Handler and goes straight to the tenant-wide COMPLAINT_MANAGER.
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, specific_user_source)
+     VALUES ($1, 1, 'specific_user', 'submitter')`,
+    [stepDraft.id],
+  );
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, role_code, organization_unit_strategy)
+     VALUES ($1, 1, 'role', 'COMPLAINT_HANDLER', 'submitter_unit')`,
+    [stepSubmitted.id],
+  );
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, role_code, organization_unit_strategy)
+     VALUES ($1, 1, 'role', 'COMPLAINT_HANDLER', 'submitter_unit')`,
+    [stepAcknowledged.id],
+  );
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules
+       (workflow_step_id, sort_order, condition_expression, assignment_type, role_code, organization_unit_strategy)
+     VALUES
+       ($1, 1, $2, 'role', 'COMPLAINT_MANAGER', 'tenant'),
+       ($1, 2, NULL, 'role', 'COMPLAINT_HANDLER', 'submitter_unit')`,
+    [stepAssigned.id, JSON.stringify({ field: "severity", operator: "eq", value: "critical" })],
+  );
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, role_code, organization_unit_strategy)
+     VALUES ($1, 1, 'role', 'COMPLAINT_HANDLER', 'submitter_unit')`,
+    [stepInvestigation.id],
+  );
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, role_code, organization_unit_strategy)
+     VALUES ($1, 1, 'role', 'COMPLAINT_HANDLER', 'submitter_unit')`,
+    [stepCorrectiveAction.id],
+  );
+  // Verification is independent QA — the tenant-wide COMPLAINT_MANAGER,
+  // never the same Handler who ran the investigation.
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, role_code, organization_unit_strategy)
+     VALUES ($1, 1, 'role', 'COMPLAINT_MANAGER', 'tenant')`,
+    [stepVerification.id],
+  );
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, specific_user_source)
+     VALUES ($1, 1, 'specific_user', 'submitter')`,
+    [stepCustomerConfirmation.id],
+  );
+
+  // Escalation: if Investigation exceeds its 48h SLA, escalate to the
+  // tenant-wide COMPLAINT_MANAGER — proves the SLA/Escalation E2E target
+  // ("SLA escalation" negative/positive path) without any Complaint-
+  // specific Scheduler code (reuses the same sweep 0D/0E already run).
+  await pool.query(
+    `INSERT INTO workflow_escalation_rules
+       (workflow_step_id, escalate_after_hours, escalate_to_role_code, escalate_to_organization_unit_strategy, note)
+     VALUES ($1, 48, 'COMPLAINT_MANAGER', 'tenant', 'Investigation SLA exceeded — escalate to tenant-wide Complaint Manager')`,
+    [stepInvestigation.id],
+  );
+
+  // Notification Templates for the Complaint Event Catalog (doc section 33)
+  // — reuses the exact same generic Notification Engine as 0E/1A, nothing
+  // Complaint-specific in the engine itself.
+  await pool.query(
+    `INSERT INTO notification_templates (tenant_id, event_type, channel, subject_template, body_template)
+     VALUES
+       ($1, 'complaint.submitted', 'in_app', 'Complaint submitted',
+        'Complaint {{complaintNumber}} has been submitted and is awaiting acknowledgement.'),
+       ($1, 'complaint.assigned', 'in_app', 'Complaint assigned to you',
+        'Complaint {{complaintNumber}} has been assigned to you for investigation.'),
+       ($1, 'complaint.closed', 'in_app', 'Complaint closed',
+        'Complaint {{complaintNumber}} has been closed.'),
+       ($1, 'complaint.escalated', 'in_app', 'Complaint escalated to you',
+        'Complaint at step {{stepCode}} was escalated to your role after its SLA was exceeded.'),
+       ($1, 'complaint.reopened', 'in_app', 'Complaint reopened',
+        'Complaint {{complaintNumber}} has been reopened.')`,
+    [tenant.id],
+  );
+
+  // Reference Data: Complaint Category and Severity catalogs (Priority
+  // deliberately REUSES the existing generic `priority_level` items seeded
+  // above — proving Priority and Severity are two distinct concepts/
+  // catalogs, per the explicit Founder instruction, not the same field
+  // twice).
+  const categoryType = (
+    await pool.query(`SELECT id FROM reference_data_types WHERE code = 'complaint_category'`)
+  ).rows[0];
+  if (categoryType) {
+    await pool.query(
+      `INSERT INTO tenant_reference_data_items (tenant_id, reference_data_type_id, code, label, sort_order)
+       VALUES
+         ($1, $2, 'service_quality', 'Service Quality', 1),
+         ($1, $2, 'safety', 'Safety', 2),
+         ($1, $2, 'billing', 'Billing', 3),
+         ($1, $2, 'facility', 'Facility', 4)`,
+      [tenant.id, categoryType.id],
+    );
+  }
+  const severityType = (
+    await pool.query(`SELECT id FROM reference_data_types WHERE code = 'complaint_severity'`)
+  ).rows[0];
+  if (severityType) {
+    await pool.query(
+      `INSERT INTO tenant_reference_data_items (tenant_id, reference_data_type_id, code, label, sort_order)
+       VALUES
+         ($1, $2, 'critical', 'Critical', 1),
+         ($1, $2, 'major', 'Major', 2),
+         ($1, $2, 'minor', 'Minor', 3)`,
+      [tenant.id, severityType.id],
+    );
+  }
+
+  // Numbering: CMP-{YYYY}-{SEQ:5} — tenant-configurable Complaint numbering,
+  // exactly like `demo_ticket` above (Checkpoint 0C mechanism, no new code).
+  await pool.query(
+    `INSERT INTO numbering_sequences (tenant_id, code, pattern, current_sequence)
+     VALUES ($1, 'complaint_number', 'CMP-{YYYY}-{SEQ:5}', 0)`,
+    [tenant.id],
+  );
+
+  // COMPLAINT_HANDLER: internal investigator, Site A org-unit scope (same
+  // hierarchical Data Scope axis as SUPERVISOR/WORKFLOW_REVIEWER, ADR-0009)
+  // — reaches the demo Customer's Complaints via
+  // `CustomerService.canAccessForDocument`'s org-unit branch. Deliberately
+  // does NOT include `workflow.instance.read`: `ComplaintService.get`/`act`/
+  // `reopen` all go through the trusted-caller `getInstanceForEntityOwner`,
+  // so this role never needs the broad, Tenant-wide "read every Workflow
+  // Instance" permission just to do its job (see decision-log.md).
+  const complaintHandlerRole = (
+    await pool.query(
+      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'COMPLAINT_HANDLER', 'Complaint Handler') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const complaintManagerRole = (
+    await pool.query(
+      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'COMPLAINT_MANAGER', 'Complaint Manager') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const complaintHandlerPermissionCodes = [
+    "complaint.read",
+    "complaint.manage",
+    "workflow.instance.act",
+    "customer.read",
+    "notification.read",
+  ];
+  const complaintHandlerPermissions = (
+    await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [
+      complaintHandlerPermissionCodes,
+    ])
+  ).rows;
+  for (const p of complaintHandlerPermissions) {
+    await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+      complaintHandlerRole.id,
+      p.id,
+    ]);
+    await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+      complaintManagerRole.id,
+      p.id,
+    ]);
+  }
+  // COMPLAINT_MANAGER additionally gets `workflow.instance.manage` so the
+  // Founder can also exercise manual Escalation/administration during
+  // Founder Review, on top of its tenant-wide Verification/Escalation
+  // routing target role above.
+  const workflowManagePermission = (
+    await pool.query(`SELECT id FROM permissions WHERE code = 'workflow.instance.manage'`)
+  ).rows[0];
+  if (workflowManagePermission) {
+    await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+      complaintManagerRole.id,
+      workflowManagePermission.id,
+    ]);
+  }
+
+  const complaintHandlerPasswordHash = await hashPassword("Handler12345!");
+  const complaintHandler = (
+    await pool.query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name)
+       VALUES ($1, 'handler@demo.local', $2, 'Demo Complaint Handler') RETURNING id`,
+      [tenant.id, complaintHandlerPasswordHash],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_organization_unit_id)
+     VALUES ($1, $2, 'organization_unit', $3)`,
+    [complaintHandler.id, complaintHandlerRole.id, siteA.id],
+  );
+
+  const complaintManagerPasswordHash = await hashPassword("ComplaintManager12345!");
+  const complaintManagerUser = (
+    await pool.query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name)
+       VALUES ($1, 'complaintmanager@demo.local', $2, 'Demo Complaint Manager') RETURNING id`,
+      [tenant.id, complaintManagerPasswordHash],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
+     VALUES ($1, $2, 'tenant')`,
+    [complaintManagerUser.id, complaintManagerRole.id],
+  );
+
+  // Grant the existing CUSTOMER_USER role the permissions it needs to
+  // submit/track/confirm its own Complaints. Deliberately NOT
+  // `workflow.instance.read` — same reasoning as COMPLAINT_HANDLER above,
+  // and it prevents a Customer User from browsing every Workflow Instance
+  // in the tenant via the raw `/workflow/*` routes (see decision-log.md).
+  const customerUserComplaintPermissionCodes = [
+    "complaint.read",
+    "complaint.manage",
+    "workflow.instance.start",
+    "workflow.instance.act",
+  ];
+  const customerUserComplaintPermissions = (
+    await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [
+      customerUserComplaintPermissionCodes,
+    ])
+  ).rows;
+  for (const p of customerUserComplaintPermissions) {
+    await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+      customerUserRole.id,
+      p.id,
+    ]);
+  }
+
   console.log("Seed complete:");
   console.log(`  Tenant code:        ${DEMO_TENANT_CODE}`);
   console.log(`  Legal Entity:       ${legalEntity.id}`);
@@ -576,6 +942,13 @@ async function main() {
   console.log(`  Customer demo:      ${customer.id} (CUST-001, owner org unit = Site A)`);
   console.log(
     `  Customer User login: customeruser@democlient.local / CustomerUser12345! (customer scope = CUST-001 only)`,
+  );
+  console.log(`  Complaint workflow:  complaint_lifecycle v1 (published)`);
+  console.log(
+    `  Handler login:       handler@demo.local / Handler12345! (COMPLAINT_HANDLER, Site A scope)`,
+  );
+  console.log(
+    `  Complaint Mgr login: complaintmanager@demo.local / ComplaintManager12345! (COMPLAINT_MANAGER, tenant-wide scope)`,
   );
 
   await pool.end();

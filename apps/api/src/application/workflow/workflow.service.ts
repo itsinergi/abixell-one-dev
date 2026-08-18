@@ -380,6 +380,28 @@ export class WorkflowService {
     return { instance, assignments };
   }
 
+  /**
+   * Checkpoint 1B — trusted-caller variant of `getInstance`/`getHistory`:
+   * no `workflow.instance.read` permission check. `workflow.instance.read`
+   * is Tenant-wide (the generic engine has no Data-Scope-aware reading —
+   * documented, pre-existing Phase 0 characteristic, not something 1B
+   * changes for the raw `/workflow/*` routes). A business module that has
+   * ALREADY authorized the actor against the specific business entity
+   * (e.g. `ComplaintService.get` via Customer Data Scope) can read that
+   * entity's Instance/Assignments/History through here instead — this is
+   * specifically what lets a Customer User read their OWN Complaint's
+   * workflow state without being granted the broad, Tenant-wide
+   * `workflow.instance.read` permission (which would otherwise let them
+   * browse every Instance in the Tenant via `GET /workflow/instances`).
+   */
+  async getInstanceForEntityOwner(tenantId: string, id: string) {
+    const instance = await this.getInstanceOrThrow(tenantId, id);
+    const assignments = await this.repo.listAssignmentsForInstance(instance.id);
+    const currentStep = instance.currentStepId ? await this.repo.findStepById(instance.currentStepId) : null;
+    const history = await this.repo.listHistory(instance.id);
+    return { instance, assignments, currentStep, history };
+  }
+
   async listInstances(actor: ActorContext): Promise<WorkflowInstance[]> {
     await this.rbac.requirePermission(actor.userId, "workflow.instance.read");
     return this.repo.listInstances(actor.tenantId);
@@ -587,6 +609,110 @@ export class WorkflowService {
    * docs/decision-log.md for why that's an accepted, documented gap
    * rather than a silent omission.
    */
+  /**
+   * Checkpoint 1B — generic, entity-agnostic reopen (does NOT know
+   * "Complaint" exists, same posture as everything else in this class).
+   * Resolves a real gap: `actOnAssignment` requires a PENDING Assignment
+   * to act on, and a completed Instance's terminal Step never has one —
+   * so "reopen a closed Complaint" cannot be expressed as an ordinary
+   * Transition no matter how the Workflow Definition is authored.
+   *
+   * Deliberately does NOT itself enforce a Tenant-wide RBAC permission —
+   * unlike every other method here, it is meant to be called by a
+   * business module's own service (e.g. `ComplaintService.reopen`)
+   * AFTER that module has authorized the specific business entity
+   * (permission + Data Scope) — the same "trusted caller" posture
+   * `escalateOverdueAssignmentsForTenant` already established for the
+   * Scheduler. `actor` is still required, for audit/history attribution.
+   */
+  async reopenInstance(
+    actor: ActorContext,
+    instanceId: string,
+    input: { toStepCode: string; comment: string | null },
+  ) {
+    const instance = await this.getInstanceOrThrow(actor.tenantId, instanceId);
+    if (instance.status === "in_progress") {
+      throw new ConflictError("Only a completed Workflow Instance can be reopened");
+    }
+    const toStep = await this.repo.findStepByCode(instance.workflowVersionId, input.toStepCode);
+    if (!toStep) throw new NotFoundError("WorkflowStep", input.toStepCode);
+    if (toStep.isTerminal) {
+      throw new ValidationError("Cannot reopen into another terminal Step");
+    }
+
+    const fromStepId = instance.currentStepId;
+    await this.repo.reopenInstance(instance.id, toStep.id);
+    await this.repo.appendHistory({
+      workflowInstanceId: instance.id,
+      fromStepId,
+      toStepId: toStep.id,
+      actionCode: "reopened",
+      actorUserId: actor.userId,
+      comment: input.comment,
+      metadata: null,
+    });
+    const newAssignment = await this.createAssignmentForStep(instance, toStep.id, toStep.code, toStep.slaHours);
+
+    await this.eventBus?.publish({
+      tenantId: actor.tenantId,
+      eventType: "workflow.reopened",
+      entityType: instance.entityType,
+      entityId: instance.entityId,
+      payload: {
+        workflowInstanceId: instance.id,
+        targetUserId: instance.startedBy,
+        toStepCode: toStep.code,
+        actorUserId: actor.userId,
+        comment: input.comment,
+      },
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "workflow.instance.reopened",
+      entityType: "workflow_instance",
+      entityId: instance.id,
+      metadata: { toStepCode: toStep.code },
+    });
+
+    return { instance: (await this.repo.findInstanceById(instance.id))!, newAssignment };
+  }
+
+  /**
+   * Checkpoint 1B — "is this actor legitimately connected to this
+   * Instance" (started it, currently/previously assigned to it — by
+   * name or by Role+Scope eligibility re-evaluated NOW, same as
+   * `assertEligible`). Generic across any entityType; used by
+   * `ComplaintService.canAccessForDocument` as one of several ways an
+   * actor can be authorized for a Complaint's evidence, alongside the
+   * Customer Data Scope path (ADR-0011/0012) — an investigator routed to
+   * a Complaint through an Organization Unit unrelated to the Customer's
+   * own `ownerOrganizationUnitId` still needs to reach the evidence they
+   * were assigned to review.
+   */
+  async isActorAssociatedWithInstance(actor: ActorContext, instanceId: string): Promise<boolean> {
+    const instance = await this.repo.findInstanceById(instanceId);
+    if (!instance || instance.tenantId !== actor.tenantId) return false;
+    if (instance.startedBy === actor.userId) return true;
+
+    const assignments = await this.repo.listAssignmentsForInstance(instanceId);
+    for (const assignment of assignments) {
+      if (assignment.assignmentType === "specific_user") {
+        if (assignment.assignedUserId === actor.userId) return true;
+        continue;
+      }
+      const covers = await this.rbac.hasRoleCoveringScope(
+        actor.userId,
+        assignment.assignedRoleCode!,
+        assignment.assignedOrganizationUnitId,
+      );
+      if (covers) return true;
+    }
+    return false;
+  }
+
   async escalateOverdueAssignments(actor: ActorContext) {
     await this.rbac.requirePermission(actor.userId, "workflow.instance.manage");
     return this.runEscalationSweep(actor.tenantId);

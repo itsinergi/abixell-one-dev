@@ -65,18 +65,32 @@ export class CustomerService {
 
   async listForTenant(actor: ActorContext): Promise<Customer[]> {
     await this.rbac.requirePermission(actor.userId, "customer.read");
-    // Checkpoint 1A: listing is Tenant-wide-permission-gated only, mirroring
-    // 0B's `OrganizationUnitService.listForTenant`/`legalEntity.listForTenant`
-    // precedent — a user holding `customer.read` sees every Customer in
-    // their Tenant, same posture as those Phase 0 listings. Per-Customer
-    // Data Scope is enforced on the SINGLE-entity path (`getAuthorized`,
-    // used by Contract/Project/Site/Service/Document access), which is
-    // the path a Customer User (scoped to exactly one Customer) actually
-    // exercises. A Customer User does not hold `customer.read` widely
-    // enough to hit this listing endpoint in practice; narrowing this
-    // listing to the actor's Data Scope is tracked as a natural follow-up
-    // once a curated "Customer Portal" role needs it (1C).
-    return this.repo.listByTenant(actor.tenantId);
+    const all = await this.repo.listByTenant(actor.tenantId);
+
+    // Checkpoint 1B hardening: `GET /customers` now applies Customer Data
+    // Scope per row, not just the Tenant-wide `customer.read` permission
+    // (the 1A gap explicitly flagged as a follow-up, pulled forward
+    // because Complaint creation uses Customer as its business context —
+    // a Customer User or scoped internal role must not be able to browse
+    // Customers outside their own scope while picking one to file a
+    // Complaint against). Assignments are fetched once and reused per row
+    // (`isCustomerContextScopeCoveredByAssignments`) rather than once per
+    // Customer — cheap at Phase 0/1A/1B data volumes (see the existing,
+    // documented "no pagination yet" item in the Technical Debt Register;
+    // this filtering shares that same known scaling ceiling, not a new
+    // one).
+    const assignments = await this.rbac.getAssignments(actor.userId);
+    if (assignments.some((a) => a.scopeType === "tenant")) return all;
+
+    const filtered: Customer[] = [];
+    for (const customer of all) {
+      const covered = await this.rbac.isCustomerContextScopeCoveredByAssignments(assignments, {
+        customerId: customer.id,
+        ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
+      });
+      if (covered) filtered.push(customer);
+    }
+    return filtered;
   }
 
   /** Loads a Customer and enforces both Tenant isolation and Data Scope.

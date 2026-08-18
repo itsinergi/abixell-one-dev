@@ -391,6 +391,13 @@ export class PgWorkflowRepository implements WorkflowRepository {
     );
   }
 
+  async reopenInstance(id: string, stepId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE workflow_instances SET status = 'in_progress', completed_at = NULL, current_step_id = $2 WHERE id = $1`,
+      [id, stepId],
+    );
+  }
+
   // --- Instance assignments --------------------------------------------------
 
   async createAssignment(input: {
