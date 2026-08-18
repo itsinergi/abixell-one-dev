@@ -7,8 +7,10 @@ const createSchema = z.object({
   fullName: z.string().min(1),
   password: z.string().min(8),
   roleCode: z.string().min(1),
-  scopeType: z.enum(["tenant", "organization_unit"]),
+  scopeType: z.enum(["tenant", "organization_unit", "customer"]),
   scopeOrganizationUnitId: z.string().uuid().nullable().optional(),
+  // Checkpoint 1A / ADR-0011 — required when scopeType === "customer".
+  scopeCustomerId: z.string().uuid().nullable().optional(),
 });
 
 export function registerUserRoutes(app: FastifyInstance, container: Container) {

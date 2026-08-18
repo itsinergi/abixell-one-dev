@@ -16,15 +16,18 @@ export interface UserRoleAssignment {
   userId: string;
   roleId: string;
   roleCode: string;
-  scopeType: "tenant" | "organization_unit";
+  scopeType: "tenant" | "organization_unit" | "customer";
   scopeOrganizationUnitId: string | null;
+  /** Checkpoint 1A / ADR-0011 — set when scopeType === "customer". */
+  scopeCustomerId: string | null;
 }
 
 export interface AssignRoleInput {
   userId: string;
   roleId: string;
-  scopeType: "tenant" | "organization_unit";
+  scopeType: "tenant" | "organization_unit" | "customer";
   scopeOrganizationUnitId?: string | null;
+  scopeCustomerId?: string | null;
 }
 
 export interface RbacRepository {

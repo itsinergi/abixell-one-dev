@@ -181,3 +181,25 @@ fitur lampiran bukti Complaint dibangun.
 Keputusan mengenai kapan dan dengan instruksi seperti apa Phase 1
 (Customer Complaint Management + Survey & Assessment) dimulai menunggu
 arahan eksplisit Founder berikutnya.
+
+## 2026-08-18 — Checkpoint 1A (Document Scope & Customer Experience Foundation)
+
+Checkpoint pertama Phase 1. Ringkasan keputusan implementasi; detail
+lengkap ada di `docs/implementation-notes.md`,
+`docs/technical-debt-register.md`, ADR-0011, dan ADR-0012.
+
+| # | Keputusan | Alasan | Referensi |
+|---|---|---|---|
+| 1 | Document/Attachment authorization mengikuti Data Scope parent entity lewat pola **Entity Authorization Resolver** (`Map<entityType, resolver>` yang di-lookup DocumentService saat runtime), bukan permission `document.manage`/`document.read` Tenant-wide untuk entityType yang sudah punya resolver | Binding decision eksplisit Founder: "attachment tidak memiliki independent business authorization yang terpisah dari parent business entity"; entityType tanpa resolver terdaftar (`demo_transaction`, satu-satunya yang dipakai regression suite Phase 0) tetap memakai perilaku Checkpoint 0E persis — jadi ini murni tambahan, bukan mengganti perilaku lama | ADR-0012, `document.service.ts`, `entity-authorization-resolver.ts` |
+| 2 | Data Scope mendapat dimensi ketiga: `customer` (exact-match, scope_customer_id), setara `tenant`/`organization_unit`, bukan kolom `customer_id` ad hoc di tabel `users` | Customer User bukan bagian hierarki Organization Unit internal sama sekali — memodelkannya sebagai Organization Unit scope adalah category error; menaruhnya sebagai axis Data Scope ketiga (bukan mekanisme otorisasi terpisah) berarti satu titik keputusan (`RbacService.requireCustomerContextScope`) tetap jadi satu-satunya tempat semua modul Customer-context bertanya, sama seperti pola ADR-0009 | ADR-0011, migration `1757000000000` |
+| 3 | Contract/Project/Site TIDAK punya `owner_organization_unit_id` sendiri — Data Scope-nya diresolusi lewat Customer induknya (`CustomerService.getAuthorized`) | Proporsional terhadap kebutuhan 1A ("tidak semua field wajib, buat relationship generik"); Contract/Project/Site yang butuh scope independen dari Customer induknya adalah keputusan Client Configuration/Extension, bukan kebutuhan Product Core yang terbukti saat ini | Migration `1757000000000` header, `contract.service.ts`/`project.service.ts`/`site.service.ts` |
+| 4 | Customer User dibuat lewat endpoint `/users` yang SUDAH ADA (Checkpoint 0B), bukan endpoint/tabel identity terpisah — hanya `scopeType: 'customer'` baru | Instruksi eksplisit Founder: "gunakan entity Phase 0 yang sudah tersedia, jangan membuat duplicate master data"; seluruh infrastruktur Auth/JWT/RBAC Phase 0 (login, refresh, RBAC effective-permission lookup) langsung berfungsi untuk Customer User tanpa perubahan | `user.service.ts`, `users.ts` routes |
+| 5 | Listing `GET /customers` tetap Tenant-permission-gated saja (belum difilter Data Scope per baris) | Mengikuti presedan `GET /organization-units`/`GET /legal-entities` 0B — path single-entity (`getAuthorized`, dipakai Contract/Project/Site/Service/Document resolver) adalah path yang benar-benar dilalui Customer User; penyempitan listing eksplisit ditunda ke 1C saat Customer Portal role kurasi membutuhkannya, dicatat sebagai gap, bukan diasumsikan selesai | `customer.service.ts`, Technical Debt Register |
+| 6 | Service catalog (`services`) adalah data Tenant-level generik (nama seperti "Catering" hanya contoh dummy), dipisah dari Service Assignment (`customer_service_links`) yang benar-benar terikat Data Scope Customer | Menjaga prinsip Generic Engine — Product Core tidak memuat kategori/nama Service spesifik klien; assignment-nya (siapa dapat Service apa) yang terikat otorisasi, bukan katalognya | Migration `1757000000000`, `service-catalog.service.ts` |
+
+### Item terbuka yang dibawa ke checkpoint berikutnya
+
+- Belum ada endpoint update/soft-delete untuk Customer/Contract/Project/Site/Service/Service Assignment (carry-over pola yang sama seperti Organization Unit/User sejak 0B).
+- `GET /customers` belum difilter Data Scope per baris (lihat keputusan #5) — didokumentasikan sebagai gap sadar, bukan bug.
+- Resolver Entity Authorization baru didaftarkan untuk `entityType='customer'`; `contract`/`project`/`site` belum punya resolver sendiri karena belum ada modul bisnis yang melampirkan dokumen langsung ke entity tersebut (Complaint/Survey akan melampirkan ke dirinya sendiri, bukan langsung ke Contract/Project/Site).
+- Seluruh item Must Fix Phase 0 (CORS allowlist, CI/CD, migrasi permission Role kurasi, endpoint update/soft-delete Phase 0, validasi rate limit) masih terbuka, belum dikerjakan di checkpoint ini (di luar cakupan 1A, boleh paralel per keputusan Founder sebelumnya).

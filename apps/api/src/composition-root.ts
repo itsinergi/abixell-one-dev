@@ -12,6 +12,17 @@ import { PgNotificationRepository } from "./infrastructure/persistence/repositor
 import { PgDocumentRepository } from "./infrastructure/persistence/repositories/document.repository.pg.js";
 import { PgSchedulerRepository } from "./infrastructure/persistence/repositories/scheduler.repository.pg.js";
 import { PgIntegrationRepository } from "./infrastructure/persistence/repositories/integration.repository.pg.js";
+import {
+  PgCustomerContactRepository,
+  PgCustomerRepository,
+} from "./infrastructure/persistence/repositories/customer.repository.pg.js";
+import { PgContractRepository } from "./infrastructure/persistence/repositories/contract.repository.pg.js";
+import { PgProjectRepository } from "./infrastructure/persistence/repositories/project.repository.pg.js";
+import { PgSiteRepository } from "./infrastructure/persistence/repositories/site.repository.pg.js";
+import {
+  PgCustomerServiceLinkRepository,
+  PgServiceRepository,
+} from "./infrastructure/persistence/repositories/service.repository.pg.js";
 import { LocalFileStorage } from "./infrastructure/storage/local-file-storage.js";
 
 import { AuditService } from "./application/audit/audit.service.js";
@@ -29,6 +40,12 @@ import { DocumentService } from "./application/document/document.service.js";
 import { SchedulerService } from "./application/scheduler/scheduler.service.js";
 import { registerJobHandlers } from "./application/scheduler/job-handlers.js";
 import { IntegrationService } from "./application/integration/integration.service.js";
+import { CustomerService } from "./application/customer/customer.service.js";
+import { ContractService } from "./application/customer/contract.service.js";
+import { ProjectService } from "./application/customer/project.service.js";
+import { SiteService } from "./application/customer/site.service.js";
+import { ServiceCatalogService } from "./application/customer/service-catalog.service.js";
+import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
  * Simple manual composition root (no DI framework — deliberate, per
@@ -56,6 +73,13 @@ export function buildContainer() {
   const documentRepo = new PgDocumentRepository(pool);
   const schedulerRepo = new PgSchedulerRepository(pool);
   const integrationRepo = new PgIntegrationRepository(pool);
+  const customerRepo = new PgCustomerRepository(pool);
+  const customerContactRepo = new PgCustomerContactRepository(pool);
+  const contractRepo = new PgContractRepository(pool);
+  const projectRepo = new PgProjectRepository(pool);
+  const siteRepo = new PgSiteRepository(pool);
+  const serviceRepo = new PgServiceRepository(pool);
+  const customerServiceLinkRepo = new PgCustomerServiceLinkRepository(pool);
 
   const audit = new AuditService(auditRepo);
   const rbac = new RbacService(rbacRepo, organizationUnitRepo);
@@ -66,8 +90,37 @@ export function buildContainer() {
 
   const workflow = new WorkflowService(workflowRepo, audit, rbac, eventBus);
   const notification = new NotificationService(notificationRepo, rbacRepo, audit, rbac);
-  const document = new DocumentService(documentRepo, new LocalFileStorage(), audit, rbac, eventBus);
   const integration = new IntegrationService(integrationRepo, tenantRepo, eventBus, audit, rbac);
+
+  // Customer Foundation (Checkpoint 1A) — built before DocumentService so
+  // its `customer` Entity Authorization Resolver (ADR-0012) can close
+  // over `customerService.canAccessForDocument` below.
+  const customer = new CustomerService(customerRepo, customerContactRepo, audit, rbac);
+  const contract = new ContractService(contractRepo, customer, audit, rbac);
+  const project = new ProjectService(projectRepo, customer, audit, rbac);
+  const site = new SiteService(siteRepo, customer, audit, rbac);
+  const serviceCatalog = new ServiceCatalogService(
+    serviceRepo,
+    customerServiceLinkRepo,
+    customer,
+    audit,
+    rbac,
+  );
+
+  const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
+    [
+      "customer",
+      { canAccess: (actor, entityId) => customer.canAccessForDocument(actor, entityId) },
+    ],
+  ]);
+  const document = new DocumentService(
+    documentRepo,
+    new LocalFileStorage(),
+    audit,
+    rbac,
+    eventBus,
+    documentEntityResolvers,
+  );
 
   // Any Domain Event, regardless of publisher, reaches both — this is
   // the "modul lain di masa depan tanpa perlu mengubah modul yang
@@ -90,13 +143,18 @@ export function buildContainer() {
     tenant: new TenantService(tenantRepo, audit),
     legalEntity: new LegalEntityService(legalEntityRepo, audit, rbac),
     organizationUnit: new OrganizationUnitService(organizationUnitRepo, audit, rbac, rbacRepo),
-    user: new UserService(userRepo, rbacRepo, audit, rbac),
+    user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
     configuration: new ConfigurationService(configurationRepo, audit, rbac),
     workflow,
     notification,
     document,
     integration,
+    customer,
+    contract,
+    project,
+    site,
+    serviceCatalog,
   };
 }
 

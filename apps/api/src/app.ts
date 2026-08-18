@@ -22,6 +22,11 @@ import { registerDocumentRoutes } from "./interfaces/http/routes/documents.js";
 import { registerSchedulerRoutes } from "./interfaces/http/routes/scheduler.js";
 import { registerIntegrationRoutes } from "./interfaces/http/routes/integration.js";
 import { registerObservabilityRoutes } from "./interfaces/http/routes/observability.js";
+import { registerCustomerRoutes } from "./interfaces/http/routes/customers.js";
+import { registerContractRoutes } from "./interfaces/http/routes/contracts.js";
+import { registerProjectRoutes } from "./interfaces/http/routes/projects.js";
+import { registerSiteRoutes } from "./interfaces/http/routes/sites.js";
+import { registerServiceRoutes } from "./interfaces/http/routes/services.js";
 import { buildContainer } from "./composition-root.js";
 
 export function buildApp(): FastifyInstance {
@@ -126,6 +131,11 @@ export function buildApp(): FastifyInstance {
     registerSchedulerRoutes(scoped, container);
     registerIntegrationRoutes(scoped, container);
     registerObservabilityRoutes(scoped, container);
+    registerCustomerRoutes(scoped, container);
+    registerContractRoutes(scoped, container);
+    registerProjectRoutes(scoped, container);
+    registerSiteRoutes(scoped, container);
+    registerServiceRoutes(scoped, container);
   });
 
   // Scheduler / Background Jobs (Checkpoint 0E): start the in-process

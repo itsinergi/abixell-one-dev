@@ -434,6 +434,127 @@ async function main() {
     [tenant.id, inboundWebhookSecret],
   );
 
+  // --- Checkpoint 1A: Customer Experience Foundation demo data ---------------
+  // Proves the full 1A E2E target end to end: Customer -> Contact ->
+  // Contract/Project/Site -> Service Assigned -> Customer User login ->
+  // Data Scope Applied. `ownerOrganizationUnitId = siteA` means the
+  // existing SUPERVISOR (Site A org-unit scope) and WORKFLOW_MANAGER/
+  // ADMIN (tenant-wide) can all reach this Customer through
+  // `RbacService.requireCustomerContextScope`'s org-unit branch; the new
+  // Customer User below reaches it through the `customer` scope branch
+  // instead — two different Data Scope axes converging on the same
+  // authorization decision, per ADR-0011.
+  const customer = (
+    await pool.query(
+      `INSERT INTO customers (tenant_id, code, name, owner_organization_unit_id)
+       VALUES ($1, 'CUST-001', 'PT Demo Client Indonesia', $2) RETURNING id`,
+      [tenant.id, siteA.id],
+    )
+  ).rows[0];
+
+  const customerContact = (
+    await pool.query(
+      `INSERT INTO customer_contacts (tenant_id, customer_id, name, email, phone, is_primary)
+       VALUES ($1, $2, 'Budi Santoso', 'budi.santoso@democlient.local', '+62-811-0000-0001', true)
+       RETURNING id`,
+      [tenant.id, customer.id],
+    )
+  ).rows[0];
+
+  const contract = (
+    await pool.query(
+      `INSERT INTO contracts (tenant_id, customer_id, code, name, start_date, status)
+       VALUES ($1, $2, 'CTR-2026-001', 'Demo Service Agreement 2026', '2026-01-01', 'active')
+       RETURNING id`,
+      [tenant.id, customer.id],
+    )
+  ).rows[0];
+
+  const project = (
+    await pool.query(
+      `INSERT INTO projects (tenant_id, customer_id, contract_id, code, name)
+       VALUES ($1, $2, $3, 'PRJ-001', 'Site Operations Support') RETURNING id`,
+      [tenant.id, customer.id, contract.id],
+    )
+  ).rows[0];
+
+  const customerSite = (
+    await pool.query(
+      `INSERT INTO sites (tenant_id, customer_id, project_id, code, name, address)
+       VALUES ($1, $2, $3, 'SITE-001', 'Demo Client Site 1', 'Jl. Demo No. 1, Jakarta')
+       RETURNING id`,
+      [tenant.id, customer.id, project.id],
+    )
+  ).rows[0];
+
+  const service = (
+    await pool.query(
+      `INSERT INTO services (tenant_id, code, name, description)
+       VALUES ($1, 'SVC-GENERAL', 'General Services', 'Dummy Service catalog entry — Client Configuration, not Product Core content')
+       RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+
+  await pool.query(
+    `INSERT INTO customer_service_links
+       (tenant_id, customer_id, service_id, contract_id, project_id, site_id, internal_pic_user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [tenant.id, customer.id, service.id, contract.id, project.id, customerSite.id, supervisor.id],
+  );
+
+  // CUSTOMER_USER role: read-only over its own Customer's foundation
+  // data. Deliberately does NOT include any `document.*` permission —
+  // Document access for entityType='customer' goes entirely through the
+  // Entity Authorization Resolver (ADR-0012), not this permission catalog
+  // (the Checkpoint 1A binding decision: "attachment tidak memiliki
+  // independent business authorization yang terpisah dari parent
+  // business entity").
+  const customerUserRole = (
+    await pool.query(
+      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'CUSTOMER_USER', 'Customer User') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const customerUserPermissionCodes = [
+    "customer.read",
+    "contract.read",
+    "project.read",
+    "site.read",
+    "service.read",
+  ];
+  const customerUserPermissions = (
+    await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [
+      customerUserPermissionCodes,
+    ])
+  ).rows;
+  for (const p of customerUserPermissions) {
+    await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+      customerUserRole.id,
+      p.id,
+    ]);
+  }
+
+  const customerUserPasswordHash = await hashPassword("CustomerUser12345!");
+  const customerUser = (
+    await pool.query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name)
+       VALUES ($1, 'customeruser@democlient.local', $2, 'Demo Customer User') RETURNING id`,
+      [tenant.id, customerUserPasswordHash],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type, scope_customer_id)
+     VALUES ($1, $2, 'customer', $3)`,
+    [customerUser.id, customerUserRole.id, customer.id],
+  );
+
+  await pool.query(
+    `INSERT INTO audit_log (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+     VALUES ($1, NULL, 'customer.seeded', 'customer', $2, $3)`,
+    [tenant.id, customer.id, JSON.stringify({ source: "seed script", code: "CUST-001" })],
+  );
+
   console.log("Seed complete:");
   console.log(`  Tenant code:        ${DEMO_TENANT_CODE}`);
   console.log(`  Legal Entity:       ${legalEntity.id}`);
@@ -452,6 +573,10 @@ async function main() {
   console.log(`  Inbound webhook:    POST /integration/webhook/${DEMO_TENANT_CODE}/demo-inbound`);
   console.log(`    Signature header: X-Webhook-Signature = HMAC-SHA256(secret, rawBody) hex`);
   console.log(`    Secret (dev-only): ${inboundWebhookSecret}`);
+  console.log(`  Customer demo:      ${customer.id} (CUST-001, owner org unit = Site A)`);
+  console.log(
+    `  Customer User login: customeruser@democlient.local / CustomerUser12345! (customer scope = CUST-001 only)`,
+  );
 
   await pool.end();
 }

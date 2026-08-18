@@ -931,3 +931,119 @@ untuk lampiran bukti sejak checkpoint pertamanya.
 
 **Menunggu Founder Review untuk menyatakan Phase 0 COMPLETED dan
 memberikan keputusan apakah Phase 1 boleh dimulai.**
+
+## Checkpoint 1A — Document Scope & Customer Experience Foundation
+
+Checkpoint pertama Phase 1, dikerjakan di atas repo hasil Checkpoint
+0A–0F (di-restore dari archive Founder ke session Phase 1 yang terpisah,
+sesuai instruksi Founder: preparation/Phase 0 dan implementasi Phase 1
+dipisah per session). Git history, seluruh ADR, Decision Log,
+Implementation Notes, dan Technical Debt Register Phase 0 dipertahankan
+utuh — checkpoint ini HANYA menambah, tidak menulis ulang riwayat.
+
+### Yang dibangun
+
+1. **Customer Foundation** — Customer, Customer Contact/PIC, Contract,
+   Project, Site/Location, Service (katalog Tenant-level), Service
+   Assignment (Customer <-> Service, opsional dipersempit ke
+   Contract/Project/Site + Internal PIC). Satu migration
+   (`1757000000000_customer-experience-foundation-1a`), tujuh tabel baru.
+2. **Customer Data Scope** (ADR-0011) — dimensi Data Scope ketiga
+   (`customer`, exact-match) di `user_role_assignments`, konvergen dengan
+   `organization_unit` scope (hierarkis, ADR-0009) lewat satu method:
+   `RbacService.requireCustomerContextScope`.
+3. **Document Entity Authorization Resolver** (ADR-0012) — mekanisme
+   plug-in yang memutus Document Service dari kebutuhan tahu apa itu
+   "Customer"; `DocumentService` melihat registry
+   `Map<entityType, resolver>` saat runtime. `entityType='customer'`
+   diregistrasi ke `CustomerService.canAccessForDocument`; `entityType`
+   lain (mis. `demo_transaction`) tetap memakai permission Tenant-wide
+   Checkpoint 0E persis seperti sebelumnya.
+4. Route HTTP baru: `/customers`, `/customer-contacts`, `/contracts`,
+   `/projects`, `/sites`, `/services`, `/customer-service-links` — pola
+   create+list saja (sama seperti presedan `/organization-units` 0B),
+   endpoint update/soft-delete belum ada (carry-over gap yang sama).
+5. Seed script (`scripts/seed.ts`) diperluas: satu Customer demo
+   (`CUST-001`, owner org unit = Site A) lengkap dengan Contact,
+   Contract, Project, Site, Service, Service Assignment, dan satu
+   `CUSTOMER_USER` login (`customeruser@democlient.local`) yang
+   scope-nya HANYA Customer tsb.
+
+### Bukti End-to-End (vertical slice, terhadap PostgreSQL nyata)
+
+`tests/integration/customer-foundation.test.ts` (16 test, semua lewat
+`app.inject` HTTP nyata, tanpa mocking) membuktikan seluruh rantai target
+1A:
+
+```
+Administrator -> Customer Created -> Customer Contact Created ->
+Contract/Project/Site Context -> Service Assigned -> Customer User Login
+-> Data Scope Applied -> Document Uploaded -> Parent Entity Authorization
+Applied -> Audit Trail -> PostgreSQL
+```
+
+Poin pembuktian yang secara spesifik divalidasi (bukan hanya jalur
+happy-path):
+
+- Supervisor scoped ke Organization Unit **induk** (Region) BISA
+  menjangkau Customer yang `owner_organization_unit_id`-nya adalah
+  **descendant** (Site) — membuktikan ADR-0009 (hierarchical Data Scope)
+  benar-benar konvergen dengan Customer lewat ADR-0011, bukan reimplementasi
+  terpisah.
+- Supervisor yang sama TIDAK BISA menjangkau Customer lain yang dimiliki
+  Organization Unit **sibling** (bukan ancestor/descendant) — isolasi
+  antar cabang tree tetap berlaku (403).
+- Customer User (role `CUSTOMER_USER_1A`, HANYA permission
+  `customer.read`/`contract.read`/`project.read`/`site.read`, TANPA
+  `document.*` sama sekali) BISA upload/list/download Document miliknya
+  sendiri (`entityType='customer'`) — membuktikan resolver adalah gerbang
+  yang sesungguhnya, bukan permission legacy.
+- Customer User yang sama TIDAK BISA membaca Document milik Customer
+  lain (403) — Data Scope, bukan hanya Tenant, yang menggerbangi.
+- Upload dengan `entityType='demo_transaction'` (tidak ada resolver
+  terdaftar) oleh aktor yang sama TETAP ditolak (403) karena tidak
+  memegang `document.manage` — membuktikan regresi Checkpoint 0E benar-
+  benar tidak berubah untuk entityType tanpa resolver.
+- Audit Trail tercatat untuk setiap create (`customer.created`,
+  `customer.contact_created`, `customer.service_assigned`,
+  `document.uploaded`, dst).
+
+### Regression Phase 0
+
+Full suite Phase 0 (`tests/integration/*.test.ts` yang sudah ada) dijalankan
+ULANG tanpa perubahan apa pun pada assertion-nya: **45/45 tetap lulus**,
+0 regresi. Total suite setelah 1A: **61/61 lulus** (6 file Phase 0 + 1
+file Checkpoint 1A).
+
+### Migration validation
+
+Migration `1757000000000` divalidasi up -> down -> up dari database
+kosong terpisah (disposable, bukan database dev), mengikuti presedan
+Checkpoint 0F: jumlah tabel round-trip persis 47 -> 40 -> 47 (40 cocok
+dengan angka yang dicatat 0F untuk chain 0A-0F). Down migration JUGA
+diuji terhadap database dev yang sudah berisi data (seed + hasil test) —
+sengaja GAGAL karena ada baris `scope_type='customer'` yang melanggar
+constraint versi lama; node-pg-migrate membungkusnya dalam transaction
+sehingga rollback penuh terjadi otomatis, database dev tidak rusak. Ini
+perilaku yang benar (down migration destruktif terhadap fitur yang
+sedang dipakai data nyata memang seharusnya gagal, bukan diam-diam
+membuang data), dicatat di sini agar tidak disalahartikan sebagai bug.
+
+### Typecheck / Lint / Build
+
+Bersih di `apps/api` (frontend tidak disentuh di checkpoint ini — 1A
+adalah foundation data + API + otorisasi, UI Customer Experience baru
+masuk cakupan 1C per urutan Founder).
+
+### Keterbatasan / gap yang diketahui di akhir Checkpoint 1A
+
+- Belum ada endpoint update/soft-delete untuk seluruh entity Customer
+  Foundation (carry-over pola yang sama seperti Organization Unit/User).
+- `GET /customers` belum difilter per Data Scope (baru single-entity path
+  yang difilter) — didokumentasikan sebagai keputusan sadar (lihat
+  decision-log #5), bukan bug, dengan rencana penyempitan di 1C.
+- Belum ada UI Customer Experience (Customer/Contract/Project/Site
+  management screen) — di luar cakupan 1A per urutan Founder (1C).
+- Resolver Entity Authorization baru ada untuk `customer`; `contract`/
+  `project`/`site` belum, karena belum ada modul yang melampirkan
+  dokumen langsung ke entity tsb.

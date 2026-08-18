@@ -112,4 +112,50 @@ export class RbacService {
           ancestorSet.has(a.scopeOrganizationUnitId)),
     );
   }
+
+  /**
+   * Checkpoint 1A / ADR-0011 — Customer Data Scope. Every Customer-context
+   * entity (Customer, Contract, Project, Site, Service Assignment, and —
+   * per the Checkpoint 1A binding decision — Document/Attachment) resolves
+   * authorization through this single method, so it can never drift
+   * between call sites (the same design goal as ADR-0009's
+   * `listAncestorIds`).
+   *
+   * Covered if the actor holds ANY of:
+   * - a tenant-wide assignment (internal Administrator/broad role), OR
+   * - an organization_unit assignment covering `ownerOrganizationUnitId`
+   *   (internal Supervisor/GM/Regional Manager — hierarchical, ADR-0009),
+   *   when the target Customer has an owner Organization Unit, OR
+   * - a customer assignment whose `scopeCustomerId` matches `customerId`
+   *   exactly (a Customer User — no hierarchy, a Customer has no
+   *   descendants).
+   */
+  async requireCustomerContextScope(
+    userId: string,
+    target: { customerId: string; ownerOrganizationUnitId: string | null },
+  ): Promise<void> {
+    const covered = await this.isCustomerContextScopeCovered(userId, target);
+    if (!covered) {
+      throw new ForbiddenError("Your assigned Data Scope does not cover this Customer");
+    }
+  }
+
+  async isCustomerContextScopeCovered(
+    userId: string,
+    target: { customerId: string; ownerOrganizationUnitId: string | null },
+  ): Promise<boolean> {
+    const assignments = await this.repo.getAssignments(userId);
+    if (assignments.some((a) => a.scopeType === "tenant")) return true;
+    if (
+      assignments.some(
+        (a) => a.scopeType === "customer" && a.scopeCustomerId === target.customerId,
+      )
+    ) {
+      return true;
+    }
+    if (target.ownerOrganizationUnitId) {
+      return this.isOrganizationUnitScopeCovered(userId, target.ownerOrganizationUnitId);
+    }
+    return false;
+  }
 }

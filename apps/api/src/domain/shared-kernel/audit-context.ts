@@ -15,12 +15,17 @@ export interface ActorContext {
  * authenticated user may act on, independent of WHAT action (permission)
  * they are allowed to perform.
  *
- * 0B scope is intentionally exact-match only:
  * - 'tenant'            -> the whole Tenant
- * - 'organization_unit' -> exactly one Organization Unit (not its
- *                          descendants — descendant-aware scope is a
- *                          documented gap, see docs/decision-log.md)
+ * - 'organization_unit' -> one Organization Unit AND every descendant of
+ *                          it (Checkpoint 0F / ADR-0009, hierarchical)
+ * - 'customer'          -> exactly one Customer (Checkpoint 1A /
+ *                          ADR-0011). No hierarchy: a Customer has no
+ *                          descendants, so this is exact-match, the same
+ *                          shape 0B's Organization Unit scope originally
+ *                          had before ADR-0009. This is the axis a
+ *                          Customer User's Role assignment carries.
  */
 export type DataScope =
   | { type: "tenant" }
-  | { type: "organization_unit"; organizationUnitId: string };
+  | { type: "organization_unit"; organizationUnitId: string }
+  | { type: "customer"; customerId: string };

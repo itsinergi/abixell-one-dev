@@ -24,7 +24,7 @@ export class PgRbacRepository implements RbacRepository {
   async getAssignments(userId: string): Promise<UserRoleAssignment[]> {
     const result = await this.pool.query(
       `SELECT ura.id, ura.user_id, ura.role_id, r.code AS role_code,
-              ura.scope_type, ura.scope_organization_unit_id
+              ura.scope_type, ura.scope_organization_unit_id, ura.scope_customer_id
          FROM user_role_assignments ura
          JOIN roles r ON r.id = ura.role_id
         WHERE ura.user_id = $1`,
@@ -37,6 +37,7 @@ export class PgRbacRepository implements RbacRepository {
       roleCode: row.role_code,
       scopeType: row.scope_type,
       scopeOrganizationUnitId: row.scope_organization_unit_id,
+      scopeCustomerId: row.scope_customer_id,
     }));
   }
 
@@ -60,14 +61,15 @@ export class PgRbacRepository implements RbacRepository {
   ): Promise<UserRoleAssignment> {
     const result = await this.pool.query(
       `INSERT INTO user_role_assignments
-         (user_id, role_id, scope_type, scope_organization_unit_id, created_by)
-       VALUES ($1, $2, $3, $4, $5)
+         (user_id, role_id, scope_type, scope_organization_unit_id, scope_customer_id, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         input.userId,
         input.roleId,
         input.scopeType,
         input.scopeOrganizationUnitId ?? null,
+        input.scopeCustomerId ?? null,
         createdBy,
       ],
     );
@@ -82,6 +84,7 @@ export class PgRbacRepository implements RbacRepository {
       roleCode: roleResult.rows[0]?.code ?? "",
       scopeType: row.scope_type,
       scopeOrganizationUnitId: row.scope_organization_unit_id,
+      scopeCustomerId: row.scope_customer_id,
     };
   }
 
