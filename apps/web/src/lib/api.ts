@@ -165,4 +165,92 @@ export const api = {
         metadata: Record<string, unknown>;
       }>
     >("/audit-log/recent", { token }),
+
+  // --- Checkpoint 0D: Workflow & Approval Engine -----------------------------
+  workflowDefinitions: (token: string) =>
+    request<
+      Array<{ id: string; code: string; name: string; entityType: string; description: string; isActive: boolean }>
+    >("/workflow/definitions", { token }),
+
+  createDemoTransaction: (token: string, title: string) =>
+    request<{ id: string; title: string }>("/workflow/demo-transactions", {
+      method: "POST",
+      token,
+      body: { title },
+    }),
+
+  startWorkflowInstance: (
+    token: string,
+    payload: { definitionCode: string; entityId: string; contextData?: Record<string, unknown> },
+  ) =>
+    request<{ instance: WorkflowInstance; assignment: WorkflowAssignment }>("/workflow/instances", {
+      method: "POST",
+      token,
+      body: payload,
+    }),
+
+  workflowInstances: (token: string) => request<WorkflowInstance[]>("/workflow/instances", { token }),
+
+  workflowInstanceHistory: (token: string, instanceId: string) =>
+    request<
+      Array<{
+        id: string;
+        fromStepId: string | null;
+        toStepId: string | null;
+        actionCode: string;
+        actorUserId: string | null;
+        comment: string | null;
+        occurredAt: string;
+      }>
+    >(`/workflow/instances/${instanceId}/history`, { token }),
+
+  myWorkflowAssignments: (token: string) =>
+    request<WorkflowAssignment[]>("/workflow/my-assignments", { token }),
+
+  actOnWorkflowAssignment: (
+    token: string,
+    assignmentId: string,
+    payload: { actionCode: string; comment?: string | null },
+  ) =>
+    request<{ instance: WorkflowInstance; decidedAssignmentId: string; newAssignment: WorkflowAssignment | null }>(
+      `/workflow/assignments/${assignmentId}/act`,
+      { method: "POST", token, body: payload },
+    ),
+
+  triggerWorkflowEscalationSweep: (token: string) =>
+    request<{ escalatedCount: number; escalated: WorkflowAssignment[] }>("/workflow/escalation-sweep", {
+      method: "POST",
+      token,
+    }),
+};
+
+export type WorkflowInstance = {
+  id: string;
+  workflowDefinitionId: string;
+  workflowVersionId: string;
+  entityType: string;
+  entityId: string;
+  currentStepId: string | null;
+  status: "in_progress" | "approved" | "rejected" | "cancelled";
+  contextData: Record<string, unknown>;
+  startedBy: string;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+export type WorkflowAssignment = {
+  id: string;
+  workflowInstanceId: string;
+  stepId: string;
+  assignmentType: "role" | "specific_user";
+  assignedRoleCode: string | null;
+  assignedOrganizationUnitId: string | null;
+  assignedUserId: string | null;
+  assignedAt: string;
+  dueAt: string | null;
+  status: "pending" | "approved" | "rejected" | "returned" | "escalated" | "superseded";
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionActionCode: string | null;
+  comment: string | null;
 };

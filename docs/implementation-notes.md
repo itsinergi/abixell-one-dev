@@ -350,3 +350,187 @@ Data/Numbering, smoke test visual browser, caching resolusi scope) sudah
 dicatat eksplisit di atas, bukan diasumsikan selesai.
 
 **Menunggu review Founder sebelum masuk Checkpoint 0D**, sesuai instruksi.
+
+---
+
+# Implementation Notes — Checkpoint 0D: Workflow & Approval Engine Foundation
+
+**Status: COMPLETE**
+**Tanggal: 2026-08-18**
+
+## Apa yang dibangun
+
+Alur end-to-end yang dibuktikan (sesuai target minimal Checkpoint 0D),
+seluruhnya terhadap objek generik `demo_transactions` — TIDAK ada logic
+Complaint, Survey, Procurement, atau modul bisnis apa pun, sesuai
+instruksi eksplisit Founder:
+
+```
+Workflow Definition -> Version -> Step -> Transition -> Condition
+  -> Assignment (role+scope ATAU specific_user) -> Approval
+  -> Reject / Return-Resubmit -> Escalation -> History
+  -> RBAC -> Configuration Audit -> PostgreSQL
+```
+
+- **Skema database** (migration `1755800000000`): `workflow_definitions`,
+  `workflow_versions` (dengan `is_current` + partial unique index, pola
+  sama seperti ADR-0006), `workflow_steps`, `workflow_transitions`
+  (dengan `condition_expression` jsonb), `workflow_assignment_rules`
+  (dengan Condition + dua tipe assignment), `workflow_escalation_rules`,
+  `demo_transactions` (objek dummy generik), `workflow_instances`
+  (dengan `context_data` jsonb — inilah yang membuat engine benar-benar
+  entity-agnostic, ia tidak pernah query tabel bisnis apa pun),
+  `workflow_instance_assignments` (task queue + keputusan Approval),
+  `workflow_history` (jejak lengkap per instance), dan
+  `workflow_notification_hooks` (hook siap-notifikasi). Plus 6 permission
+  baru (`workflow.definition.manage`/`.read`,
+  `workflow.instance.start`/`.read`/`.act`/`.manage`).
+- **Dua bug FK "ON DELETE tanpa CASCADE" ditemukan dan diperbaiki sebelum
+  migration final** (lihat decision log item #6) — kelas bug persis sama
+  dengan temuan Checkpoint 0B, kali ini dikenali lebih cepat karena
+  polanya sudah familiar; diperbaiki lewat siklus rollback (`npm run
+  migrate:down`) → perbaikan `onDelete: "CASCADE"` pada 7 kolom FK ke
+  `organization_units`/`users` → migrate ulang → reseed tenant demo.
+- **Condition evaluator** (`condition-evaluator.ts`): pure function,
+  enam operator (`eq`/`neq`/`gt`/`gte`/`lt`/`lte`/`in`), dievaluasi
+  terhadap `contextData` milik Workflow Instance — dipakai baik oleh
+  Transition (menentukan tujuan berikutnya) maupun Assignment Rule
+  (menentukan siapa yang menerima tugas), keduanya dengan mekanisme
+  "kondisi null = selalu cocok / default".
+- **WorkflowService**: seluruh orkestrasi design-time (create/list
+  Definition, create/list/publish Version dengan validasi wajib —
+  tepat satu Step initial, minimal satu Step terminal, setiap Step
+  non-terminal wajib punya Transition keluar DAN Assignment Rule — atau
+  publish ditolak 400 dengan daftar masalah) dan runtime (start
+  Instance, resolve Assignment lewat Condition, act on Assignment
+  dengan validasi RBAC role+scope ATAU specific-user, penentuan
+  Transition berikutnya lewat Condition, penyelesaian Instance ke
+  status terminal, escalation sweep). Setiap operasi mutasi memanggil
+  BAIK `AuditService` (Audit Trail lintas-modul) MAUPUN
+  `workflow_history` (jejak spesifik per instance) — keduanya melayani
+  kebutuhan berbeda sesuai dok 04/06.
+- **RBAC**: `RbacService.hasRoleCoveringScope` (baru) memeriksa apakah
+  actor memegang role tertentu dalam Data Scope yang mencakup target —
+  dipakai untuk memutuskan siapa berhak bertindak atas Assignment
+  bertipe `role` (queue), memakai model Role + Data Scope yang sama
+  persis dengan yang dibangun sejak 0B (exact-match, ADR-0005).
+  Assignment bertipe `specific_user` diperiksa dengan pencocokan userId
+  langsung.
+- **API**: 18 endpoint `/workflow/*` (7 design-time, termasuk
+  create/publish Version dan add Step/Transition/Assignment
+  Rule/Escalation Rule; 11 runtime, termasuk start Instance, my-
+  assignments, act, history, escalation sweep), seluruhnya di balik
+  `app.authenticate`, RBAC per-permission di level Service (pola sama
+  seperti 0C — HTTP layer tidak pernah cek permission sendiri).
+- **Thin Frontend — Workflow panel**: ditambahkan ke Dashboard,
+  menampilkan tombol "Start a Workflow Instance" (memilih Organization
+  Unit dan kategori — normal vs high_risk, untuk membuktikan Condition-
+  based routing dari UI), daftar "My Tasks" dengan tombol
+  Approve/Reject/Return/Resubmit, tabel Workflow Instances dengan
+  History per instance, dan tombol Escalation Sweep.
+- **Seed script**: dua role demo baru — `WORKFLOW_REVIEWER` (scope Site
+  A) dan `WORKFLOW_MANAGER` (scope tenant-wide) — plus satu Workflow
+  Definition lengkap dan published (`demo_approval_workflow` v1) dengan
+  4 Step (REVIEW → COMPLETE/REJECTED/REVISE), 4 Transition, 3
+  Assignment Rule (2 Condition-based di REVIEW, 1 specific_user di
+  REVISE), dan 1 Escalation Rule (SLA 4 jam di REVIEW). Tenant demo
+  `demo-gs` di-reseed ulang agar role ADMIN memiliki permission
+  `workflow.*` baru (pola sama seperti 0C, gap migrasi permission
+  produksi tercatat lagi).
+- **Test**: 10 test integrasi baru
+  (`tests/integration/workflow.test.ts`), berjalan terhadap PostgreSQL
+  sungguhan, membangun Workflow Definition-nya sendiri lewat HTTP API
+  (bukan lewat seed), mencakup: routing default ke WORKFLOW_REVIEWER
+  ber-scope Site, Condition-based routing ke WORKFLOW_MANAGER untuk
+  kategori high_risk, penolakan 403 untuk actor yang tidak memegang
+  role dalam scope yang cocok, jalur Approval penuh sampai status
+  `approved`, jalur Reject sampai status `rejected`, loop
+  Return→specific_user(submitter)→Resubmit kembali ke REVIEW (dengan
+  pembuktian 403 saat aktor yang salah mencoba bertindak), Escalation
+  sweep (backdate `due_at` manual untuk simulasi SLA lewat, verifikasi
+  reassignment + History + Notification hook + Audit langsung ke
+  PostgreSQL), Versioning (publish Version 2 kosong ditolak validasi
+  400, Instance yang sedang berjalan tetap menunjuk Version 1 meski
+  Version baru dibuat), penolakan 403 tanpa permission
+  `workflow.instance.act`, dan verifikasi Audit Trail mencatat seluruh
+  siklus hidup (definition created, version published, instance
+  started/acted/escalated). Total 33 test (23 lama + 10 baru) hijau,
+  tidak ada regresi.
+
+## Pembuktian manual tambahan (di luar automated test)
+
+Smoke test manual lewat curl terhadap server yang berjalan, memakai
+tenant demo `demo-gs`: start instance dengan routing default (→
+WORKFLOW_REVIEWER Site A, `dueAt` 4 jam ke depan), `my-assignments`
+untuk reviewer vs manager (manager kosong karena task ber-scope Site,
+bukan tenant), penolakan 403 saat manager mencoba bertindak di luar
+role/scope-nya, Approval penuh sampai instance `approved`, Condition-
+based routing kategori `high_risk` → WORKFLOW_MANAGER tenant-wide,
+Reject sampai instance `rejected`, loop Return→Resubmit lengkap dengan
+penolakan 403 aktor salah, Escalation sweep (backdate `due_at` via SQL
+langsung, verifikasi reassignment ke WORKFLOW_MANAGER + Audit Trail +
+Notification hook), dan Versioning (create Version 2, publish ditolak
+validasi karena kosong, Version 1 tetap `is_current`). Seluruh hasil
+sesuai ekspektasi.
+
+## Keterbatasan / gap yang diketahui di akhir Checkpoint 0D
+
+- **Tidak ada mekanisme claim/lock** untuk Assignment bertipe `role` —
+  siapa pun pemegang role dalam scope yang cocok bisa mencoba
+  bertindak; yang pertama sampai ke database yang menang (percobaan
+  kedua mendapat `ConflictError`, bukan silang data diam-diam).
+  Didokumentasikan sebagai simplifikasi sengaja di ADR-0007.
+- **Escalation sweep tidak otomatis** — tidak ada scheduler/cron di
+  lingkungan implementasi ini yang memicu sweep secara berkala;
+  mekanismenya sendiri terbukti benar lewat pemicu manual/API. Carry-
+  over dari gap "belum ada CI/CD" filosofinya sama: infrastruktur
+  penjadwalan belum ada, bukan logic yang salah.
+- **Data Scope untuk Workflow Assignment masih exact-match**, carry-over
+  langsung dari ADR-0005 — belum rekursif ke Organization Unit turunan.
+- **Belum ada mekanisme migrasi permission untuk tenant produksi** yang
+  sudah live saat permission baru ditambahkan lewat migration — gap
+  yang sama dari 0C, terbukti relevan lagi di sini (reseed hanya valid
+  untuk tenant demo/dev).
+- **Belum ada endpoint cancel/reopen Instance** secara eksplisit (dok 04
+  menyebutnya sebagai kapabilitas generik engine) — 0D membuktikan
+  Submit→Validate(implisit via Assignment)→Review→Approve/Reject/
+  Return→Escalate→Complete sesuai target minimal; cancellation dan
+  reopen didesain agar mudah ditambahkan nanti (Instance sudah punya
+  kolom `status` yang mendukung status tambahan) tapi belum
+  diimplementasikan.
+- **Frontend Workflow panel belum melalui smoke test visual browser
+  sungguhan** — keterbatasan yang sama seperti Checkpoint 0C (lingkungan
+  implementasi tidak punya akses browser ke dev server container);
+  diverifikasi lewat `typecheck`/`lint`/`build` sukses dan pemanggilan
+  API yang identik sudah diverifikasi hijau lewat curl.
+- **CI/CD masih belum ada** (carry-over dari 0A/0B/0C).
+
+## Risk Note
+
+| Risiko | Dampak | Kemungkinan | Mitigasi saat ini / rencana |
+|---|---|---|---|
+| Tanpa claim/lock, dua pemegang role yang sama bisa mencoba bertindak pada Assignment yang sama nyaris bersamaan | Rendah — percobaan kedua mendapat error yang jelas (`ConflictError`, assignment sudah bukan `pending`), bukan silent overwrite; tapi UX-nya (aksi gagal tiba-tiba) belum ideal untuk skala tim besar | Rendah untuk Phase 0 (tim kecil per Site) | Didokumentasikan di ADR-0007; claim/lock eksplisit bisa ditambahkan tanpa mengubah skema jika pola pemakaian nyata membuktikan perlu |
+| Escalation sweep butuh pemicu eksternal (manual/API), bukan otomatis berjalan sendiri | Sedang — bila tidak ada yang memanggil sweep secara rutin, task overdue tidak benar-benar ter-eskalasi meski SLA sudah lewat | Sedang, sampai scheduler/cron infrastructure ada | Mekanisme intinya sudah teruji benar; menyambungkannya ke pemicu otomatis (cron job, external scheduler) adalah pekerjaan wiring terpisah yang dicatat eksplisit sebagai gap, bukan diasumsikan sudah otomatis |
+| Reseed tenant demo untuk menyebarkan permission `workflow.*` baru berulang lagi dari pola 0C | Tinggi bila pola ini ditiru di tenant produksi (kehilangan data) | Rendah (hanya dipakai di tenant demo), tapi terbukti dua kali berturut-turut (0C dan 0D) — memperkuat urgensi menyelesaikan gap ini sebelum ada tenant produksi sungguhan | Sama seperti 0C: didokumentasikan eksplisit sebagai pola demo/dev-only; migrasi permission produksi tetap sebagai item terbuka prioritas tinggi |
+| Dua bug FK cascade ditemukan SETELAH migration awal diterapkan (baru ketagihan saat test integrasi cleanup gagal) | Rendah — ditemukan dan diperbaiki sebelum Founder Review, sebelum migration dianggap final, lewat siklus rollback-fix-reapply yang sudah baku sejak 0C | Rendah untuk checkpoint berikutnya (pola FK cascade untuk kolom yang mereferensikan `organization_units`/`users` di tabel scoped-tenant kini sudah dikenali sebagai pengecekan wajib) | Dicatat eksplisit di decision log; disarankan pengecekan FK cascade secara sistematis (bukan hanya reaktif saat test gagal) di awal desain migration checkpoint berikutnya |
+| Test integrasi menulis Tenant sungguhan ke database dev yang sama dipakai untuk development manual | Rendah | Rendah | Sama seperti 0B/0C — `afterAll` menghapus Tenant beserta seluruh data turunannya via cascade (kini termasuk seluruh tabel `workflow_*` berkat perbaikan FK di atas) |
+
+## Kesiapan untuk Checkpoint 0E
+
+Workflow & Approval Engine Foundation sudah stabil dan teruji end-to-end
+dari UI sampai PostgreSQL: Workflow Definition, Versioning, Step/State,
+Transition, Condition, Assignment (dua tipe), Approval, Reject/Return,
+Escalation hook, SLA-ready hook, Notification-ready hook, History, RBAC,
+dan Configuration Audit seluruhnya terbukti lewat 33 test otomatis (0
+regresi dari 0A–0C) plus smoke test manual curl yang mencakup jalur
+sukses, jalur Condition-based routing, jalur reject, jalur return/
+resubmit, escalation, dan RBAC-403. Seluruh pembuktian memakai objek
+dummy generik (`demo_transactions`) — TIDAK ada logic Complaint, Survey,
+atau Procurement yang masuk ke Phase 0, sesuai instruksi eksplisit
+Founder.
+
+Gap yang diketahui (claim/lock, scheduler otomatis untuk escalation,
+migrasi permission produksi, cancel/reopen instance, smoke test visual
+browser) sudah dicatat eksplisit di atas, bukan diasumsikan selesai.
+
+**Menunggu review Founder sebelum masuk Checkpoint 0E**, sesuai instruksi.

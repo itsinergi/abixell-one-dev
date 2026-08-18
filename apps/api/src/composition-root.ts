@@ -6,6 +6,7 @@ import { PgUserRepository } from "./infrastructure/persistence/repositories/user
 import { PgRbacRepository } from "./infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { PgAuditLogRepository } from "./infrastructure/persistence/repositories/audit-log.repository.pg.js";
 import { PgConfigurationRepository } from "./infrastructure/persistence/repositories/configuration.repository.pg.js";
+import { PgWorkflowRepository } from "./infrastructure/persistence/repositories/workflow.repository.pg.js";
 
 import { AuditService } from "./application/audit/audit.service.js";
 import { RbacService } from "./application/rbac/rbac.service.js";
@@ -15,6 +16,7 @@ import { OrganizationUnitService } from "./application/organization-unit/organiz
 import { UserService } from "./application/identity/user.service.js";
 import { AuthService } from "./application/identity/auth.service.js";
 import { ConfigurationService } from "./application/configuration/configuration.service.js";
+import { WorkflowService } from "./application/workflow/workflow.service.js";
 
 /**
  * Simple manual composition root (no DI framework — deliberate, per
@@ -30,6 +32,7 @@ export function buildContainer() {
   const rbacRepo = new PgRbacRepository(pool);
   const auditRepo = new PgAuditLogRepository(pool);
   const configurationRepo = new PgConfigurationRepository(pool);
+  const workflowRepo = new PgWorkflowRepository(pool);
 
   const audit = new AuditService(auditRepo);
   const rbac = new RbacService(rbacRepo);
@@ -44,6 +47,7 @@ export function buildContainer() {
     user: new UserService(userRepo, rbacRepo, audit, rbac),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
     configuration: new ConfigurationService(configurationRepo, audit, rbac),
+    workflow: new WorkflowService(workflowRepo, audit, rbac),
   };
 }
 

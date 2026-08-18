@@ -12,6 +12,7 @@ import { registerOrganizationUnitRoutes } from "./interfaces/http/routes/organiz
 import { registerUserRoutes } from "./interfaces/http/routes/users.js";
 import { registerAuditRoutes } from "./interfaces/http/routes/audit.js";
 import { registerConfigurationRoutes } from "./interfaces/http/routes/config.js";
+import { registerWorkflowRoutes } from "./interfaces/http/routes/workflow.js";
 import { buildContainer } from "./composition-root.js";
 
 export function buildApp(): FastifyInstance {
@@ -42,6 +43,7 @@ export function buildApp(): FastifyInstance {
   registerUserRoutes(app, container);
   registerAuditRoutes(app, container);
   registerConfigurationRoutes(app, container);
+  registerWorkflowRoutes(app, container);
 
   return app;
 }

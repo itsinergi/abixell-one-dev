@@ -101,6 +101,39 @@ async function main() {
     );
   }
 
+  // Checkpoint 0D demo roles: WORKFLOW_REVIEWER (Site A scope) and
+  // WORKFLOW_MANAGER (tenant-wide) — proves Workflow Assignment routing
+  // to a role+scope "queue" (not a pre-picked user) and the hierarchical
+  // Escalation target, reusing the same Site A / Head Office structure
+  // Checkpoints 0B/0C already demonstrate Data Scope and Configuration
+  // Scope with.
+  const workflowReviewerRole = (
+    await pool.query(
+      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'WORKFLOW_REVIEWER', 'Workflow Reviewer') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const workflowManagerRole = (
+    await pool.query(
+      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'WORKFLOW_MANAGER', 'Workflow Manager') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const workflowPermissionCodes = ["workflow.instance.read", "workflow.instance.act"];
+  const workflowPermissions = (
+    await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [workflowPermissionCodes])
+  ).rows;
+  for (const p of workflowPermissions) {
+    await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+      workflowReviewerRole.id,
+      p.id,
+    ]);
+    await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+      workflowManagerRole.id,
+      p.id,
+    ]);
+  }
+
   const adminPasswordHash = await hashPassword("Admin12345!");
   const admin = (
     await pool.query(
@@ -128,6 +161,35 @@ async function main() {
        (user_id, role_id, scope_type, scope_organization_unit_id)
      VALUES ($1, $2, 'organization_unit', $3)`,
     [supervisor.id, supervisorRole.id, siteA.id],
+  );
+
+  const workflowReviewerPasswordHash = await hashPassword("Reviewer12345!");
+  const workflowReviewer = (
+    await pool.query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name)
+       VALUES ($1, 'reviewer@demo.local', $2, 'Demo Workflow Reviewer') RETURNING id`,
+      [tenant.id, workflowReviewerPasswordHash],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO user_role_assignments
+       (user_id, role_id, scope_type, scope_organization_unit_id)
+     VALUES ($1, $2, 'organization_unit', $3)`,
+    [workflowReviewer.id, workflowReviewerRole.id, siteA.id],
+  );
+
+  const workflowManagerPasswordHash = await hashPassword("Manager12345!");
+  const workflowManager = (
+    await pool.query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name)
+       VALUES ($1, 'manager@demo.local', $2, 'Demo Workflow Manager') RETURNING id`,
+      [tenant.id, workflowManagerPasswordHash],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
+     VALUES ($1, $2, 'tenant')`,
+    [workflowManager.id, workflowManagerRole.id],
   );
 
   await pool.query(
@@ -209,6 +271,118 @@ async function main() {
     [tenant.id],
   );
 
+  // --- Checkpoint 0D: Workflow & Approval Engine demo definition --------------
+  // A single, fully published Workflow Definition proving every required
+  // capability end-to-end against the generic `demo_transactions` object
+  // ONLY (no Complaint/Survey/Procurement business logic, per explicit
+  // Founder instruction): Versioning (this is version 1, published +
+  // current), Step/State (REVIEW/REVISE/COMPLETE/REJECTED), Transition
+  // (approve/reject/return/resubmit), Condition (category=high_risk
+  // routes to WORKFLOW_MANAGER instead of the default WORKFLOW_REVIEWER),
+  // Assignment (role+scope AND specific_user types both used), Approval
+  // (approve -> COMPLETE), Reject (reject -> REJECTED), Return (return ->
+  // REVISE -> resubmit loops back to REVIEW), Escalation (4h SLA on
+  // REVIEW, escalates to WORKFLOW_MANAGER tenant-wide), SLA-ready hook
+  // (sla_hours -> due_at), Notification-ready hook (fires on every
+  // assign/approve/reject/return/escalate/complete).
+  const workflowDefinition = (
+    await pool.query(
+      `INSERT INTO workflow_definitions (tenant_id, code, name, entity_type, description, created_by)
+       VALUES ($1, 'demo_approval_workflow', 'Demo Generic Approval Workflow', 'demo_transaction',
+               'Checkpoint 0D engine-proof workflow — routes a generic dummy transaction through Review, with Condition-based dynamic assignment, Escalation, and a Return/Resubmit rework loop.',
+               $2)
+       RETURNING id`,
+      [tenant.id, admin.id],
+    )
+  ).rows[0];
+
+  const workflowVersion = (
+    await pool.query(
+      `INSERT INTO workflow_versions (workflow_definition_id, version_number, status, is_current, created_by, published_at)
+       VALUES ($1, 1, 'published', true, $2, now())
+       RETURNING id`,
+      [workflowDefinition.id, admin.id],
+    )
+  ).rows[0];
+
+  const reviewStep = (
+    await pool.query(
+      `INSERT INTO workflow_steps
+         (workflow_version_id, code, name, step_type, is_initial, is_terminal, sla_hours, sequence_order)
+       VALUES ($1, 'REVIEW', 'Review', 'approval', true, false, 4, 1)
+       RETURNING id`,
+      [workflowVersion.id],
+    )
+  ).rows[0];
+  const reviseStep = (
+    await pool.query(
+      `INSERT INTO workflow_steps
+         (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'REVISE', 'Revise', 'task', false, false, 2)
+       RETURNING id`,
+      [workflowVersion.id],
+    )
+  ).rows[0];
+  const completeStep = (
+    await pool.query(
+      `INSERT INTO workflow_steps
+         (workflow_version_id, code, name, step_type, is_initial, is_terminal, terminal_status, sequence_order)
+       VALUES ($1, 'COMPLETE', 'Complete', 'end', false, true, 'approved', 3)
+       RETURNING id`,
+      [workflowVersion.id],
+    )
+  ).rows[0];
+  const rejectedStep = (
+    await pool.query(
+      `INSERT INTO workflow_steps
+         (workflow_version_id, code, name, step_type, is_initial, is_terminal, terminal_status, sequence_order)
+       VALUES ($1, 'REJECTED', 'Rejected', 'end', false, true, 'rejected', 4)
+       RETURNING id`,
+      [workflowVersion.id],
+    )
+  ).rows[0];
+
+  await pool.query(
+    `INSERT INTO workflow_transitions (workflow_version_id, from_step_id, to_step_id, action_code, name, sort_order)
+     VALUES
+       ($1, $2, $4, 'approve', 'Approve', 1),
+       ($1, $2, $5, 'reject', 'Reject', 2),
+       ($1, $2, $3, 'return', 'Return for revision', 3),
+       ($1, $3, $2, 'resubmit', 'Resubmit after revision', 1)`,
+    [workflowVersion.id, reviewStep.id, reviseStep.id, completeStep.id, rejectedStep.id],
+  );
+
+  // Condition-based dynamic routing (doc 04 "Dynamic Routing"): a
+  // high_risk transaction skips the local Reviewer and goes straight to
+  // the tenant-wide Manager; everything else defaults to the Site-scoped
+  // Reviewer. Rules are evaluated in sort_order — first match wins.
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules
+       (workflow_step_id, sort_order, condition_expression, assignment_type, role_code, organization_unit_strategy)
+     VALUES
+       ($1, 1, $2, 'role', 'WORKFLOW_MANAGER', 'tenant'),
+       ($1, 2, NULL, 'role', 'WORKFLOW_REVIEWER', 'submitter_unit')`,
+    [reviewStep.id, JSON.stringify({ field: "category", operator: "eq", value: "high_risk" })],
+  );
+  // REVISE is routed back to whoever originally started the instance —
+  // proves the 'specific_user' assignment type, distinct from role+scope.
+  await pool.query(
+    `INSERT INTO workflow_assignment_rules
+       (workflow_step_id, sort_order, assignment_type, specific_user_source)
+     VALUES ($1, 1, 'specific_user', 'submitter')`,
+    [reviseStep.id],
+  );
+
+  // Escalation hook: REVIEW's 4-hour SLA, if exceeded, reassigns to
+  // WORKFLOW_MANAGER tenant-wide (a Site-level task escalating up the
+  // Organization Hierarchy, per doc 04's "Escalate jika lewat SLA").
+  await pool.query(
+    `INSERT INTO workflow_escalation_rules
+       (workflow_step_id, escalate_after_hours, escalate_to_role_code, escalate_to_organization_unit_strategy, note)
+     VALUES ($1, 4, 'WORKFLOW_MANAGER', 'tenant', 'SLA exceeded at Review — escalate to tenant-wide Workflow Manager')`,
+    [reviewStep.id],
+  );
+
   console.log("Seed complete:");
   console.log(`  Tenant code:        ${DEMO_TENANT_CODE}`);
   console.log(`  Legal Entity:       ${legalEntity.id}`);
@@ -217,6 +391,13 @@ async function main() {
   console.log(
     `  Supervisor login:   supervisor@demo.local / Supervisor12345! (Site A scope only, read-only permissions)`,
   );
+  console.log(
+    `  Reviewer login:     reviewer@demo.local / Reviewer12345! (WORKFLOW_REVIEWER, Site A scope)`,
+  );
+  console.log(
+    `  Manager login:      manager@demo.local / Manager12345! (WORKFLOW_MANAGER, tenant-wide scope)`,
+  );
+  console.log(`  Workflow demo:      demo_approval_workflow v1 (published)`);
 
   await pool.end();
 }

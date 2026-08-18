@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { api, ApiError } from "../lib/api";
 import { ConfigurationPanel } from "./ConfigurationPanel";
+import { WorkflowPanel } from "./WorkflowPanel";
 
 type OrgUnit = { id: string; parentId: string | null; name: string; unitType: string; legalEntityId: string };
 type LegalEntity = { id: string; name: string };
@@ -251,6 +252,15 @@ export function DashboardPage() {
         token={token}
         orgUnits={orgUnits}
         canManage={permissions.includes("config.manage")}
+        onMessage={setMessage}
+      />
+
+      <WorkflowPanel
+        token={token}
+        orgUnits={orgUnits}
+        canStart={permissions.includes("workflow.instance.start")}
+        canAct={permissions.includes("workflow.instance.act")}
+        canManage={permissions.includes("workflow.instance.manage")}
         onMessage={setMessage}
       />
     </div>
