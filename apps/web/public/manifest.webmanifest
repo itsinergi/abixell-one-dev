@@ -1,0 +1,10 @@
+{
+  "name": "Enterprise Management System",
+  "short_name": "EMS",
+  "description": "PWA manifest placeholder — real name/icons are supplied per Tenant Branding Configuration at build/deploy time, never hardcoded per Founder Decision on client-facing branding.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": []
+}

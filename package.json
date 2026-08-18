@@ -1,0 +1,28 @@
+{
+  "name": "abixell-one",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Abixell One - Enterprise Core Foundation (Phase 0). Internal positioning: Whitelabel Integrated Enterprise Management System. Client-facing term 'whitelabel' must never appear in this codebase's user-facing strings.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/api && npm run build -w apps/web",
+    "lint": "npm run lint -w apps/api && npm run lint -w apps/web",
+    "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
+    "test": "npm run test -w apps/api",
+    "db:up": "docker compose -f infra/postgres/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/postgres/docker-compose.yml down",
+    "migrate": "npm run migrate -w apps/api",
+    "migrate:generate": "npm run migrate:generate -w apps/api"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}
