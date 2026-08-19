@@ -1558,3 +1558,107 @@ the workflow→event emission itself is covered by complaint-engine tests.
 ### Deferred to 1E.2
 `survey.submitted` consumption, outcome/threshold evaluation, target action
 (reopen / escalate / management attention). No automatic reopen in 1E.1.
+
+## 2026-08-20 — Checkpoint 1E.2 + 1E.3 (Survey Outcome → Management Attention, and Phase 1E closure)
+
+Completes Survey-to-Action: a submitted Survey is evaluated against a
+configured question-code threshold and, on a match, raises **management
+attention**. Phase 1E's Core capability ENDS here — see "Product blueprint".
+
+### Flow (second half)
+`survey.submitted` → find the 1E.1 execution that created this assignment
+(policy lineage) → evaluate the execution's SNAPSHOT of the outcome config →
+compare-and-set the outcome (exactly-once) → audit → if matched and the
+policy is still enabled: resolve management recipients BY CAPABILITY →
+publish `survey.integration.attention_required` → Notification Core delivers
+→ record `attention_status`.
+
+### Outcome model (FD-1E-05)
+Question **code** (stable across versions), one finite operator
+(`lt|lte|eq|gte|gt`), one numeric threshold. `rating` → the submitted
+numeric value (no normalization); `single_choice` → the selected option's
+CONFIGURED score (never option order); anything else / unanswered / option
+without a score → `unresolvable` (never a fallback to `total_score`, never
+an invented number). Outcomes: `matched | not_matched | unresolvable`, with
+`outcome_error_code` naming why (`no_outcome_config`, `question_not_found`,
+`not_answered`, `non_numeric_question`, `no_option_score`).
+
+### Policy snapshot (FD-1E §29)
+The outcome configuration is copied onto the execution when the Assignment
+is created. Editing the policy while a respondent is still answering cannot
+retroactively change how that assignment is judged (covered by a test:
+threshold widened 2 → 4 mid-flight, the assignment is still judged at 2).
+
+### Management attention (FD-1E-06)
+Definition: an authoritative, tenant-safe, idempotent, auditable, and
+configurable signal — NOT a new task/workflow subsystem. Delivered through
+existing capability: one domain event
+`survey.integration.attention_required` carrying `targetUserIds`, which the
+existing Notification Engine renders/delivers per its templates. Recipients
+are resolved BY CAPABILITY (`attention_permission_code` in policy data —
+e.g. `complaint.dashboard.read`), never by role name, via the new
+`RbacRepository.listUserIdsWithPermissionInTenant`, which excludes
+`customer`-scoped assignments so a Customer User can never receive an
+internal management signal. `attention_status` ∈
+`created | failed | skipped_policy_disabled`.
+
+### Notification Core change (minimal)
+`handleDomainEvent` gained one branch: an optional `targetUserIds` array in
+the payload, alongside the existing `targetUserId`/`targetRoleCode`
+convention. No new notification service/method, no new delivery path.
+
+### Idempotency (FD-1E §25/§26)
+Exactly-once WITHOUT a new table: `claimOutcome` is a single conditional
+UPDATE (`WHERE outcome IS NULL`). A replayed `survey.submitted` loses the
+compare-and-set and performs no second evaluation and no second attention.
+
+### Failure semantics (FD-1E §33/§34)
+The handler never throws — a Survey submission is a completed domain action
+and is NEVER rolled back by an integration failure (test: an unresolvable
+management capability yields `attention_status='failed'` +
+`error_code='no_management_recipient'` while the submission stands with its
+score). Unresolvable outcomes are a business/configuration state, not a
+retry loop. No retry framework was added.
+
+### Trusted result access (FD-1E §43/§44)
+`SurveyService.getResultForTrustedIntegration(tenantId, assignmentId)` —
+bypasses only the human `survey.results.read` permission; still enforces
+tenant ownership and submitted state; never exposed over HTTP.
+
+### Automatic Complaint reopen
+**NOT IMPLEMENTED — Founder decision.** Nothing in Survey Integration calls
+`ComplaintService.reopen()` or mutates Workflow (verified by scan and by a
+live check: zero automation-created `complaint.reopened` events).
+
+### Schema / migration
+Migration `1762000000000` — additive columns only on the two 1E.1 tables
+(**still 58 tables**, no third table). All new columns nullable, so 1E.1
+rows stay valid (a pre-1E.2 execution evaluates to `no_outcome_config`).
+Rollback-safe: down → up verified, suite green afterwards.
+
+### Tests / Regression
+`survey-integration.test.ts` → **18 tests** (8 from 1E.1 unchanged, 10 new):
+match, non-match, replay, single-choice option score, long-text
+unresolvable, missing question code, policy-edit drift (snapshot),
+policy-disabled-after-assignment, manual assignment no-op, and
+submission-never-rolled-back. Suite **150/150 PASS** (was 140);
+typecheck/lint/build PASS.
+
+### Live acceptance (real HTTP + real EventBus, seeded demo tenant)
+Full chain through the REAL Complaint workflow: customer files → submit →
+handler acknowledge/assign/investigate/corrective/verification → manager
+verify → **customer confirms** → survey auto-appears in My Surveys →
+customer answers → submits. Rating 2 (≤2) → `matched`, attention `created`,
+1 recipient, in-app notification `sent`, audit
+`outcome.evaluated` + `attention.created`. Rating 4 → `not_matched`, no
+attention, no notification. Complaint workflow stayed terminal (`approved`)
+in both — no auto-reopen. DB checks: no duplicate assignments per
+(policy, complaint), attention events == created attentions (11/11).
+
+### Product blueprint note (FD-1E §75)
+Survey-to-Action's initial **Core** capability ends at
+*configurable outcome → management attention*. Automatic domain mutation
+(e.g. Complaint Reopen, escalation, generic follow-up) is NOT part of Core
+1E; it remains a future Advanced Capability requiring an explicit Founder
+decision. This boundary matters for the Product Core vs Advanced audit
+after Phase 1F.

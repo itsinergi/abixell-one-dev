@@ -306,3 +306,18 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 7 | Handler never throws; persists a `failed` execution instead | A failed integration must not roll back the confirmation; failure must be durable/observable, not swallowed | FD-1E §15/§16 |
 | 8 | One-per-lifetime (FD-1E-07), not per-closure-cycle; no outcome/action fields in schema | YAGNI — 1E.1 is trigger/assignment only; 1E.2 may additively extend | FD-1E-07 §6/§25 |
 | 9 | No permission and no admin UI added; policies via service config seam | No human config surface in 1E.1 → avoid a dead `survey.integration.configure` permission | FD-1E §20/§37 |
+
+## 2026-08-20 — Checkpoint 1E.2 / 1E.3 (Survey Outcome → Management Attention; Phase 1E closure)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Outcome = question **code** + one finite operator + one numeric threshold | Question ids change per version, codes are the stable semantic key; `total_score` is raw and not comparable across surveys | FD-1E-05 §11/§16 |
+| 2 | Outcome config is SNAPSHOTTED onto the execution at assignment time | A policy edited while the respondent is answering must not retroactively change the judgement of an already-assigned survey | FD-1E §29 |
+| 3 | `rating` → submitted value; `single_choice` → configured option score; everything else → `unresolvable` | Never invent a number, never fall back to total score, never read option order as a value | FD-1E §13/§14/§15 |
+| 4 | Management attention = domain event + Notification Core + execution/audit record; no task subsystem | Reuse existing capability first; the execution record is the authoritative signal | FD-1E-06 §6/§19 |
+| 5 | Recipients resolved by CAPABILITY (`attention_permission_code` policy data), excluding customer-scoped users | Founder forbids coupling to a role name; a Customer User must never receive an internal management signal | FD-1E §20/§42 |
+| 6 | Notification Core extended with an optional `targetUserIds` payload key | One-line convention extension reuses all template/render/delivery machinery instead of a second notification path | FD-1E §19 |
+| 7 | Exactly-once via conditional UPDATE `WHERE outcome IS NULL` (no new table/index) | DB is the final idempotency boundary; a single-statement CAS is atomic and keeps the schema to two tables | FD-1E §25/§47 |
+| 8 | Policy disabled after assignment → outcome still evaluated, action skipped (`skipped_policy_disabled`) | "Disabled policy → no outcome action", while keeping the evaluation observable | FD-1E §58 |
+| 9 | Automatic Complaint reopen NOT implemented; Core 1E ends at management attention | Explicitly prohibited for Phase 1E; remains a Founder-gated advanced capability | FD-1E §5/§39/§75 |
+| 10 | Trusted result read added (`getResultForTrustedIntegration`), never exposed over HTTP | Automation needs the result without a human permission, but must keep tenant + submitted-state integrity | FD-1E §43/§44 |

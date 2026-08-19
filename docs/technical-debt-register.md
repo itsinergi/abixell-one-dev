@@ -425,4 +425,48 @@ Assignment. Survey Submitted → Action = 1E.2 (belum dibangun).
 
 ### BUSINESS DECISION REQUIRED (untuk 1E.2)
 - Outcome model + first target action (lihat proposal 1E §18/§21/§41) —
-  perlu Founder Decision saat membuka 1E.2.
+  perlu Founder Decision saat membuka 1E.2. **RESOLVED**: FD-1E-05
+  (question-code threshold) + FD-1E-06 (management attention).
+
+---
+
+## Phase 1E — Konsolidasi Penutupan (1E.2 + 1E.3, Phase 1E CLOSED)
+
+**Diperbarui:** 2026-08-20. Survey-to-Action lengkap: trigger→assignment
+(1E.1) + submitted→outcome→management attention (1E.2), plus stabilisasi/
+closure (1E.3). Regression **150/150**; live acceptance hijau; migration
+down/up terverifikasi; 58 tables (1E.2 additive columns saja).
+
+### MUST FIX BEFORE 1F
+- **Tidak ada.** Tidak ditemukan data leakage, duplicate action, tenant
+  bypass, broken idempotency, evaluasi salah, rollback Survey submission
+  akibat integrasi, execution state korup, masalah migration, atau regresi
+  kritis. Semua gate §79 lolos.
+
+### SHOULD FIX LATER
+- **Reliable async reconciliation / outbox** (dibawa dari 1E.1): EventBus
+  in-process fire-once + menelan exception. Bila proses mati SEBELUM
+  execution/outcome tertulis, kegagalan hanya tertangkap log `onError`.
+  Reconciliation worker = future Platform improvement (FD-1E §16/§35).
+- **Orphan assignment pada race lifetime (rare)** — tetap seperti 1E.1.
+- **Admin config UI + `survey.integration.configure`**: policy masih via
+  seed/config bootstrap (FD-1E §30). Permission sengaja BELUM dibuat agar
+  tidak jadi dead permission (FD-1E §21).
+- **Management Action Center view untuk Survey Attention** (FD-1E §46,
+  OPTIONAL): tidak dibangun — notifikasi in-app sudah menjadi surface yang
+  ada. Bisa ditambah additive bila terbukti berguna operasional.
+- **Shared date formatter** (dibawa dari 1D.3, belum berubah).
+
+### DEFERRED PRODUCT CAPABILITY (butuh Founder Decision terpisah)
+- **Automatic Complaint Reopen** dari hasil survey — DILARANG di Phase 1E,
+  tetap Advanced Capability.
+- Escalation / generic follow-up / target action tambahan; retry framework;
+  per-closure-cycle re-survey; source di luar Complaint; anonymous /
+  customer_contact respondent; survey analytics / NPS / AI sentiment;
+  multi-condition rule engine atau DSL.
+
+### CATATAN BLUEPRINT
+Core Survey-to-Action Phase 1E berhenti pada
+`configurable outcome → management attention`. Mutasi domain otomatis
+bukan bagian Core 1E (penting untuk audit Product Core vs Advanced
+setelah Phase 1F).
