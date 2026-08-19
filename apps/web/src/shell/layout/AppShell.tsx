@@ -24,6 +24,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError } from "../../lib/api";
 import { visibleSections } from "../../lib/capabilities";
 import { Alert, Button, Spinner } from "../components/ui";
+import { useOnlineStatus } from "../useOnlineStatus";
 
 interface ShellContextValue {
   /** Raw permission codes from `GET /me`. */
@@ -53,6 +54,7 @@ export function AppShell() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const online = useOnlineStatus();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,6 +141,15 @@ export function AppShell() {
 
       {/* Main content region */}
       <div className="flex min-w-0 flex-1 flex-col">
+        {!online && (
+          <div
+            className="bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-white"
+            role="status"
+            aria-live="polite"
+          >
+            You are offline — changes can&apos;t be saved until the connection returns.
+          </div>
+        )}
         <div className="hidden items-center justify-end border-b border-slate-200 bg-white px-6 py-2 md:flex">
           <span className="mr-3 text-xs text-slate-400">{session!.userId}</span>
           <Button variant="secondary" onClick={logout}>

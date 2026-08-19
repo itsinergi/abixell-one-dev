@@ -36,7 +36,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   return (
     <button
-      className={`inline-flex items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-[36px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 ${BUTTON_VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {children}
@@ -253,37 +253,59 @@ export function DataTable<T>({
 }) {
   if (rows.length === 0 && empty) return <>{empty}</>;
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
-          <tr>
+    <>
+      {/* Mobile (Checkpoint 1C.7): stacked cards instead of a sideways-scrolling
+          table, so dense operational/management tables stay usable on a phone. */}
+      <ul className="space-y-3 sm:hidden">
+        {rows.map((row) => (
+          <li
+            key={keyOf(row)}
+            onClick={onRowClick ? () => onRowClick(row) : undefined}
+            className={`rounded-lg border border-slate-200 bg-white p-3 ${onRowClick ? "cursor-pointer active:bg-slate-50" : ""}`}
+          >
             {columns.map((c, i) => (
-              <th
-                key={i}
-                className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${c.className ?? ""}`}
-              >
-                {c.header}
-              </th>
+              <div key={i} className="flex items-start justify-between gap-3 py-0.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{c.header}</span>
+                <span className="text-right text-sm text-slate-700">{c.cell(row)}</span>
+              </div>
             ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
-          {rows.map((row) => (
-            <tr
-              key={keyOf(row)}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={onRowClick ? "cursor-pointer hover:bg-slate-50" : ""}
-            >
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop/tablet: the full table (still scrolls inside its own box). */}
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 sm:block">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50">
+            <tr>
               {columns.map((c, i) => (
-                <td key={i} className={`px-3 py-2 align-middle text-slate-700 ${c.className ?? ""}`}>
-                  {c.cell(row)}
-                </td>
+                <th
+                  key={i}
+                  className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${c.className ?? ""}`}
+                >
+                  {c.header}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {rows.map((row) => (
+              <tr
+                key={keyOf(row)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={onRowClick ? "cursor-pointer hover:bg-slate-50" : ""}
+              >
+                {columns.map((c, i) => (
+                  <td key={i} className={`px-3 py-2 align-middle text-slate-700 ${c.className ?? ""}`}>
+                    {c.cell(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

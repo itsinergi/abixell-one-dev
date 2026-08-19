@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Enterprise Management System">
+  <!-- Neutral, non-branded placeholder icon (theme slate + a generic
+       "list/records" glyph). Deliberately NOT a client logo — per the
+       client-facing branding rule, real icons are supplied per Tenant
+       Branding Configuration at deploy time. -->
+  <rect width="512" height="512" rx="96" fill="#0f172a" />
+  <g fill="#ffffff">
+    <rect x="140" y="150" width="232" height="28" rx="14" />
+    <rect x="140" y="242" width="232" height="28" rx="14" />
+    <rect x="140" y="334" width="150" height="28" rx="14" />
+  </g>
+</svg>

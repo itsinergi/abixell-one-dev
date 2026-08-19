@@ -14,3 +14,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </React.StrictMode>,
 );
+
+// Checkpoint 1C.7 — register the PWA service worker in production builds only.
+// In dev, Vite's HMR serves unhashed modules, so a caching SW would fight the
+// dev server; PROD builds emit hashed, cache-safe assets (see public/sw.js).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Registration failure must never break the app — PWA is an enhancement.
+    });
+  });
+}
