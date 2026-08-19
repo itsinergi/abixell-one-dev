@@ -1429,3 +1429,48 @@ rating answer=5 → total score 5; submitted state persists read-only).
 customer_contact/anonymous respondent UI, conditional/matrix/file questions,
 survey analytics, and the Complaint→Survey trigger (1E). Context entity remains
 a metadata/authorization seam only.
+
+## 2026-08-19 — Checkpoint 1D.3 (Survey Engine Stabilization & Closure)
+
+Regression/validation/closure checkpoint — **no new features** (per Founder
+prohibition list). No product code changed except tests; no schema/migration,
+no dependency change. Objective: prove Phase 1D is safe to close.
+
+### Invariants validated (regression + live)
+- **Lifecycle/versioning**: draft→published→retired; published + questions/
+  options immutable (add-option to published question → 409).
+- **Historical response safety**: create v2 + edit after a v1 response; the
+  submitted assignment's result stays bound to v1 with its original score
+  (verified: score unchanged after v2 edits).
+- **Retire safety**: retiring the current version keeps existing results
+  readable; assigning a retired version → 409.
+- **Scoring/atomicity**: submit is a single guarded UPDATE (status IN
+  pending/in_progress) — double-submit → 409, no partial state.
+- **Tenant isolation / result authorization / context safety**: enforced via
+  repo tenant scoping + `survey.results.read` + EntityAuthorizationResolver.
+
+### Stabilization tests added (§14–§16, no product change)
+`survey-engine.test.ts` → **16 tests**: immutability of published question
+options; historical response safety across a new version; retire safety.
+Full suite **132/132 PASS**; typecheck/lint/build PASS.
+
+### Live acceptance (real Chromium)
+- Admin authoring + publish + assign; respondent answer → submit → read-only
+  with total score (unchanged app code; re-confirmed on closure state).
+- **Draft persistence (§27)**: rating draft saved → reload → selection
+  persists server-side (`aria-pressed=true`); `localStorage` holds only
+  `abixell.session` (no business-data caching); submit → reload → read-only
+  "Submitted — thank you" + correct total score.
+
+### Scan results
+- **No Complaint coupling** in Survey Core (only a UI date-format util import
+  from `../complaints/format` — pure formatting, logged as SHOULD FIX LATER).
+- **Terminology**: no internal terms (Whitelabel/Shared Core/Product Core) in
+  client-facing UI; no client name hardcoded.
+- **Migration sanity**: idempotent (survey-permissions guarded by NOT EXISTS);
+  down-migrations drop in FK order.
+- **PWA cache security**: sw.js caches static shell only; `/api` never cached.
+
+### 1E readiness (documented, NOT built)
+context_entity seam + `survey.assigned`/`survey.submitted` events + immutable
+score are in place. See technical-debt-register "1E READINESS".

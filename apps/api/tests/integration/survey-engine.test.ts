@@ -292,4 +292,47 @@ describe("Checkpoint 1D.1 — Survey Engine Core", () => {
     ).rows.map((r) => r.event_type);
     expect(events).toEqual(expect.arrayContaining(["survey.published", "survey.assigned", "survey.submitted"]));
   });
+
+  it("Immutability: cannot add an option to a published question (1D.3 §14)", async () => {
+    const res = await post(`/survey-questions/${qChoiceId}/options`, adminToken, { code: "maybe", label: "Maybe" });
+    expect(res.statusCode).toBe(409); // qChoiceId belongs to the published v1
+  });
+
+  it("Historical response safety: editing a later draft version does not change a submitted result (1D.3 §15)", async () => {
+    // Snapshot the already-submitted assignment's result (v1, score 14).
+    const before = (await get(`/survey-assignments/${assignmentId}/result`, adminToken)).json();
+    expect(Number(before.assignment.totalScore)).toBe(14);
+    expect(before.version.version.versionNumber).toBe(1);
+
+    // Create + edit a NEW draft version (v2).
+    const v2 = await post(`/surveys/csat/versions`, adminToken);
+    expect(v2.statusCode).toBe(201);
+    const v2add = await post(`/survey-versions/${v2.json().id}/questions`, adminToken, {
+      code: "extra",
+      text: "Extra v2 question",
+      questionType: "long_text",
+    });
+    expect(v2add.statusCode).toBe(201);
+
+    // The submitted assignment's result is unchanged (still v1, score 14, same answers).
+    const after = (await get(`/survey-assignments/${assignmentId}/result`, adminToken)).json();
+    expect(Number(after.assignment.totalScore)).toBe(14);
+    expect(after.version.version.versionNumber).toBe(1);
+    expect(after.answers.length).toBe(before.answers.length);
+  });
+
+  it("Retire safety: retire keeps history readable and blocks new assignments (1D.3 §16)", async () => {
+    const retire = await post(`/surveys/csat/versions/1/retire`, adminToken);
+    expect(retire.statusCode).toBe(200);
+    expect(retire.json().status).toBe("retired");
+
+    // Historical submitted result still readable + unchanged.
+    const result = (await get(`/survey-assignments/${assignmentId}/result`, adminToken)).json();
+    expect(Number(result.assignment.totalScore)).toBe(14);
+    expect(result.version.questions.length).toBeGreaterThanOrEqual(2);
+
+    // A retired version cannot receive a NEW assignment.
+    const assign = await post("/survey-assignments", adminToken, { surveyVersionId: v1Id, respondentUserId: respAId });
+    expect(assign.statusCode).toBe(409);
+  });
 });

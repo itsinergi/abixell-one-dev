@@ -282,3 +282,13 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 2 | Added GET /survey-versions/:id + enriched /survey-assignments/my | Authoring a DRAFT and a meaningful respondent list need reads the 1D.1 API did not expose; small additive, survey.manage/respond gated | Founder 1D.2 §29 |
 | 3 | Assignment respondent picker reuses /users | No duplicate people directory; admin holds user.read | Founder 1D.2 §16 |
 | 4 | Frontend-only otherwise; no schema/migration | 1D.2 is UX over 1D.1 | Founder 1D.2 §30 |
+
+## 2026-08-19 — Checkpoint 1D.3 (Survey Engine Stabilization & Closure)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Closure = validation + tests only; zero product/schema/dependency change | 1D.3 is a stabilization checkpoint, not a feature checkpoint | Founder 1D.3 |
+| 2 | Added 3 stabilization tests (immutability §14 / historical safety §15 / retire safety §16); suite 16 survey / 132 total | Lock the immutability + versioning invariants against regression before closing 1D | Founder 1D.3 §14–§16 |
+| 3 | No MUST-FIX defects found → Phase 1D declared ready for Founder closure | All MUST-FIX criteria (tenant leakage/unauthorized/published mutation/scoring/atomicity/result leakage/PWA caching/crash) passed | Founder 1D.3 §37 |
+| 4 | Survey UI date-format import from `../complaints/format` kept for now, logged SHOULD FIX LATER | Pure formatting util, no Complaint logic → not a coupling defect; extract at next UI-util refactor | Founder 1D.3 §37 |
+| 5 | 1E readiness documented, not built (context_entity seam, survey.assigned/submitted events, immutable score) | Founder scope forbids starting 1E; only document the seam | Founder 1D.3 §39 |

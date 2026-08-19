@@ -337,3 +337,55 @@ selesai; berikut kapabilitas yang sengaja ditunda (bukan bug/blocker).
   engine + context seam + domain events.
 - Customer Satisfaction is now buildable ON this engine (configuration), not a
   Complaint column — wiring it to Complaint is 1E.
+
+---
+
+## Phase 1D — Konsolidasi Debt (Checkpoint 1D.3 — Stabilization & Closure)
+
+**Diperbarui:** 2026-08-19 (1D.3). Checkpoint regresi/validasi/penutupan —
+BUKAN checkpoint fitur. Seluruh gap Survey Engine dari 1D.1/1D.2
+dikonsolidasikan ulang ke empat kategori sesuai instruksi Founder §37.
+Hasil validasi 1D.3: lifecycle/versioning/immutability/scoring/atomicity/
+tenant-isolation/result-authorization/context-safety terverifikasi (regresi
+132/132 hijau, termasuk 3 test stabilisasi baru §14–§16; acceptance real-
+browser admin+respondent + draft-persistence hijau). **Tidak ditemukan defect
+kategori MUST FIX** (tenant leakage / unauthorized access / published mutation
+/ scoring corruption / non-atomic submit / result leakage / migration-bootstrap
+/ broken flow / PWA business-data caching / crash) — semuanya lolos.
+
+### MUST FIX BEFORE 1E
+- Tidak ada. Semua kriteria MUST-FIX Founder lolos verifikasi di 1D.3.
+
+### SHOULD FIX LATER
+- **Shared date-format util**: halaman Survey (`SurveyDetailPage`,
+  `MySurveyDetailPage`, dll.) meng-import util tanggal dari
+  `../complaints/format` (`formatDateShort`). Bukan coupling domain (murni
+  formatting UI, tanpa logika Complaint), tapi lokasi import lintas-fitur.
+  Ekstrak ke `src/lib/format.ts` bersama saat ada refactor UI util. Tidak
+  memblokir 1E.
+- **Autosave / offline draft** untuk respondent: saat ini explicit "Save
+  draft" (persist server-side; diverifikasi bertahan lintas reload). Autosave
+  dan offline-queue tetap ditunda (di luar scope 1D, dilarang di 1D.3).
+
+### DEFERRED PRODUCT CAPABILITY
+- Seluruh item DEFERRED dari section 1D.1 tetap berlaku tanpa perubahan:
+  customer_contact/anonymous/public-token respondent; conditional/matrix/
+  file-upload question types; weighted/section/percentage/NPS scoring;
+  cross-survey analytics/benchmarking/AI; question type tambahan
+  (short_text/multiple_choice/numeric/yes_no/date). Ditegaskan ulang sebagai
+  dilarang eksplisit di scope 1D.3 — tidak dibangun.
+
+### BUSINESS DECISION REQUIRED
+- **Complaint→Survey trigger & Survey-to-Action** = Checkpoint 1E (rekomendasi
+  next). 1D hanya menyediakan generic engine + context seam + domain events.
+
+### 1E READINESS (didokumentasikan, TIDAK dibangun di 1D.3)
+- **Context entity seam**: `survey_assignments.context_entity_type` +
+  `context_entity_id` sudah ada; authorization lewat
+  `EntityAuthorizationResolverRegistry` (ADR-0012). 1E cukup mengaitkan
+  `context_entity_type='complaint'` tanpa perubahan schema.
+- **Domain events**: `survey.assigned` + `survey.submitted` sudah dipublikasikan
+  ke EventBus (`domain_events`) — seam trigger untuk Survey-to-Action.
+- **Immutable score**: skor final tersimpan immutable saat submit (atomic
+  finalize); tersedia untuk aturan 1E (mis. low-rating → corrective) tanpa
+  re-compute.
