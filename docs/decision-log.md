@@ -255,3 +255,21 @@ perubahan ini, bukan ditunda lagi ke 1C.
 - Tidak ada perubahan backend business / dependency.
 - Technical debt Phase 1C dikonsolidasi & diklasifikasi di `technical-debt-register.md`.
 - Tidak ada blocker; Phase 1C siap ditutup menunggu Founder.
+
+## 2026-08-19 — Checkpoint 1D.1 (Survey Engine Core)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Assignment = instance + response container (no separate survey_responses) | Fewer tables, template vs instance still separated; answers hang off the assignment | FD-1D-02 |
+| 2 | Answers reference the immutable published question by FK; NO snapshot columns | Published version + questions are immutable, so meaning cannot drift; snapshot would be redundant | FD-1D-03 |
+| 3 | Lightweight status lifecycle (draft/published/retired), not the Workflow Engine | Survey definition lifecycle is simple; reusing the workflow engine would be over-engineering | FD-1D-06 §9 |
+| 4 | Only rating/single_choice/long_text have behavior; enum future-ready | FD-1D-04; other types rejected at create + publish validation | FD-1D-04 |
+| 5 | Submit finalization is a single guarded UPDATE (status IN pending/in_progress) | Atomic; double-submit impossible; no partial business state | §14/§37 |
+| 6 | Context entity authorized via the shared EntityAuthorizationResolver registry | Reuse ADR-0012; Survey Core never hardcodes `if contextEntityType===complaint` | FD-1D-05 §16 |
+| 7 | Respondent v1 = user only; customer_contact columns are schema-readiness | Keep first slice focused; model stays extensible | FD-1D §10/§16 |
+| 8 | No survey numbering | UUID sufficient | FD-1D-07 |
+
+### 1D vs 1E boundary
+Survey assignments may carry a context entity, but 1D.1 contains NO
+Complaint→Survey auto-creation or any Survey-to-Action automation — that is
+Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.

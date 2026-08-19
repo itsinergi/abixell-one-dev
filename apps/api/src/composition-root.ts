@@ -50,6 +50,9 @@ import { ComplaintService } from "./application/complaint/complaint.service.js";
 import { ComplaintDashboardService } from "./application/complaint/complaint-dashboard.service.js";
 import { PgComplaintDashboardRepository } from "./infrastructure/persistence/repositories/complaint-dashboard.repository.pg.js";
 import { ComplaintConfigurationService } from "./application/complaint/complaint-configuration.service.js";
+import { PgSurveyRepository } from "./infrastructure/persistence/repositories/survey.repository.pg.js";
+import { SurveyService } from "./application/survey/survey.service.js";
+import { SurveyResponseService } from "./application/survey/survey-response.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -166,6 +169,14 @@ export function buildContainer() {
     documentEntityResolvers,
   );
 
+  // Generic Survey & Assessment Engine (Checkpoint 1D.1). Reuses the shared
+  // EntityAuthorizationResolver registry so an Assignment's optional context
+  // entity (e.g. a Complaint) is authorized without Survey Core knowing that
+  // module (ADR-0012). No Complaint/1E integration wired here.
+  const surveyRepo = new PgSurveyRepository(pool);
+  const survey = new SurveyService(surveyRepo, audit, rbac, eventBus, documentEntityResolvers);
+  const surveyResponse = new SurveyResponseService(surveyRepo, audit, rbac, eventBus);
+
   // Any Domain Event, regardless of publisher, reaches both — this is
   // the "modul lain di masa depan tanpa perlu mengubah modul yang
   // mempublikasikan event" guarantee from doc 07, proven with the two
@@ -221,6 +232,8 @@ export function buildContainer() {
     complaint,
     complaintDashboard,
     complaintConfiguration,
+    survey,
+    surveyResponse,
   };
 }
 

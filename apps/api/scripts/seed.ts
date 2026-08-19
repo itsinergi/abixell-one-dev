@@ -920,6 +920,10 @@ async function main() {
     "complaint.manage",
     "workflow.instance.start",
     "workflow.instance.act",
+    // Checkpoint 1D.1: a Customer User can respond to surveys assigned to
+    // them (e.g. a satisfaction survey). survey.manage/results stay with
+    // internal/admin roles (ADMIN via sync) — never granted here.
+    "survey.respond",
   ];
   const customerUserComplaintPermissions = (
     await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [

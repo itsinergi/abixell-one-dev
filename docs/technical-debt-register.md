@@ -309,3 +309,31 @@ per instruksi Founder 1C.8 (§40/§41). Item yang sudah selesai ditandai.
 - **e2e/smoke.mjs**: dijalankan hijau di real Chromium (shell/persona nav,
   responsive no-overflow 390/768/1280, manifest valid, SW support). Selektor
   step-2 diperbaiki (cocok banyak elemen) — perbaikan test, bukan product.
+
+---
+
+## Phase 1D — Survey & Assessment Engine (Checkpoint 1D.1) — Deferred
+
+**Diperbarui:** 2026-08-19 (1D.1 Survey Engine Core). Backend vertical slice
+selesai; berikut kapabilitas yang sengaja ditunda (bukan bug/blocker).
+
+### SHOULD FIX LATER
+- **Survey frontend** (admin authoring + respondent form) — 1D.1 backend-only.
+- **Draft-answer save** sudah ada (explicit save); autosave/offline tidak.
+
+### DEFERRED PRODUCT CAPABILITY
+- customer_contact & external/anonymous/public-token respondent (kolom
+  schema-ready; flow + security review = future).
+- Conditional/branching logic, matrix/grid questions, file-upload question
+  type, full multi-language localization.
+- Weighted / section / percentage / NPS scoring engine.
+- Cross-survey analytics / benchmarking / AI (sentiment/summary/generation).
+- Additional question types (short_text/multiple_choice/numeric/yes_no/date)
+  — enum ready, behavior not implemented.
+
+### BUSINESS DECISION / 1E
+- **Complaint→Survey trigger & Survey-to-Action** (auto-send on close, low-
+  rating reopen/corrective) = Checkpoint 1E. 1D.1 only provides the generic
+  engine + context seam + domain events.
+- Customer Satisfaction is now buildable ON this engine (configuration), not a
+  Complaint column — wiring it to Complaint is 1E.

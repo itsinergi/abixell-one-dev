@@ -1306,3 +1306,78 @@ dan dokumentasi.
 
 Lihat `technical-debt-register.md` (bagian Phase 1C) untuk konsolidasi &
 klasifikasi technical debt. **Tidak ada MUST FIX BEFORE 1D.**
+
+---
+
+## Checkpoint 1D.1 — Generic Survey & Assessment Engine Core
+
+**Status: COMPLETE (awaiting Founder review)**
+**Date: 2026-08-19**
+
+Backend-first vertical slice of the Product-Core Survey/Assessment engine
+(FD-1D approvals). Frontend deferred to a later 1D sub-checkpoint (§29/§30).
+
+### Built
+- **Schema** (migration `1760000000000_survey-engine-schema`, +8 tables →
+  56 total): `survey_definitions → survey_versions → survey_sections →
+  survey_questions → survey_question_options` (Definition aggregate) and
+  `survey_assignments → survey_answers → survey_answer_options` (Assignment =
+  instance + response container, FD-1D-02). Tenant ownership on the roots
+  (definition/assignment); sub-entities tenant-guarded in the app layer +
+  tests. Indexes per §24; down migration drops in FK order (rollback-safe).
+- **Permissions** (migration `1760000100000_survey-permissions`, data-only,
+  idempotent): `survey.manage`, `survey.respond`, `survey.results.read`
+  (FD-1D-01). ADMIN via `sync-role-permissions`; CUSTOMER_USER granted
+  `survey.respond` in seed (never `manage`).
+- **Domain/Repo/Services**: `SurveyService` (definition/version/section/
+  question/option/publish/retire/assign + results) and `SurveyResponseService`
+  (my-assignments/get/save-answers/submit). PG repo mirrors existing
+  conventions.
+- **Versioning & immutability** (FD-1D-03/06): lightweight status
+  `draft|published|retired` (NOT the Workflow Engine); only drafts are
+  editable; publish sets is_current; answers reference the immutable published
+  question by FK — **no defensive snapshot fields** (per FD-1D-03).
+- **Question types** (FD-1D-04): `rating` (config min/max, score = value),
+  `single_choice` (options with optional score, exactly one selection),
+  `long_text` (no score). Enum is future-ready; other types are rejected.
+- **Scoring**: on submit, total = sum(rating values + selected option scores);
+  long_text unscored; persisted on the assignment (immutable). Semantics
+  documented: total is over scored questions only.
+- **Assignment/respondent**: respondent_type `user` only in v1;
+  customer_contact columns are schema-readiness. Cross-tenant respondent
+  rejected. `context_entity_type/id` present (FD-1D-05) and authorized via the
+  reused EntityAuthorizationResolver registry — **no Complaint auto-create /
+  1E trigger**.
+- **Submit atomicity** (§14/§37): required-validation + score, then a single
+  guarded `UPDATE ... WHERE status IN (pending,in_progress)` — double-submit
+  returns 409; a submitted assignment is immutable.
+- **Audit/Events**: `survey.definition.created/version.created/published/
+  version.retired/assignment.created/submitted` (audit); `survey.published/
+  assigned/submitted` (EventBus) — notification-ready for 1E, no automation.
+
+### API
+Admin: POST /surveys, GET /surveys, GET /surveys/:code, POST /surveys/:code/
+versions, POST /survey-versions/:id/{sections,questions}, POST /survey-
+questions/:id/options, POST /surveys/:code/versions/:n/{publish,retire}, POST
+/survey-assignments. Respondent: GET /survey-assignments/my, GET /survey-
+assignments/:id, POST /survey-assignments/:id/answers, POST .../submit.
+Results: GET /survey-assignments/:id/result.
+
+### Tests / Regression
+`survey-engine.test.ts` (12) — definition/publish (valid+invalid+immutable),
+assignment (published-only, cross-tenant respondent), respond (ownership,
+invalid option/range), submit (required, scoring=14, immutability, double-
+submit), result (authorized/unauthorized/cross-tenant), tenant isolation,
+audit+events. Total suite **128/128 PASS**; typecheck/lint/build PASS.
+
+### Migration validation
+Applied to dev DB; idempotent (`No migrations to run` on re-run); 56 tables /
+12 migrations; both new migrations rollback-safe (down written). Disposable-DB
+down/up roundtrip not run — role lacks CREATEDB (environment limitation, same
+as 1C.8).
+
+### Deferred (see technical-debt-register Phase 1D)
+Survey frontend (admin + respondent), customer_contact respondent flow,
+anonymous/public token, conditional/branching, matrix, file-upload question,
+full multi-language, weighted/section scoring, cross-survey analytics/AI, and
+the Complaint→Survey trigger (1E).
