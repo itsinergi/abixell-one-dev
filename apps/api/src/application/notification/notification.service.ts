@@ -32,6 +32,9 @@ const ALL_CHANNELS: NotificationChannel[] = ["email", "push", "whatsapp", "sms",
  * event payload (a convention this checkpoint establishes, not a
  * requirement enforced by the Event Foundation itself):
  *   - `targetUserId`: a specific user (e.g. "the submitter").
+ *   - `targetUserIds`: an explicit recipient list a publisher already
+ *     resolved itself (Checkpoint 1E.2 — capability-resolved management
+ *     recipients).
  *   - `targetRoleCode` (+ optional `targetOrganizationUnitId`): fans out
  *     to every user currently holding that Role in that Data Scope — the
  *     same Role+Scope "queue" ADR-0007 uses for Workflow Assignment, kept
@@ -117,9 +120,20 @@ export class NotificationService {
     const targetOrganizationUnitId =
       typeof payload.targetOrganizationUnitId === "string" ? payload.targetOrganizationUnitId : null;
 
+    // Checkpoint 1E.2 — a publisher that has ALREADY resolved its own
+    // recipients (e.g. Survey Integration resolving management users by
+    // capability rather than by role name) passes them directly. Same
+    // convention family as `targetUserId`/`targetRoleCode`, so nothing
+    // about template resolution, rendering, or delivery changes.
+    const targetUserIds = Array.isArray(payload.targetUserIds)
+      ? payload.targetUserIds.filter((id): id is string => typeof id === "string")
+      : null;
+
     let recipientIds: string[] = [];
     if (targetUserId) {
       recipientIds = [targetUserId];
+    } else if (targetUserIds && targetUserIds.length > 0) {
+      recipientIds = targetUserIds;
     } else if (targetRoleCode) {
       recipientIds = await this.rbacRepo.listUserIdsWithRoleInScope(
         event.tenantId,

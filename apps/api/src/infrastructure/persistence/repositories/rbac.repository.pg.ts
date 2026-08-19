@@ -9,6 +9,27 @@ import type {
 export class PgRbacRepository implements RbacRepository {
   constructor(private readonly pool: Pool) {}
 
+  async listUserIdsWithPermissionInTenant(tenantId: string, permissionCode: string): Promise<string[]> {
+    // Capability-based recipient resolution (Checkpoint 1E.2). Internal
+    // scopes only — `customer`-scoped assignments are deliberately excluded
+    // so a Customer User can never be an internal management recipient.
+    const result = await this.pool.query(
+      `SELECT DISTINCT ura.user_id
+         FROM user_role_assignments ura
+         JOIN roles r ON r.id = ura.role_id
+         JOIN role_permissions rp ON rp.role_id = ura.role_id
+         JOIN permissions p ON p.id = rp.permission_id
+         JOIN users u ON u.id = ura.user_id
+        WHERE r.tenant_id = $1
+          AND u.tenant_id = $1
+          AND u.deleted_at IS NULL
+          AND p.code = $2
+          AND ura.scope_type IN ('tenant', 'organization_unit')`,
+      [tenantId, permissionCode],
+    );
+    return result.rows.map((r) => r.user_id);
+  }
+
   async getEffectivePermissionCodes(userId: string): Promise<Set<string>> {
     const result = await this.pool.query(
       `SELECT DISTINCT p.code

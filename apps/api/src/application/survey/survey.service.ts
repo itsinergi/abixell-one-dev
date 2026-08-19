@@ -1,4 +1,5 @@
 import type {
+  SurveyAnswer,
   SurveyAssignment,
   SurveyDefinition,
   SurveyQuestion,
@@ -456,6 +457,46 @@ export class SurveyService {
       createdBy: null,
     });
     return assignment;
+  }
+
+  /**
+   * Trusted read of a SUBMITTED result for the integration orchestrator
+   * (Checkpoint 1E.2, FD-1E §43/§44). Bypasses only the human
+   * `survey.results.read` permission — tenant ownership and submitted state
+   * are still enforced, and this is never exposed over HTTP. Returns the
+   * questions of the assignment's own immutable version plus its answers,
+   * so the caller can evaluate a configured question CODE without Survey
+   * Core knowing what that code means. Null when the assignment is missing,
+   * belongs to another tenant, or is not yet submitted.
+   */
+  async getResultForTrustedIntegration(
+    tenantId: string,
+    assignmentId: string,
+  ): Promise<{
+    assignment: SurveyAssignment;
+    questions: SurveyQuestion[];
+    answers: SurveyAnswer[];
+    optionsByQuestionId: Map<string, SurveyQuestionOption[]>;
+    selectedOptionIdsByAnswerId: Map<string, string[]>;
+  } | null> {
+    const assignment = await this.repo.findAssignmentById(assignmentId);
+    if (!assignment || assignment.tenantId !== tenantId) return null;
+    if (assignment.status !== "submitted") return null;
+
+    const questions = await this.repo.listQuestions(assignment.surveyVersionId);
+    const answers = await this.repo.listAnswers(assignment.id);
+
+    const optionsByQuestionId = new Map<string, SurveyQuestionOption[]>();
+    for (const option of await this.repo.listOptionsForVersion(assignment.surveyVersionId)) {
+      const list = optionsByQuestionId.get(option.surveyQuestionId) ?? [];
+      list.push(option);
+      optionsByQuestionId.set(option.surveyQuestionId, list);
+    }
+    const selectedOptionIdsByAnswerId = new Map<string, string[]>();
+    for (const answer of answers) {
+      selectedOptionIdsByAnswerId.set(answer.id, await this.repo.listAnswerOptionIds(answer.id));
+    }
+    return { assignment, questions, answers, optionsByQuestionId, selectedOptionIdsByAnswerId };
   }
 
   // ===================================================================

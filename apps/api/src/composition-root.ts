@@ -192,6 +192,8 @@ export function buildContainer() {
     userRepo,
     rbac,
     audit,
+    rbacRepo,
+    eventBus,
     (policyCode, error) => console.error(`[SurveyIntegration] policy '${policyCode}' failed:`, error),
   );
 
@@ -229,6 +231,13 @@ export function buildContainer() {
   eventBus.subscribe("complaint.customer_confirmed", (event) =>
     surveyIntegration.handleTriggerEvent(event),
   );
+
+  // Checkpoint 1E.2: a submitted Survey is evaluated against the policy
+  // snapshot taken when it was assigned; a matching outcome raises
+  // management attention (notification + execution + audit). NO automatic
+  // Complaint reopen and no Workflow mutation — Survey Core stays unaware
+  // of Complaint semantics and Complaint Core is never called from here.
+  eventBus.subscribe("survey.submitted", (event) => surveyIntegration.handleSurveySubmitted(event));
 
   const scheduler = new SchedulerService(schedulerRepo, rbac, (jobCode, error) => {
     console.error(`[Scheduler] job '${jobCode}' failed:`, error);

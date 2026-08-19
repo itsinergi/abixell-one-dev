@@ -4,8 +4,15 @@ import type { SurveyService } from "../survey/survey.service.js";
 import type { DomainEvent } from "../../domain/event/event.entity.js";
 import type { ComplaintRepository } from "../../domain/complaint/complaint.entity.js";
 import type { UserRepository } from "../../domain/identity/user.entity.js";
+import type { EventBus } from "../event/event-bus.js";
+import type { RbacRepository } from "../../domain/rbac/rbac.entity.js";
 import type {
+  OutcomeConfig,
+  OutcomeErrorCode,
+  OutcomeOperator,
+  OutcomeResult,
   CreatePolicyInput,
+  SurveyIntegrationExecution,
   SurveyIntegrationExecutionStatus,
   SurveyIntegrationPolicy,
   SurveyIntegrationRepository,
@@ -41,6 +48,8 @@ export class SurveyIntegrationService {
     private readonly userRepo: UserRepository,
     private readonly rbac: RbacService,
     private readonly audit: AuditService,
+    private readonly rbacRepo: RbacRepository,
+    private readonly eventBus: EventBus,
     private readonly onError: (policyCode: string, error: unknown) => void = () => {},
   ) {}
 
@@ -91,6 +100,16 @@ export class SurveyIntegrationService {
       triggerDomainEventId: event.id,
       sourceEntityType,
       sourceEntityId,
+      // FD-1E §29 — snapshot the outcome configuration NOW, so editing the
+      // policy while the respondent is still answering cannot retroactively
+      // change how this assignment is judged.
+      outcomeConfig: {
+        outcomeQuestionCode: policy.outcomeQuestionCode,
+        outcomeOperator: policy.outcomeOperator,
+        outcomeNumericValue: policy.outcomeNumericValue,
+        targetAction: policy.targetAction,
+        attentionPermissionCode: policy.attentionPermissionCode,
+      },
     });
     // Reprocessed event (same policy + same domain event) — safe no-op.
     if (started.duplicate || !started.execution) return;
@@ -275,5 +294,257 @@ export class SurveyIntegrationService {
     if (!isCustomerActor) return null;
 
     return actorUserId;
+  }
+
+  // =====================================================================
+  // Checkpoint 1E.2 — survey.submitted → outcome → management attention
+  // =====================================================================
+
+  /**
+   * EventBus subscriber for `survey.submitted`. Like the trigger handler it
+   * NEVER throws: a Survey submission is a completed domain action and must
+   * never be rolled back because a side-effect failed (FD-1E §34).
+   *
+   * The submission is evaluated against the execution created in 1E.1 for
+   * this assignment (policy lineage, FD-1E §28) using that execution's
+   * SNAPSHOT of the outcome configuration (FD-1E §29). An assignment that
+   * integration did not create has no execution → safe no-op.
+   */
+  async handleSurveySubmitted(event: DomainEvent): Promise<void> {
+    if (!event.entityId) return;
+    const assignmentId = event.entityId;
+    let execution: SurveyIntegrationExecution | null = null;
+
+    try {
+      execution = await this.repo.findAssignedExecutionByAssignment(assignmentId);
+      if (!execution) return; // manually created assignment — not ours.
+      if (execution.tenantId !== event.tenantId) return; // tenant safety.
+
+      const evaluation = await this.evaluateOutcome(execution, assignmentId);
+
+      // Exactly-once claim (FD-1E §25/§26): a replayed submission loses the
+      // compare-and-set and performs no second action.
+      const claimed = await this.repo.claimOutcome(execution.id, {
+        submittedDomainEventId: event.id,
+        outcome: evaluation.outcome,
+        outcomeValue: evaluation.value,
+        outcomeErrorCode: evaluation.errorCode,
+      });
+      if (!claimed) return;
+
+      await this.audit.record({
+        tenantId: execution.tenantId,
+        actorUserId: null,
+        action: "survey.integration.outcome.evaluated",
+        entityType: "survey_integration_execution",
+        entityId: execution.id,
+        metadata: {
+          policyId: execution.policyId,
+          surveyAssignmentId: assignmentId,
+          questionCode: execution.outcomeQuestionCode,
+          operator: execution.outcomeOperator,
+          threshold: execution.outcomeNumericValue,
+          outcome: evaluation.outcome,
+          value: evaluation.value,
+          outcomeErrorCode: evaluation.errorCode,
+          submittedDomainEventId: event.id,
+        },
+      });
+
+      if (evaluation.outcome !== "matched") return;
+      if (execution.targetAction !== "management_attention") return;
+
+      // A policy disabled after the assignment must not act (FD-1E §58).
+      const policy = await this.repo.findPolicyById(execution.policyId);
+      if (!policy || !policy.enabled) {
+        await this.repo.recordAttention(execution.id, {
+          attentionStatus: "skipped_policy_disabled",
+          attentionEventId: null,
+          attentionRecipientCount: null,
+        });
+        return;
+      }
+
+      await this.createManagementAttention(execution, assignmentId, evaluation.value);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (execution) {
+        try {
+          await this.repo.recordAttention(execution.id, {
+            attentionStatus: "failed",
+            attentionEventId: null,
+            attentionRecipientCount: null,
+            errorCode: "outcome_processing_error",
+            errorMessage: message.slice(0, 500),
+          });
+          await this.audit.record({
+            tenantId: execution.tenantId,
+            actorUserId: null,
+            action: "survey.integration.attention.failed",
+            entityType: "survey_integration_execution",
+            entityId: execution.id,
+            metadata: { errorCode: "outcome_processing_error", surveyAssignmentId: assignmentId },
+          });
+        } catch (persistError) {
+          this.onError("survey.submitted", persistError);
+        }
+      }
+      this.onError("survey.submitted", error);
+    }
+  }
+
+  /**
+   * Management Attention (FD-1E-06). Recipients are resolved by CAPABILITY
+   * (the snapshotted permission code), never by role name, and never
+   * include Customer Users (`listUserIdsWithPermissionInTenant` excludes
+   * customer-scoped assignments). Delivery reuses the existing Notification
+   * Engine: one domain event carrying `targetUserIds` — no new task/queue
+   * subsystem, no duplicate mirror event.
+   */
+  private async createManagementAttention(
+    execution: SurveyIntegrationExecution,
+    assignmentId: string,
+    value: number | null,
+  ): Promise<void> {
+    const permissionCode = execution.attentionPermissionCode;
+    const recipients = permissionCode
+      ? await this.rbacRepo.listUserIdsWithPermissionInTenant(execution.tenantId, permissionCode)
+      : [];
+
+    if (recipients.length === 0) {
+      await this.repo.recordAttention(execution.id, {
+        attentionStatus: "failed",
+        attentionEventId: null,
+        attentionRecipientCount: 0,
+        errorCode: "no_management_recipient",
+        errorMessage: `No internal user holds '${permissionCode ?? "(unconfigured)"}' in this tenant`,
+      });
+      await this.audit.record({
+        tenantId: execution.tenantId,
+        actorUserId: null,
+        action: "survey.integration.attention.failed",
+        entityType: "survey_integration_execution",
+        entityId: execution.id,
+        metadata: { reason: "no_management_recipient", attentionPermissionCode: permissionCode },
+      });
+      return;
+    }
+
+    // Deliberately carries the threshold context (why attention is needed),
+    // NOT the respondent's free-text answers (FD-1E §22).
+    const attentionEvent = await this.eventBus.publish({
+      tenantId: execution.tenantId,
+      eventType: "survey.integration.attention_required",
+      entityType: "survey_integration_execution",
+      entityId: execution.id,
+      payload: {
+        targetUserIds: recipients,
+        surveyAssignmentId: assignmentId,
+        contextEntityType: execution.sourceEntityType,
+        contextEntityId: execution.sourceEntityId,
+        respondentUserId: execution.respondentUserId,
+        questionCode: execution.outcomeQuestionCode,
+        operator: execution.outcomeOperator,
+        threshold: execution.outcomeNumericValue,
+        value,
+      },
+      createdBy: null,
+    });
+
+    await this.repo.recordAttention(execution.id, {
+      attentionStatus: "created",
+      attentionEventId: attentionEvent.id,
+      attentionRecipientCount: recipients.length,
+    });
+    await this.audit.record({
+      tenantId: execution.tenantId,
+      actorUserId: null,
+      action: "survey.integration.attention.created",
+      entityType: "survey_integration_execution",
+      entityId: execution.id,
+      metadata: {
+        policyId: execution.policyId,
+        surveyAssignmentId: assignmentId,
+        recipientCount: recipients.length,
+        attentionPermissionCode: permissionCode,
+        value,
+      },
+    });
+  }
+
+  /**
+   * Question-code numeric threshold evaluation (FD-1E-05).
+   *  - `rating`        → the submitted numeric value, no normalization.
+   *  - `single_choice` → the selected option's CONFIGURED score (never the
+   *                      option's order/index).
+   *  - anything else / unanswered / option without a score → unresolvable.
+   * Never falls back to `total_score` and never invents a number
+   * (FD-1E §13/§16).
+   */
+  private async evaluateOutcome(
+    execution: SurveyIntegrationExecution,
+    assignmentId: string,
+  ): Promise<{ outcome: OutcomeResult; value: number | null; errorCode: OutcomeErrorCode | null }> {
+    const unresolvable = (errorCode: OutcomeErrorCode) =>
+      ({ outcome: "unresolvable" as const, value: null, errorCode });
+
+    const config: OutcomeConfig = execution;
+    if (
+      !config.outcomeQuestionCode ||
+      !config.outcomeOperator ||
+      config.outcomeNumericValue === null ||
+      !config.targetAction
+    ) {
+      // Includes executions created before 1E.2 (no snapshot) — FD-1E §49.
+      return unresolvable("no_outcome_config");
+    }
+
+    // Trusted read: tenant + submitted state enforced inside (FD-1E §43).
+    const result = await this.survey.getResultForTrustedIntegration(execution.tenantId, assignmentId);
+    if (!result) return unresolvable("not_answered");
+
+    const question = result.questions.find((q) => q.code === config.outcomeQuestionCode);
+    if (!question) return unresolvable("question_not_found");
+
+    const answer = result.answers.find((a) => a.surveyQuestionId === question.id);
+    if (!answer) return unresolvable("not_answered");
+
+    let value: number | null = null;
+    if (question.questionType === "rating") {
+      value = answer.valueNumeric;
+      if (value === null) return unresolvable("not_answered");
+    } else if (question.questionType === "single_choice") {
+      const selectedIds = result.selectedOptionIdsByAnswerId.get(answer.id) ?? [];
+      if (selectedIds.length === 0) return unresolvable("not_answered");
+      const options = result.optionsByQuestionId.get(question.id) ?? [];
+      const selected = options.find((o) => o.id === selectedIds[0]);
+      if (!selected || selected.score === null || selected.score === undefined) {
+        return unresolvable("no_option_score");
+      }
+      value = selected.score;
+    } else {
+      return unresolvable("non_numeric_question");
+    }
+
+    const matched = compare(value, config.outcomeOperator, config.outcomeNumericValue);
+    return { outcome: matched ? "matched" : "not_matched", value, errorCode: null };
+  }
+}
+
+/** Finite numeric comparison — no expressions, no DSL (FD-1E §10). */
+function compare(value: number, operator: OutcomeOperator, threshold: number): boolean {
+  switch (operator) {
+    case "lt":
+      return value < threshold;
+    case "lte":
+      return value <= threshold;
+    case "eq":
+      return value === threshold;
+    case "gte":
+      return value >= threshold;
+    case "gt":
+      return value > threshold;
+    default:
+      return false;
   }
 }

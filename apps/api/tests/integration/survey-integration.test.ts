@@ -23,6 +23,9 @@ import type { DomainEvent } from "../../src/domain/event/event.entity.js";
 const A = `test-1e1-a-${Date.now()}`;
 const B = `test-1e1-b-${Date.now()}`;
 const SURVEY_CODE = "csat_1e1";
+/** Capability used to address management attention — policy DATA, not a
+ * role name and not hardcoded in the engine (FD-1E §20). */
+const ATTENTION_PERMISSION = "complaint.dashboard.read";
 
 describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", () => {
   const container = buildContainer();
@@ -38,6 +41,10 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
   let tenantBUserId: string; // belongs to tenant B (cross-tenant actor)
   let publishedVersionId: string;
   let policyId: string;
+  let managementUserId: string;
+  let ratingQuestionId: string;
+  let choiceQuestionId: string;
+  let longTextQuestionId: string;
 
   const insertTenant = async (code: string, name: string) =>
     (await pool.query(`INSERT INTO tenants (code, name) VALUES ($1, $2) RETURNING id`, [code, name])).rows[0].id as string;
@@ -127,19 +134,34 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
 
     tenantBUserId = await insertUser(tenantBId, "cust@t1e1b.local");
 
+    // A management user identified by CAPABILITY (not role name) — the
+    // attention recipient. A customer-scoped user must never receive it.
+    const mgmtRoleId = await createReadOnlyRole(tenantAId, "MGMT_1E1", [ATTENTION_PERMISSION]);
+    managementUserId = await insertUser(tenantAId, "mgmt@t1e1a.local");
+    await assignTenantScope(managementUserId, mgmtRoleId);
+
     // Published survey definition (Product Core, via the real service).
     const { version } = await container.survey.createDefinition(adminAActor, { code: SURVEY_CODE, name: "Customer Satisfaction" });
-    await container.survey.addQuestion(adminAActor, version.id, {
-      code: "overall",
-      text: "Overall rating",
-      questionType: "rating",
-      isRequired: true,
-      config: { min: 1, max: 5 },
-    });
+    const mk = (input: Parameters<typeof container.survey.addQuestion>[2]) =>
+      container.survey.addQuestion(adminAActor, version.id, input);
+    ratingQuestionId = (
+      await mk({ code: "overall", text: "Overall rating", questionType: "rating", isRequired: true, config: { min: 1, max: 5 }, sortOrder: 1 })
+    ).id;
+    choiceQuestionId = (
+      await mk({ code: "recommend", text: "Would you recommend us?", questionType: "single_choice", sortOrder: 2 })
+    ).id;
+    await container.survey.addOption(adminAActor, choiceQuestionId, { code: "no", label: "No", score: 1 });
+    await container.survey.addOption(adminAActor, choiceQuestionId, { code: "yes", label: "Yes", score: 5 });
+    await container.survey.addOption(adminAActor, choiceQuestionId, { code: "unsure", label: "Unsure", score: null });
+    longTextQuestionId = (
+      await mk({ code: "comments", text: "Comments", questionType: "long_text", sortOrder: 3 })
+    ).id;
     await container.survey.publishVersion(adminAActor, SURVEY_CODE, 1);
     publishedVersionId = version.id;
 
     // The enabled integration policy under test (finite, structured).
+    // NOTE: "overall" / 2 / management_attention are POLICY DATA — the
+    // engine never hardcodes a question code, threshold, or survey code.
     const policy = await container.surveyIntegration.createPolicy({
       tenantId: tenantAId,
       code: "csat-on-confirm",
@@ -149,10 +171,49 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
       surveyDefinitionCode: SURVEY_CODE,
       respondentResolution: "source_event_actor",
       onePerEntityLifetime: true,
+      outcomeQuestionCode: "overall",
+      outcomeOperator: "lte",
+      outcomeNumericValue: 2,
+      targetAction: "management_attention",
+      attentionPermissionCode: ATTENTION_PERMISSION,
       createdBy: adminAActor.userId,
     });
     policyId = policy.id;
+
+    // in_app template so attention delivery produces real Notification rows.
+    await container.notification.createTemplate(adminAActor, {
+      eventType: "survey.integration.attention_required",
+      channel: "in_app",
+      subjectTemplate: "Survey requires management attention",
+      bodyTemplate: "Survey {{surveyAssignmentId}} scored {{value}} on {{questionCode}}.",
+    });
   });
+
+  /** Drive a full assign → answer → submit cycle for one complaint. */
+  const assignAnswerSubmit = async (
+    complaintNumber: string,
+    answers: { questionId: string; valueNumeric?: number; valueText?: string; optionIds?: string[] }[],
+  ) => {
+    const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, complaintNumber);
+    await confirm(complaintId, customerUserId, tenantAId);
+    const assignmentId = (await assignmentsForComplaint(complaintId))[0].id as string;
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    await container.surveyResponse.saveAnswers(respondent, assignmentId, answers);
+    await container.surveyResponse.submit(respondent, assignmentId);
+    return { complaintId, assignmentId };
+  };
+
+  const execFor = async (complaintId: string) => (await executions(policyId, complaintId))[0];
+
+  const attentionNotifications = async (assignmentId: string) =>
+    (
+      await pool.query(
+        `SELECT n.* FROM notifications n
+          WHERE n.event_type = 'survey.integration.attention_required'
+            AND n.body LIKE $1`,
+        [`%${assignmentId}%`],
+      )
+    ).rows;
 
   afterAll(async () => {
     await pool.end();
@@ -302,5 +363,329 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
       [complaintId],
     );
     expect(anyExec.rows).toHaveLength(0);
+  });
+
+  // ===================================================================
+  // Checkpoint 1E.2 — outcome evaluation → management attention
+  // ===================================================================
+
+  it("1E.2 Outcome MATCH (rating 2 <= 2) → exactly one management attention, notified by capability", async () => {
+    const { complaintId, assignmentId } = await assignAnswerSubmit("C-1E2-1", [
+      { questionId: ratingQuestionId, valueNumeric: 2 },
+    ]);
+
+    const exec = await execFor(complaintId);
+    expect(exec.outcome).toBe("matched");
+    expect(Number(exec.outcome_value)).toBe(2);
+    expect(exec.attention_status).toBe("created");
+    // Capability holders = the dedicated management user AND the tenant
+    // admin (full-access role also grants the permission) — resolved by
+    // capability, not by role name.
+    expect(exec.attention_recipient_count).toBe(2);
+    expect(exec.attention_event_id).toBeTruthy();
+    expect(exec.submitted_domain_event_id).toBeTruthy();
+    // Snapshot of the policy config is on the execution (FD-1E §29).
+    expect(exec.outcome_question_code).toBe("overall");
+    expect(exec.outcome_operator).toBe("lte");
+    expect(exec.target_action).toBe("management_attention");
+
+    // Delivered to capability holders only — never to a Customer User.
+    const notes = await attentionNotifications(assignmentId);
+    const recipients = notes.map((n) => n.recipient_user_id);
+    expect(recipients).toContain(managementUserId);
+    expect(recipients).not.toContain(customerUserId);
+    expect(recipients).not.toContain(customerUser2Id);
+    expect(notes.every((n) => n.status === "sent")).toBe(true);
+
+    // Audit covers evaluation + action.
+    const actions = (
+      await pool.query(
+        `SELECT action FROM audit_log WHERE entity_id = $1 AND action LIKE 'survey.integration%' ORDER BY action`,
+        [exec.id],
+      )
+    ).rows.map((r) => r.action);
+    expect(actions).toContain("survey.integration.outcome.evaluated");
+    expect(actions).toContain("survey.integration.attention.created");
+  });
+
+  it("1E.2 Outcome NON-MATCH (rating 4) → evaluation recorded, no management attention", async () => {
+    const { complaintId, assignmentId } = await assignAnswerSubmit("C-1E2-2", [
+      { questionId: ratingQuestionId, valueNumeric: 4 },
+    ]);
+
+    const exec = await execFor(complaintId);
+    expect(exec.outcome).toBe("not_matched");
+    expect(Number(exec.outcome_value)).toBe(4);
+    expect(exec.attention_status).toBeNull();
+    expect(await attentionNotifications(assignmentId)).toHaveLength(0);
+  });
+
+  it("1E.2 Event replay — reprocessing the same survey.submitted yields one attention only", async () => {
+    const { complaintId, assignmentId } = await assignAnswerSubmit("C-1E2-3", [
+      { questionId: ratingQuestionId, valueNumeric: 1 },
+    ]);
+    const submitted = (
+      await pool.query(
+        `SELECT * FROM domain_events WHERE event_type = 'survey.submitted' AND entity_id = $1`,
+        [assignmentId],
+      )
+    ).rows[0];
+
+    // Replay the exact same domain event through the real handler.
+    await container.surveyIntegration.handleSurveySubmitted({
+      id: submitted.id,
+      tenantId: submitted.tenant_id,
+      eventType: submitted.event_type,
+      entityType: submitted.entity_type,
+      entityId: submitted.entity_id,
+      payload: submitted.payload,
+      occurredAt: submitted.occurred_at,
+      createdBy: submitted.created_by,
+    });
+
+    const exec = await execFor(complaintId);
+    expect(exec.outcome).toBe("matched");
+    // Still ONE attention: the replay lost the compare-and-set, so the
+    // notification set was not duplicated (2 recipients, not 4 rows).
+    expect(exec.attention_recipient_count).toBe(2);
+    expect(await attentionNotifications(assignmentId)).toHaveLength(2);
+  });
+
+  it("1E.2 Single choice uses the configured option SCORE (not option order)", async () => {
+    const scorePolicy = await container.surveyIntegration.createPolicy({
+      tenantId: tenantAId,
+      code: "choice-score",
+      name: "Choice score policy",
+      sourceEntityType: "complaint",
+      sourceEventType: "complaint.customer_confirmed",
+      surveyDefinitionCode: SURVEY_CODE,
+      respondentResolution: "source_event_actor",
+      onePerEntityLifetime: true,
+      outcomeQuestionCode: "recommend",
+      outcomeOperator: "lte",
+      outcomeNumericValue: 1,
+      targetAction: "management_attention",
+      attentionPermissionCode: ATTENTION_PERMISSION,
+      createdBy: adminAActor.userId,
+    });
+
+    const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-4");
+    await confirm(complaintId, customerUserId, tenantAId);
+    // Two policies both assigned (independent lineage, FD-1E §27).
+    const scoreExecBefore = (await executions(scorePolicy.id, complaintId))[0];
+    const assignmentId = scoreExecBefore.survey_assignment_id as string;
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    // "no" carries score 1 but is the FIRST option — order must not be used.
+    const optionNoId = (
+      await pool.query(`SELECT id FROM survey_question_options WHERE survey_question_id = $1 AND code = 'no'`, [choiceQuestionId])
+    ).rows[0].id;
+    await container.surveyResponse.saveAnswers(respondent, assignmentId, [
+      { questionId: ratingQuestionId, valueNumeric: 5 },
+      { questionId: choiceQuestionId, optionIds: [optionNoId] },
+    ]);
+    await container.surveyResponse.submit(respondent, assignmentId);
+
+    const scoreExec = (await executions(scorePolicy.id, complaintId))[0];
+    expect(scoreExec.outcome).toBe("matched");
+    expect(Number(scoreExec.outcome_value)).toBe(1);
+    expect(scoreExec.attention_status).toBe("created");
+  });
+
+  it("1E.2 Long text question → unresolvable, no attention, no invented number", async () => {
+    const textPolicy = await container.surveyIntegration.createPolicy({
+      tenantId: tenantAId,
+      code: "text-policy",
+      name: "Long text policy",
+      sourceEntityType: "complaint",
+      sourceEventType: "complaint.customer_confirmed",
+      surveyDefinitionCode: SURVEY_CODE,
+      respondentResolution: "source_event_actor",
+      onePerEntityLifetime: true,
+      outcomeQuestionCode: "comments",
+      outcomeOperator: "lte",
+      outcomeNumericValue: 2,
+      targetAction: "management_attention",
+      attentionPermissionCode: ATTENTION_PERMISSION,
+      createdBy: adminAActor.userId,
+    });
+
+    const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-5");
+    await confirm(complaintId, customerUserId, tenantAId);
+    const assignmentId = (await executions(textPolicy.id, complaintId))[0].survey_assignment_id as string;
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    await container.surveyResponse.saveAnswers(respondent, assignmentId, [
+      { questionId: ratingQuestionId, valueNumeric: 1 },
+      { questionId: longTextQuestionId, valueText: "terrible" },
+    ]);
+    await container.surveyResponse.submit(respondent, assignmentId);
+
+    const exec = (await executions(textPolicy.id, complaintId))[0];
+    expect(exec.outcome).toBe("unresolvable");
+    expect(exec.outcome_error_code).toBe("non_numeric_question");
+    expect(exec.outcome_value).toBeNull();
+    expect(exec.attention_status).toBeNull();
+  });
+
+  it("1E.2 Configured question code missing from the assigned version → unresolvable, no crash", async () => {
+    const missingPolicy = await container.surveyIntegration.createPolicy({
+      tenantId: tenantAId,
+      code: "missing-question",
+      name: "Missing question policy",
+      sourceEntityType: "complaint",
+      sourceEventType: "complaint.customer_confirmed",
+      surveyDefinitionCode: SURVEY_CODE,
+      respondentResolution: "source_event_actor",
+      onePerEntityLifetime: true,
+      outcomeQuestionCode: "nps_not_in_this_version",
+      outcomeOperator: "lte",
+      outcomeNumericValue: 2,
+      targetAction: "management_attention",
+      attentionPermissionCode: ATTENTION_PERMISSION,
+      createdBy: adminAActor.userId,
+    });
+
+    const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-6");
+    await confirm(complaintId, customerUserId, tenantAId);
+    const assignmentId = (await executions(missingPolicy.id, complaintId))[0].survey_assignment_id as string;
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    await container.surveyResponse.saveAnswers(respondent, assignmentId, [
+      { questionId: ratingQuestionId, valueNumeric: 1 },
+    ]);
+    await container.surveyResponse.submit(respondent, assignmentId);
+
+    const exec = (await executions(missingPolicy.id, complaintId))[0];
+    expect(exec.outcome).toBe("unresolvable");
+    expect(exec.outcome_error_code).toBe("question_not_found");
+    expect(exec.attention_status).toBeNull();
+  });
+
+  it("1E.2 Policy edited AFTER assignment does not change the already-assigned survey's judgement (snapshot)", async () => {
+    const driftPolicy = await container.surveyIntegration.createPolicy({
+      tenantId: tenantAId,
+      code: "drift-policy",
+      name: "Drift policy",
+      sourceEntityType: "complaint",
+      sourceEventType: "complaint.customer_confirmed",
+      surveyDefinitionCode: SURVEY_CODE,
+      respondentResolution: "source_event_actor",
+      onePerEntityLifetime: true,
+      outcomeQuestionCode: "overall",
+      outcomeOperator: "lte",
+      outcomeNumericValue: 2,
+      targetAction: "management_attention",
+      attentionPermissionCode: ATTENTION_PERMISSION,
+      createdBy: adminAActor.userId,
+    });
+
+    const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-7");
+    await confirm(complaintId, customerUserId, tenantAId);
+    const assignmentId = (await executions(driftPolicy.id, complaintId))[0].survey_assignment_id as string;
+
+    // Admin widens the threshold to 4 while the respondent is still answering.
+    await pool.query(`UPDATE survey_integration_policies SET outcome_numeric_value = 4 WHERE id = $1`, [driftPolicy.id]);
+
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    await container.surveyResponse.saveAnswers(respondent, assignmentId, [
+      { questionId: ratingQuestionId, valueNumeric: 3 },
+    ]);
+    await container.surveyResponse.submit(respondent, assignmentId);
+
+    // 3 <= 4 under the NEW policy, but the assignment was made under <= 2.
+    const exec = (await executions(driftPolicy.id, complaintId))[0];
+    expect(Number(exec.outcome_numeric_value)).toBe(2);
+    expect(exec.outcome).toBe("not_matched");
+    expect(exec.attention_status).toBeNull();
+  });
+
+  it("1E.2 Policy disabled after assignment → outcome evaluated, action skipped", async () => {
+    const offPolicy = await container.surveyIntegration.createPolicy({
+      tenantId: tenantAId,
+      code: "disable-after",
+      name: "Disabled after assignment",
+      sourceEntityType: "complaint",
+      sourceEventType: "complaint.customer_confirmed",
+      surveyDefinitionCode: SURVEY_CODE,
+      respondentResolution: "source_event_actor",
+      onePerEntityLifetime: true,
+      outcomeQuestionCode: "overall",
+      outcomeOperator: "lte",
+      outcomeNumericValue: 2,
+      targetAction: "management_attention",
+      attentionPermissionCode: ATTENTION_PERMISSION,
+      createdBy: adminAActor.userId,
+    });
+
+    const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-8");
+    await confirm(complaintId, customerUserId, tenantAId);
+    const assignmentId = (await executions(offPolicy.id, complaintId))[0].survey_assignment_id as string;
+    await pool.query(`UPDATE survey_integration_policies SET enabled = false WHERE id = $1`, [offPolicy.id]);
+
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    await container.surveyResponse.saveAnswers(respondent, assignmentId, [
+      { questionId: ratingQuestionId, valueNumeric: 1 },
+    ]);
+    await container.surveyResponse.submit(respondent, assignmentId);
+
+    const exec = (await executions(offPolicy.id, complaintId))[0];
+    expect(exec.outcome).toBe("matched");
+    expect(exec.attention_status).toBe("skipped_policy_disabled");
+    expect(await attentionNotifications(assignmentId)).toHaveLength(0);
+  });
+
+  it("1E.2 A manually created Survey Assignment (no integration lineage) is a safe no-op on submit", async () => {
+    const assignment = await container.survey.createAssignment(adminAActor, {
+      surveyDefinitionCode: SURVEY_CODE,
+      respondentUserId: customerUserId,
+    });
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    await container.surveyResponse.saveAnswers(respondent, assignment.id, [
+      { questionId: ratingQuestionId, valueNumeric: 1 },
+    ]);
+    await container.surveyResponse.submit(respondent, assignment.id);
+
+    const anyExec = await pool.query(
+      `SELECT * FROM survey_integration_executions WHERE survey_assignment_id = $1`,
+      [assignment.id],
+    );
+    expect(anyExec.rows).toHaveLength(0);
+    expect(await attentionNotifications(assignment.id)).toHaveLength(0);
+  });
+
+  it("1E.2 Survey submission is never rolled back by an integration failure", async () => {
+    // Force an attention failure: a policy whose capability nobody holds.
+    const orphanPolicy = await container.surveyIntegration.createPolicy({
+      tenantId: tenantAId,
+      code: "no-recipient",
+      name: "No recipient policy",
+      sourceEntityType: "complaint",
+      sourceEventType: "complaint.customer_confirmed",
+      surveyDefinitionCode: SURVEY_CODE,
+      respondentResolution: "source_event_actor",
+      onePerEntityLifetime: true,
+      outcomeQuestionCode: "overall",
+      outcomeOperator: "lte",
+      outcomeNumericValue: 2,
+      targetAction: "management_attention",
+      attentionPermissionCode: "survey.integration.nonexistent_capability",
+      createdBy: adminAActor.userId,
+    });
+
+    const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-9");
+    await confirm(complaintId, customerUserId, tenantAId);
+    const assignmentId = (await executions(orphanPolicy.id, complaintId))[0].survey_assignment_id as string;
+    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    await container.surveyResponse.saveAnswers(respondent, assignmentId, [
+      { questionId: ratingQuestionId, valueNumeric: 1 },
+    ]);
+    const submitted = await container.surveyResponse.submit(respondent, assignmentId);
+
+    // Submission stands…
+    expect(submitted.status).toBe("submitted");
+    expect(submitted.totalScore).not.toBeNull();
+    // …and the failure is durable + observable, not swallowed.
+    const exec = (await executions(orphanPolicy.id, complaintId))[0];
+    expect(exec.outcome).toBe("matched");
+    expect(exec.attention_status).toBe("failed");
+    expect(exec.error_code).toBe("no_management_recipient");
   });
 });

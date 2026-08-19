@@ -52,4 +52,14 @@ export interface RbacRepository {
     roleCode: string,
     organizationUnitId: string | null,
   ): Promise<string[]>;
+
+  /**
+   * Every INTERNAL user in the Tenant whose roles grant `permissionCode`.
+   * Added in Checkpoint 1E.2 so management attention can be addressed by
+   * CAPABILITY rather than by coupling to a role NAME (FD-1E §20).
+   * Customer-scoped assignments are excluded: a Customer User must never
+   * receive an internal management signal, even if their role happened to
+   * carry the permission (FD-1E §42).
+   */
+  listUserIdsWithPermissionInTenant(tenantId: string, permissionCode: string): Promise<string[]>;
 }
