@@ -408,6 +408,27 @@ export const api = {
     return request<DashboardResult>(`/complaints/dashboard${qs ? `?${qs}` : ""}`, { token });
   },
 
+  // Checkpoint 1C.6 — Complaint Administration (gated on complaint.configure).
+  complaintConfig: (token: string) => request<ComplaintConfigView>("/complaints/config", { token }),
+
+  createComplaintRefItem: (
+    token: string,
+    typeCode: string,
+    item: { code: string; label: string; sortOrder?: number },
+  ) =>
+    request<ReferenceItemView>(`/complaints/config/reference-data/${typeCode}`, {
+      method: "POST",
+      token,
+      body: item,
+    }),
+
+  setComplaintRefItemActive: (token: string, typeCode: string, itemId: string, isActive: boolean) =>
+    request<ReferenceItemView>(`/complaints/config/reference-data/${typeCode}/${itemId}`, {
+      method: "PATCH",
+      token,
+      body: { isActive },
+    }),
+
   createComplaint: (token: string, payload: CreateComplaintPayload) =>
     request<Complaint>("/complaints", { method: "POST", token, body: payload }),
 
@@ -781,6 +802,67 @@ export type DashboardResult = {
   actionCenter: ActionCenterItem[];
   period: { from: string; to: string };
   scope: { customerCount: number };
+};
+
+// --- Checkpoint 1C.6 admin configuration types ------------------------------
+
+export type ReferenceItemView = {
+  id: string;
+  code: string;
+  label: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type WorkflowCondition = { field: string; operator: string; value: unknown } | null;
+
+export type WorkflowStepView = {
+  code: string;
+  name: string;
+  stepType: string;
+  isInitial: boolean;
+  isTerminal: boolean;
+  terminalStatus: string | null;
+  slaHours: number | null;
+  transitions: { actionCode: string; name: string; toStepCode: string | null; condition: WorkflowCondition }[];
+  assignmentRules: {
+    assignmentType: string;
+    roleCode: string | null;
+    organizationUnitStrategy: string | null;
+    specificUserSource: string | null;
+    condition: WorkflowCondition;
+  }[];
+};
+
+export type WorkflowDefinitionView = {
+  definition: { code: string; name: string; entityType: string; isActive: boolean };
+  versionNumber: number | null;
+  versionStatus: string | null;
+  steps: WorkflowStepView[];
+} | null;
+
+export type ComplaintConfigView = {
+  referenceData: {
+    categories: ReferenceItemView[];
+    severities: ReferenceItemView[];
+    priorities: ReferenceItemView[];
+  };
+  numbering: { code: string; pattern: string; currentSequence: number } | null;
+  notificationTemplates: {
+    id: string;
+    eventType: string;
+    channel: string;
+    subjectTemplate: string | null;
+    isActive: boolean;
+  }[];
+  workflow: WorkflowDefinitionView;
+  capabilities: {
+    referenceDataCreate: boolean;
+    referenceDataToggleActive: boolean;
+    numberingEditable: boolean;
+    notificationTemplateEditable: boolean;
+    workflowEditable: boolean;
+  };
 };
 
 export type CreateComplaintPayload = {

@@ -75,6 +75,13 @@ export class NotificationService {
     return this.repo.listTemplates(actor.tenantId);
   }
 
+  /** Checkpoint 1C.6 — trusted-caller read (no `notification.template.manage`).
+   * Used by ComplaintConfigurationService (gated on `complaint.configure`) to
+   * show the Complaint-related notification templates in the admin surface. */
+  async listTemplatesForTrustedCaller(tenantId: string): Promise<NotificationTemplate[]> {
+    return this.repo.listTemplates(tenantId);
+  }
+
   async listMyNotifications(actor: ActorContext, limit = 50): Promise<Notification[]> {
     await this.rbac.requirePermission(actor.userId, "notification.read");
     return this.repo.listForRecipient(actor.tenantId, actor.userId, limit);

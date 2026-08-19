@@ -268,6 +268,30 @@ export class PgConfigurationRepository implements ConfigurationRepository {
     };
   }
 
+  /** Checkpoint 1C.6 — generic additive: activate/deactivate a reference-data
+   * item, scoped to (tenant, type, id) so a caller can only ever touch items
+   * of the type it manages. Returns null if no such item (wrong tenant/type/id). */
+  async setReferenceDataItemActive(
+    tenantId: string,
+    typeCode: string,
+    itemId: string,
+    isActive: boolean,
+    updatedBy: string,
+  ): Promise<ReferenceDataItem | null> {
+    const result = await this.pool.query(
+      `UPDATE tenant_reference_data_items tri
+          SET is_active = $4, updated_by = $5, updated_at = now()
+         FROM reference_data_types rdt
+        WHERE tri.reference_data_type_id = rdt.id
+          AND tri.tenant_id = $1 AND rdt.code = $2 AND tri.id = $3
+       RETURNING tri.id, tri.code, tri.label, tri.sort_order, tri.is_active`,
+      [tenantId, typeCode, itemId, isActive, updatedBy],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return { id: row.id, code: row.code, label: row.label, sortOrder: row.sort_order, isActive: row.is_active };
+  }
+
   // --- Numbering -------------------------------------------------------------
 
   async getNumberingSequence(tenantId: string, code: string): Promise<NumberingSequence | null> {

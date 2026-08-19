@@ -11,6 +11,7 @@ import { OperationalDetailPage } from "./pages/operational/OperationalDetailPage
 import { VerificationQueuePage } from "./pages/verification/VerificationQueuePage";
 import { VerificationDetailPage } from "./pages/verification/VerificationDetailPage";
 import { ManagementDashboardPage } from "./pages/management/ManagementDashboardPage";
+import { ComplaintConfigPage } from "./pages/admin/ComplaintConfigPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="verification/:complaintId" element={<VerificationDetailPage />} />
           <Route path="management" element={<ManagementDashboardPage />} />
           <Route path="administration" element={<DashboardPage />} />
+          <Route path="administration/complaints" element={<ComplaintConfigPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

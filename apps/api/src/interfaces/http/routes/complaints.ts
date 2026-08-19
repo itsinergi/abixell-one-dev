@@ -107,6 +107,47 @@ export function registerComplaintRoutes(app: FastifyInstance, container: Contain
     return reply.send(result);
   });
 
+  // Checkpoint 1C.6 — Complaint Administration & Configuration (internal;
+  // gated on complaint.configure in the service). Static paths — before `/:id`.
+  const createRefItemSchema = z.object({
+    code: z.string().min(1),
+    label: z.string().min(1),
+    sortOrder: z.number().int().optional(),
+  });
+  const setRefItemActiveSchema = z.object({ isActive: z.boolean() });
+
+  app.get("/complaints/config", { preHandler: app.authenticate }, async (request, reply) => {
+    const result = await container.complaintConfiguration.getConfiguration(request.actor!);
+    return reply.send(result);
+  });
+
+  app.post(
+    "/complaints/config/reference-data/:typeCode",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { typeCode } = request.params as { typeCode: string };
+      const body = createRefItemSchema.parse(request.body);
+      const created = await container.complaintConfiguration.createReferenceItem(request.actor!, typeCode, body);
+      return reply.status(201).send(created);
+    },
+  );
+
+  app.patch(
+    "/complaints/config/reference-data/:typeCode/:itemId",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { typeCode, itemId } = request.params as { typeCode: string; itemId: string };
+      const body = setRefItemActiveSchema.parse(request.body);
+      const updated = await container.complaintConfiguration.setReferenceItemActive(
+        request.actor!,
+        typeCode,
+        itemId,
+        body.isActive,
+      );
+      return reply.send(updated);
+    },
+  );
+
   app.get("/complaints/:id", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await container.complaint.get(request.actor!, id);

@@ -77,6 +77,30 @@ export interface EntityWorkflowView {
   nonTerminalSteps: { code: string; name: string }[];
 }
 
+/** Checkpoint 1C.6 — read-only definition view for an admin config surface. */
+export interface EntityWorkflowDefinitionView {
+  definition: { code: string; name: string; entityType: string; isActive: boolean };
+  versionNumber: number | null;
+  versionStatus: string | null;
+  steps: {
+    code: string;
+    name: string;
+    stepType: string;
+    isInitial: boolean;
+    isTerminal: boolean;
+    terminalStatus: string | null;
+    slaHours: number | null;
+    transitions: { actionCode: string; name: string; toStepCode: string | null; condition: ConditionExpression | null }[];
+    assignmentRules: {
+      assignmentType: string;
+      roleCode: string | null;
+      organizationUnitStrategy: string | null;
+      specificUserSource: string | null;
+      condition: ConditionExpression | null;
+    }[];
+  }[];
+}
+
 /** ADR-0008: how long an opt-in claim (see `claimAssignment`) blocks
  * other eligible users from acting, before it auto-expires and the task
  * reverts to plain first-decision-wins. 15 minutes — long enough to
@@ -558,6 +582,66 @@ export class WorkflowService {
   async listInstances(actor: ActorContext): Promise<WorkflowInstance[]> {
     await this.rbac.requirePermission(actor.userId, "workflow.instance.read");
     return this.repo.listInstances(actor.tenantId);
+  }
+
+  /**
+   * Checkpoint 1C.6 — trusted-caller, read-only view of a Definition's CURRENT
+   * published version (steps + SLA + transitions + assignment rules). No
+   * `workflow.definition.read` permission: a business admin surface that has
+   * already authorized the actor for its own scope (e.g.
+   * ComplaintConfigurationService, gated on `complaint.configure`) uses this
+   * to SHOW the configured lifecycle without granting the broad, engine-wide
+   * definition-read permission. Read-only by design — it exposes no mutation
+   * (authoring stays on the RBAC-gated `/workflow/definitions/*` routes).
+   */
+  async getDefinitionView(tenantId: string, code: string): Promise<EntityWorkflowDefinitionView | null> {
+    const definition = await this.repo.findDefinitionByCode(tenantId, code);
+    if (!definition) return null;
+    const version = await this.repo.findCurrentVersion(definition.id);
+    const base = {
+      code: definition.code,
+      name: definition.name,
+      entityType: definition.entityType,
+      isActive: definition.isActive,
+    };
+    if (!version) {
+      return { definition: base, versionNumber: null, versionStatus: null, steps: [] };
+    }
+    const steps = await this.repo.listSteps(version.id);
+    const codeByStepId = new Map(steps.map((s) => [s.id, s.code]));
+    const ordered = [...steps].sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+    const stepViews = [];
+    for (const s of ordered) {
+      const [transitions, rules] = await Promise.all([
+        this.repo.listTransitionsFromStep(s.id),
+        this.repo.listAssignmentRules(s.id),
+      ]);
+      stepViews.push({
+        code: s.code,
+        name: s.name,
+        stepType: s.stepType,
+        isInitial: s.isInitial,
+        isTerminal: s.isTerminal,
+        terminalStatus: s.terminalStatus,
+        slaHours: s.slaHours,
+        transitions: transitions
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((t) => ({
+            actionCode: t.actionCode,
+            name: t.name,
+            toStepCode: codeByStepId.get(t.toStepId) ?? null,
+            condition: t.conditionExpression,
+          })),
+        assignmentRules: rules.map((r) => ({
+          assignmentType: r.assignmentType,
+          roleCode: r.roleCode,
+          organizationUnitStrategy: r.organizationUnitStrategy,
+          specificUserSource: r.specificUserSource,
+          condition: r.conditionExpression,
+        })),
+      });
+    }
+    return { definition: base, versionNumber: version.versionNumber, versionStatus: version.status, steps: stepViews };
   }
 
   async getHistory(actor: ActorContext, instanceId: string) {

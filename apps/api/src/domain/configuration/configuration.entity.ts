@@ -141,6 +141,13 @@ export interface ConfigurationRepository {
     item: { code: string; label: string; sortOrder?: number },
     createdBy: string,
   ): Promise<ReferenceDataItem>;
+  setReferenceDataItemActive(
+    tenantId: string,
+    typeCode: string,
+    itemId: string,
+    isActive: boolean,
+    updatedBy: string,
+  ): Promise<ReferenceDataItem | null>;
 
   // Numbering
   getNumberingSequence(tenantId: string, code: string): Promise<NumberingSequence | null>;

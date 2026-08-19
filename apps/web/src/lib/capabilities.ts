@@ -35,6 +35,7 @@ export const PERMISSIONS = {
   complaintManage: "complaint.manage",
   workflowManage: "workflow.instance.manage",
   complaintDashboardRead: "complaint.dashboard.read",
+  complaintConfigure: "complaint.configure",
   configManage: "config.manage",
 } as const;
 

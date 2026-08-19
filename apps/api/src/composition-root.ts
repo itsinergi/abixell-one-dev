@@ -49,6 +49,7 @@ import { ServiceCatalogService } from "./application/customer/service-catalog.se
 import { ComplaintService } from "./application/complaint/complaint.service.js";
 import { ComplaintDashboardService } from "./application/complaint/complaint-dashboard.service.js";
 import { PgComplaintDashboardRepository } from "./infrastructure/persistence/repositories/complaint-dashboard.repository.pg.js";
+import { ComplaintConfigurationService } from "./application/complaint/complaint-configuration.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -136,6 +137,16 @@ export function buildContainer() {
     rbac,
   );
 
+  // Checkpoint 1C.6 — Complaint Administration surface (gated on
+  // complaint.configure; reuses Configuration/Notification/Workflow via
+  // trusted-caller reads + audited writes, no new config storage).
+  const complaintConfiguration = new ComplaintConfigurationService(
+    rbac,
+    configuration,
+    notification,
+    workflow,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -209,6 +220,7 @@ export function buildContainer() {
     serviceCatalog,
     complaint,
     complaintDashboard,
+    complaintConfiguration,
   };
 }
 

@@ -249,6 +249,88 @@ export class ConfigurationService {
     }
   }
 
+  /**
+   * Checkpoint 1C.6 — trusted-caller create (no `config.manage`). A business
+   * admin surface that has already authorized the actor for its own operation
+   * (e.g. ComplaintConfigurationService, gated on `complaint.configure`)
+   * creates a reference-data item through here. Validation + audit are
+   * preserved exactly as the permission-gated path — only the RBAC check is
+   * the caller's responsibility. */
+  async createReferenceDataItemForTrustedCaller(
+    tenantId: string,
+    actorUserId: string,
+    typeCode: string,
+    item: { code: string; label: string; sortOrder?: number },
+  ) {
+    await this.validator.validate("reference_data", "item", item);
+    try {
+      const created = await this.repo.createReferenceDataItem(tenantId, typeCode, item, actorUserId);
+      await this.audit.record({
+        tenantId,
+        actorUserId,
+        action: "config.reference_data_item.created",
+        entityType: "reference_data_item",
+        entityId: created.id,
+        metadata: { typeCode, code: item.code, label: item.label },
+      });
+      return created;
+    } catch (err) {
+      if ((err as { code?: string }).code === "23505") {
+        throw new ConflictError(`Reference Data item '${item.code}' already exists for type '${typeCode}'`);
+      }
+      throw err;
+    }
+  }
+
+  /** Checkpoint 1C.6 — generic activate/deactivate of a reference-data item
+   * (config.manage). Additive: Configuration Core previously supported only
+   * create/read for reference items. Audited. */
+  async setReferenceDataItemActive(
+    actor: ActorContext,
+    typeCode: string,
+    itemId: string,
+    isActive: boolean,
+  ) {
+    await this.rbac.requirePermission(actor.userId, "config.manage");
+    return this.setReferenceDataItemActiveInternal(actor.tenantId, actor.userId, typeCode, itemId, isActive);
+  }
+
+  /** Trusted-caller variant (no config.manage) — see the create counterpart. */
+  async setReferenceDataItemActiveForTrustedCaller(
+    tenantId: string,
+    actorUserId: string,
+    typeCode: string,
+    itemId: string,
+    isActive: boolean,
+  ) {
+    return this.setReferenceDataItemActiveInternal(tenantId, actorUserId, typeCode, itemId, isActive);
+  }
+
+  private async setReferenceDataItemActiveInternal(
+    tenantId: string,
+    actorUserId: string,
+    typeCode: string,
+    itemId: string,
+    isActive: boolean,
+  ) {
+    const updated = await this.repo.setReferenceDataItemActive(tenantId, typeCode, itemId, isActive, actorUserId);
+    if (!updated) throw new NotFoundError("ReferenceDataItem", itemId);
+    await this.audit.record({
+      tenantId,
+      actorUserId,
+      action: isActive ? "config.reference_data_item.activated" : "config.reference_data_item.deactivated",
+      entityType: "reference_data_item",
+      entityId: updated.id,
+      metadata: { typeCode, code: updated.code, isActive },
+    });
+    return updated;
+  }
+
+  /** Checkpoint 1C.6 — trusted-caller numbering read (no `config.read`). */
+  async getNumberingSequenceForTrustedCaller(tenantId: string, code: string) {
+    return this.repo.getNumberingSequence(tenantId, code);
+  }
+
   // --- Numbering -------------------------------------------------------------
 
   async getOrCreateSequenceInfo(actor: ActorContext, code: string) {

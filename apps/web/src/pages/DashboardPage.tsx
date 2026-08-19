@@ -4,7 +4,8 @@ import { api, ApiError } from "../lib/api";
 import { ConfigurationPanel } from "./ConfigurationPanel";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { SharedServicesPanel } from "./SharedServicesPanel";
-import { PageHeader } from "../shell/components/ui";
+import { Link } from "react-router-dom";
+import { Button, PageHeader } from "../shell/components/ui";
 
 type OrgUnit = { id: string; parentId: string | null; name: string; unitType: string; legalEntityId: string };
 type LegalEntity = { id: string; name: string };
@@ -140,6 +141,13 @@ export function DashboardPage() {
           tenantName
             ? `${tenantName} — permissions: ${permissions.join(", ") || "(none)"}`
             : "Organization, users, configuration, and shared services."
+        }
+        actions={
+          permissions.includes("complaint.configure") ? (
+            <Link to="/administration/complaints">
+              <Button variant="secondary">Complaint Configuration</Button>
+            </Link>
+          ) : undefined
         }
       />
 
