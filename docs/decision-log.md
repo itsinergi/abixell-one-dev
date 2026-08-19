@@ -292,3 +292,17 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 3 | No MUST-FIX defects found → Phase 1D declared ready for Founder closure | All MUST-FIX criteria (tenant leakage/unauthorized/published mutation/scoring/atomicity/result leakage/PWA caching/crash) passed | Founder 1D.3 §37 |
 | 4 | Survey UI date-format import from `../complaints/format` kept for now, logged SHOULD FIX LATER | Pure formatting util, no Complaint logic → not a coupling defect; extract at next UI-util refactor | Founder 1D.3 §37 |
 | 5 | 1E readiness documented, not built (context_entity seam, survey.assigned/submitted events, immutable score) | Founder scope forbids starting 1E; only document the seam | Founder 1D.3 §39 |
+
+## 2026-08-20 — Checkpoint 1E.1 (Complaint → Survey Assignment Integration)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | New `survey-integration` orchestrator between the Cores; one-way dep (→ Complaint read + Survey port); neither Core imports the other | Keep Complaint Core survey-unaware and Survey Core complaint-unaware; integration lives on the boundary | FD-1E §2/§39 |
+| 2 | Source event = `complaint.customer_confirmed`, stored as a finite `source_event_type` policy value | Follow actual customer confirmation, not `complaint.closed`, for the first slice; configurable finite value, not a rule engine | FD-1E-01 §7 |
+| 3 | Respondent = `source_event_actor` (`DomainEvent.createdBy`) accepted only if it holds a `customer`-scoped assignment matching the complaint's customer | Deterministic, excludes internal handlers/admins; no anonymous/contact/submitter fallback | FD-1E-02 §5/§9 |
+| 4 | Automation attribution via `assigned_by=NULL` + audit `creationMode:automation` + `triggerDomainEventId` | No system user / no ADMIN grant / no ActorContext redesign; never present the survey as manually created by the customer | FD-1E-03 §18 |
+| 5 | Trusted seam `createAssignmentForTrustedIntegration` bypasses only human permission, re-enforces every business/data invariant | "Trusted caller = skip permission, not integrity" | FD-1E §19 |
+| 6 | DB is the final idempotency boundary: `UNIQUE(policy, trigger_event)` + partial `UNIQUE(policy, entity) WHERE status='assigned'` | In-process EventBus is fire-once and swallows errors; app pre-check is only an optimization | FD-1E §12/§15 |
+| 7 | Handler never throws; persists a `failed` execution instead | A failed integration must not roll back the confirmation; failure must be durable/observable, not swallowed | FD-1E §15/§16 |
+| 8 | One-per-lifetime (FD-1E-07), not per-closure-cycle; no outcome/action fields in schema | YAGNI — 1E.1 is trigger/assignment only; 1E.2 may additively extend | FD-1E-07 §6/§25 |
+| 9 | No permission and no admin UI added; policies via service config seam | No human config surface in 1E.1 → avoid a dead `survey.integration.configure` permission | FD-1E §20/§37 |

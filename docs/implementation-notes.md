@@ -1474,3 +1474,87 @@ Full suite **132/132 PASS**; typecheck/lint/build PASS.
 ### 1E readiness (documented, NOT built)
 context_entity seam + `survey.assigned`/`survey.submitted` events + immutable
 score are in place. See technical-debt-register "1E READINESS".
+
+## 2026-08-20 — Checkpoint 1E.1 (Complaint → Survey Assignment Integration)
+
+The trigger/assignment HALF of Survey-to-Action (FD-1E-01..07). Survey
+Submitted → Action is explicitly OUT (that is 1E.2).
+
+### Integration boundary (FD-1E §2/§39)
+New application component `survey-integration` (orchestrator) sits BETWEEN
+the two Cores. It subscribes to `complaint.customer_confirmed` and calls
+Survey via an application port. Dependency is one-way: `survey-integration`
+→ Complaint (read, `ComplaintRepository.findById`) + Survey (application
+port). Complaint Core and Survey Core do NOT import each other or this
+component. The strings `complaint` / `complaint.customer_confirmed` live
+only as configured finite policy VALUES, never as Survey/Product Core logic.
+
+### Flow
+`complaint.customer_confirmed` (real EventBus) → find enabled policies for
+(tenant, source_entity_type, source_event_type) → per policy: claim a
+`processing` execution → one-per-lifetime pre-check → resolve respondent →
+resolve current published version → `SurveyService.createAssignmentFor
+TrustedIntegration` → complete execution `assigned` (context = complaint).
+
+### Source event (FD-1E-01)
+`complaint.customer_confirmed` (published by the workflow `confirm` action
+via `ACTION_EVENT_MAP`). Stored as a finite `source_event_type` policy
+value; NOT `complaint.closed` for the first slice.
+
+### Respondent resolution (FD-1E-02)
+`source_event_actor` = `DomainEvent.createdBy`, accepted ONLY when it is a
+genuine customer-side actor: user exists + same tenant + holds a `customer`-
+scoped role assignment matching the complaint's `customerId`. This
+structurally EXCLUDES internal handlers/admins (they carry `tenant`/
+`organization_unit` scope). Any failure → execution
+`skipped_recipient_unresolvable`, no fallback to submittedByUserId /
+internal agent / contact / first customer user / admin / anonymous token.
+
+### System attribution (FD-1E-03)
+No system user seeded, no ADMIN grant, no ActorContext redesign. The
+Assignment is created via a trusted seam with `assigned_by = NULL`; the
+survey audit records `creationMode: automation` + `triggerDomainEventId`,
+and the execution row carries respondent + trigger event. So it is never
+presented as manually created by the customer.
+
+### Trusted seam (FD-1E §19)
+`SurveyService.createAssignmentForTrustedIntegration` +
+`resolvePublishedVersionForTrustedIntegration`. "Trusted" bypasses ONLY the
+human `survey.manage` permission — tenant match, published-only, respondent-
+same-tenant, and context invariants are all still enforced.
+
+### Idempotency (FD-1E §12) — DB is the final boundary
+- `UNIQUE(policy_id, trigger_domain_event_id)` → event replay is a no-op
+  (`ON CONFLICT DO NOTHING` on the `processing` insert).
+- partial `UNIQUE(policy_id, source_entity_type, source_entity_id) WHERE
+  status='assigned'` → one-per-lifetime (FD-1E-07): reopen + re-confirm does
+  not create a second survey. App pre-check optimizes the common case; the
+  index is authoritative.
+
+### EventBus reliability (FD-1E §15/§16)
+The in-process bus is fire-once and SWALLOWS a throwing subscriber. The
+handler therefore NEVER throws — it catches everything and persists a
+`failed` execution, so a failure is durable/observable instead of lost. A
+failed integration never rolls back the customer's confirmation (the
+Assignment is a side-effect, not part of the confirmation transaction).
+
+### Schema / config
+Two tables (migration `1761000000000`, 56 → 58): `survey_integration_
+policies` (finite structured config, no outcome/action fields — those are
+1E.2, YAGNI) + `survey_integration_executions` (idempotency + observability).
+Rollback-safe (down verified). No permission added (no admin surface yet →
+no dead `survey.integration.configure`). Policies are created via the
+service config seam (test/seed/future admin); none seeded (no magic config).
+
+### Tests / Regression
+`survey-integration.test.ts` — 8 tests through the REAL EventBus + REAL
+registered subscriber (`buildContainer()`): valid assign + automation
+attribution; event-replay idempotency; one-per-lifetime; recipient invalid
+(internal / wrong-customer / cross-tenant); no-published-version skip;
+tenant isolation (disabled policy in another tenant). Suite **140/140 PASS**
+(was 132). typecheck/lint/build PASS. Complaint rows are seeded directly —
+the workflow→event emission itself is covered by complaint-engine tests.
+
+### Deferred to 1E.2
+`survey.submitted` consumption, outcome/threshold evaluation, target action
+(reopen / escalate / management attention). No automatic reopen in 1E.1.

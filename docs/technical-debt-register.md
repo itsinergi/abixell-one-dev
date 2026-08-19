@@ -389,3 +389,40 @@ kategori MUST FIX** (tenant leakage / unauthorized access / published mutation
 - **Immutable score**: skor final tersimpan immutable saat submit (atomic
   finalize); tersedia untuk aturan 1E (mis. low-rating → corrective) tanpa
   re-compute.
+
+---
+
+## Phase 1E — Survey-to-Action (Checkpoint 1E.1 — Trigger/Assignment half)
+
+**Diperbarui:** 2026-08-20 (1E.1). Complaint `customer_confirmed` → Survey
+Assignment. Survey Submitted → Action = 1E.2 (belum dibangun).
+
+### MUST FIX BEFORE 1E.2
+- Tidak ada. Semua invariant (idempotency DB, one-per-lifetime, tenant
+  isolation, recipient authorization, trusted-caller integrity, no-crash/
+  no-rollback) terverifikasi (140/140).
+
+### SHOULD FIX LATER
+- **Orphan assignment pada race lifetime (rare)**: bila dua event confirm
+  untuk complaint yang sama lolos pre-check bersamaan, partial-unique
+  menolak UPDATE `assigned` kedua → execution jadi `skipped_already_assigned`
+  tetapi Survey Assignment yang sempat dibuat menjadi orphan. Praktis
+  mustahil (confirm adalah satu aksi manusia per complaint); didokumentasikan
+  sebagai trade-off model synchronous best-effort (FD-1E §16/§30).
+- **Reliable async reconciliation / outbox**: EventBus in-process fire-once &
+  menelan exception → bila proses mati SEBELUM execution row tertulis,
+  kegagalan hanya tertangkap `onError` log. Reconciliation worker = future
+  Platform improvement (FD-1E §16), sengaja tidak dibangun di 1E.1.
+- **Admin config UI + `survey.integration.configure` permission**: belum ada
+  (policy via service seam/test/seed). Ditambah saat ada kebutuhan human
+  config nyata (hindari dead permission, FD-1E §20).
+
+### DEFERRED PRODUCT CAPABILITY / 1E.2
+- Konsumsi `survey.submitted`, outcome/threshold evaluation (question-code
+  vs total-score), target action (reopen / escalate / management attention),
+  retry framework, per-closure-cycle re-survey, sumber non-complaint.
+  Semua = 1E.2+ (dilarang di 1E.1). No automatic reopen di 1E.1.
+
+### BUSINESS DECISION REQUIRED (untuk 1E.2)
+- Outcome model + first target action (lihat proposal 1E §18/§21/§41) —
+  perlu Founder Decision saat membuka 1E.2.

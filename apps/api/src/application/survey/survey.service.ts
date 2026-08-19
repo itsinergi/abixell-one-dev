@@ -361,6 +361,104 @@ export class SurveyService {
   }
 
   // ===================================================================
+  // Trusted integration seam (Checkpoint 1E.1)
+  // ===================================================================
+  // A business module that has ALREADY authorized an automated action
+  // (the Survey Integration orchestrator) calls these instead of the
+  // permission-gated `createAssignment`. "Trusted caller" bypasses ONLY
+  // the human `survey.manage` permission check — every business/data
+  // invariant (tenant match, published-only, respondent same tenant,
+  // context pairing) is still enforced here, exactly as for a human
+  // assigner. Survey Core stays generic: it never learns what a
+  // "complaint" is; the caller supplies an opaque context entity.
+
+  /** Resolve the current published version of a definition by code, or
+   * null when the definition is missing OR has no current published
+   * version. Deliberately returns null (never throws) so the integration
+   * layer can record a `skipped_no_published_version` execution instead
+   * of failing the triggering business transaction (FD-1E-04). */
+  async resolvePublishedVersionForTrustedIntegration(
+    tenantId: string,
+    surveyDefinitionCode: string,
+  ): Promise<SurveyVersion | null> {
+    const definition = await this.repo.findDefinitionByCode(tenantId, surveyDefinitionCode);
+    if (!definition) return null;
+    const version = await this.repo.findCurrentVersion(definition.id);
+    if (!version || version.status !== "published") return null;
+    return version;
+  }
+
+  /** Create a Survey Assignment on behalf of an automated integration.
+   * `assignedBy` is stored NULL (no human assigner) and the audit entry
+   * marks `creationMode: automation` + the triggering domain event, so
+   * the record is never presented as manually created by the respondent
+   * (FD-1E-03). Reuses the existing `survey.assigned` event (FD-1E §24). */
+  async createAssignmentForTrustedIntegration(input: {
+    tenantId: string;
+    surveyVersionId: string;
+    respondentUserId: string;
+    contextEntityType: string;
+    contextEntityId: string;
+    automationTriggerEventId: string;
+  }): Promise<SurveyAssignment> {
+    const version = await this.repo.findVersionById(input.surveyVersionId);
+    if (!version) throw new NotFoundError("SurveyVersion", input.surveyVersionId);
+    const definition = await this.repo.findDefinitionById(version.surveyDefinitionId);
+    if (!definition || definition.tenantId !== input.tenantId) {
+      throw new NotFoundError("SurveyVersion", input.surveyVersionId);
+    }
+    if (version.status !== "published") {
+      throw new ConflictError(`Only a published version can be assigned (is '${version.status}')`);
+    }
+    const respondentTenant = await this.repo.findUserTenantId(input.respondentUserId);
+    if (!respondentTenant) throw new NotFoundError("User", input.respondentUserId);
+    if (respondentTenant !== input.tenantId) {
+      throw new ForbiddenError("Cannot assign a survey to a respondent in another tenant");
+    }
+
+    const assignment = await this.repo.createAssignment({
+      tenantId: input.tenantId,
+      surveyVersionId: version.id,
+      respondentType: "user",
+      respondentUserId: input.respondentUserId,
+      respondentCustomerContactId: null,
+      contextEntityType: input.contextEntityType,
+      contextEntityId: input.contextEntityId,
+      dueAt: null,
+      assignedBy: null,
+    });
+
+    await this.audit.record({
+      tenantId: input.tenantId,
+      actorUserId: null,
+      action: "survey.assignment.created",
+      entityType: "survey_assignment",
+      entityId: assignment.id,
+      metadata: {
+        surveyVersionId: version.id,
+        respondentUserId: input.respondentUserId,
+        contextEntityType: assignment.contextEntityType,
+        creationMode: "automation",
+        triggerDomainEventId: input.automationTriggerEventId,
+      },
+    });
+    await this.eventBus.publish({
+      tenantId: input.tenantId,
+      eventType: "survey.assigned",
+      entityType: "survey_assignment",
+      entityId: assignment.id,
+      payload: {
+        surveyVersionId: version.id,
+        targetUserId: input.respondentUserId,
+        contextEntityType: assignment.contextEntityType,
+        contextEntityId: assignment.contextEntityId,
+      },
+      createdBy: null,
+    });
+    return assignment;
+  }
+
+  // ===================================================================
   // Results (survey.results.read)
   // ===================================================================
 

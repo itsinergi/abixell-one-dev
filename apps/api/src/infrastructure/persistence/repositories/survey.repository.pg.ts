@@ -316,7 +316,7 @@ export class PgSurveyRepository implements SurveyRepository {
     contextEntityType: string | null;
     contextEntityId: string | null;
     dueAt: Date | null;
-    assignedBy: string;
+    assignedBy: string | null;
   }): Promise<SurveyAssignment> {
     const r = await this.pool.query(
       `INSERT INTO survey_assignments

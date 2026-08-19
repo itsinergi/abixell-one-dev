@@ -53,6 +53,8 @@ import { ComplaintConfigurationService } from "./application/complaint/complaint
 import { PgSurveyRepository } from "./infrastructure/persistence/repositories/survey.repository.pg.js";
 import { SurveyService } from "./application/survey/survey.service.js";
 import { SurveyResponseService } from "./application/survey/survey-response.service.js";
+import { PgSurveyIntegrationRepository } from "./infrastructure/persistence/repositories/survey-integration.repository.pg.js";
+import { SurveyIntegrationService } from "./application/survey-integration/survey-integration.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -177,6 +179,22 @@ export function buildContainer() {
   const survey = new SurveyService(surveyRepo, audit, rbac, eventBus, documentEntityResolvers);
   const surveyResponse = new SurveyResponseService(surveyRepo, audit, rbac, eventBus);
 
+  // Survey Integration orchestrator (Checkpoint 1E.1) — turns a Complaint
+  // customer-confirmation into a Survey Assignment WITHOUT coupling the two
+  // Cores. It depends on Complaint (read) + Survey (application port) only;
+  // neither Core depends on it or on each other (FD-1E §2/§39). Wired as a
+  // subscriber below.
+  const surveyIntegrationRepo = new PgSurveyIntegrationRepository(pool);
+  const surveyIntegration = new SurveyIntegrationService(
+    surveyIntegrationRepo,
+    survey,
+    complaintRepo,
+    userRepo,
+    rbac,
+    audit,
+    (policyCode, error) => console.error(`[SurveyIntegration] policy '${policyCode}' failed:`, error),
+  );
+
   // Any Domain Event, regardless of publisher, reaches both — this is
   // the "modul lain di masa depan tanpa perlu mengubah modul yang
   // mempublikasikan event" guarantee from doc 07, proven with the two
@@ -202,6 +220,15 @@ export function buildContainer() {
       createdBy: event.createdBy,
     });
   });
+
+  // Checkpoint 1E.1: Complaint customer-confirmation triggers Survey
+  // Assignment via the Integration orchestrator. The subscriber only
+  // consumes the event; all business logic (policy/respondent/version
+  // resolution, idempotency) lives in SurveyIntegrationService, which never
+  // throws (a failed integration must not roll back the confirmation).
+  eventBus.subscribe("complaint.customer_confirmed", (event) =>
+    surveyIntegration.handleTriggerEvent(event),
+  );
 
   const scheduler = new SchedulerService(schedulerRepo, rbac, (jobCode, error) => {
     console.error(`[Scheduler] job '${jobCode}' failed:`, error);
@@ -234,6 +261,7 @@ export function buildContainer() {
     complaintConfiguration,
     survey,
     surveyResponse,
+    surveyIntegration,
   };
 }
 

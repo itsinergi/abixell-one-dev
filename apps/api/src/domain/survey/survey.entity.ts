@@ -187,7 +187,10 @@ export interface SurveyRepository {
     contextEntityType: string | null;
     contextEntityId: string | null;
     dueAt: Date | null;
-    assignedBy: string;
+    /** Null when the Assignment was created by automation (integration
+     * layer) rather than a human assigner — the column is nullable and
+     * attribution then lives in the audit/execution record (FD-1E-03). */
+    assignedBy: string | null;
   }): Promise<SurveyAssignment>;
   findAssignmentById(id: string): Promise<SurveyAssignment | null>;
   listAssignmentsByRespondentUser(tenantId: string, userId: string): Promise<SurveyAssignment[]>;
