@@ -76,7 +76,12 @@ export const NAV_SECTIONS: NavSection[] = [
     path: "/verification",
     label: "Verification",
     description: "Independently verify corrective actions awaiting sign-off.",
-    requiresAnyOf: [PERMISSIONS.complaintManage],
+    // QA/verification is an internal area — gate it away from Customer Users
+    // (who hold complaint.manage on their own complaints). `workflow.instance.manage`
+    // is the closest existing capability the verifier persona holds
+    // (COMPLAINT_MANAGER); it will be replaced by a dedicated permission
+    // when 1C.4 / FD-1C-02 land. Backend still enforces all authorization.
+    requiresAnyOf: [PERMISSIONS.workflowManage],
   },
   {
     key: "management",

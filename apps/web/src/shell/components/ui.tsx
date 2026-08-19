@@ -8,7 +8,14 @@
  * reuses the existing Tailwind design language (slate palette, subtle
  * borders, `text-sm` scale) rather than introducing a new visual system.
  */
-import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  PropsWithChildren,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 /* ------------------------------------------------------------------ Button */
 
@@ -173,5 +180,81 @@ export function Alert({
     <div className={`rounded p-2 text-sm ${ALERT_TONES[tone]}`} role="alert">
       {children}
     </div>
+  );
+}
+
+/* ------------------------------------------------- Form primitives (1C.2) */
+
+const CONTROL_CLASS =
+  "mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-50";
+
+/** Labelled field wrapper — pairs a label with a control and optional hint. */
+export function Field({
+  label,
+  required,
+  hint,
+  children,
+}: PropsWithChildren<{ label: string; required?: boolean; hint?: ReactNode }>) {
+  return (
+    <label className="block text-sm">
+      <span className="font-medium text-slate-700">
+        {label}
+        {required && <span className="ml-0.5 text-red-500">*</span>}
+      </span>
+      {children}
+      {hint && <span className="mt-0.5 block text-xs text-slate-400">{hint}</span>}
+    </label>
+  );
+}
+
+export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={`${CONTROL_CLASS} ${className}`} {...rest} />;
+}
+
+export function Textarea({ className = "", ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={`${CONTROL_CLASS} ${className}`} {...rest} />;
+}
+
+export function Select({
+  className = "",
+  children,
+  ...rest
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select className={`${CONTROL_CLASS} ${className}`} {...rest}>
+      {children}
+    </select>
+  );
+}
+
+/* ---------------------------------------------------------- Timeline (1C.2) */
+
+export interface TimelineItem {
+  key: string;
+  title: string;
+  timestamp?: string | null;
+  detail?: ReactNode;
+}
+
+/** Vertical progress timeline — generic, ordered oldest→newest by caller. */
+export function Timeline({ items }: { items: TimelineItem[] }) {
+  if (items.length === 0) {
+    return <p className="text-sm text-slate-500">No activity recorded yet.</p>;
+  }
+  return (
+    <ol className="relative ml-2 border-l border-slate-200">
+      {items.map((item) => (
+        <li key={item.key} className="mb-4 ml-4">
+          <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-slate-300" />
+          <div className="text-sm font-medium text-slate-800">{item.title}</div>
+          {item.timestamp && (
+            <div className="text-xs text-slate-400">
+              {new Date(item.timestamp).toLocaleString()}
+            </div>
+          )}
+          {item.detail && <div className="mt-0.5 text-sm text-slate-600">{item.detail}</div>}
+        </li>
+      ))}
+    </ol>
   );
 }

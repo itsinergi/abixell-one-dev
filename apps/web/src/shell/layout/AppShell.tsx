@@ -55,9 +55,19 @@ export function AppShell() {
     setLoading(true);
     setError(null);
     try {
-      const [me, tenant] = await Promise.all([api.me(token), api.tenant(token)]);
+      // `/me` (permissions) is required — it drives the whole navigation.
+      const me = await api.me(token);
       setPermissions(me.permissions);
-      setTenantName(tenant.name);
+      // The Tenant name is only the workspace title, and reading it needs
+      // `tenant.read` — a permission a Customer User does NOT hold. Fetch it
+      // best-effort so its absence never blocks the shell; fall back to the
+      // neutral title (ADR-0003) instead.
+      try {
+        const tenant = await api.tenant(token);
+        setTenantName(tenant.name);
+      } catch {
+        setTenantName("");
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load your workspace");
     } finally {

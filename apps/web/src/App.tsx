@@ -4,6 +4,9 @@ import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SectionPlaceholder } from "./pages/SectionPlaceholder";
+import { ComplaintsListPage } from "./pages/complaints/ComplaintsListPage";
+import { ComplaintCreatePage } from "./pages/complaints/ComplaintCreatePage";
+import { ComplaintDetailPage } from "./pages/complaints/ComplaintDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -39,16 +42,9 @@ export default function App() {
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<AppShell />}>
           <Route index element={<OverviewPage />} />
-          <Route
-            path="complaints"
-            element={
-              <SectionPlaceholder
-                title="Complaints"
-                checkpoint="1C.2 / 1C.3"
-                description="Raise, track, and act on complaints within your scope."
-              />
-            }
-          />
+          <Route path="complaints" element={<ComplaintsListPage />} />
+          <Route path="complaints/new" element={<ComplaintCreatePage />} />
+          <Route path="complaints/:complaintId" element={<ComplaintDetailPage />} />
           <Route
             path="verification"
             element={

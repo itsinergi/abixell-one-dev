@@ -285,6 +285,17 @@ export const api = {
 
   documentDownloadUrl: (id: string) => `${API_BASE}/documents/${id}/download`,
 
+  /** Authenticated download — the download route requires a Bearer token,
+   * which a plain <a href> can't send, so fetch the bytes and hand back a
+   * Blob the caller can turn into a temporary object URL. */
+  downloadDocument: async (token: string, id: string): Promise<Blob> => {
+    const response = await fetch(`${API_BASE}/documents/${id}/download`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new ApiError(response.status, `Download failed (${response.status})`);
+    return response.blob();
+  },
+
   deleteDocument: (token: string, id: string) => request<DocumentRecord>(`/documents/${id}`, { method: "DELETE", token }),
 
   scheduledJobs: (token: string) => request<ScheduledJob[]>("/scheduler/jobs", { token }),
@@ -354,6 +365,17 @@ export const api = {
     request<{ complaint: Complaint; status: ComplaintStatus | null }>(`/complaints/${id}`, {
       token,
     }),
+
+  // Checkpoint 1C.2 — customer list (status + SLA per row) + composite detail
+  // + create-form option catalogs. All read from the real backend.
+  complaintsByCustomerSummary: (token: string, customerId: string) =>
+    request<ComplaintSummaryItem[]>(`/complaints?customerId=${customerId}&view=summary`, { token }),
+
+  complaintDetail: (token: string, id: string) =>
+    request<ComplaintDetailView>(`/complaints/${id}/detail`, { token }),
+
+  complaintReferenceData: (token: string) =>
+    request<ComplaintCreateOptions>("/complaints/reference-data", { token }),
 
   createComplaint: (token: string, payload: CreateComplaintPayload) =>
     request<Complaint>("/complaints", { method: "POST", token, body: payload }),
@@ -577,6 +599,48 @@ export type Complaint = {
 export type ComplaintStatus = {
   stepCode: string | null;
   instanceStatus: string;
+};
+
+// --- Checkpoint 1C.2 composite/customer read types --------------------------
+
+export type ComplaintDetailStatus = {
+  stepCode: string | null;
+  stepName: string | null;
+  instanceStatus: string;
+} | null;
+
+export type ComplaintSla = { dueAt: string | null; slaHours: number | null } | null;
+
+export type ComplaintTimelineEntry = {
+  occurredAt: string;
+  actionCode: string;
+  stepCode: string | null;
+  stepName: string | null;
+};
+
+export type ComplaintAvailableAction = { actionCode: string; name: string };
+
+export type ComplaintDetailView = {
+  complaint: Complaint;
+  status: ComplaintDetailStatus;
+  sla: ComplaintSla;
+  timeline: ComplaintTimelineEntry[];
+  availableActions: ComplaintAvailableAction[];
+  reopen: { canReopen: boolean; targetSteps: { code: string; name: string }[] };
+};
+
+export type ComplaintSummaryItem = {
+  complaint: Complaint;
+  status: ComplaintDetailStatus;
+  sla: ComplaintSla;
+};
+
+export type ComplaintRefItem = { code: string; label: string };
+
+export type ComplaintCreateOptions = {
+  categories: ComplaintRefItem[];
+  severities: ComplaintRefItem[];
+  priorities: ComplaintRefItem[];
 };
 
 export type CreateComplaintPayload = {

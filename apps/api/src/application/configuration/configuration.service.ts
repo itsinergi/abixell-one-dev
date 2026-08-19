@@ -200,6 +200,20 @@ export class ConfigurationService {
     return this.repo.listReferenceDataItems(actor.tenantId, typeCode);
   }
 
+  /**
+   * Checkpoint 1C.2 — trusted-caller reference-data read (no `config.read`).
+   * A business module that has already authorized the actor for its own
+   * operation (e.g. `ComplaintService.getCreateOptions`, gated on
+   * `complaint.manage`) can read the Tenant's configured catalogs it needs
+   * to drive a create form, without granting the broad `config.read`
+   * permission to every Customer User. Same trusted-caller posture as
+   * `WorkflowService.getInstanceForEntityOwner`. Returns Tenant
+   * Configuration verbatim — the values are never hardcoded here.
+   */
+  async listReferenceDataItemsForTrustedCaller(tenantId: string, typeCode: string) {
+    return this.repo.listReferenceDataItems(tenantId, typeCode);
+  }
+
   async createReferenceDataItem(
     actor: ActorContext,
     typeCode: string,

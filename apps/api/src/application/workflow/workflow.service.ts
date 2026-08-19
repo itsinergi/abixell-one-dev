@@ -16,12 +16,62 @@ import type {
   WorkflowDefinition,
   WorkflowInstance,
   WorkflowInstanceAssignment,
+  WorkflowInstanceStatus,
   WorkflowRepository,
   WorkflowStepType,
   WorkflowTerminalStatus,
   WorkflowVersion,
 } from "../../domain/workflow/workflow.entity.js";
 import { evaluateCondition } from "./condition-evaluator.js";
+
+/**
+ * Checkpoint 1C.2 — generic, read-only projections a business module
+ * exposes to its own authorized entity owner (e.g. a Customer reading
+ * their own Complaint). All are computed live from the existing authoritative
+ * Workflow tables — no denormalized store, no materialized view, no CQRS
+ * (FD-1C-01). `entityType`-agnostic, same posture as the rest of this class.
+ */
+export interface EntityWorkflowStatus {
+  stepCode: string | null;
+  stepName: string | null;
+  instanceStatus: WorkflowInstanceStatus;
+  /** SLA state derived from the pending Assignment's due date + the current
+   * Step's configured SLA hours — the authoritative source, never a
+   * frontend recomputation. */
+  sla: { dueAt: Date | null; slaHours: number | null } | null;
+}
+
+export interface EntityWorkflowTimelineEntry {
+  occurredAt: Date;
+  actionCode: string;
+  fromStepCode: string | null;
+  fromStepName: string | null;
+  toStepCode: string | null;
+  toStepName: string | null;
+  actorUserId: string | null;
+  comment: string | null;
+}
+
+export interface EntityWorkflowAction {
+  actionCode: string;
+  name: string;
+  toStepCode: string;
+}
+
+export interface EntityWorkflowView {
+  instanceStatus: WorkflowInstanceStatus;
+  currentStep: { code: string; name: string } | null;
+  sla: { dueAt: Date | null; slaHours: number | null } | null;
+  /** Transitions the actor is actually eligible to take from the current
+   * Step right now (Role+Scope / specific_user match, Condition satisfied)
+   * — lets the UI render actions from workflow state instead of hardcoding
+   * lifecycle rules (guard: no `if status===X show button Y`). */
+  availableActions: EntityWorkflowAction[];
+  timeline: EntityWorkflowTimelineEntry[];
+  /** Non-terminal Steps of this Instance's Version — the valid reopen
+   * targets a business module can offer (it decides who may reopen). */
+  nonTerminalSteps: { code: string; name: string }[];
+}
 
 /** ADR-0008: how long an opt-in claim (see `claimAssignment`) blocks
  * other eligible users from acting, before it auto-expires and the task
@@ -400,6 +450,97 @@ export class WorkflowService {
     const currentStep = instance.currentStepId ? await this.repo.findStepById(instance.currentStepId) : null;
     const history = await this.repo.listHistory(instance.id);
     return { instance, assignments, currentStep, history };
+  }
+
+  /**
+   * Checkpoint 1C.2 — light status projection for list rows. Trusted-caller
+   * (no `workflow.instance.read`): the business module has already
+   * authorized the actor against the parent entity, same posture as
+   * `getInstanceForEntityOwner`. Loads only what a list row needs
+   * (current Step + pending Assignment), never the full history/transitions.
+   */
+  async getEntityStatus(actor: ActorContext, instanceId: string): Promise<EntityWorkflowStatus> {
+    const instance = await this.getInstanceOrThrow(actor.tenantId, instanceId);
+    const currentStep = instance.currentStepId
+      ? await this.repo.findStepById(instance.currentStepId)
+      : null;
+    const assignments = await this.repo.listAssignmentsForInstance(instance.id);
+    const pending = assignments.find((a) => a.status === "pending") ?? null;
+    const sla =
+      currentStep && (pending?.dueAt != null || currentStep.slaHours != null)
+        ? { dueAt: pending?.dueAt ?? null, slaHours: currentStep.slaHours ?? null }
+        : null;
+    return {
+      stepCode: currentStep?.code ?? null,
+      stepName: currentStep?.name ?? null,
+      instanceStatus: instance.status,
+      sla,
+    };
+  }
+
+  /**
+   * Checkpoint 1C.2 — full composite view for an entity-detail screen.
+   * Trusted-caller (see `getEntityStatus`). Composed live in the
+   * application layer from existing tables (FD-1C-01: no new read store).
+   * `actor` is needed to compute `availableActions` (eligibility depends
+   * on who is asking).
+   */
+  async getEntityWorkflowView(actor: ActorContext, instanceId: string): Promise<EntityWorkflowView> {
+    const instance = await this.getInstanceOrThrow(actor.tenantId, instanceId);
+    const steps = await this.repo.listSteps(instance.workflowVersionId);
+    const stepById = new Map(steps.map((s) => [s.id, s]));
+    const currentStep = instance.currentStepId ? stepById.get(instance.currentStepId) ?? null : null;
+
+    const assignments = await this.repo.listAssignmentsForInstance(instance.id);
+    const pending = assignments.find((a) => a.status === "pending") ?? null;
+    const sla =
+      currentStep && (pending?.dueAt != null || currentStep.slaHours != null)
+        ? { dueAt: pending?.dueAt ?? null, slaHours: currentStep.slaHours ?? null }
+        : null;
+
+    const history = await this.repo.listHistory(instance.id);
+    const timeline: EntityWorkflowTimelineEntry[] = history.map((h) => ({
+      occurredAt: h.occurredAt,
+      actionCode: h.actionCode,
+      fromStepCode: h.fromStepId ? stepById.get(h.fromStepId)?.code ?? null : null,
+      fromStepName: h.fromStepId ? stepById.get(h.fromStepId)?.name ?? null : null,
+      toStepCode: h.toStepId ? stepById.get(h.toStepId)?.code ?? null : null,
+      toStepName: h.toStepId ? stepById.get(h.toStepId)?.name ?? null : null,
+      actorUserId: h.actorUserId,
+      comment: h.comment,
+    }));
+
+    let availableActions: EntityWorkflowAction[] = [];
+    if (
+      instance.status === "in_progress" &&
+      currentStep &&
+      pending &&
+      (await this.isActorEligibleForAssignment(actor, pending))
+    ) {
+      const transitions = await this.repo.listTransitionsFromStep(currentStep.id);
+      availableActions = transitions
+        .filter((t) => evaluateCondition(t.conditionExpression, instance.contextData))
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((t) => ({
+          actionCode: t.actionCode,
+          name: t.name,
+          toStepCode: stepById.get(t.toStepId)?.code ?? "",
+        }));
+    }
+
+    const nonTerminalSteps = steps
+      .filter((s) => !s.isTerminal)
+      .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+      .map((s) => ({ code: s.code, name: s.name }));
+
+    return {
+      instanceStatus: instance.status,
+      currentStep: currentStep ? { code: currentStep.code, name: currentStep.name } : null,
+      sla,
+      availableActions,
+      timeline,
+      nonTerminalSteps,
+    };
   }
 
   async listInstances(actor: ActorContext): Promise<WorkflowInstance[]> {
@@ -849,6 +990,24 @@ export class WorkflowService {
       throw new NotFoundError("WorkflowInstance", id);
     }
     return instance;
+  }
+
+  /** Non-throwing eligibility check (Checkpoint 1C.2) — same Role+Scope /
+   * specific_user rule as `assertEligible`, returned as a boolean so a
+   * read-only projection (`getEntityWorkflowView.availableActions`) can
+   * report what the actor could do without raising. */
+  private async isActorEligibleForAssignment(
+    actor: ActorContext,
+    assignment: WorkflowInstanceAssignment,
+  ): Promise<boolean> {
+    if (assignment.assignmentType === "specific_user") {
+      return assignment.assignedUserId === actor.userId;
+    }
+    return this.rbac.hasRoleCoveringScope(
+      actor.userId,
+      assignment.assignedRoleCode!,
+      assignment.assignedOrganizationUnitId,
+    );
   }
 
   /** Shared by `actOnAssignment` and `claimAssignment` (ADR-0008) — the

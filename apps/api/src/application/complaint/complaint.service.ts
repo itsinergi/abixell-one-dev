@@ -22,6 +22,16 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../../domain/share
 export const COMPLAINT_WORKFLOW_DEFINITION_CODE = "complaint_lifecycle";
 export const COMPLAINT_NUMBERING_CODE = "complaint_number";
 
+/** Product Core integration points: WHICH Tenant-configured reference-data
+ * catalogs drive Complaint creation. Like COMPLAINT_WORKFLOW_DEFINITION_CODE,
+ * these fix the catalog identity only — the actual option VALUES are 100%
+ * Tenant Configuration (never hardcoded business choices). Priority reuses
+ * the generic `priority_level` catalog, distinct from `complaint_severity`
+ * (Severity ≠ Priority — see seed.ts / decision-log.md). */
+export const COMPLAINT_CATEGORY_REF_TYPE = "complaint_category";
+export const COMPLAINT_SEVERITY_REF_TYPE = "complaint_severity";
+export const COMPLAINT_PRIORITY_REF_TYPE = "priority_level";
+
 /** actionCode -> business-readable Domain Event type (Event Catalog,
  * doc section 33). A Tenant is free to configure Transitions with ANY
  * actionCode; one outside this map still works end-to-end, it just
@@ -55,6 +65,36 @@ export interface CreateComplaintInput {
   severity: string;
   source?: string | null;
   channel?: string | null;
+}
+
+/** Checkpoint 1C.2 — Tenant-configured option catalogs for the create form. */
+export interface ComplaintCreateOptions {
+  categories: { code: string; label: string }[];
+  severities: { code: string; label: string }[];
+  priorities: { code: string; label: string }[];
+}
+
+/** Checkpoint 1C.2 — status + SLA for one Complaint list row. */
+export interface ComplaintSummaryItem {
+  complaint: Complaint;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  sla: { dueAt: Date | null; slaHours: number | null } | null;
+}
+
+/**
+ * Checkpoint 1C.2 — customer-safe composite detail. Deliberately projects
+ * only what a Complaint owner may see: the lifecycle progression, SLA
+ * state, the actions THIS actor can take, and reopen eligibility. Internal
+ * workflow comments and actor identities are stripped from the timeline
+ * (guard 9) — a richer, role-aware operational view is future work (1C.3).
+ */
+export interface ComplaintDetailView {
+  complaint: Complaint;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  sla: { dueAt: Date | null; slaHours: number | null } | null;
+  timeline: { occurredAt: Date; actionCode: string; stepCode: string | null; stepName: string | null }[];
+  availableActions: { actionCode: string; name: string }[];
+  reopen: { canReopen: boolean; targetSteps: { code: string; name: string }[] };
 }
 
 /**
@@ -155,6 +195,107 @@ export class ComplaintService {
     await this.rbac.requirePermission(actor.userId, "complaint.read");
     await this.customers.getAuthorized(actor, customerId);
     return this.repo.listByCustomer(customerId);
+  }
+
+  /**
+   * Checkpoint 1C.2 — Tenant-configured option catalogs the create form
+   * needs (category / severity / priority). Gated on `complaint.manage`
+   * (the permission required to actually create), reading the same
+   * Configuration reference data an Administrator manages — so a Customer
+   * User can populate the form without the broad `config.read` permission.
+   * Only active items are returned.
+   */
+  async getCreateOptions(actor: ActorContext): Promise<ComplaintCreateOptions> {
+    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    const [categories, severities, priorities] = await Promise.all([
+      this.configuration.listReferenceDataItemsForTrustedCaller(actor.tenantId, COMPLAINT_CATEGORY_REF_TYPE),
+      this.configuration.listReferenceDataItemsForTrustedCaller(actor.tenantId, COMPLAINT_SEVERITY_REF_TYPE),
+      this.configuration.listReferenceDataItemsForTrustedCaller(actor.tenantId, COMPLAINT_PRIORITY_REF_TYPE),
+    ]);
+    const active = (items: { code: string; label: string; isActive: boolean }[]) =>
+      items.filter((i) => i.isActive).map((i) => ({ code: i.code, label: i.label }));
+    return {
+      categories: active(categories),
+      severities: active(severities),
+      priorities: active(priorities),
+    };
+  }
+
+  /**
+   * Checkpoint 1C.2 — list a Customer's Complaints enriched with each one's
+   * live Workflow status + SLA, for the customer list experience. Same
+   * authorization as `listByCustomer` (permission + Customer Data Scope);
+   * status is composed per row via the trusted-caller Workflow projection.
+   */
+  async listByCustomerSummary(actor: ActorContext, customerId: string): Promise<ComplaintSummaryItem[]> {
+    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.customers.getAuthorized(actor, customerId);
+    const complaints = await this.repo.listByCustomer(customerId);
+    const items: ComplaintSummaryItem[] = [];
+    for (const complaint of complaints) {
+      if (!complaint.workflowInstanceId) {
+        items.push({ complaint, status: null, sla: null });
+        continue;
+      }
+      const status = await this.workflow.getEntityStatus(actor, complaint.workflowInstanceId);
+      items.push({
+        complaint,
+        status: {
+          stepCode: status.stepCode,
+          stepName: status.stepName,
+          instanceStatus: status.instanceStatus,
+        },
+        sla: status.sla,
+      });
+    }
+    return items;
+  }
+
+  /**
+   * Checkpoint 1C.2 — customer-safe composite detail (see ComplaintDetailView).
+   * Authorization is the existing `getAuthorized` visibility gate; the
+   * Workflow projection is trusted-caller (this method already authorized
+   * the Complaint). `canReopen` reflects the real reopen rule
+   * (`complaint.manage` + a completed Instance), so the UI never hardcodes
+   * lifecycle state to decide it.
+   */
+  async getDetail(actor: ActorContext, id: string): Promise<ComplaintDetailView> {
+    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    const complaint = await this.getAuthorized(actor, id);
+    if (!complaint.workflowInstanceId) {
+      return {
+        complaint,
+        status: null,
+        sla: null,
+        timeline: [],
+        availableActions: [],
+        reopen: { canReopen: false, targetSteps: [] },
+      };
+    }
+
+    const view = await this.workflow.getEntityWorkflowView(actor, complaint.workflowInstanceId);
+    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const canReopen = permissions.has("complaint.manage") && view.instanceStatus !== "in_progress";
+
+    return {
+      complaint,
+      status: {
+        stepCode: view.currentStep?.code ?? null,
+        stepName: view.currentStep?.name ?? null,
+        instanceStatus: view.instanceStatus,
+      },
+      sla: view.sla,
+      // Customer-safe timeline: lifecycle progression only — never internal
+      // actor identities or internal workflow comments (guard 9).
+      timeline: view.timeline.map((t) => ({
+        occurredAt: t.occurredAt,
+        actionCode: t.actionCode,
+        stepCode: t.toStepCode,
+        stepName: t.toStepName,
+      })),
+      availableActions: view.availableActions.map((a) => ({ actionCode: a.actionCode, name: a.name })),
+      reopen: { canReopen, targetSteps: canReopen ? view.nonTerminalSteps : [] },
+    };
   }
 
   /** Submit is just the first Transition (Draft -> Submitted) — no

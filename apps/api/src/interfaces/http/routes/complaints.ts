@@ -40,14 +40,40 @@ export function registerComplaintRoutes(app: FastifyInstance, container: Contain
   });
 
   app.get("/complaints", { preHandler: app.authenticate }, async (request, reply) => {
-    const query = z.object({ customerId: z.string().uuid() }).parse(request.query);
+    // `view=summary` (Checkpoint 1C.2) enriches each row with live Workflow
+    // status + SLA for the customer list experience. Default is unchanged
+    // (plain Complaint[]) — backward-compatible with existing consumers.
+    const query = z
+      .object({ customerId: z.string().uuid(), view: z.enum(["summary"]).optional() })
+      .parse(request.query);
+    if (query.view === "summary") {
+      const list = await container.complaint.listByCustomerSummary(request.actor!, query.customerId);
+      return reply.send(list);
+    }
     const list = await container.complaint.listByCustomer(request.actor!, query.customerId);
     return reply.send(list);
+  });
+
+  // Checkpoint 1C.2 — Tenant-configured category/severity/priority catalogs
+  // for the create form, gated on complaint.manage (so Customer Users can
+  // load it without config.read). Static path — declared before `/:id`.
+  app.get("/complaints/reference-data", { preHandler: app.authenticate }, async (request, reply) => {
+    const result = await container.complaint.getCreateOptions(request.actor!);
+    return reply.send(result);
   });
 
   app.get("/complaints/:id", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await container.complaint.get(request.actor!, id);
+    return reply.send(result);
+  });
+
+  // Checkpoint 1C.2 — customer-safe composite detail (complaint + status +
+  // SLA + safe timeline + available actions + reopen eligibility) in one
+  // authorized read, composed live from existing tables (FD-1C-01).
+  app.get("/complaints/:id/detail", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await container.complaint.getDetail(request.actor!, id);
     return reply.send(result);
   });
 
