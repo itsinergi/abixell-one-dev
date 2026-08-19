@@ -12,6 +12,10 @@ import { VerificationQueuePage } from "./pages/verification/VerificationQueuePag
 import { VerificationDetailPage } from "./pages/verification/VerificationDetailPage";
 import { ManagementDashboardPage } from "./pages/management/ManagementDashboardPage";
 import { ComplaintConfigPage } from "./pages/admin/ComplaintConfigPage";
+import { SurveyListPage } from "./pages/survey/SurveyListPage";
+import { SurveyDetailPage } from "./pages/survey/SurveyDetailPage";
+import { MySurveysPage } from "./pages/survey/MySurveysPage";
+import { MySurveyDetailPage } from "./pages/survey/MySurveyDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -57,6 +61,10 @@ export default function App() {
           <Route path="management" element={<ManagementDashboardPage />} />
           <Route path="administration" element={<DashboardPage />} />
           <Route path="administration/complaints" element={<ComplaintConfigPage />} />
+          <Route path="surveys" element={<SurveyListPage />} />
+          <Route path="surveys/:code" element={<SurveyDetailPage />} />
+          <Route path="my-surveys" element={<MySurveysPage />} />
+          <Route path="my-surveys/:assignmentId" element={<MySurveyDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

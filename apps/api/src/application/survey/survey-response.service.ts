@@ -33,9 +33,26 @@ export class SurveyResponseService {
     private readonly eventBus: EventBus,
   ) {}
 
-  async listMyAssignments(actor: ActorContext): Promise<SurveyAssignment[]> {
+  /** Respondent list, enriched with the survey name + version number so the
+   * UI can render a meaningful "My Surveys" list (the assignment itself only
+   * references a version id). Small per-row enrichment — a respondent's list
+   * is bounded. */
+  async listMyAssignments(
+    actor: ActorContext,
+  ): Promise<{ assignment: SurveyAssignment; surveyName: string | null; versionNumber: number | null }[]> {
     await this.rbac.requirePermission(actor.userId, "survey.respond");
-    return this.repo.listAssignmentsByRespondentUser(actor.tenantId, actor.userId);
+    const assignments = await this.repo.listAssignmentsByRespondentUser(actor.tenantId, actor.userId);
+    const out = [];
+    for (const assignment of assignments) {
+      const version = await this.repo.findVersionById(assignment.surveyVersionId);
+      const definition = version ? await this.repo.findDefinitionById(version.surveyDefinitionId) : null;
+      out.push({
+        assignment,
+        surveyName: definition?.name ?? null,
+        versionNumber: version?.versionNumber ?? null,
+      });
+    }
+    return out;
   }
 
   async getAssignment(actor: ActorContext, assignmentId: string) {

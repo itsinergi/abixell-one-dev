@@ -273,3 +273,12 @@ perubahan ini, bukan ditunda lagi ke 1C.
 Survey assignments may carry a context entity, but 1D.1 contains NO
 Complaint→Survey auto-creation or any Survey-to-Action automation — that is
 Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
+
+## 2026-08-19 — Checkpoint 1D.2 (Survey Admin & Respondent UX)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | API client sets Content-Type/body only when a body is present | Fastify 400s on empty JSON body; broke bodyless POSTs (survey publish/submit) — first such calls in the app | Bug found in live testing |
+| 2 | Added GET /survey-versions/:id + enriched /survey-assignments/my | Authoring a DRAFT and a meaningful respondent list need reads the 1D.1 API did not expose; small additive, survey.manage/respond gated | Founder 1D.2 §29 |
+| 3 | Assignment respondent picker reuses /users | No duplicate people directory; admin holds user.read | Founder 1D.2 §16 |
+| 4 | Frontend-only otherwise; no schema/migration | 1D.2 is UX over 1D.1 | Founder 1D.2 §30 |

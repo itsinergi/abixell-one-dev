@@ -37,6 +37,8 @@ export const PERMISSIONS = {
   complaintDashboardRead: "complaint.dashboard.read",
   complaintConfigure: "complaint.configure",
   configManage: "config.manage",
+  surveyManage: "survey.manage",
+  surveyRespond: "survey.respond",
 } as const;
 
 export interface NavSection {
@@ -118,6 +120,20 @@ export const NAV_SECTIONS: NavSection[] = [
     // FD-1C-02: gated on the real management permission now (replacing the
     // 1C.1 workflow.instance.manage proxy). Backend enforces it too.
     requiresAnyOf: [PERMISSIONS.complaintDashboardRead],
+  },
+  {
+    key: "my-surveys",
+    path: "/my-surveys",
+    label: "My Surveys",
+    description: "Surveys assigned to you — respond and submit.",
+    requiresAnyOf: [PERMISSIONS.surveyRespond],
+  },
+  {
+    key: "surveys",
+    path: "/surveys",
+    label: "Surveys",
+    description: "Author survey definitions, publish versions, and assign them.",
+    requiresAnyOf: [PERMISSIONS.surveyManage],
   },
   {
     key: "administration",

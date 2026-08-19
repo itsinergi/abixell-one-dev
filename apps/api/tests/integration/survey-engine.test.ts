@@ -173,6 +173,20 @@ describe("Checkpoint 1D.1 — Survey Engine Core", () => {
     expect(noCurrent.statusCode).toBe(404);
   });
 
+  it("Admin version detail + respondent my-list enrichment (1D.2 reads)", async () => {
+    // GET /survey-versions/:id returns the full version detail (any status).
+    const vd = await get(`/survey-versions/${v1Id}`, adminToken);
+    expect(vd.statusCode).toBe(200);
+    expect(vd.json().questions.length).toBe(3);
+    // Respondent's my-list is enriched with survey name + version number.
+    const my = await get("/survey-assignments/my", respAToken);
+    expect(my.statusCode).toBe(200);
+    const item = my.json().find((r: { assignment: { id: string } }) => r.assignment.id === assignmentId);
+    expect(item).toBeTruthy();
+    expect(item.surveyName).toBe("Customer Satisfaction");
+    expect(item.versionNumber).toBe(1);
+  });
+
   it("Respond: owner sees questions; wrong respondent denied", async () => {
     const view = await get(`/survey-assignments/${assignmentId}`, respAToken);
     expect(view.statusCode).toBe(200);

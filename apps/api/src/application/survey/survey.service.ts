@@ -277,6 +277,20 @@ export class SurveyService {
     };
   }
 
+  /** Checkpoint 1D.2 — read a specific version's full detail (any status), so
+   * the admin UI can author a DRAFT (getDefinition only returns the current
+   * published version). survey.manage + tenant-guarded. */
+  async getVersionDetail(actor: ActorContext, versionId: string): Promise<SurveyVersionDetail> {
+    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    const version = await this.repo.findVersionById(versionId);
+    if (!version) throw new NotFoundError("SurveyVersion", versionId);
+    const definition = await this.repo.findDefinitionById(version.surveyDefinitionId);
+    if (!definition || definition.tenantId !== actor.tenantId) {
+      throw new NotFoundError("SurveyVersion", versionId);
+    }
+    return this.buildVersionDetail(version);
+  }
+
   // ===================================================================
   // Assignment
   // ===================================================================

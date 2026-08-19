@@ -13,13 +13,17 @@ async function request<T>(
   path: string,
   options: { method?: string; token?: string; body?: unknown } = {},
 ): Promise<T> {
+  const hasBody = options.body !== undefined;
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method ?? "GET",
     headers: {
-      "Content-Type": "application/json",
+      // Only advertise a JSON body when we actually send one — Fastify rejects
+      // an empty body when Content-Type is application/json, which would break
+      // bodyless POSTs (e.g. publish/submit).
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
     },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: hasBody ? JSON.stringify(options.body) : undefined,
   });
 
   const data = await response.json().catch(() => ({}));
@@ -474,6 +478,62 @@ export const api = {
       token,
       body: { toStepCode, comment: comment ?? null },
     }),
+
+  // --- Checkpoint 1D: Generic Survey & Assessment Engine --------------------
+  // Admin (survey.manage)
+  surveys: (token: string) => request<SurveyDefinition[]>("/surveys", { token }),
+  survey: (token: string, code: string) => request<SurveyDetail>(`/surveys/${code}`, { token }),
+  createSurvey: (token: string, payload: { code: string; name: string; description?: string | null }) =>
+    request<{ definition: SurveyDefinition; version: SurveyVersion }>("/surveys", {
+      method: "POST",
+      token,
+      body: payload,
+    }),
+  createSurveyVersion: (token: string, code: string) =>
+    request<SurveyVersion>(`/surveys/${code}/versions`, { method: "POST", token }),
+  surveyVersionDetail: (token: string, versionId: string) =>
+    request<SurveyVersionDetail>(`/survey-versions/${versionId}`, { token }),
+  addSurveyQuestion: (
+    token: string,
+    versionId: string,
+    payload: {
+      code: string;
+      text: string;
+      questionType: string;
+      isRequired?: boolean;
+      config?: Record<string, unknown>;
+      sortOrder?: number;
+    },
+  ) => request<SurveyQuestion>(`/survey-versions/${versionId}/questions`, { method: "POST", token, body: payload }),
+  addSurveyOption: (
+    token: string,
+    questionId: string,
+    payload: { code: string; label: string; score?: number | null; sortOrder?: number },
+  ) => request<SurveyQuestionOption>(`/survey-questions/${questionId}/options`, { method: "POST", token, body: payload }),
+  publishSurveyVersion: (token: string, code: string, versionNumber: number) =>
+    request<SurveyVersion>(`/surveys/${code}/versions/${versionNumber}/publish`, { method: "POST", token }),
+  retireSurveyVersion: (token: string, code: string, versionNumber: number) =>
+    request<SurveyVersion>(`/surveys/${code}/versions/${versionNumber}/retire`, { method: "POST", token }),
+  createSurveyAssignment: (
+    token: string,
+    payload: {
+      surveyDefinitionCode?: string;
+      surveyVersionId?: string;
+      respondentUserId: string;
+      dueAt?: string | null;
+    },
+  ) => request<SurveyAssignment>("/survey-assignments", { method: "POST", token, body: payload }),
+  surveyResult: (token: string, assignmentId: string) =>
+    request<SurveyResultView>(`/survey-assignments/${assignmentId}/result`, { token }),
+
+  // Respondent (survey.respond)
+  mySurveyAssignments: (token: string) => request<MySurveyItem[]>("/survey-assignments/my", { token }),
+  surveyAssignment: (token: string, id: string) =>
+    request<SurveyRespondentView>(`/survey-assignments/${id}`, { token }),
+  saveSurveyAnswers: (token: string, id: string, answers: SurveyAnswerInput[]) =>
+    request<{ ok: boolean }>(`/survey-assignments/${id}/answers`, { method: "POST", token, body: { answers } }),
+  submitSurvey: (token: string, id: string) =>
+    request<SurveyAssignment>(`/survey-assignments/${id}/submit`, { method: "POST", token }),
 };
 
 export type WorkflowInstance = {
@@ -879,4 +939,131 @@ export type CreateComplaintPayload = {
   severity: string;
   source?: string | null;
   channel?: string | null;
+};
+
+// --- Checkpoint 1D survey types ---------------------------------------------
+
+export type SurveyVersionStatus = "draft" | "published" | "retired";
+export type SurveyQuestionType =
+  | "rating"
+  | "single_choice"
+  | "long_text"
+  | "short_text"
+  | "multiple_choice"
+  | "numeric"
+  | "yes_no"
+  | "date";
+export type SurveyAssignmentStatus = "pending" | "in_progress" | "submitted" | "expired" | "cancelled";
+
+export type SurveyDefinition = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SurveyVersion = {
+  id: string;
+  surveyDefinitionId: string;
+  versionNumber: number;
+  status: SurveyVersionStatus;
+  isCurrent: boolean;
+  publishedAt: string | null;
+  createdAt: string;
+};
+
+export type SurveySection = {
+  id: string;
+  surveyVersionId: string;
+  code: string;
+  title: string;
+  description: string | null;
+  sortOrder: number;
+};
+
+export type SurveyQuestionOption = {
+  id: string;
+  surveyQuestionId: string;
+  code: string;
+  label: string;
+  score: number | null;
+  sortOrder: number;
+};
+
+export type SurveyQuestion = {
+  id: string;
+  surveyVersionId: string;
+  sectionId: string | null;
+  code: string;
+  text: string;
+  questionType: SurveyQuestionType;
+  isRequired: boolean;
+  config: Record<string, unknown>;
+  sortOrder: number;
+  options?: SurveyQuestionOption[];
+};
+
+export type SurveyAssignment = {
+  id: string;
+  tenantId: string;
+  surveyVersionId: string;
+  respondentType: string;
+  respondentUserId: string | null;
+  respondentCustomerContactId: string | null;
+  contextEntityType: string | null;
+  contextEntityId: string | null;
+  status: SurveyAssignmentStatus;
+  dueAt: string | null;
+  totalScore: number | null;
+  assignedBy: string | null;
+  createdAt: string;
+  submittedAt: string | null;
+};
+
+export type SurveyVersionDetail = {
+  version: SurveyVersion;
+  sections: SurveySection[];
+  questions: (SurveyQuestion & { options: SurveyQuestionOption[] })[];
+};
+
+export type SurveyDetail = {
+  definition: SurveyDefinition;
+  versions: SurveyVersion[];
+  current: SurveyVersionDetail | null;
+};
+
+export type SurveyAnswerView = {
+  questionId: string;
+  valueText: string | null;
+  valueNumeric: number | null;
+  selectedOptionIds: string[];
+};
+
+export type SurveyRespondentView = {
+  assignment: SurveyAssignment;
+  sections: SurveySection[];
+  questions: (SurveyQuestion & { options: SurveyQuestionOption[] })[];
+  answers: SurveyAnswerView[];
+};
+
+export type SurveyResultView = {
+  assignment: SurveyAssignment;
+  version: SurveyVersionDetail | null;
+  answers: SurveyAnswerView[];
+};
+
+export type SurveyAnswerInput = {
+  questionId: string;
+  valueText?: string | null;
+  valueNumeric?: number | null;
+  optionIds?: string[];
+};
+
+export type MySurveyItem = {
+  assignment: SurveyAssignment;
+  surveyName: string | null;
+  versionNumber: number | null;
 };

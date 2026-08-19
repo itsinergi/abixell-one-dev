@@ -84,6 +84,12 @@ export function registerSurveyRoutes(app: FastifyInstance, container: Container)
     return reply.status(201).send(version);
   });
 
+  app.get("/survey-versions/:versionId", { preHandler: app.authenticate }, async (request, reply) => {
+    const { versionId } = request.params as { versionId: string };
+    const result = await container.survey.getVersionDetail(request.actor!, versionId);
+    return reply.send(result);
+  });
+
   app.post("/survey-versions/:versionId/sections", { preHandler: app.authenticate }, async (request, reply) => {
     const { versionId } = request.params as { versionId: string };
     const body = addSectionSchema.parse(request.body);

@@ -1381,3 +1381,51 @@ Survey frontend (admin + respondent), customer_contact respondent flow,
 anonymous/public token, conditional/branching, matrix, file-upload question,
 full multi-language, weighted/section scoring, cross-survey analytics/AI, and
 the Complaint→Survey trigger (1E).
+
+---
+
+## Checkpoint 1D.2 — Survey Admin & Respondent Experience
+
+**Status: COMPLETE (awaiting Founder review)**
+**Date: 2026-08-19**
+
+Thin end-to-end frontend over the 1D.1 API, reusing the 1C shell/components/
+responsive/PWA foundation. Acceptance flow (admin create → publish → assign →
+respondent answer → submit → result) verified live in real Chromium.
+
+### Frontend
+- Nav (capability-gated): "Surveys" (survey.manage), "My Surveys"
+  (survey.respond). Routes /surveys, /surveys/:code, /my-surveys,
+  /my-surveys/:assignmentId.
+- Admin: SurveyListPage (list + create), SurveyDetailPage (version selector,
+  draft-only question authoring for rating/single_choice/long_text incl.
+  option adder, publish/retire, assignment form with a user picker via the
+  existing /users endpoint). Published versions render read-only.
+- Respondent: MySurveysPage (enriched list) + MySurveyDetailPage (renders
+  rating scale from config min/max, single-choice radios, long-text; save
+  draft; submit; submitted state read-only with total score). No offline
+  answer caching (PWA policy unchanged).
+
+### Backend (small additive reads for the UI, §29)
+- GET /survey-versions/:id (survey.manage) — version detail for authoring a
+  draft (getDefinition only returns the current published version).
+- Enriched GET /survey-assignments/my — includes surveyName + versionNumber
+  so the respondent list is meaningful.
+- Seed: CUSTOMER_USER granted survey.respond (demo respondent).
+
+### Bug fixed (found by live testing)
+- The web API client always set `Content-Type: application/json`, even for
+  bodyless POSTs — Fastify rejects an empty JSON body (400). This broke every
+  bodyless POST (survey publish/version/retire/submit — the first such calls
+  in the app). Fixed: set Content-Type + body only when a body is present.
+
+### Tests / Regression
+`survey-engine.test.ts` grew to 13 (added a check for the version-detail read
++ my-list enrichment). Suite **129/129 PASS**; typecheck/lint/build PASS.
+Live acceptance verified in Chromium (admin authoring UI + respondent UI;
+rating answer=5 → total score 5; submitted state persists read-only).
+
+### Deferred (see technical-debt-register Phase 1D)
+customer_contact/anonymous respondent UI, conditional/matrix/file questions,
+survey analytics, and the Complaint→Survey trigger (1E). Context entity remains
+a metadata/authorization seam only.
