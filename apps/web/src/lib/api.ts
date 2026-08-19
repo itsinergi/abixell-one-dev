@@ -311,6 +311,95 @@ export const api = {
   integrationLog: (token: string) => request<IntegrationLogEntry[]>("/integration/log", { token }),
 
   observabilityEvents: (token: string) => request<DomainEvent[]>("/observability/events", { token }),
+
+  // --- Checkpoint 1A: Customer Experience Foundation -------------------------
+  // Backend-scoped: `/customers` returns only the customers within the
+  // caller's Data Scope (Customer/Organization/Tenant), never the raw table.
+  customers: (token: string) => request<Customer[]>("/customers", { token }),
+
+  createCustomer: (
+    token: string,
+    payload: {
+      code: string;
+      name: string;
+      status?: string;
+      ownerOrganizationUnitId?: string | null;
+      notes?: string | null;
+    },
+  ) => request<Customer>("/customers", { method: "POST", token, body: payload }),
+
+  customerContacts: (token: string, customerId: string) =>
+    request<CustomerContact[]>(`/customer-contacts?customerId=${customerId}`, { token }),
+
+  createCustomerContact: (
+    token: string,
+    payload: {
+      customerId: string;
+      name: string;
+      email?: string | null;
+      phone?: string | null;
+      isPrimary?: boolean;
+    },
+  ) => request<CustomerContact>("/customer-contacts", { method: "POST", token, body: payload }),
+
+  // --- Checkpoint 1B: Generic Customer Complaint Engine ---------------------
+  // Lifecycle/SLA/assignment all live in the Workflow Engine; these methods
+  // are the Complaint-specific surface. `actOnComplaint` forwards a
+  // Tenant-configured Workflow Transition actionCode verbatim — the set of
+  // valid actions is never hardcoded on the client.
+  complaintsByCustomer: (token: string, customerId: string) =>
+    request<Complaint[]>(`/complaints?customerId=${customerId}`, { token }),
+
+  complaint: (token: string, id: string) =>
+    request<{ complaint: Complaint; status: ComplaintStatus | null }>(`/complaints/${id}`, {
+      token,
+    }),
+
+  createComplaint: (token: string, payload: CreateComplaintPayload) =>
+    request<Complaint>("/complaints", { method: "POST", token, body: payload }),
+
+  submitComplaint: (token: string, id: string, comment?: string | null) =>
+    request(`/complaints/${id}/submit`, { method: "POST", token, body: { comment: comment ?? null } }),
+
+  actOnComplaint: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request(`/complaints/${id}/actions/${actionCode}`, {
+      method: "POST",
+      token,
+      body: { comment: comment ?? null },
+    }),
+
+  updateComplaintInvestigation: (
+    token: string,
+    id: string,
+    payload: {
+      rootCause?: string | null;
+      correctiveAction?: string | null;
+      preventiveAction?: string | null;
+      correctiveActionOwnerUserId?: string | null;
+      correctiveActionTargetDate?: string | null;
+    },
+  ) => request<Complaint>(`/complaints/${id}/investigation`, { method: "POST", token, body: payload }),
+
+  verifyComplaint: (token: string, id: string, note?: string | null) =>
+    request<Complaint>(`/complaints/${id}/verification`, {
+      method: "POST",
+      token,
+      body: { note: note ?? null },
+    }),
+
+  confirmComplaintByCustomer: (token: string, id: string, note?: string | null) =>
+    request<Complaint>(`/complaints/${id}/customer-confirmation`, {
+      method: "POST",
+      token,
+      body: { note: note ?? null },
+    }),
+
+  reopenComplaint: (token: string, id: string, toStepCode: string, comment?: string | null) =>
+    request(`/complaints/${id}/reopen`, {
+      method: "POST",
+      token,
+      body: { toStepCode, comment: comment ?? null },
+    }),
 };
 
 export type WorkflowInstance = {
@@ -427,4 +516,81 @@ export type DomainEvent = {
   entityId: string | null;
   payload: Record<string, unknown>;
   occurredAt: string;
+};
+
+// --- Checkpoint 1A / 1B domain types (mirror the API contracts) -------------
+
+export type Customer = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+  ownerOrganizationUnitId: string | null;
+  notes: string | null;
+};
+
+export type CustomerContact = {
+  id: string;
+  customerId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+};
+
+export type Complaint = {
+  id: string;
+  complaintNumber: string;
+  customerId: string;
+  customerContactId: string | null;
+  contractId: string | null;
+  projectId: string | null;
+  siteId: string | null;
+  serviceId: string | null;
+  category: string;
+  subcategory: string | null;
+  description: string;
+  priority: string;
+  severity: string;
+  source: string | null;
+  channel: string | null;
+  submittedByUserId: string;
+  submittedAt: string | null;
+  rootCause: string | null;
+  correctiveAction: string | null;
+  preventiveAction: string | null;
+  correctiveActionOwnerUserId: string | null;
+  correctiveActionTargetDate: string | null;
+  verificationNote: string | null;
+  verifiedByUserId: string | null;
+  verifiedAt: string | null;
+  customerConfirmationNote: string | null;
+  customerConfirmedAt: string | null;
+  closureDate: string | null;
+  workflowInstanceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Current lifecycle position, resolved from the Complaint's Workflow
+ * Instance (never a column on the Complaint itself). */
+export type ComplaintStatus = {
+  stepCode: string | null;
+  instanceStatus: string;
+};
+
+export type CreateComplaintPayload = {
+  customerId: string;
+  customerContactId?: string | null;
+  contractId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  serviceId?: string | null;
+  category: string;
+  subcategory?: string | null;
+  description: string;
+  priority: string;
+  severity: string;
+  source?: string | null;
+  channel?: string | null;
 };

@@ -1,0 +1,106 @@
+/**
+ * Checkpoint 1C.1 — Experience-layer capability & navigation model.
+ *
+ * Single, client-neutral source of truth for the persona navigation. It
+ * maps the raw permission codes returned by `GET /me` to the sections a
+ * user may SEE. This is a UX convenience only — every backend route
+ * re-enforces its own authorization (RBAC + Customer/Organization/Tenant
+ * Data Scope). Hiding a nav item never grants or denies access; it only
+ * declutters the shell for the persona in front of it.
+ *
+ * Deliberately NOT hardcoded per client: sections are gated by generic
+ * capability, so the exact same build renders the right menu for a
+ * Customer User, a Complaint Handler, a Verifier, Management, or an
+ * Administrator purely from that user's granted permissions.
+ *
+ * Naming rule (ADR-0003): every user-facing `label` here is client-neutral
+ * product language — no internal "whitelabel / shared core / platform"
+ * terminology ever reaches this layer.
+ */
+
+/** Permission codes this layer references. These already exist in the
+ * Core RBAC catalog (Phase 0 / Checkpoint 1B seed) — 1C.1 adds none.
+ *
+ * Note (FD-1C-02): the finer-grained `complaint.dashboard.read` and
+ * `complaint.configure` permissions are APPROVED but intentionally NOT
+ * wired here yet — they gate real functionality that lands in 1C.5
+ * (Management Dashboard) and 1C.6 (Admin Configuration). Until then the
+ * Management section is gated on the existing `workflow.instance.manage`
+ * capability as a conservative proxy, and Administration on the existing
+ * `config.manage`. This keeps 1C.1 a pure frontend foundation with zero
+ * backend/permission changes; the swap is a one-line change in each
+ * `requiresAnyOf` when those permissions are introduced. */
+export const PERMISSIONS = {
+  complaintRead: "complaint.read",
+  complaintManage: "complaint.manage",
+  workflowManage: "workflow.instance.manage",
+  configManage: "config.manage",
+} as const;
+
+export interface NavSection {
+  /** Stable key, also used for testing hooks. */
+  key: string;
+  /** Route path relative to the shell root. */
+  path: string;
+  /** Client-neutral, user-facing label. */
+  label: string;
+  /** Short description shown on the Overview cards. */
+  description: string;
+  /** Visible if the user holds AT LEAST ONE of these permissions.
+   * `undefined` means "visible to any authenticated user". */
+  requiresAnyOf?: string[];
+}
+
+/**
+ * Persona experience areas prepared by 1C.1. The pages behind
+ * Complaints / Verification / Management are foundation placeholders in
+ * 1C.1 and are filled in by later, separately-gated checkpoints
+ * (1C.2–1C.6). Administration mounts the existing Phase 0 admin surface.
+ */
+export const NAV_SECTIONS: NavSection[] = [
+  {
+    key: "overview",
+    path: "/",
+    label: "Overview",
+    description: "Your workspace at a glance.",
+  },
+  {
+    key: "complaints",
+    path: "/complaints",
+    label: "Complaints",
+    description: "Raise, track, and act on complaints within your scope.",
+    requiresAnyOf: [PERMISSIONS.complaintRead, PERMISSIONS.complaintManage],
+  },
+  {
+    key: "verification",
+    path: "/verification",
+    label: "Verification",
+    description: "Independently verify corrective actions awaiting sign-off.",
+    requiresAnyOf: [PERMISSIONS.complaintManage],
+  },
+  {
+    key: "management",
+    path: "/management",
+    label: "Management",
+    description: "Complaint performance, SLA, and escalation visibility.",
+    requiresAnyOf: [PERMISSIONS.workflowManage],
+  },
+  {
+    key: "administration",
+    path: "/administration",
+    label: "Administration",
+    description: "Organization, users, configuration, and shared services.",
+    requiresAnyOf: [PERMISSIONS.configManage],
+  },
+];
+
+/** True if `permissions` satisfies the section's gate. */
+export function canSeeSection(section: NavSection, permissions: string[]): boolean {
+  if (!section.requiresAnyOf) return true;
+  return section.requiresAnyOf.some((p) => permissions.includes(p));
+}
+
+/** The sections a user with these permissions may see, in nav order. */
+export function visibleSections(permissions: string[]): NavSection[] {
+  return NAV_SECTIONS.filter((s) => canSeeSection(s, permissions));
+}

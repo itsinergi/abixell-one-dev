@@ -4,6 +4,7 @@ import { api, ApiError } from "../lib/api";
 import { ConfigurationPanel } from "./ConfigurationPanel";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { SharedServicesPanel } from "./SharedServicesPanel";
+import { PageHeader } from "../shell/components/ui";
 
 type OrgUnit = { id: string; parentId: string | null; name: string; unitType: string; legalEntityId: string };
 type LegalEntity = { id: string; name: string };
@@ -33,7 +34,7 @@ function OrgUnitTree({ units, parentId = null, depth = 0 }: { units: OrgUnit[]; 
 }
 
 export function DashboardPage() {
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
   const token = session!.accessToken;
 
   const [tenantName, setTenantName] = useState("");
@@ -133,17 +134,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">{tenantName || "…"}</h1>
-          <p className="text-xs text-slate-500">
-            Signed in as {session!.userId} — permissions: {permissions.join(", ") || "(none)"}
-          </p>
-        </div>
-        <button onClick={logout} className="rounded border border-slate-300 px-3 py-1 text-sm">
-          Sign out
-        </button>
-      </div>
+      <PageHeader
+        title="Administration"
+        subtitle={
+          tenantName
+            ? `${tenantName} — permissions: ${permissions.join(", ") || "(none)"}`
+            : "Organization, users, configuration, and shared services."
+        }
+      />
 
       {message && (
         <div

@@ -64,28 +64,38 @@ await passwordInput.fill("Admin12345!");
 await page.click('button[type="submit"]');
 await page.waitForURL(BASE + "/", { timeout: 8000 });
 await page.waitForSelector("text=Demo Enterprise Client", { timeout: 8000 });
-await shot("dashboard-after-login");
-console.log("   OK — logged in, dashboard loaded, tenant name visible.");
+await shot("overview-after-login");
+console.log("   OK — logged in, Overview loaded, tenant name visible.");
 
-console.log("3. Verifying key Checkpoint 0A-0F sections render...");
-const sections = [
-  "Organization Units",
-  "Legal Entities",
-  "Users",
-  "Audit Trail (recent)",
-];
+console.log("3a. Checkpoint 1C.1: verifying capability-gated persona navigation...");
+// admin@demo.local is is_full_access, so every persona section is visible.
+const navSections = ["Overview", "Complaints", "Verification", "Management", "Administration"];
+for (const label of navSections) {
+  const visible = await page.locator(`nav >> text=${label}`).first().isVisible().catch(() => false);
+  console.log(`   - nav "${label}": ${visible ? "visible" : "MISSING"}`);
+}
+
+console.log("3b. Navigating to Administration and verifying Phase 0 sections render...");
+await page.click(`nav >> text=Administration`);
+await page.waitForURL(BASE + "/administration", { timeout: 8000 });
+await page.waitForSelector("text=Administration", { timeout: 8000 });
+await shot("administration");
+const sections = ["Legal Entities", "Users", "Audit Trail (recent)"];
 for (const label of sections) {
   const visible = await page.locator(`text=${label}`).first().isVisible().catch(() => false);
   console.log(`   - "${label}": ${visible ? "visible" : "MISSING"}`);
 }
-// Note: "Organization Units" renders as "Sites" in this run because of a
-// Terminology Configuration override (Checkpoint 0C feature) on the demo
-// tenant — confirmed correct behavior via screenshot, not a defect.
-// WorkflowPanel and SharedServicesPanel headings (best-effort, structure may vary).
+// Note: "Organization Units" renders as "Sites" here because of a Terminology
+// Configuration override (Checkpoint 0C feature) on the demo tenant —
+// confirmed correct behavior via screenshot, not a defect.
 const workflowVisible = await page.locator("text=/Workflow/i").first().isVisible().catch(() => false);
 const sharedServicesVisible = await page.locator("text=/Notification|Scheduler|Integration|Document/i").first().isVisible().catch(() => false);
 console.log(`   - Workflow section present: ${workflowVisible}`);
 console.log(`   - Shared Services section present: ${sharedServicesVisible}`);
+
+console.log("3c. Returning to Overview...");
+await page.click(`nav >> text=Overview`);
+await page.waitForURL(BASE + "/", { timeout: 8000 });
 
 console.log("4. Checkpoint 0F: reloading the page — session should PERSIST (no bounce to /login)...");
 await page.reload({ waitUntil: "networkidle" });
