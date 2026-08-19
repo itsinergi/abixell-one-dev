@@ -63,13 +63,17 @@ await emailInput.fill("admin@demo.local");
 await passwordInput.fill("Admin12345!");
 await page.click('button[type="submit"]');
 await page.waitForURL(BASE + "/", { timeout: 8000 });
-await page.waitForSelector("text=Demo Enterprise Client", { timeout: 8000 });
+// The Overview landing heading ("Welcome to <tenant>") is the reliable,
+// single, visible signal that the shell + Overview rendered (the tenant name
+// itself appears in several places, some hidden per breakpoint).
+await page.getByRole("heading", { name: /Welcome to/i }).waitFor({ timeout: 8000 });
 await shot("overview-after-login");
 console.log("   OK — logged in, Overview loaded, tenant name visible.");
 
 console.log("3a. Checkpoint 1C.1: verifying capability-gated persona navigation...");
-// admin@demo.local is is_full_access, so every persona section is visible.
-const navSections = ["Overview", "Complaints", "Verification", "Management", "Administration"];
+// admin@demo.local is is_full_access (tenant scope) → internal areas visible;
+// "Complaints" is customer-scope only, so it is intentionally NOT shown here.
+const navSections = ["Overview", "Queue", "Verification", "Management", "Administration"];
 for (const label of navSections) {
   const visible = await page.locator(`nav >> text=${label}`).first().isVisible().catch(() => false);
   console.log(`   - nav "${label}": ${visible ? "visible" : "MISSING"}`);

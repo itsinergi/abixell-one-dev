@@ -239,3 +239,19 @@ perubahan ini, bukan ditunda lagi ke 1C.
 - `subcategory` masih free-text, belum jadi reference data type tersendiri.
 - Peran internal dengan `workflow.instance.read` (peninggalan Phase 0, mis. `WORKFLOW_MANAGER`) tetap bisa menelusuri semua Workflow Instance tenant lewat route generic `/workflow/instances/...`, termasuk milik Complaint — karakteristik generic engine yang sudah ada sejak 0D, bukan diperkenalkan 1B; demo seed 1B sengaja tidak memberi permission ini ke role Complaint manapun (lihat keputusan #4).
 - Seluruh item Must Fix Phase 0 yang belum dikerjakan (CORS allowlist, CI/CD, migrasi permission Role kurasi, validasi rate limit dengan traffic nyata) masih terbuka, di luar cakupan 1B, boleh berjalan paralel sesuai keputusan Founder sebelumnya.
+
+## 2026-08-19 — Checkpoint 1C.8 (Regression & Stabilization)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Tidak mengubah dependency meski `npm audit` melaporkan 9 vuln | CRITICAL/HIGH + mayoritas MODERATE = dev/build/test tooling (vitest/vite/esbuild/vite-node/glob/node-pg-migrate), bukan production runtime; react-router/-dom moderate advisory tidak applicable (nav internal literal, client-only tanpa SSR). Tidak ada MUST-FIX applicable | Founder 1C.8 §33/§34/§42 |
+| 2 | Fresh-environment via disposable DB tidak dijalankan | Role `abixell` tanpa CREATEDB & tanpa superuser; roundtrip destruktif dilarang di dev DB utama. Determinism diverifikasi via idempotency migrate + inspeksi schema/FK; test suite mem-bootstrap tenant dari kosong | Founder 1C.8 §23/§24 (ENVIRONMENT LIMITATION) |
+| 3 | Menginstal Playwright Chromium (runtime browser, bukan package baru) & memverifikasi PWA di real browser | Playwright sudah devDependency; §27 mengizinkan install browser runtime. Membuktikan SW register/active + `/api` tidak di-cache + offline shell — menutup gap verifikasi 1C.7 | Founder 1C.8 §26/§27 |
+| 4 | Perbaikan selektor e2e smoke (bukan product) | Selektor step-2 cocok banyak elemen (mobile header hidden) → timeout; product behavior benar (diverifikasi live). §28 "perbaiki test bila product benar" | Founder 1C.8 §28 |
+| 5 | Limitation KPI "Critical" & customer-set Priority didokumentasikan, tidak diubah | Critical bergantung canonical code `critical`; priority dapat dipilih customer karena model existing — keduanya butuh keputusan bisnis/konfigurasi, bukan defect | Founder 1C.8 §17/§18 |
+
+### Closure Phase 1C
+- Tidak ada schema/migration baru di 1C.8 (tetap 10 migrations / 48 tables).
+- Tidak ada perubahan backend business / dependency.
+- Technical debt Phase 1C dikonsolidasi & diklasifikasi di `technical-debt-register.md`.
+- Tidak ada blocker; Phase 1C siap ditutup menunggu Founder.

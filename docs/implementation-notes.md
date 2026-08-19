@@ -1241,3 +1241,68 @@ BLOCKER yang menghalangi mulainya 1C. Rekomendasi eksplisit: keputusan
 soal Survey/Assessment (1C/1D per urutan Founder) dan UI Experience Layer
 sebaiknya menunggu instruksi lanjutan Founder, bukan diasumsikan otomatis
 lanjut tanpa arahan baru.
+
+---
+
+## Checkpoint 1C.8 — Regression & Stabilization (Phase 1C Closure)
+
+**Status: COMPLETE (awaiting Founder closure)**
+**Date: 2026-08-19**
+
+Verifikasi/stabilisasi lintas Checkpoint 1C.1–1C.7. Bukan feature checkpoint —
+tidak ada fitur baru; hanya perbaikan test-selector (e2e smoke), verifikasi,
+dan dokumentasi.
+
+### Regression
+- typecheck / lint / build: PASS. Backend suite: **116/116 PASS** (13 files).
+- Bundle web stabil: JS 267 KB (gzip 75 KB), CSS 17 KB (gzip 3.8 KB) — tanpa
+  lonjakan dari 1C.7.
+
+### Authorization / cross-tenant / data scope
+- Ter-cover oleh negative-path tests di seluruh suite (customer/operational/
+  verification/dashboard/config): cross-tenant → 404, cross-customer/unauthorized
+  → 403, scope-aware aggregation, customer-safe timeline (tanpa actor/comment),
+  operational endpoint menolak customer-scope-only. Migration idempotent
+  (re-run "No migrations to run"); FK role_permissions→permissions = ON DELETE
+  CASCADE → migration permission 1C.5 idempotent (up: WHERE NOT EXISTS) +
+  rollback-safe (down: cascade).
+
+### Fresh-environment / migration roundtrip
+- Disposable-DB roundtrip TIDAK feasible di environment ini: role `abixell`
+  tanpa CREATEDB, tanpa kredensial superuser (ENVIRONMENT LIMITATION; roundtrip
+  destruktif dilarang pada dev DB utama §23). Determinism diverifikasi via
+  idempotency migrate + inspeksi schema (48 tables / 10 migrations) + FK. Test
+  suite mem-bootstrap tenant dari kosong tiap run (bukti skema berasal dari
+  migrations, bukan state historis).
+
+### PWA real-browser verification (RESOLVED)
+- `npx playwright install chromium` berhasil (114 MB). Terhadap production
+  preview (:4173): SW **registered + active** (scope `/`); cache
+  `abixell-shell-v1` = 3 static asset; **`/api` tidak pernah di-cache**
+  (apiCached=0); **offline shell render**; **online recovery OK**. Kegagalan SW
+  di in-app browser 1C.7 memang batasan sandbox, bukan defect.
+- `e2e/smoke.mjs` (real Chromium) hijau: shell/persona nav, responsive
+  no-overflow (390/768/1280), mobile nav toggle, manifest valid, SW support.
+
+### Dependency audit (npm audit — tidak ada perubahan dependency, §34)
+- 9 vuln (1 critical / 3 high / 5 moderate). CRITICAL/HIGH + mayoritas MODERATE =
+  **dev/build/test tooling** (vitest, vite, esbuild, vite-node, glob,
+  node-pg-migrate) — tidak di production runtime. react-router/-dom (moderate) =
+  frontend runtime tetapi advisory tidak applicable (nav internal literal;
+  client-only tanpa SSR). Tidak ada MUST-FIX applicable → dependency tidak diubah.
+
+### Terminology / architecture drift
+- Scan client-facing `apps/web/src`: tidak ada "Whitelabel/Shared Core/Reusable
+  Platform/Product Core" pada string UI (satu-satunya match ada di komentar
+  kode capabilities.ts — diizinkan). Arsitektur konsisten dengan binding
+  decisions (modular monolith, satu PostgreSQL, API-first, web-first, PWA-ready,
+  multi-tenant ready) — tanpa microservice/duplicate persistence/reporting store/
+  low-code/permission bypass.
+
+### Bugs found & fixed
+- e2e smoke step-2 selector cocok banyak elemen (mobile header hidden) →
+  timeout. Diperbaiki jadi selektor heading Overview (test fix; product benar).
+  Tidak ada product bug ditemukan.
+
+Lihat `technical-debt-register.md` (bagian Phase 1C) untuk konsolidasi &
+klasifikasi technical debt. **Tidak ada MUST FIX BEFORE 1D.**

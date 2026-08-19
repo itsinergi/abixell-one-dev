@@ -241,3 +241,71 @@ Tidak ada.
 - Migration 1B tervalidasi round-trip (up -> down -> up) dari database
   kosong terpisah — jumlah tabel kembali persis ke titik awal (47 -> 48
   -> 47 -> 48).
+
+---
+
+## Phase 1C — Complaint Experience Layer (Checkpoint 1C.1–1C.8) — Consolidated
+
+**Diperbarui:** 2026-08-19 (Checkpoint 1C.8 — Regression & Stabilization / Phase 1C Closure).
+Konsolidasi seluruh gap yang tercatat sepanjang 1C.1–1C.7, diklasifikasikan
+per instruksi Founder 1C.8 (§40/§41). Item yang sudah selesai ditandai.
+
+### MUST FIX BEFORE 1D
+- **(tidak ada.)** Verifikasi 1C.8 tidak menemukan security vulnerability yang
+  applicable pada runtime, cross-tenant leakage, kegagalan authorization,
+  primary flow rusak, migration non-deterministic, kegagalan bootstrap fresh
+  environment, korupsi data, crash reproducible, atau kebocoran data sensitif
+  via PWA cache. (Definisi MUST-FIX §42.)
+
+### SHOULD FIX LATER
+- **Operational queue N+1**: `ComplaintService.listOperationalQueue` meng-enrich
+  per-complaint (getEntityStatus) — aman pada skala demo/pilot; optimisasi =
+  single SQL projection (Management dashboard sudah aggregate SQL). Tanpa
+  evidence bottleneck, ditunda (§36).
+- **Friendly names**: operational/verification timeline menampilkan actor sebagai
+  truncated userId; queue/detail belum me-resolve nama site/service (handler tak
+  punya org-unit/user read). Dashboard sudah me-resolve via SQL join.
+- **PNG icons 192/512** untuk installability penuh lintas-browser (SVG neutral
+  icon sudah ada; deployment-readiness item).
+- **react-router-dom (moderate advisory)**: open-redirect via backslash di
+  Link/useNavigate + SSR deserializeErrors — TIDAK applicable pada pemakaian
+  saat ini (target navigasi internal literal; SPA client-only tanpa SSR).
+  Kandidat targeted patch update (6.x) — bukan blocker (§34).
+- **Deterministic demo permission**: fresh seed sudah memberi
+  `complaint.dashboard.read` ke COMPLAINT_MANAGER; dev DB lama perlu
+  `npm run sync-permissions` / re-seed (bukan migration khusus, §25).
+
+### DEFERRED PRODUCT CAPABILITY
+- **Customer Satisfaction** → Checkpoint 1D (Generic Survey & Assessment) + 1E
+  (Survey-to-Action). Tidak ada placeholder/fake metric.
+- **Structured Root Cause taxonomy**: `rootCause` tetap free-text; dashboard
+  tidak mengklaim structured RCA analytics.
+- **Multidimensional SLA** (severity×category×customer) + business/holiday
+  calendar: SLA tetap per-Workflow-Step.
+- **Workflow version-authoring UI**: Complaint config menampilkan lifecycle
+  read-only; authoring tetap via Workflow Engine API (versioning).
+- **Numbering pattern edit & Notification template edit**: Core saat ini
+  create-only → admin surface read-only untuk keduanya (butuh endpoint update
+  generic di Config/Notification Core bila akan disurface).
+- **QA return/rework transition**: tergantung konfigurasi Workflow (bukan kode);
+  availableActions akan memunculkannya bila tenant mengonfigurasi transisi.
+- **Management KPI "Critical"**: bergantung pada canonical reference-data code
+  `critical` (katalog severity belum punya flag/ranking). Kandidat future
+  client configuration (severity ranking/is_critical). Didokumentasikan (§17).
+- **Tenant timezone**: "Submitted today" memakai konvensi timestamp DB/server;
+  model timezone per-tenant belum ada.
+
+### BUSINESS DECISION REQUIRED
+- **Customer-set Priority**: customer saat ini dapat memilih priority karena
+  model/API existing. Bukan defect; perlu review kebijakan bisnis apakah
+  priority seharusnya field triage internal (§18).
+- **Structured Root Cause taxonomy** (bila dibutuhkan): perlu Founder Decision
+  terpisah sebelum menambah schema/klasifikasi.
+
+### RESOLVED di 1C.8
+- **Real-browser PWA verification**: Chromium terinstal; SW ter-register + aktif
+  (scope `/`), cache `abixell-shell-v1` berisi 3 static asset, `/api` TIDAK
+  pernah di-cache (apiCached=0), offline shell render, online recovery OK.
+- **e2e/smoke.mjs**: dijalankan hijau di real Chromium (shell/persona nav,
+  responsive no-overflow 390/768/1280, manifest valid, SW support). Selektor
+  step-2 diperbaiki (cocok banyak elemen) — perbaikan test, bukan product.
