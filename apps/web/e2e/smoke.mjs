@@ -105,6 +105,50 @@ const stillOnDashboard = urlAfterReload === BASE + "/";
 await shot("dashboard-after-reload");
 console.log(`   URL after reload: ${urlAfterReload} — session persisted: ${stillOnDashboard}`);
 
+console.log("4b. Checkpoint 1C.7: responsive viewports — no horizontal page overflow...");
+async function noHorizontalOverflow() {
+  return page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+}
+for (const vp of [
+  { name: "mobile", width: 390, height: 844 },
+  { name: "tablet", width: 768, height: 1024 },
+  { name: "desktop", width: 1280, height: 800 },
+]) {
+  await page.setViewportSize({ width: vp.width, height: vp.height });
+  await page.reload({ waitUntil: "networkidle" });
+  const ok = await noHorizontalOverflow();
+  console.log(`   - ${vp.name} (${vp.width}px): no horizontal overflow = ${ok}`);
+}
+// On mobile the navigation collapses behind a toggle button.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.reload({ waitUntil: "networkidle" });
+const toggleVisible = await page
+  .locator('button[aria-label="Toggle navigation"]')
+  .isVisible()
+  .catch(() => false);
+console.log(`   - mobile nav toggle visible: ${toggleVisible}`);
+await page.setViewportSize({ width: 1280, height: 800 });
+
+console.log("4c. Checkpoint 1C.7: PWA manifest present and valid...");
+const manifestHref = await page.getAttribute('link[rel="manifest"]', "href").catch(() => null);
+console.log(`   - <link rel=manifest>: ${manifestHref}`);
+if (manifestHref) {
+  const manifest = await page.evaluate(async (href) => {
+    const res = await fetch(href);
+    return res.ok ? res.json() : null;
+  }, manifestHref);
+  console.log(
+    `   - manifest name="${manifest?.name}" display="${manifest?.display}" icons=${manifest?.icons?.length ?? 0}`,
+  );
+}
+// Service Worker registers in PRODUCTION builds only (see main.tsx); against
+// the dev server it is intentionally absent. Report support + any registration.
+const swSupported = await page.evaluate(() => "serviceWorker" in navigator);
+const swRegs = await page.evaluate(async () =>
+  "serviceWorker" in navigator ? (await navigator.serviceWorker.getRegistrations()).length : 0,
+);
+console.log(`   - serviceWorker supported: ${swSupported}; registrations: ${swRegs} (0 expected on dev)`);
+
 console.log("5. Checking localStorage for persisted session key...");
 const storedSession = await page.evaluate(() => window.localStorage.getItem("abixell.session"));
 console.log(`   localStorage 'abixell.session' present: ${storedSession !== null}`);
