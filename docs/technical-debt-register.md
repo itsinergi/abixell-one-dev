@@ -470,3 +470,61 @@ Core Survey-to-Action Phase 1E berhenti pada
 `configurable outcome → management attention`. Mutasi domain otomatis
 bukan bagian Core 1E (penting untuk audit Product Core vs Advanced
 setelah Phase 1F).
+
+---
+
+## Post-Phase-1 Audit — Debt Reclassification (2026-08-20)
+
+Global audit reclassification. Existing debt is **preserved**, not deleted;
+this section re-sorts it into the categories approved for the audit and maps
+each item to a Roadmap Unit so it is scheduled rather than merely noted.
+
+### MUST FIX BEFORE PILOT (Platform Hardening — Roadmap Phase H)
+| Item | Unit | Note |
+|---|---|---|
+| No CI/CD pipeline (carried since 0A) | PH-1 | Platform Hardening, **not** a business module. Every gate is manual today. |
+| CORS permissive (`origin: true`) + provisional rate limit | PH-2 | Replace with `CORS_ORIGIN` allowlist; tune `RATE_LIMIT_MAX` from real traffic. |
+| Operational queue N+1 enrichment | PH-5 | Only confirmed pathological query; fix before pilot load. |
+| `react-router-dom` moderate advisory | PH-6 | Evaluate applicability, then remediate. |
+| PWA PNG icons 192/512 | PH-7 | Full installability across browsers. |
+
+### MUST FIX BEFORE PRODUCTION (Roadmap Phase H2)
+| Item | Unit |
+|---|---|
+| Backup / restore / DR runbook | PH-3 |
+| Deployment & environment provisioning automation | PH-4 |
+| Integration reconciliation / outbox worker (EventBus is in-process, fire-once, swallows subscriber errors) | PH-8 |
+
+### SHOULD FIX LATER
+- Shared date-format util (survey pages import from `../complaints/format`).
+- Lifetime-race orphan survey assignment (rare; documented in 1E).
+- Admin configuration UI for survey integration policies + `survey.integration.configure` permission (intentionally not created to avoid a dead permission).
+- Friendly actor names in operational/verification timelines.
+- Tenant timezone handling for "today" conventions.
+- Autosave / offline draft for survey respondents.
+
+### CANDIDATE ADVANCED CAPABILITY (input to future roadmap waves)
+Multidimensional SLA · structured RCA taxonomy + advanced CAPA · recurring-problem
+detection & service analytics · automatic domain mutation from feedback (auto-reopen,
+predictive escalation) · survey conditional/matrix questions · weighted/section/NPS
+scoring · anonymous/public-token distribution · multi-language surveys · survey
+analytics & benchmarking · workflow version-authoring UI · AI/sentiment.
+
+### CANDIDATE CLIENT CONFIGURATION
+Numbering pattern editing · notification template editing · QA return/rework
+transition · management KPI thresholds ("Critical" reference-data code) ·
+customer-set priority policy · survey thresholds · integration policy.
+
+### CANDIDATE CLIENT EXTENSION
+Client-specific complaint intake channels (proprietary portal / WA gateway) ·
+client ERP / accounting posting bridges · biometric or attendance devices ·
+regulator reporting interfaces. Tracked **outside** the product roadmap denominator.
+
+### BUSINESS DECISION REQUIRED
+Structured Root Cause taxonomy adoption · customer-set priority policy ·
+outcome/action expansion beyond management attention (automatic reopen) ·
+disposition of the untracked `docs/00-prd/` corpus.
+
+### MUST FIX BEFORE GLOBAL AUDIT
+None outstanding — this audit is complete. No security, tenant-isolation, data-integrity,
+or regression blocker was found (150/150 PASS at `b7b6d64`).

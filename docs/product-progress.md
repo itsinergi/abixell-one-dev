@@ -1,0 +1,136 @@
+# Abixell One — Product Progress
+
+| | |
+|---|---|
+| **Document Status** | CANONICAL |
+| **Authority** | Founder (Insting Tekno Sinergi) |
+| **Roadmap Baseline** | v1.0 |
+| **Progress Model** | v1.0 |
+| **Last Updated** | 2026-08-20 |
+| **Measured at** | `master` @ `b7b6d64` · 150/150 tests · 58 tables · 14 migrations |
+| **Related** | [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) |
+
+---
+
+## 1. Headline
+
+| Metric | Value |
+|---|---:|
+| **Core Product Readiness** | **41.4 %** |
+| **Full Approved Roadmap Progress** | **22.1 %** |
+
+Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
+
+- **Core Product Readiness** = Platform Core + Business Core + required Platform Hardening.
+- **Full Approved Roadmap Progress** = Core Product Readiness + all approved Advanced capabilities.
+- **Client Extensions are excluded from both** — custom client work must never shrink product completion.
+
+---
+
+## 2. Layer progress
+
+| Layer | Completed / Total | % |
+|---|---:|---:|
+| Platform Core | 41 / 41 | **100 %** |
+| Platform Hardening | 0 / 16 | **0 %** |
+| Business Core | 31 / 117 | **26.5 %** |
+| Advanced Capabilities | 6 / 179 | **3.4 %** |
+
+## 3. Per-module progress
+
+### Business Core only
+| Module | Completed / Total | % |
+|---|---:|---:|
+| Customer & Commercial | 7 / 9 | 77.8 % |
+| Service Quality (Complaint) | 15 / 15 | **100 %** |
+| Survey & Assessment | 9 / 9 | **100 %** |
+| Service Operations & Work Mgmt | 0 / 13 | 0 % |
+| Workforce (HR) Core | 0 / 10 | 0 % |
+| Supply Chain Core | 0 / 14 | 0 % |
+| Asset Core | 0 / 8 | 0 % |
+| Finance Core | 0 / 12 | 0 % |
+| HSE Core | 0 / 9 | 0 % |
+| Project Delivery Core | 0 / 8 | 0 % |
+| Reporting & Operational Insight | 0 / 10 | 0 % |
+
+### Module including its Advanced capabilities
+| Module | Completed / Total | % |
+|---|---:|---:|
+| Customer & Commercial | 7 / 17 | 41.2 % |
+| Service Quality (Complaint) | 15 / 26 | 57.7 % |
+| Survey & Assessment | 15 / 28 | 53.6 % |
+| Asset Core | 0 / 19 | 0 % |
+| Project Delivery Core | 0 / 21 | 0 % |
+| HSE Core | 0 / 23 | 0 % |
+| Service Operations & Work Mgmt | 0 / 26 | 0 % |
+| Finance Core | 0 / 33 | 0 % |
+| Workforce (HR) Core | 0 / 34 | 0 % |
+| Supply Chain Core | 0 / 36 | 0 % |
+| Reporting & Operational Insight | 0 / 20 | 0 % |
+| Platform (cross-cutting Advanced) | 0 / 13 | 0 % |
+
+---
+
+## 4. Progress Calculation Basis
+
+Weight model: **S=1 · M=2 · L=3 · XL=5** per Roadmap Unit.
+Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no estimation); `PLANNED/DEFERRED = 0`.
+
+```text
+Platform Core          total  41   completed  41
+Platform Hardening     total  16   completed   0
+Business Core          total 117   completed  31
+Advanced Capabilities  total 179   completed   6
+
+Core Product Readiness
+  denominator = 41 + 117 + 16 = 174
+  completed   = 41 +  31 +  0 =  72
+  in-progress earned          =   0
+  (72 + 0) / 174 × 100 = 41.4 %
+
+Full Approved Roadmap
+  denominator = 174 + 179 = 353
+  completed   =  72 +   6 =  78
+  (78 + 0) / 353 × 100 = 22.1 %
+```
+
+**Consistency check (§79):** sum of module weights equals the layer denominators —
+Business Core `9+15+9+13+10+14+8+12+9+8+10 = 117` ✓ ·
+Advanced `8+11+19+13+24+21+22+11+13+14+13+10 = 179` ✓ ·
+Core denominator `41+117+16 = 174` ✓ · Full denominator `174+179 = 353` ✓.
+Arithmetic was recomputed programmatically and by hand; both agree.
+
+### Assumptions
+1. Survey-to-Action (Phase 1E) is counted as **Advanced — delivered**, not Business Core (pending FD-B).
+2. `CUS.4` (Customer admin UI) is PLANNED: the Customer domain has API + tests but no dedicated screens.
+3. Platform Hardening is inside Core Readiness because a client cannot go live without it.
+4. Individual client configuration data is **not** product progress.
+5. Advanced units are approved-but-optional; their presence lowers the *Full* metric without implying regression.
+
+---
+
+## 5. Completed roadmap units (evidence-backed)
+
+| Unit(s) | Evidence |
+|---|---|
+| PC-1…PC-13 | Phase 0 checkpoints 0A–0F; migrations `1755500000000`–`1756000000000`; `phase0-stabilization.test.ts`, `workflow.test.ts`, `configuration.test.ts`, `shared-services.test.ts`, `vertical-slice.test.ts`; `docs/phase0-final-review.md` |
+| CUS.1–CUS.3 | Phase 1A; migration `1757000000000`; `customer-foundation.test.ts` (16) |
+| CMP.1–CMP.7 | Phases 1B/1C; migrations `1758000000000`, `1759000000000`; `complaint-engine.test.ts` (16), `customer-complaint-experience.test.ts` (8), `operational-complaint-experience.test.ts` (10), `verification-complaint-experience.test.ts` (7), `management-dashboard.test.ts` (7), `complaint-configuration.test.ts` (7) |
+| SRV.1–SRV.3 | Phase 1D; migrations `1760000000000`, `1760000100000`; `survey-engine.test.ts` (16); commit `5c6e14a` |
+| ADV-SRV Survey-to-Action ×2 | Phase 1E; migrations `1761000000000`, `1762000000000`; `survey-integration.test.ts` (18); commits `8d64666`, `9fb8bbf`, `b7b6d64` |
+
+## 6. Pending roadmap units
+
+All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-4…BC-11, and all Advanced units except the two delivered Survey-to-Action units.
+
+## 7. Active phase
+
+**None.** Phase 1 closed; next phase awaits Founder approval. Roadmap recommendation: **Phase 2 — Service Operations & Work Management Core**, with **Phase H (Platform Hardening — Pilot gate)** runnable in parallel.
+
+## 8. Progress change log
+
+| Baseline | Date | Core Readiness | Full Roadmap | Note |
+|---|---|---:|---:|---|
+| v1.0 | 2026-08-20 | 41.4 % | 22.1 % | First measured baseline. No prior figure existed — nothing to compare against. |
+
+> Future note: a *decrease* caused by adding approved scope to the denominator is **not** regression. Always state the reason alongside the number.

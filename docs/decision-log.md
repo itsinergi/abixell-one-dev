@@ -321,3 +321,20 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 8 | Policy disabled after assignment → outcome still evaluated, action skipped (`skipped_policy_disabled`) | "Disabled policy → no outcome action", while keeping the evaluation observable | FD-1E §58 |
 | 9 | Automatic Complaint reopen NOT implemented; Core 1E ends at management attention | Explicitly prohibited for Phase 1E; remains a Founder-gated advanced capability | FD-1E §5/§39/§75 |
 | 10 | Trusted result read added (`getResultForTrustedIntegration`), never exposed over HTTP | Automation needs the result without a human permission, but must keep tenant + submitted-state integrity | FD-1E §43/§44 |
+
+## 2026-08-20 — Global Product Blueprint & Roadmap Audit (Post-Phase-1)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | **Phase 1F = NOT APPLICABLE / cancelled as undefined** | No authoritative definition ever existed; "1F" occurrences were forward references written during 1E. Recorded so no future session re-invents it | FD-POST-1-01 |
+| 2 | **Phase 1 = OFFICIALLY COMPLETED** after 1E | Documented Phase 1 scope (Customer Complaint Management + Survey & Assessment) is fully delivered and stabilized | FD-POST-1-02 |
+| 3 | Product is layered as Platform Core / Business Core / Advanced Capability / Client Configuration / Client Extension | Extends the Founder-approved pre-Phase-0 three-layer rule by splitting Product Core into Platform vs Business and naming Advanced explicitly | `01-FOUNDER-DECISION-PRE-PHASE-0.md` + audit §4/§5 |
+| 4 | **11 Business Core modules** defined; Vendor merged into Supply Chain, Contract into Customer & Commercial, Document into Platform Core; IGSEP vertical apps (catering/housekeeping/camp/facilities) become vertical service packs over Service Operations | Avoid over-modularization; module boundary must reflect owned data + lifecycle, not menu items | audit §12/§13 |
+| 5 | **Survey-to-Action (Phase 1E) classified as Advanced — delivered**, not Business Core | It is automation depth over two Core modules; per the Founder's own Core/Advanced principle. Code is unchanged — classification only | audit §5/§23/§24 |
+| 6 | `docs/product-blueprint.md`, `docs/product-roadmap.md`, `docs/product-progress.md` are the **canonical** product documents | Removes source-of-truth ambiguity; README now points to them | audit §49/§92 |
+| 7 | `docs/00-prd/22-…` is **template/strategy input**, not the roadmap; the IGSEP corpus is **historical/supporting** | Doc 22 is instruction-shaped and year-based; the corpus describes IGSEP, a different (pre-whitelabel) product shape | audit §7/§31 |
+| 8 | Progress model v1.0: weighted roadmap units (S1/M2/L3/XL5), COMPLETED=100 %, IN PROGRESS=0 % until accepted | Reproducible and conservative; phase-count percentages rejected as misleading | audit §37–§42 |
+| 9 | **Dual metric** reported: Core Product Readiness + Full Approved Roadmap Progress | A single number would misrepresent a deployable Core against a large optional Advanced backlog | audit §72/§73 |
+| 10 | Client Extensions excluded from both denominators; client configuration data is not product progress | Otherwise every custom client request would permanently reduce "product completion" | audit §70/§71 |
+| 11 | Platform Hardening (CI/CD, CORS, rate limit, DR, deployment, advisories) tracked as its own track inside Core Readiness, never as business capability | Keeps infrastructure debt out of module classification while still gating pilot/production | audit §54–§56 |
+| 12 | `docs/00-prd/` recommended for commit as **supporting/historical** (excluding the DOCX); not committed in this run | Corpus is authoritative history but not implementation truth; Founder disposition required first | audit §51/§84 |

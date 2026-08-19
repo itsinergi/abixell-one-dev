@@ -1,0 +1,253 @@
+# Abixell One — Product Roadmap
+
+| | |
+|---|---|
+| **Document Status** | CANONICAL |
+| **Authority** | Founder (Insting Tekno Sinergi) |
+| **Roadmap Baseline** | v1.0 |
+| **Progress Model** | v1.0 |
+| **Last Updated** | 2026-08-20 |
+| **Supersedes** | `docs/00-prd/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
+| **Related** | [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [decision-log.md](decision-log.md) |
+
+---
+
+## 1. Purpose
+
+One implementable roadmap that maps **Product Layer → Module → Capability → Phase → Roadmap Unit → Status**, with weights that make progress reproducible.
+
+It deliberately does **not** inherit the "22 phases" implied by the PRD filename `22-…`: those are *documentation-authoring* phases of the IGSEP PRD, not implementation phases.
+
+---
+
+## 2. Status vocabulary
+
+`COMPLETED` · `IN PROGRESS` · `PLANNED` · `DEFERRED` · `BLOCKED` · `OPTIONAL`
+
+No vague states ("mostly done") are permitted.
+
+## 3. Weight model
+
+Roadmap Unit size → points: **S = 1 · M = 2 · L = 3 · XL = 5**.
+
+Sizing considers domain complexity, data-model and workflow complexity, security/compliance surface, integration surface, and operational criticality. Deliberately coarse — reproducible beats precise.
+
+**Earned progress:** `COMPLETED = 100%` of unit weight; `IN PROGRESS = 0%` until the unit is accepted (conservative); `PLANNED/DEFERRED = 0%`. Partial credit is earned by completing *sub-units*, never by estimation.
+
+---
+
+## 4. Historical delivery (do not rewrite)
+
+Git history and checkpoint names are preserved exactly as delivered.
+
+| Historical phase | Delivered capability | Maps to |
+|---|---|---|
+| **Phase 0** (0A–0F) | Enterprise Core Foundation | Platform Core PC-1…PC-13 |
+| **Phase 1A** | Customer Experience Foundation | BC-1 Customer & Commercial |
+| **Phase 1B** | Generic Customer Complaint Engine | BC-2 Service Quality |
+| **Phase 1C** (1C.1–1C.8) | Complaint experience layer, management dashboard, administration, responsive/PWA | BC-2 Service Quality |
+| **Phase 1D** (1D.1–1D.3) | Generic Survey & Assessment Engine + admin/respondent UX | BC-3 Survey & Assessment |
+| **Phase 1E** (1E.1–1E.3) | Survey-to-Action integration + management attention | **Advanced** over BC-2/BC-3 |
+| **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
+
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02).**
+
+---
+
+## 5. Current product baseline
+
+| Item | Value |
+|---|---|
+| Branch / commit | `master` @ `b7b6d64` |
+| Migrations | 14 |
+| Tables | 58 |
+| Permissions | 42 |
+| Tests | 150 PASS (15 files) |
+| typecheck / lint / build | PASS |
+
+---
+
+## 6. Roadmap units — Platform Core (COMPLETED, weight 41)
+
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| PC-1 | Tenant / Legal Entity / Org Unit / Project / Site hierarchy | 3 | COMPLETED |
+| PC-2 | Identity, authentication, session | 3 | COMPLETED |
+| PC-3 | RBAC, permissions, Data Scope (hierarchical + customer) | 5 | COMPLETED |
+| PC-4 | Configuration & Metadata Engine | 5 | COMPLETED |
+| PC-5 | Workflow & Approval Engine | 5 | COMPLETED |
+| PC-6 | Audit foundation | 2 | COMPLETED |
+| PC-7 | Domain Events / EventBus | 2 | COMPLETED |
+| PC-8 | Notification Engine | 3 | COMPLETED |
+| PC-9 | Document Service + entity authorization | 3 | COMPLETED |
+| PC-10 | Scheduler | 2 | COMPLETED |
+| PC-11 | Integration Boundary | 3 | COMPLETED |
+| PC-12 | Observability | 2 | COMPLETED |
+| PC-13 | App Shell, Design System, responsive, PWA | 3 | COMPLETED |
+
+## 7. Roadmap units — Platform Hardening (weight 16, 0 completed)
+
+Pilot/production readiness. **Not** business capability.
+
+| ID | Unit | W | Status | Gate |
+|---|---|---:|---|---|
+| PH-1 | CI/CD pipeline (lint/typecheck/test/build) | 3 | PLANNED | Pilot |
+| PH-2 | CORS allowlist + rate-limit tuning + header review | 2 | PLANNED | Pilot |
+| PH-3 | Backup / restore / DR runbook | 2 | PLANNED | Production |
+| PH-4 | Deployment & environment provisioning automation | 3 | PLANNED | Production |
+| PH-5 | Performance fixes (operational queue N+1) | 2 | PLANNED | Pilot |
+| PH-6 | Dependency advisory remediation | 1 | PLANNED | Pilot |
+| PH-7 | PWA installability assets (PNG 192/512) | 1 | PLANNED | Pilot |
+| PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | Production |
+
+## 8. Roadmap units — Business Core (weight 117, 31 completed)
+
+### BC-1 Customer & Commercial — 7/9
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| CUS.1 | Customer + contacts master | 2 | COMPLETED |
+| CUS.2 | Contract / Project / Site / Service catalog + links | 3 | COMPLETED |
+| CUS.3 | Customer Data Scope authorization (ADR-0011) | 2 | COMPLETED |
+| CUS.4 | Customer & commercial admin UI | 2 | **PLANNED** (API-only today) |
+
+### BC-2 Service Quality (Complaint) — 15/15 · COMPLETED
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| CMP.1 | Complaint engine + generic workflow extensions | 3 | COMPLETED |
+| CMP.2 | Customer complaint experience | 2 | COMPLETED |
+| CMP.3 | Operational queue & detail | 2 | COMPLETED |
+| CMP.4 | QA / verification experience | 2 | COMPLETED |
+| CMP.5 | Management dashboard | 2 | COMPLETED |
+| CMP.6 | Complaint administration / configuration | 2 | COMPLETED |
+| CMP.7 | Responsive / PWA + regression | 2 | COMPLETED |
+
+### BC-3 Survey & Assessment — 9/9 · COMPLETED
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| SRV.1 | Survey engine core (definition→version→question→assignment→response→scoring) | 5 | COMPLETED |
+| SRV.2 | Survey admin + respondent experience | 3 | COMPLETED |
+| SRV.3 | Survey engine stabilization | 1 | COMPLETED |
+
+### BC-4 Service Operations & Work Management — 0/13
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| OPS.1 | Service request / work order master + lifecycle | 3 | PLANNED |
+| OPS.2 | Scheduling & team assignment | 3 | PLANNED |
+| OPS.3 | Field execution & evidence capture | 3 | PLANNED |
+| OPS.4 | Supervisor / field operational UX | 3 | PLANNED |
+| OPS.5 | Stabilization | 1 | PLANNED |
+
+### BC-5 Workforce (HR) Core — 0/10
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| HR.1 | Employee master + employment status | 3 | PLANNED |
+| HR.2 | Organizational placement & position | 2 | PLANNED |
+| HR.3 | Employee documents & basic history | 2 | PLANNED |
+| HR.4 | Workforce admin UX | 2 | PLANNED |
+| HR.5 | Stabilization | 1 | PLANNED |
+
+### BC-6 Supply Chain Core — 0/14
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| SCM.1 | Item master + supplier master | 3 | PLANNED |
+| SCM.2 | Stock balance + goods in/out | 3 | PLANNED |
+| SCM.3 | Purchase request | 2 | PLANNED |
+| SCM.4 | Purchase order + receipt | 3 | PLANNED |
+| SCM.5 | Operational UX | 2 | PLANNED |
+| SCM.6 | Stabilization | 1 | PLANNED |
+
+### BC-7 Asset Core — 0/8
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| AST.1 | Asset master + tag / location / custodian | 3 | PLANNED |
+| AST.2 | Movement & status history | 2 | PLANNED |
+| AST.3 | Asset UX + documents | 2 | PLANNED |
+| AST.4 | Stabilization | 1 | PLANNED |
+
+### BC-8 Finance Core — 0/12
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| FIN.1 | Income / expense transaction + category | 3 | PLANNED |
+| FIN.2 | Cash / bank basic + evidence | 2 | PLANNED |
+| FIN.3 | Approval integration (Workflow reuse) | 2 | PLANNED |
+| FIN.4 | Basic cashflow view | 2 | PLANNED |
+| FIN.5 | Finance UX | 2 | PLANNED |
+| FIN.6 | Stabilization | 1 | PLANNED |
+
+### BC-9 HSE Core — 0/9
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| HSE.1 | Incident + observation capture | 3 | PLANNED |
+| HSE.2 | Category / location / evidence + follow-up lifecycle | 3 | PLANNED |
+| HSE.3 | HSE UX | 2 | PLANNED |
+| HSE.4 | Stabilization | 1 | PLANNED |
+
+### BC-10 Project Delivery Core — 0/8
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| PRJ.1 | Activity / task + milestone | 3 | PLANNED |
+| PRJ.2 | PIC, dates, status, progress | 2 | PLANNED |
+| PRJ.3 | Project delivery UX | 2 | PLANNED |
+| PRJ.4 | Stabilization | 1 | PLANNED |
+
+### BC-11 Reporting & Operational Insight — 0/10
+| ID | Unit | W | Status |
+|---|---|---:|---|
+| RPT.1 | Cross-module reporting foundation (scope-safe) | 3 | PLANNED |
+| RPT.2 | Standard operational reports + export | 3 | PLANNED |
+| RPT.3 | Executive dashboard (cross-module) | 3 | PLANNED |
+| RPT.4 | Stabilization | 1 | PLANNED |
+
+## 9. Roadmap units — Advanced Capabilities (weight 179, 6 completed)
+
+| Module | Units (weight) | W | Done |
+|---|---|---:|---:|
+| Customer & Commercial | Sales/opportunity/quotation (5) · Self-service portal expansion (3) | 8 | 0 |
+| Service Quality | Multidimensional SLA + calendar (3) · RCA taxonomy + advanced CAPA (3) · Recurring-problem detection & service analytics (3) · Automatic domain mutation from feedback (2) | 11 | 0 |
+| Survey & Assessment | **Survey-to-Action trigger→assignment (3) ✅** · **Outcome→management attention (3) ✅** · Conditional/matrix (3) · Weighted/section/NPS (2) · Anonymous/public token (3) · Multi-language (2) · Analytics & benchmarking (3) | 19 | **6** |
+| Service Operations | Vertical service packs (5) · Offline field PWA (5) · Route/roster optimization (3) | 13 | 0 |
+| Workforce (HR) | Attendance/shift/roster (5) · Leave & overtime (3) · Payroll+BPJS+PPh21 (5) · Recruitment (3) · Performance/competency/training/career (5) · Manpower planning (3) | 24 | 0 |
+| Finance | GL/COA/journal (5) · AP/AR + aging (3) · Budgeting & cost center (3) · Bank reconciliation (2) · Fixed-asset accounting (3) · Tax/consolidation/statements (5) | 21 | 0 |
+| Supply Chain | Multi-warehouse/bin/batch/serial (5) · Reservation/reorder/transfer/opname (3) · Valuation + landed cost (3) · RFQ/tender/bid (5) · Supplier evaluation & contract purchasing (3) · Spend analytics (3) | 22 | 0 |
+| Asset | Preventive & corrective maintenance + work orders (5) · Meter/spare parts/downtime (3) · MTBF/MTTR + predictive (3) | 11 | 0 |
+| Project Delivery | WBS/dependencies/Gantt (5) · Resource loading + baseline (3) · Earned value + cost control + project accounting (5) | 13 | 0 |
+| HSE | Investigation + risk assessment JSA/HIRA (5) · Permit to work (3) · Inspection & audit (3) · Environmental monitoring + CAPA + indicators (3) | 14 | 0 |
+| Platform (cross-cutting) | API economy / partner surface (3) · AI readiness (5) · Marketplace & ecosystem (5) | 13 | 0 |
+| Reporting | Self-service BI / warehouse (5) · Predictive analytics (5) | 10 | 0 |
+
+## 10. Future phases (dependency-ordered)
+
+Strategy: **Business Core breadth → stabilization → Advanced depth** (not "all Advanced of module A before module B has a Core").
+
+| Phase | Name | Units | W | Depends on | Status |
+|---|---|---|---:|---|---|
+| **Phase 2** | Service Operations & Work Management Core | OPS.1–OPS.5 | 13 | Platform Core, BC-1 | PLANNED |
+| **Phase 3** | Workforce (HR) Core | HR.1–HR.5 | 10 | Platform Core | PLANNED |
+| **Phase 4** | Supply Chain Core | SCM.1–SCM.6 | 14 | Platform Core | PLANNED |
+| **Phase 5** | Asset Core | AST.1–AST.4 | 8 | Platform Core, BC-6 (spares) | PLANNED |
+| **Phase 6** | Finance Core | FIN.1–FIN.6 | 12 | Platform Core, BC-1 | PLANNED |
+| **Phase 7** | HSE Core | HSE.1–HSE.4 | 9 | Platform Core, BC-4 | PLANNED |
+| **Phase 8** | Project Delivery Core | PRJ.1–PRJ.4 | 8 | BC-1 | PLANNED |
+| **Phase 9** | Reporting & Operational Insight | RPT.1–RPT.4 | 10 | ≥3 Business Cores | PLANNED |
+| **Phase 10** | Customer & Commercial completion | CUS.4 | 2 | BC-1 | PLANNED |
+| **Phase H** | Platform Hardening (Pilot gate) | PH-1, PH-2, PH-5, PH-6, PH-7 | 9 | — | PLANNED |
+| **Phase H2** | Platform Hardening (Production gate) | PH-3, PH-4, PH-8 | 7 | Phase H | PLANNED |
+| **Wave A+** | Advanced capability waves | per module | 179 | respective Core | PLANNED / OPTIONAL |
+
+**Phase H may run in parallel** with any Business Core phase — it is infrastructure, not business capability.
+
+## 11. Gates
+
+- **Pilot Gate:** Platform Core ✅ + ≥1 Business Core module ✅ + Phase H complete + client configuration loaded.
+  *Current status:* functionality satisfied (3 modules); **blocked on Phase H**.
+- **Production Gate:** Pilot Gate + Phase H2 + security review + DR tested.
+
+## 12. Deferred / optional
+
+Advanced waves are OPTIONAL per client and are excluded from *Core Product Readiness* but included in *Full Approved Roadmap Progress*. **Client Extensions are excluded from both** denominators and tracked per client.
+
+## 13. Version history
+
+| Version | Date | Change |
+|---|---|---|
+| v1.0 | 2026-08-20 | First canonical roadmap. Replaces template-shaped `22-…`. Establishes layers, 11 Business Core modules, weighted units, dual progress metric. Records Phase 1F as NOT APPLICABLE. |
