@@ -34,6 +34,7 @@ export const PERMISSIONS = {
   complaintRead: "complaint.read",
   complaintManage: "complaint.manage",
   workflowManage: "workflow.instance.manage",
+  complaintDashboardRead: "complaint.dashboard.read",
   configManage: "config.manage",
 } as const;
 
@@ -113,7 +114,9 @@ export const NAV_SECTIONS: NavSection[] = [
     path: "/management",
     label: "Management",
     description: "Complaint performance, SLA, and escalation visibility.",
-    requiresAnyOf: [PERMISSIONS.workflowManage],
+    // FD-1C-02: gated on the real management permission now (replacing the
+    // 1C.1 workflow.instance.manage proxy). Backend enforces it too.
+    requiresAnyOf: [PERMISSIONS.complaintDashboardRead],
   },
   {
     key: "administration",

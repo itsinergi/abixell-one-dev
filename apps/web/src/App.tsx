@@ -3,7 +3,6 @@ import { AppShell } from "./shell/layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { SectionPlaceholder } from "./pages/SectionPlaceholder";
 import { ComplaintsListPage } from "./pages/complaints/ComplaintsListPage";
 import { ComplaintCreatePage } from "./pages/complaints/ComplaintCreatePage";
 import { ComplaintDetailPage } from "./pages/complaints/ComplaintDetailPage";
@@ -11,6 +10,7 @@ import { OperationalQueuePage } from "./pages/operational/OperationalQueuePage";
 import { OperationalDetailPage } from "./pages/operational/OperationalDetailPage";
 import { VerificationQueuePage } from "./pages/verification/VerificationQueuePage";
 import { VerificationDetailPage } from "./pages/verification/VerificationDetailPage";
+import { ManagementDashboardPage } from "./pages/management/ManagementDashboardPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -53,16 +53,7 @@ export default function App() {
           <Route path="queue/:complaintId" element={<OperationalDetailPage />} />
           <Route path="verification" element={<VerificationQueuePage />} />
           <Route path="verification/:complaintId" element={<VerificationDetailPage />} />
-          <Route
-            path="management"
-            element={
-              <SectionPlaceholder
-                title="Management"
-                checkpoint="1C.5"
-                description="Complaint performance, SLA, and escalation visibility."
-              />
-            }
-          />
+          <Route path="management" element={<ManagementDashboardPage />} />
           <Route path="administration" element={<DashboardPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

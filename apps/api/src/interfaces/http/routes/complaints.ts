@@ -90,6 +90,23 @@ export function registerComplaintRoutes(app: FastifyInstance, container: Contain
     return reply.send(result);
   });
 
+  // Checkpoint 1C.5 — Management Dashboard (internal, permission-gated in the
+  // service on complaint.dashboard.read + Data Scope). Static path — before `/:id`.
+  const dashboardQuerySchema = z.object({
+    from: z.string().optional(),
+    to: z.string().optional(),
+    customerId: z.string().uuid().optional(),
+    siteId: z.string().uuid().optional(),
+    serviceId: z.string().uuid().optional(),
+    category: z.string().min(1).optional(),
+    severity: z.string().min(1).optional(),
+  });
+  app.get("/complaints/dashboard", { preHandler: app.authenticate }, async (request, reply) => {
+    const q = dashboardQuerySchema.parse(request.query);
+    const result = await container.complaintDashboard.getDashboard(request.actor!, q);
+    return reply.send(result);
+  });
+
   app.get("/complaints/:id", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await container.complaint.get(request.actor!, id);

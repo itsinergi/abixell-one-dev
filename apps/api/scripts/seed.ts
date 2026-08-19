@@ -869,6 +869,18 @@ async function main() {
       workflowManagePermission.id,
     ]);
   }
+  // Checkpoint 1C.5 (FD-1C-02): COMPLAINT_MANAGER is the demo tenant's
+  // management persona — grant it Management Dashboard visibility. Generic
+  // permission; the grant here is demo configuration, not a Core assumption.
+  const dashboardReadPermission = (
+    await pool.query(`SELECT id FROM permissions WHERE code = 'complaint.dashboard.read'`)
+  ).rows[0];
+  if (dashboardReadPermission) {
+    await pool.query(
+      `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [complaintManagerRole.id, dashboardReadPermission.id],
+    );
+  }
 
   const complaintHandlerPasswordHash = await hashPassword("Handler12345!");
   const complaintHandler = (

@@ -47,6 +47,8 @@ import { ProjectService } from "./application/customer/project.service.js";
 import { SiteService } from "./application/customer/site.service.js";
 import { ServiceCatalogService } from "./application/customer/service-catalog.service.js";
 import { ComplaintService } from "./application/complaint/complaint.service.js";
+import { ComplaintDashboardService } from "./application/complaint/complaint-dashboard.service.js";
+import { PgComplaintDashboardRepository } from "./infrastructure/persistence/repositories/complaint-dashboard.repository.pg.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -126,6 +128,14 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Checkpoint 1C.5 — Management Dashboard read-model (aggregate-only,
+  // permission-gated + Data-Scope-aware; no new persistence, FD-1C-01).
+  const complaintDashboard = new ComplaintDashboardService(
+    new PgComplaintDashboardRepository(pool),
+    customer,
+    rbac,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -198,6 +208,7 @@ export function buildContainer() {
     site,
     serviceCatalog,
     complaint,
+    complaintDashboard,
   };
 }
 

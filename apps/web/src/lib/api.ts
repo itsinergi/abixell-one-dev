@@ -397,6 +397,17 @@ export const api = {
   operationalDetail: (token: string, id: string) =>
     request<OperationalComplaintDetail>(`/complaints/${id}/operational-detail`, { token }),
 
+  // Checkpoint 1C.5 — Management Dashboard (gated on complaint.dashboard.read
+  // + Data Scope in the backend; aggregate read-only).
+  complaintDashboard: (token: string, filters: DashboardFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v) params.set(k, v);
+    }
+    const qs = params.toString();
+    return request<DashboardResult>(`/complaints/dashboard${qs ? `?${qs}` : ""}`, { token });
+  },
+
   createComplaint: (token: string, payload: CreateComplaintPayload) =>
     request<Complaint>("/complaints", { method: "POST", token, body: payload }),
 
@@ -713,6 +724,63 @@ export type OperationalComplaintDetail = {
   timeline: OperationalTimelineEntry[];
   availableActions: { actionCode: string; name: string; toStepCode: string }[];
   reopen: { canReopen: boolean; targetSteps: { code: string; name: string }[] };
+};
+
+// --- Checkpoint 1C.5 management dashboard types -----------------------------
+
+export type DashboardFilters = {
+  from?: string;
+  to?: string;
+  customerId?: string;
+  siteId?: string;
+  serviceId?: string;
+  category?: string;
+  severity?: string;
+};
+
+export type DashboardSummary = {
+  total: number;
+  open: number;
+  closed: number;
+  submittedToday: number;
+  critical: number;
+  slaOverdue: number;
+  resolutionRatePercent: number | null;
+  avgResolutionHours: number | null;
+};
+
+export type BreakdownRow = { key: string; label: string; count: number };
+
+export type DashboardBreakdowns = {
+  byCustomer: BreakdownRow[];
+  bySite: BreakdownRow[];
+  byService: BreakdownRow[];
+  byCategory: BreakdownRow[];
+  bySeverity: BreakdownRow[];
+  byStatus: BreakdownRow[];
+};
+
+export type EscalationSummary = { escalatedEvents: number; openEscalatedComplaints: number };
+
+export type ActionCenterItem = {
+  complaintId: string;
+  complaintNumber: string;
+  customerName: string | null;
+  severity: string;
+  stepCode: string | null;
+  stepName: string | null;
+  dueAt: string | null;
+  overdue: boolean;
+  critical: boolean;
+};
+
+export type DashboardResult = {
+  summary: DashboardSummary;
+  breakdowns: DashboardBreakdowns;
+  escalation: EscalationSummary;
+  actionCenter: ActionCenterItem[];
+  period: { from: string; to: string };
+  scope: { customerCount: number };
 };
 
 export type CreateComplaintPayload = {

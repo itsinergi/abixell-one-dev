@@ -93,6 +93,31 @@ export class CustomerService {
     return filtered;
   }
 
+  /**
+   * Checkpoint 1C.5 — trusted-caller resolution of the Customer ids within
+   * the actor's Data Scope, WITHOUT requiring `customer.read`. A business
+   * module that has already authorized the actor for its own operation (e.g.
+   * ComplaintDashboardService, gated on `complaint.dashboard.read`) uses this
+   * to constrain aggregation to the allowed customers — so scope is enforced
+   * in the query, not the UI. Same trusted-caller posture as
+   * WorkflowService.getInstanceForEntityOwner. Returns only the fields a
+   * scope filter needs.
+   */
+  async listScopedCustomerIds(actor: ActorContext): Promise<string[]> {
+    const all = await this.repo.listByTenant(actor.tenantId);
+    const assignments = await this.rbac.getAssignments(actor.userId);
+    if (assignments.some((a) => a.scopeType === "tenant")) return all.map((c) => c.id);
+    const ids: string[] = [];
+    for (const customer of all) {
+      const covered = await this.rbac.isCustomerContextScopeCoveredByAssignments(assignments, {
+        customerId: customer.id,
+        ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
+      });
+      if (covered) ids.push(customer.id);
+    }
+    return ids;
+  }
+
   /** Loads a Customer and enforces both Tenant isolation and Data Scope.
    * The single choke point every Customer-context module (Contract,
    * Project, Site, Service Assignment, Document resolver) calls through. */
