@@ -39,6 +39,10 @@ export interface EntityWorkflowStatus {
    * Step's configured SLA hours — the authoritative source, never a
    * frontend recomputation. */
   sla: { dueAt: Date | null; slaHours: number | null } | null;
+  /** Current pending Assignment summary (Checkpoint 1C.3) — who the task is
+   * routed to, and whether the asking actor is eligible to act on it now
+   * (`isMine`). Null when there is no pending Assignment (e.g. completed). */
+  assignment: { roleCode: string | null; userId: string | null; isMine: boolean } | null;
 }
 
 export interface EntityWorkflowTimelineEntry {
@@ -470,11 +474,19 @@ export class WorkflowService {
       currentStep && (pending?.dueAt != null || currentStep.slaHours != null)
         ? { dueAt: pending?.dueAt ?? null, slaHours: currentStep.slaHours ?? null }
         : null;
+    const assignment = pending
+      ? {
+          roleCode: pending.assignedRoleCode,
+          userId: pending.assignedUserId,
+          isMine: await this.isActorEligibleForAssignment(actor, pending),
+        }
+      : null;
     return {
       stepCode: currentStep?.code ?? null,
       stepName: currentStep?.name ?? null,
       instanceStatus: instance.status,
       sla,
+      assignment,
     };
   }
 

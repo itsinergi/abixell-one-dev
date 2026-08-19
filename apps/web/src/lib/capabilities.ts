@@ -49,6 +49,22 @@ export interface NavSection {
   /** Visible if the user holds AT LEAST ONE of these permissions.
    * `undefined` means "visible to any authenticated user". */
   requiresAnyOf?: string[];
+  /** Visible only to INTERNAL users — those with an organization_unit or
+   * tenant Data Scope (Checkpoint 1C.3). Keeps operational areas away from
+   * external Customer Users. UX only; the backend still enforces access. */
+  requiresInternal?: boolean;
+  /** Visible only to users who hold a customer Data Scope (external Customer
+   * Users) — the customer-facing complaint experience. */
+  requiresCustomerScope?: boolean;
+}
+
+/** Internal = holds any non-customer Data Scope (organization_unit/tenant). */
+export function isInternalScope(scopeTypes: string[]): boolean {
+  return scopeTypes.some((s) => s !== "customer");
+}
+
+export function hasCustomerScope(scopeTypes: string[]): boolean {
+  return scopeTypes.includes("customer");
 }
 
 /**
@@ -68,8 +84,17 @@ export const NAV_SECTIONS: NavSection[] = [
     key: "complaints",
     path: "/complaints",
     label: "Complaints",
-    description: "Raise, track, and act on complaints within your scope.",
+    description: "Raise and track the complaints you have submitted.",
     requiresAnyOf: [PERMISSIONS.complaintRead, PERMISSIONS.complaintManage],
+    requiresCustomerScope: true,
+  },
+  {
+    key: "queue",
+    path: "/queue",
+    label: "Queue",
+    description: "Work the complaints assigned to you and your team.",
+    requiresAnyOf: [PERMISSIONS.complaintRead, PERMISSIONS.complaintManage],
+    requiresInternal: true,
   },
   {
     key: "verification",
@@ -99,13 +124,21 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-/** True if `permissions` satisfies the section's gate. */
-export function canSeeSection(section: NavSection, permissions: string[]): boolean {
-  if (!section.requiresAnyOf) return true;
-  return section.requiresAnyOf.some((p) => permissions.includes(p));
+/** True if the user (permissions + scope types) satisfies the section's gate. */
+export function canSeeSection(
+  section: NavSection,
+  permissions: string[],
+  scopeTypes: string[],
+): boolean {
+  if (section.requiresAnyOf && !section.requiresAnyOf.some((p) => permissions.includes(p))) {
+    return false;
+  }
+  if (section.requiresInternal && !isInternalScope(scopeTypes)) return false;
+  if (section.requiresCustomerScope && !hasCustomerScope(scopeTypes)) return false;
+  return true;
 }
 
-/** The sections a user with these permissions may see, in nav order. */
-export function visibleSections(permissions: string[]): NavSection[] {
-  return NAV_SECTIONS.filter((s) => canSeeSection(s, permissions));
+/** The sections a user may see, in nav order. */
+export function visibleSections(permissions: string[], scopeTypes: string[]): NavSection[] {
+  return NAV_SECTIONS.filter((s) => canSeeSection(s, permissions, scopeTypes));
 }

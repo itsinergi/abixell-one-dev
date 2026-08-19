@@ -97,6 +97,52 @@ export interface ComplaintDetailView {
   reopen: { canReopen: boolean; targetSteps: { code: string; name: string }[] };
 }
 
+/** Checkpoint 1C.3 — operational queue row (complaint as a business object,
+ * not a raw Workflow Assignment). */
+export interface OperationalQueueItem {
+  complaint: Complaint;
+  customerName: string | null;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  sla: { dueAt: Date | null; slaHours: number | null } | null;
+  assignment: { roleCode: string | null; userId: string | null; isMine: boolean } | null;
+  overdue: boolean;
+}
+
+export interface OperationalQueueFilters {
+  assignedToMe?: boolean;
+  severity?: string;
+  stepCode?: string;
+  overdue?: boolean;
+  customerId?: string;
+}
+
+export interface OperationalQueueResult {
+  items: OperationalQueueItem[];
+  total: number;
+}
+
+/** Checkpoint 1C.3 — operational (internal) detail. Unlike the customer-safe
+ * ComplaintDetailView, the timeline here is role-appropriate: it retains
+ * actor and workflow comments (section 11). Access is restricted to internal
+ * actors — see `requireInternalActor`. */
+export interface OperationalComplaintDetail {
+  complaint: Complaint;
+  customerName: string | null;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  sla: { dueAt: Date | null; slaHours: number | null } | null;
+  assignment: { roleCode: string | null; userId: string | null; isMine: boolean } | null;
+  timeline: {
+    occurredAt: Date;
+    actionCode: string;
+    fromStepName: string | null;
+    toStepName: string | null;
+    actorUserId: string | null;
+    comment: string | null;
+  }[];
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+  reopen: { canReopen: boolean; targetSteps: { code: string; name: string }[] };
+}
+
 /**
  * Generic Customer Complaint Engine (Checkpoint 1B). Deliberately thin —
  * every lifecycle/assignment/SLA concern is delegated to the generic
@@ -294,6 +340,154 @@ export class ComplaintService {
         stepName: t.toStepName,
       })),
       availableActions: view.availableActions.map((a) => ({ actionCode: a.actionCode, name: a.name })),
+      reopen: { canReopen, targetSteps: canReopen ? view.nonTerminalSteps : [] },
+    };
+  }
+
+  /**
+   * Checkpoint 1C.3 — restricts an operation to INTERNAL actors (those with
+   * an organization_unit or tenant Data Scope). A Customer User (customer
+   * scope only) is denied even for their own complaints — they use the
+   * customer-safe experience instead. This is what keeps internal
+   * operational data (full timeline, assignments) from leaking to customers
+   * through the operational endpoints, independent of the frontend.
+   */
+  private async requireInternalActor(actor: ActorContext): Promise<void> {
+    const assignments = await this.rbac.getAssignments(actor.userId);
+    const internal = assignments.some((a) => a.scopeType !== "customer");
+    if (!internal) {
+      throw new ForbiddenError("This area is available to internal operational users only");
+    }
+  }
+
+  /**
+   * Checkpoint 1C.3 — operational queue: complaints within the actor's
+   * Customer Data Scope (ADR-0011, reusing `CustomerService.listForTenant`),
+   * enriched with live Workflow status/SLA/assignment. `assignment.isMine`
+   * marks the ones the actor is currently eligible to act on. Read-only,
+   * composed live from existing records (FD-1C-01) — no queue store.
+   * Filters and simple limit/offset pagination are applied after
+   * enrichment; the candidate set is already bounded by the actor's scope.
+   */
+  async listOperationalQueue(
+    actor: ActorContext,
+    filters: OperationalQueueFilters,
+    pagination: { limit?: number; offset?: number },
+  ): Promise<OperationalQueueResult> {
+    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.requireInternalActor(actor);
+
+    const customers = await this.customers.listForTenant(actor);
+    const nameById = new Map(customers.map((c) => [c.id, c.name]));
+
+    const complaints: Complaint[] = [];
+    for (const customer of customers) {
+      if (filters.customerId && customer.id !== filters.customerId) continue;
+      complaints.push(...(await this.repo.listByCustomer(customer.id)));
+    }
+
+    const now = Date.now();
+    let items: OperationalQueueItem[] = [];
+    for (const complaint of complaints) {
+      let status: OperationalQueueItem["status"] = null;
+      let sla: OperationalQueueItem["sla"] = null;
+      let assignment: OperationalQueueItem["assignment"] = null;
+      if (complaint.workflowInstanceId) {
+        const s = await this.workflow.getEntityStatus(actor, complaint.workflowInstanceId);
+        status = { stepCode: s.stepCode, stepName: s.stepName, instanceStatus: s.instanceStatus };
+        sla = s.sla;
+        assignment = s.assignment;
+      }
+      const overdue = !!(
+        sla?.dueAt &&
+        status?.instanceStatus === "in_progress" &&
+        sla.dueAt.getTime() < now
+      );
+      items.push({
+        complaint,
+        customerName: nameById.get(complaint.customerId) ?? null,
+        status,
+        sla,
+        assignment,
+        overdue,
+      });
+    }
+
+    if (filters.severity) items = items.filter((i) => i.complaint.severity === filters.severity);
+    if (filters.stepCode) items = items.filter((i) => i.status?.stepCode === filters.stepCode);
+    if (filters.assignedToMe) items = items.filter((i) => i.assignment?.isMine);
+    if (filters.overdue) items = items.filter((i) => i.overdue);
+
+    // Overdue first, then newest — the operationally useful ordering.
+    items.sort(
+      (a, b) =>
+        Number(b.overdue) - Number(a.overdue) ||
+        new Date(b.complaint.createdAt).getTime() - new Date(a.complaint.createdAt).getTime(),
+    );
+
+    const total = items.length;
+    const limit = pagination.limit ?? 50;
+    const offset = pagination.offset ?? 0;
+    return { items: items.slice(offset, offset + limit), total };
+  }
+
+  /**
+   * Checkpoint 1C.3 — operational (internal) complaint detail. Restricted to
+   * internal actors; the timeline is role-appropriate (retains actor +
+   * workflow comments). Reuses the existing composite Workflow view.
+   */
+  async getOperationalDetail(actor: ActorContext, id: string): Promise<OperationalComplaintDetail> {
+    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.requireInternalActor(actor);
+    const complaint = await this.getAuthorized(actor, id);
+
+    // Customer name is cosmetic — never let its absence (an actor authorized
+    // for the complaint via workflow association but not Customer Data Scope)
+    // fail the whole read.
+    let customerName: string | null = null;
+    try {
+      customerName = (await this.customers.getAuthorized(actor, complaint.customerId)).name;
+    } catch {
+      customerName = null;
+    }
+
+    if (!complaint.workflowInstanceId) {
+      return {
+        complaint,
+        customerName,
+        status: null,
+        sla: null,
+        assignment: null,
+        timeline: [],
+        availableActions: [],
+        reopen: { canReopen: false, targetSteps: [] },
+      };
+    }
+
+    const view = await this.workflow.getEntityWorkflowView(actor, complaint.workflowInstanceId);
+    const s = await this.workflow.getEntityStatus(actor, complaint.workflowInstanceId);
+    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const canReopen = permissions.has("complaint.manage") && view.instanceStatus !== "in_progress";
+
+    return {
+      complaint,
+      customerName,
+      status: {
+        stepCode: view.currentStep?.code ?? null,
+        stepName: view.currentStep?.name ?? null,
+        instanceStatus: view.instanceStatus,
+      },
+      sla: view.sla,
+      assignment: s.assignment,
+      timeline: view.timeline.map((t) => ({
+        occurredAt: t.occurredAt,
+        actionCode: t.actionCode,
+        fromStepName: t.fromStepName,
+        toStepName: t.toStepName,
+        actorUserId: t.actorUserId,
+        comment: t.comment,
+      })),
+      availableActions: view.availableActions,
       reopen: { canReopen, targetSteps: canReopen ? view.nonTerminalSteps : [] },
     };
   }

@@ -55,11 +55,22 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
 
   app.get("/me", { preHandler: app.authenticate }, async (request, reply) => {
     const actor = request.actor!;
-    const permissions = await container.rbac.getEffectivePermissions(actor.userId);
+    const [permissions, assignments] = await Promise.all([
+      container.rbac.getEffectivePermissions(actor.userId),
+      container.rbac.getAssignments(actor.userId),
+    ]);
+    // Checkpoint 1C.3 — expose the distinct Data-Scope types the actor holds
+    // ("customer" vs "organization_unit"/"tenant"). This is what lets the
+    // experience layer tell an external Customer User apart from an internal
+    // operational user for navigation — a distinction permissions alone
+    // cannot make (both hold complaint.read/manage). Authorization is still
+    // enforced per-route in the backend; this only shapes the UI.
+    const scopeTypes = Array.from(new Set(assignments.map((a) => a.scopeType)));
     return reply.send({
       userId: actor.userId,
       tenantId: actor.tenantId,
       permissions: Array.from(permissions),
+      scopeTypes,
     });
   });
 }

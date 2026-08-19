@@ -55,7 +55,9 @@ export const api = {
     }>("/auth/login", { method: "POST", body: payload }),
 
   me: (token: string) =>
-    request<{ userId: string; tenantId: string; permissions: string[] }>("/me", { token }),
+    request<{ userId: string; tenantId: string; permissions: string[]; scopeTypes: string[] }>("/me", {
+      token,
+    }),
 
   // Frontend token/session persistence (Checkpoint 0F): `refresh` trades
   // the opaque refresh token for a new access token AND a rotated
@@ -377,6 +379,24 @@ export const api = {
   complaintReferenceData: (token: string) =>
     request<ComplaintCreateOptions>("/complaints/reference-data", { token }),
 
+  // Checkpoint 1C.3 — operational (internal) queue + detail. Backend restricts
+  // both to internal actors; the frontend only reflects the authorized result.
+  operationalQueue: (token: string, filters: OperationalQueueFilters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.assignedToMe) params.set("assignedToMe", "true");
+    if (filters.overdue) params.set("overdue", "true");
+    if (filters.severity) params.set("severity", filters.severity);
+    if (filters.stepCode) params.set("stepCode", filters.stepCode);
+    if (filters.customerId) params.set("customerId", filters.customerId);
+    if (filters.limit != null) params.set("limit", String(filters.limit));
+    if (filters.offset != null) params.set("offset", String(filters.offset));
+    const qs = params.toString();
+    return request<OperationalQueueResult>(`/complaints/queue${qs ? `?${qs}` : ""}`, { token });
+  },
+
+  operationalDetail: (token: string, id: string) =>
+    request<OperationalComplaintDetail>(`/complaints/${id}/operational-detail`, { token }),
+
   createComplaint: (token: string, payload: CreateComplaintPayload) =>
     request<Complaint>("/complaints", { method: "POST", token, body: payload }),
 
@@ -641,6 +661,58 @@ export type ComplaintCreateOptions = {
   categories: ComplaintRefItem[];
   severities: ComplaintRefItem[];
   priorities: ComplaintRefItem[];
+};
+
+// --- Checkpoint 1C.3 operational (internal) types ---------------------------
+
+export type ComplaintAssignmentSummary = {
+  roleCode: string | null;
+  userId: string | null;
+  isMine: boolean;
+} | null;
+
+export type OperationalQueueFilters = {
+  assignedToMe?: boolean;
+  overdue?: boolean;
+  severity?: string;
+  stepCode?: string;
+  customerId?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type OperationalQueueItem = {
+  complaint: Complaint;
+  customerName: string | null;
+  status: ComplaintDetailStatus;
+  sla: ComplaintSla;
+  assignment: ComplaintAssignmentSummary;
+  overdue: boolean;
+};
+
+export type OperationalQueueResult = {
+  items: OperationalQueueItem[];
+  total: number;
+};
+
+export type OperationalTimelineEntry = {
+  occurredAt: string;
+  actionCode: string;
+  fromStepName: string | null;
+  toStepName: string | null;
+  actorUserId: string | null;
+  comment: string | null;
+};
+
+export type OperationalComplaintDetail = {
+  complaint: Complaint;
+  customerName: string | null;
+  status: ComplaintDetailStatus;
+  sla: ComplaintSla;
+  assignment: ComplaintAssignmentSummary;
+  timeline: OperationalTimelineEntry[];
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+  reopen: { canReopen: boolean; targetSteps: { code: string; name: string }[] };
 };
 
 export type CreateComplaintPayload = {

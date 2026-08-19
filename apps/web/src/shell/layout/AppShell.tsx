@@ -28,6 +28,8 @@ import { Alert, Button, Spinner } from "../components/ui";
 interface ShellContextValue {
   /** Raw permission codes from `GET /me`. */
   permissions: string[];
+  /** Data-Scope types the actor holds (customer / organization_unit / tenant). */
+  scopeTypes: string[];
   userId: string;
   tenantName: string;
 }
@@ -46,6 +48,7 @@ export function AppShell() {
   const token = session!.accessToken;
 
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [scopeTypes, setScopeTypes] = useState<string[]>([]);
   const [tenantName, setTenantName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export function AppShell() {
       // `/me` (permissions) is required — it drives the whole navigation.
       const me = await api.me(token);
       setPermissions(me.permissions);
+      setScopeTypes(me.scopeTypes);
       // The Tenant name is only the workspace title, and reading it needs
       // `tenant.read` — a permission a Customer User does NOT hold. Fetch it
       // best-effort so its absence never blocks the shell; fall back to the
@@ -79,7 +83,7 @@ export function AppShell() {
     load();
   }, [load]);
 
-  const sections = visibleSections(permissions);
+  const sections = visibleSections(permissions, scopeTypes);
   // Client-neutral fallback while the Tenant name loads (ADR-0003).
   const workspaceTitle = tenantName || "Enterprise Management System";
 
@@ -152,7 +156,9 @@ export function AppShell() {
               </Button>
             </div>
           ) : (
-            <ShellContext.Provider value={{ permissions, userId: session!.userId, tenantName }}>
+            <ShellContext.Provider
+              value={{ permissions, scopeTypes, userId: session!.userId, tenantName }}
+            >
               <Outlet />
               {/* Sign out is also reachable on mobile from the bottom of content. */}
               <div className="mt-8 md:hidden">

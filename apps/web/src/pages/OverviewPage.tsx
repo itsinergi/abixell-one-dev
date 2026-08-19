@@ -11,9 +11,9 @@ import { visibleSections } from "../lib/capabilities";
 import { Card, PageHeader, StatusPill } from "../shell/components/ui";
 
 export function OverviewPage() {
-  const { permissions, tenantName } = useShell();
+  const { permissions, scopeTypes, tenantName } = useShell();
   // Everything except Overview itself, in nav order.
-  const sections = visibleSections(permissions).filter((s) => s.key !== "overview");
+  const sections = visibleSections(permissions, scopeTypes).filter((s) => s.key !== "overview");
 
   return (
     <div>

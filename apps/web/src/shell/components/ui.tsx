@@ -227,6 +227,66 @@ export function Select({
   );
 }
 
+/* --------------------------------------------------------- DataTable (1C.3) */
+
+export interface Column<T> {
+  header: string;
+  cell: (row: T) => ReactNode;
+  /** Optional extra classes for the cell (e.g. alignment, width). */
+  className?: string;
+}
+
+/** Generic, responsive table. Horizontal-scrolls inside its own container so
+ * the page never scrolls sideways. Rows are optionally clickable. */
+export function DataTable<T>({
+  columns,
+  rows,
+  keyOf,
+  onRowClick,
+  empty,
+}: {
+  columns: Column<T>[];
+  rows: T[];
+  keyOf: (row: T) => string;
+  onRowClick?: (row: T) => void;
+  empty?: ReactNode;
+}) {
+  if (rows.length === 0 && empty) return <>{empty}</>;
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <thead className="bg-slate-50">
+          <tr>
+            {columns.map((c, i) => (
+              <th
+                key={i}
+                className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${c.className ?? ""}`}
+              >
+                {c.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 bg-white">
+          {rows.map((row) => (
+            <tr
+              key={keyOf(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={onRowClick ? "cursor-pointer hover:bg-slate-50" : ""}
+            >
+              {columns.map((c, i) => (
+                <td key={i} className={`px-3 py-2 align-middle text-slate-700 ${c.className ?? ""}`}>
+                  {c.cell(row)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------- Timeline (1C.2) */
 
 export interface TimelineItem {

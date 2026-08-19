@@ -62,6 +62,34 @@ export function registerComplaintRoutes(app: FastifyInstance, container: Contain
     return reply.send(result);
   });
 
+  // Checkpoint 1C.3 — operational queue (internal actors only; enforced in
+  // the service). Complaint-centric, scope-filtered, enriched with live
+  // status/SLA/assignment. Static path — declared before `/:id`.
+  const queueQuerySchema = z.object({
+    assignedToMe: z.enum(["true", "false"]).optional(),
+    severity: z.string().min(1).optional(),
+    stepCode: z.string().min(1).optional(),
+    overdue: z.enum(["true", "false"]).optional(),
+    customerId: z.string().uuid().optional(),
+    limit: z.coerce.number().int().positive().max(200).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  });
+  app.get("/complaints/queue", { preHandler: app.authenticate }, async (request, reply) => {
+    const q = queueQuerySchema.parse(request.query);
+    const result = await container.complaint.listOperationalQueue(
+      request.actor!,
+      {
+        assignedToMe: q.assignedToMe === "true",
+        severity: q.severity,
+        stepCode: q.stepCode,
+        overdue: q.overdue === "true",
+        customerId: q.customerId,
+      },
+      { limit: q.limit, offset: q.offset },
+    );
+    return reply.send(result);
+  });
+
   app.get("/complaints/:id", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await container.complaint.get(request.actor!, id);
@@ -74,6 +102,15 @@ export function registerComplaintRoutes(app: FastifyInstance, container: Contain
   app.get("/complaints/:id/detail", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await container.complaint.getDetail(request.actor!, id);
+    return reply.send(result);
+  });
+
+  // Checkpoint 1C.3 — operational (internal) detail: richer, role-appropriate
+  // timeline (retains actor + comments). Restricted to internal actors in the
+  // service, so a Customer User cannot reach internal data through it.
+  app.get("/complaints/:id/operational-detail", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await container.complaint.getOperationalDetail(request.actor!, id);
     return reply.send(result);
   });
 

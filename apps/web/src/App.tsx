@@ -7,6 +7,8 @@ import { SectionPlaceholder } from "./pages/SectionPlaceholder";
 import { ComplaintsListPage } from "./pages/complaints/ComplaintsListPage";
 import { ComplaintCreatePage } from "./pages/complaints/ComplaintCreatePage";
 import { ComplaintDetailPage } from "./pages/complaints/ComplaintDetailPage";
+import { OperationalQueuePage } from "./pages/operational/OperationalQueuePage";
+import { OperationalDetailPage } from "./pages/operational/OperationalDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -45,6 +47,8 @@ export default function App() {
           <Route path="complaints" element={<ComplaintsListPage />} />
           <Route path="complaints/new" element={<ComplaintCreatePage />} />
           <Route path="complaints/:complaintId" element={<ComplaintDetailPage />} />
+          <Route path="queue" element={<OperationalQueuePage />} />
+          <Route path="queue/:complaintId" element={<OperationalDetailPage />} />
           <Route
             path="verification"
             element={
