@@ -9,6 +9,8 @@ import { ComplaintCreatePage } from "./pages/complaints/ComplaintCreatePage";
 import { ComplaintDetailPage } from "./pages/complaints/ComplaintDetailPage";
 import { OperationalQueuePage } from "./pages/operational/OperationalQueuePage";
 import { OperationalDetailPage } from "./pages/operational/OperationalDetailPage";
+import { VerificationQueuePage } from "./pages/verification/VerificationQueuePage";
+import { VerificationDetailPage } from "./pages/verification/VerificationDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -49,16 +51,8 @@ export default function App() {
           <Route path="complaints/:complaintId" element={<ComplaintDetailPage />} />
           <Route path="queue" element={<OperationalQueuePage />} />
           <Route path="queue/:complaintId" element={<OperationalDetailPage />} />
-          <Route
-            path="verification"
-            element={
-              <SectionPlaceholder
-                title="Verification"
-                checkpoint="1C.4"
-                description="Independently verify corrective actions awaiting sign-off."
-              />
-            }
-          />
+          <Route path="verification" element={<VerificationQueuePage />} />
+          <Route path="verification/:complaintId" element={<VerificationDetailPage />} />
           <Route
             path="management"
             element={
