@@ -61,6 +61,8 @@ import { PgWorkforceRepository } from "./modules/workforce/core/infrastructure/w
 import { WorkforceService } from "./modules/workforce/core/application/workforce.service.js";
 import { PgSupplyChainRepository } from "./modules/supply-chain/core/infrastructure/supply-chain.repository.pg.js";
 import { SupplyChainService } from "./modules/supply-chain/core/application/supply-chain.service.js";
+import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
+import { AssetService } from "./modules/asset/core/application/asset.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -197,6 +199,19 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 5 — Asset Core. Built before DocumentService so its `asset` Entity
+  // Authorization Resolver can close over `asset.canAccessForDocument`
+  // (ADR-0012). Asset documents are gated by a dedicated capability AND the
+  // asset's own Data Scope, not by plain asset.read.
+  const asset = new AssetService(
+    new PgAssetRepository(pool),
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -221,6 +236,10 @@ export function buildContainer() {
     [
       "purchase_order",
       { canAccess: (actor, entityId) => supplyChain.canAccessOrderForDocument(actor, entityId) },
+    ],
+    [
+      "asset",
+      { canAccess: (actor, entityId) => asset.canAccessForDocument(actor, entityId) },
     ],
   ]);
   const document = new DocumentService(
@@ -335,6 +354,7 @@ export function buildContainer() {
     serviceOperations,
     workforce,
     supplyChain,
+    asset,
   };
 }
 
