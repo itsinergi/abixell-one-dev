@@ -28,6 +28,10 @@ import { SuppliersPage } from "./modules/supply-chain/SuppliersPage";
 import { PurchasingPage } from "./modules/supply-chain/PurchasingPage";
 import { AssetsPage } from "./modules/asset/AssetsPage";
 import { AssetDetailPage } from "./modules/asset/AssetDetailPage";
+import { FinanceAccountsPage } from "./modules/finance/FinanceAccountsPage";
+import { FinanceTransactionsPage } from "./modules/finance/FinanceTransactionsPage";
+import { FinanceTransactionDetailPage } from "./modules/finance/FinanceTransactionDetailPage";
+import { CashflowPage } from "./modules/finance/CashflowPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -93,6 +97,11 @@ export default function App() {
           {/* Phase 5 — Asset */}
           <Route path="assets" element={<AssetsPage />} />
           <Route path="assets/:assetId" element={<AssetDetailPage />} />
+          {/* Phase 6 — Finance */}
+          <Route path="finance/accounts" element={<FinanceAccountsPage />} />
+          <Route path="finance/transactions" element={<FinanceTransactionsPage />} />
+          <Route path="finance/transactions/:transactionId" element={<FinanceTransactionDetailPage />} />
+          <Route path="finance/cashflow" element={<CashflowPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

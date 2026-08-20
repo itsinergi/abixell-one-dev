@@ -52,6 +52,10 @@ export const PERMISSIONS = {
   assetRead: "asset.read",
   assetManage: "asset.manage",
   assetMove: "asset.move",
+  financeRead: "finance.read",
+  financeManage: "finance.manage",
+  financeApprove: "finance.approve",
+  financeConfigure: "finance.configure",
 } as const;
 
 export interface NavSection {
@@ -208,6 +212,30 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Assets",
     description: "What you own, where it is, and who holds it.",
     requiresAnyOf: [PERMISSIONS.assetRead, PERMISSIONS.assetManage, PERMISSIONS.assetMove],
+    requiresInternal: true,
+  },
+  {
+    key: "finance-transactions",
+    path: "/finance/transactions",
+    label: "Transactions",
+    description: "What came in, what went out, and what it was for.",
+    requiresAnyOf: [PERMISSIONS.financeRead, PERMISSIONS.financeManage],
+    requiresInternal: true,
+  },
+  {
+    key: "finance-cashflow",
+    path: "/finance/cashflow",
+    label: "Cashflow",
+    description: "What moved this period, and where you stand now.",
+    requiresAnyOf: [PERMISSIONS.financeRead],
+    requiresInternal: true,
+  },
+  {
+    key: "finance-accounts",
+    path: "/finance/accounts",
+    label: "Cash & Bank",
+    description: "Where the money actually sits.",
+    requiresAnyOf: [PERMISSIONS.financeConfigure, PERMISSIONS.financeRead],
     requiresInternal: true,
   },
   {

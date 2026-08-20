@@ -788,6 +788,151 @@ export const api = {
     request<SiteRecord[]>(`/sites?customerId=${customerId}`, { token }),
   projectsForCustomer: (token: string, customerId: string) =>
     request<ProjectRecord[]>(`/projects?customerId=${customerId}`, { token }),
+
+  // --- Finance (Phase 6) ------------------------------------------------
+  // Every amount below is a STRING, deliberately: money must never pass
+  // through a JavaScript number on its way to or from the API.
+  financeAccounts: (token: string, query: { activeOnly?: boolean } = {}) =>
+    request<FinanceAccount[]>(`/finance/accounts${query.activeOnly ? "?activeOnly=true" : ""}`, { token }),
+  financeAccount: (token: string, code: string) =>
+    request<FinanceAccount>(`/finance/accounts/${encodeURIComponent(code)}`, { token }),
+  createFinanceAccount: (token: string, body: CreateFinanceAccountBody) =>
+    request<FinanceAccount>("/finance/accounts", { method: "POST", token, body }),
+  updateFinanceAccount: (
+    token: string,
+    code: string,
+    body: { name?: string; description?: string | null; isActive?: boolean },
+  ) => request<FinanceAccount>(`/finance/accounts/${encodeURIComponent(code)}`, { method: "PATCH", token, body }),
+
+  financeCategories: (token: string) =>
+    request<{ code: string; label: string }[]>("/finance/categories", { token }),
+
+  financeTransactions: (token: string, query: FinanceTransactionQuery = {}) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    }
+    return request<FinanceTransactionRecord[]>(`/finance/transactions${qs.toString() ? `?${qs}` : ""}`, { token });
+  },
+  financeTransaction: (token: string, id: string) =>
+    request<FinanceTransactionDetail>(`/finance/transactions/${id}`, { token }),
+  recordFinanceTransaction: (token: string, body: RecordFinanceTransactionBody) =>
+    request<FinanceTransactionDetail>("/finance/transactions", { method: "POST", token, body }),
+  actOnFinanceTransaction: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<FinanceTransactionDetail>(`/finance/transactions/${id}/actions/${actionCode}`, {
+      method: "POST",
+      token,
+      body: { comment: comment ?? null },
+    }),
+  reverseFinanceTransaction: (
+    token: string,
+    id: string,
+    body: { reason?: string | null; transactionDate?: string | null } = {},
+  ) => request<FinanceTransactionDetail>(`/finance/transactions/${id}/reversal`, { method: "POST", token, body }),
+
+  financeCashflow: (token: string, query: { from: string; to: string; accountCode?: string }) => {
+    const qs = new URLSearchParams({ from: query.from, to: query.to });
+    if (query.accountCode) qs.set("accountCode", query.accountCode);
+    return request<CashflowResult>(`/finance/cashflow?${qs}`, { token });
+  },
+};
+
+// --- Finance types (Phase 6) -------------------------------------------
+
+/** Money is a string end to end — see the module PRD and finance.entity.ts. */
+export type Money = string;
+
+export type FinanceAccountType = "cash" | "bank" | "petty_cash";
+export type TransactionDirection = "income" | "expense";
+
+export type FinanceAccount = {
+  id: string;
+  code: string;
+  name: string;
+  accountType: FinanceAccountType;
+  currency: string;
+  description: string | null;
+  legalEntityId: string | null;
+  organizationUnitId: string | null;
+  balance: Money;
+  isActive: boolean;
+};
+
+export type FinanceTransactionRecord = {
+  id: string;
+  transactionNumber: string;
+  direction: TransactionDirection;
+  amount: Money;
+  currency: string;
+  transactionDate: string;
+  accountId: string;
+  categoryCode: string;
+  description: string | null;
+  reference: string | null;
+  organizationUnitId: string | null;
+  projectId: string | null;
+  siteId: string | null;
+  customerId: string | null;
+  workflowInstanceId: string | null;
+  appliedAt: string | null;
+  reversesTransactionId: string | null;
+  reversedByTransactionId: string | null;
+};
+
+export type FinanceTransactionDetail = {
+  transaction: FinanceTransactionRecord;
+  account: FinanceAccount | null;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+  isApplied: boolean;
+};
+
+export type CashflowResult = {
+  from: string;
+  to: string;
+  opening: Money;
+  totals: { income: Money; expense: Money; net: Money };
+  closing: Money;
+  byCategory: { categoryCode: string; direction: TransactionDirection; amount: Money }[];
+  accounts: FinanceAccount[];
+};
+
+export type FinanceTransactionQuery = {
+  direction?: string;
+  accountCode?: string;
+  categoryCode?: string;
+  customerId?: string;
+  projectId?: string;
+  organizationUnitId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  state?: string;
+  search?: string;
+};
+
+export type CreateFinanceAccountBody = {
+  code: string;
+  name: string;
+  accountType: FinanceAccountType;
+  currency: string;
+  description?: string | null;
+  legalEntityId?: string | null;
+  organizationUnitId?: string | null;
+};
+
+export type RecordFinanceTransactionBody = {
+  direction: TransactionDirection;
+  /** A string, always. */
+  amount: Money;
+  transactionDate: string;
+  accountCode: string;
+  categoryCode: string;
+  description?: string | null;
+  reference?: string | null;
+  organizationUnitId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  customerId?: string | null;
 };
 
 // --- Asset types (Phase 5) ---------------------------------------------
