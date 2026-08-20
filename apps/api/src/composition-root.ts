@@ -57,6 +57,8 @@ import { PgSurveyIntegrationRepository } from "./infrastructure/persistence/repo
 import { SurveyIntegrationService } from "./application/survey-integration/survey-integration.service.js";
 import { PgServiceOperationsRepository } from "./modules/service-operations/core/infrastructure/service-operations.repository.pg.js";
 import { ServiceOperationsService } from "./modules/service-operations/core/application/service-operations.service.js";
+import { PgWorkforceRepository } from "./modules/workforce/core/infrastructure/workforce.repository.pg.js";
+import { WorkforceService } from "./modules/workforce/core/application/workforce.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -170,6 +172,18 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 3 — Workforce / HR Core. Built before DocumentService so its
+  // `employee` Entity Authorization Resolver can close over
+  // `workforce.canAccessForDocument` (ADR-0012). Employee documents are
+  // gated by a dedicated capability, not by plain workforce.read.
+  const workforce = new WorkforceService(
+    new PgWorkforceRepository(pool),
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -182,6 +196,10 @@ export function buildContainer() {
     [
       "work_order",
       { canAccess: (actor, entityId) => serviceOperations.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "employee",
+      { canAccess: (actor, entityId) => workforce.canAccessForDocument(actor, entityId) },
     ],
   ]);
   const document = new DocumentService(
@@ -294,6 +312,7 @@ export function buildContainer() {
     surveyResponse,
     surveyIntegration,
     serviceOperations,
+    workforce,
   };
 }
 

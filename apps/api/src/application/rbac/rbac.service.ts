@@ -51,7 +51,12 @@ export class RbacService {
     }
   }
 
-  private async isOrganizationUnitScopeCovered(
+  /** Public since Phase 3: a business module filtering a LIST by
+   * Organization Unit Data Scope (e.g. Workforce) must reuse this exact
+   * rule rather than re-deriving hierarchical scope for itself. Mirrors
+   * `isCustomerContextScopeCovered`, which is already public for the same
+   * reason. */
+  async isOrganizationUnitScopeCovered(
     userId: string,
     targetOrganizationUnitId: string,
   ): Promise<boolean> {

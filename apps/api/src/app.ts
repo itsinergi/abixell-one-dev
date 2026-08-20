@@ -30,6 +30,7 @@ import { registerServiceRoutes } from "./interfaces/http/routes/services.js";
 import { registerComplaintRoutes } from "./interfaces/http/routes/complaints.js";
 import { registerSurveyRoutes } from "./interfaces/http/routes/surveys.js";
 import { registerServiceOperationsRoutes } from "./modules/service-operations/core/api/service-operations.routes.js";
+import { registerWorkforceRoutes } from "./modules/workforce/core/api/workforce.routes.js";
 import { buildContainer } from "./composition-root.js";
 
 export function buildApp(): FastifyInstance {
@@ -142,6 +143,7 @@ export function buildApp(): FastifyInstance {
     registerComplaintRoutes(scoped, container);
     registerSurveyRoutes(scoped, container);
     registerServiceOperationsRoutes(scoped, container);
+    registerWorkforceRoutes(scoped, container);
   });
 
   // Scheduler / Background Jobs (Checkpoint 0E): start the in-process
