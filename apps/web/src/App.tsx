@@ -21,6 +21,8 @@ import { WorkOrderDetailPage } from "./modules/service-operations/WorkOrderDetai
 import { MyWorkPage } from "./modules/service-operations/MyWorkPage";
 import { MyWorkDetailPage } from "./modules/service-operations/MyWorkDetailPage";
 import { ServiceDefinitionsPage } from "./modules/service-operations/ServiceDefinitionsPage";
+import { EmployeesPage } from "./modules/workforce/EmployeesPage";
+import { EmployeeDetailPage } from "./modules/workforce/EmployeeDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -76,6 +78,9 @@ export default function App() {
           <Route path="my-work" element={<MyWorkPage />} />
           <Route path="my-work/:workOrderId" element={<MyWorkDetailPage />} />
           <Route path="service-types" element={<ServiceDefinitionsPage />} />
+          {/* Phase 3 — Workforce / HR */}
+          <Route path="employees" element={<EmployeesPage />} />
+          <Route path="employees/:employeeId" element={<EmployeeDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

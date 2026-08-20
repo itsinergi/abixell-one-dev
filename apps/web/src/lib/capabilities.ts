@@ -43,6 +43,8 @@ export const PERMISSIONS = {
   serviceOperationsManage: "service_operations.manage",
   serviceOperationsExecute: "service_operations.execute",
   serviceOperationsConfigure: "service_operations.configure",
+  workforceRead: "workforce.read",
+  workforceManage: "workforce.manage",
 } as const;
 
 export interface NavSection {
@@ -160,6 +162,14 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Service Types",
     description: "Define the reusable services your teams deliver.",
     requiresAnyOf: [PERMISSIONS.serviceOperationsConfigure],
+  },
+  {
+    key: "employees",
+    path: "/employees",
+    label: "Employees",
+    description: "Who works here, and where they belong in the organisation.",
+    requiresAnyOf: [PERMISSIONS.workforceRead, PERMISSIONS.workforceManage],
+    requiresInternal: true,
   },
   {
     key: "administration",

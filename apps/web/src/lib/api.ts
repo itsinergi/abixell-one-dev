@@ -619,6 +619,99 @@ export const api = {
     request<WorkOrder>(`/work-orders/${id}/complete`, { method: "POST", token, body: { notes } }),
   verifyWorkOrder: (token: string, id: string, notes: string | null) =>
     request<WorkOrder>(`/work-orders/${id}/verify`, { method: "POST", token, body: { notes } }),
+
+  // --- Workforce / HR (Phase 3) ---------------------------------------
+  positions: (token: string) => request<PositionRecord[]>("/positions", { token }),
+  createPosition: (token: string, body: { code: string; name: string; description?: string | null }) =>
+    request<PositionRecord>("/positions", { method: "POST", token, body }),
+  setPositionActive: (token: string, code: string, isActive: boolean) =>
+    request<PositionRecord>(`/positions/${code}/active`, { method: "PATCH", token, body: { isActive } }),
+
+  employees: (token: string, query: { search?: string; employmentStatus?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (query.search) params.set("search", query.search);
+    if (query.employmentStatus) params.set("employmentStatus", query.employmentStatus);
+    const qs = params.toString();
+    return request<Employee[]>(`/employees${qs ? `?${qs}` : ""}`, { token });
+  },
+  employee: (token: string, id: string) => request<EmployeeDetail>(`/employees/${id}`, { token }),
+  myEmployeeRecord: (token: string) => request<EmployeeDetail>("/employees/me", { token }),
+  createEmployee: (
+    token: string,
+    body: {
+      employeeNumber?: string;
+      fullName: string;
+      email?: string | null;
+      phone?: string | null;
+      employmentType?: string | null;
+      joinedAt?: string | null;
+      legalEntityId?: string | null;
+      organizationUnitId?: string | null;
+      positionCode?: string | null;
+    },
+  ) => request<Employee>("/employees", { method: "POST", token, body }),
+  updateEmployeeProfile: (
+    token: string,
+    id: string,
+    body: { fullName?: string; email?: string | null; phone?: string | null; employmentType?: string | null },
+  ) => request<Employee>(`/employees/${id}`, { method: "PATCH", token, body }),
+  changeEmployeePlacement: (
+    token: string,
+    id: string,
+    body: {
+      legalEntityId?: string | null;
+      organizationUnitId?: string | null;
+      positionCode?: string | null;
+      employmentStatus?: string;
+      effectiveFrom?: string;
+      note?: string | null;
+    },
+  ) => request<EmployeeDetail>(`/employees/${id}/placement`, { method: "POST", token, body }),
+  setEmployeeUserLink: (token: string, id: string, userId: string | null) =>
+    request<Employee>(`/employees/${id}/user-link`, { method: "POST", token, body: { userId } }),
+};
+
+// --- Workforce types (Phase 3) -----------------------------------------
+
+export type PositionRecord = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+};
+
+export type Employee = {
+  id: string;
+  employeeNumber: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  employmentType: string | null;
+  employmentStatus: "active" | "inactive" | "ended";
+  joinedAt: string | null;
+  endedAt: string | null;
+  legalEntityId: string | null;
+  organizationUnitId: string | null;
+  positionId: string | null;
+  userId: string | null;
+};
+
+export type EmployeeAssignmentRecord = {
+  id: string;
+  legalEntityId: string | null;
+  organizationUnitId: string | null;
+  positionId: string | null;
+  employmentStatus: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  note: string | null;
+};
+
+export type EmployeeDetail = {
+  employee: Employee;
+  position: PositionRecord | null;
+  history: EmployeeAssignmentRecord[];
 };
 
 // --- Service Operations types (Phase 2) --------------------------------
