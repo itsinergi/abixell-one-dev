@@ -28,11 +28,11 @@ One application shell + design system
 | **UX-006** | **No offline business data.** Offline capability shall cover the application shell only; business data and API responses shall never be cached client-side. | DELIVERED |
 | **UX-007** | **No offline business mutation.** The application shall not queue business writes while offline. | DELIVERED |
 | **UX-008** | **Client-side surface.** Client users shall submit and track their own requests and see only their own organisation's data. | DELIVERED (Complaint, Survey) |
-| **UX-009** | **Operational surface.** Operational users shall see a work queue, act on assigned work, and record execution evidence. | DELIVERED (Complaint) · PLANNED (Service Operations) |
+| **UX-009** | **Operational surface.** Operational users shall see a work queue, act on assigned work, and record execution evidence. | DELIVERED (Complaint, Service Operations) |
 | **UX-010** | **Verification surface.** Verification users shall review completed work and record a verification outcome. | DELIVERED (Complaint) |
 | **UX-011** | **Management surface.** Management users shall see aggregate operational status and items needing attention. | DELIVERED (Complaint) · PLANNED (cross-module) |
 | **UX-012** | **Administration surface.** Administrators shall maintain their tenant's configuration through the application. | PARTIAL (Complaint config only) |
-| **UX-013** | **Field execution surface.** Field users shall execute assigned work and capture evidence on mobile. | PLANNED (Service Operations) |
+| **UX-013** | **Field execution surface.** Field users shall execute assigned work and capture evidence on mobile. | DELIVERED |
 | **UX-014** | **Every Business Core module shall ship the operational UI needed for its Core to be genuinely usable.** | PARTIAL (Customer module has no UI) |
 | **UX-015** | **Client-facing vocabulary.** No internal product terminology shall appear in any user-facing string; labels come from tenant terminology configuration. | DELIVERED |
 

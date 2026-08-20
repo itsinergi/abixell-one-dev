@@ -34,11 +34,11 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 |---|---|---|---|---|---|
 | Project | `CUS-CORE-004` + `PRJ-CORE-*` | ADAPT (split: commercial record vs delivery execution) | Business Core | PARTIAL | CUS.2 / PRJ.1 |
 | Site | `CUS-CORE-005` | ADOPT | Business Core | DELIVERED | CUS.2 |
-| Operational Task / Daily Report | `SO-CORE-003/008` | ADAPT | Business Core | PLANNED | OPS.1/OPS.3 |
-| Inspection / Checklist | `SO-CORE-007/008` | ADAPT | Business Core | PLANNED | OPS.3 |
+| Operational Task / Daily Report | `SO-CORE-003/008` | ADAPT | Business Core | DELIVERED | OPS.1/OPS.3 |
+| Inspection / Checklist | `SO-CORE-007/008` | ADAPT | Business Core | DELIVERED | OPS.3 |
 | Issue / Complaint | `SQ-CORE-001…016` | ADAPT (generic engine) | Business Core | DELIVERED | CMP.1–CMP.7 |
 | Corrective Action | `SQ-CORE-005` | ADOPT | Business Core | DELIVERED | CMP.1 |
-| Mobilization / Demobilization | `SO-CORE-002/003` | MERGE (work request/order lifecycle) | Business Core | PLANNED | OPS.1 |
+| Mobilization / Demobilization | `SO-CORE-002/003` | MERGE (work request/order lifecycle) | Business Core | DELIVERED | OPS.1 |
 
 ### Vertical services (Catering · Housekeeping · Camp · Facilities)
 
@@ -47,7 +47,7 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 | Catering: Kitchen, Production, Distribution, Consumption, Waste, Quality, Nutrition, Menu, Meal Planning | `PACK-001` over `SO-CORE-*` | **SUPERSEDE** (as separate module) → pack + configuration | Pack | PLANNED | Pack wave |
 | Housekeeping: Area, Cleaning, Schedule, Task, Photo, Completion | `PACK-002` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | PLANNED | Pack wave |
 | Camp: Camp, Building, Room, Occupancy, Accommodation, Laundry, Utilities | `PACK-003` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | PLANNED | Pack wave |
-| Facilities: Facility, Service Request, Work Order, History | `PACK-004` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | PLANNED | Pack wave |
+| Facilities: Facility, Service Request, Work Order, History | `PACK-004` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | PLANNED (engine DELIVERED) | Pack wave |
 | Facilities/Camp: Maintenance, Repair | `AST-ADV-001/002` | RECLASSIFY | Advanced (Asset) | DEFERRED | Wave A |
 | Catering: Food Cost | `FIN-ADV-*` / `SCM-ADV-005` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 
@@ -107,10 +107,10 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 |---|---|---|---|---|---|
 | Customer Portal (as module) | `UX-008` + module screens | **SUPERSEDE** → experience surface | Platform + module UI | DELIVERED (Complaint/Survey) | CMP.2 |
 | Supervisor Mobile (as module) | `UX-009` + `UX-004` | **SUPERSEDE** → responsive surface | Platform + module UI | DELIVERED (Complaint) | CMP.3 |
-| Employee Mobile (as module) | `UX-013` | **SUPERSEDE** → responsive surface | Platform + module UI | PLANNED | OPS.4 |
+| Employee Mobile (as module) | `UX-013` | **SUPERSEDE** → responsive surface | Platform + module UI | DELIVERED | OPS.4 |
 | Executive Dashboard (as module) | `RPT-CORE-005` | **SUPERSEDE** → reporting capability | Business Core | PLANNED | RPT.3 |
 | Offline Mode (supervisor) | `SO-ADV-006` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| GPS capture | `SO-CORE-009` (evidence context) | ADAPT | Business Core | PLANNED | OPS.3 |
+| GPS capture | `SO-CORE-009` (evidence context) | ADAPT | Business Core | PARTIAL (evidence delivered; geo capture deferred) | OPS.3 |
 | Portal: Attendance / Meal views | Pack + `HR-ADV-001` | RECLASSIFY | Pack / Advanced | DEFERRED | Pack wave |
 
 ### Administration & platform

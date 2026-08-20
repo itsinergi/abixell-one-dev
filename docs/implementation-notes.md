@@ -1662,3 +1662,82 @@ Survey-to-Action's initial **Core** capability ends at
 1E; it remains a future Advanced Capability requiring an explicit Founder
 decision. This boundary matters for the Product Core vs Advanced audit
 after Phase 1F.
+
+
+## 2026-08-20 — Phase 2 (Service Operations & Work Management Core)
+
+First business module delivered under the **frozen target repository
+architecture**: backend at `apps/api/src/modules/service-operations/core/
+{domain,application,infrastructure,api}`, frontend at
+`apps/web/src/modules/service-operations/`. Existing Phase 0/1 code was NOT
+migrated (deliberate — see blueprint §11A).
+
+### Domain model
+- `service_definitions` + `service_definition_checklist_items` — reusable,
+  generic service types (SO-CORE-001/007).
+- `work_requests` — intake. State is **derived** from
+  `converted_work_order_id` / `cancelled_at`; there is deliberately no status
+  column, so intake bookkeeping can never become a second lifecycle.
+- `work_orders` — the executable unit. **No status column**:
+  `workflow_instance_id` is the one link to the Workflow Engine
+  (SO-CORE-004). Completion/verification columns record business FACTS only,
+  exactly as `complaints` does.
+- `work_order_checklist_items` — snapshotted from the template at creation.
+
+### Why the checklist is snapshotted
+A Service Definition is Client Configuration and will change. Executed work
+must remain historically truthful, so code/label/is_required are copied onto
+the Work Order at creation. Verified by test: adding a template item later
+does not alter an existing Work Order's checklist.
+
+### Platform Core reuse (nothing re-implemented)
+Workflow (lifecycle + assignment eligibility), Numbering (`work_request`,
+`work_order`), Configuration (reference data types `service_category`,
+`work_priority`), Documents (evidence via entityType `work_order` plus an
+entity authorization resolver), Audit, Domain Events, Notification, RBAC, and
+Customer Data Scope. Customer/Project/Site come from Customer & Commercial —
+no duplicate master anywhere.
+
+### Authorization design
+Five capability-based permissions: `service_operations.read`, `.manage`,
+`.execute`, `.verify`, `.configure`. No role-name logic exists.
+
+Work Order visibility = Customer Data Scope **OR** the actor is the assigned
+executor **OR** the actor is associated with the Workflow Instance. The
+assignee path matters because a field executor is authorised by assignment,
+not by owning the customer's scope.
+
+Lifecycle dispatch (`/actions/:actionCode`) requires `read` plus **any**
+operational capability, with the Workflow Engine remaining the precise gate.
+This was a real correction found by testing: requiring `execute` wrongly
+blocked coordinators from advancing work they own.
+
+### Idempotency and guards
+Guarded UPDATEs make start, completion, and verification idempotent (a
+duplicate completion returns 409 and cannot overwrite the original facts). A
+Work Request converts exactly once. Required checklist items block
+completion. Only the assigned executor may execute.
+
+### Tests / Regression
+`service-operations.test.ts` — 13 tests covering the full happy path,
+authorization, execution ownership, lifecycle validity, historical safety,
+Data Scope, cross-tenant isolation (work order, assignment, service
+definition), intake lifecycle, inactive definitions, and schedule validation.
+Suite **163/163 PASS**; typecheck/lint/build PASS.
+
+### Live acceptance (real Chromium, through the UI)
+Service type + checklist defined → work order created → assigned to a field
+worker → scheduled → lifecycle advanced → field worker (390 px viewport)
+started work, completed the required checklist item, and completed the job →
+supervisor verified → historical record still readable. No horizontal
+overflow at 375/390/768/desktop on all three surfaces.
+
+### Also resolved
+The "shared date formatter" debt: module-neutral helpers now live at
+`apps/web/src/shared/format.ts`, with the Complaint module re-exporting them
+(no behaviour change, no churn).
+
+### Deliberately NOT built (Advanced, deferred)
+Recurring service, advanced scheduling, route planning, productivity and
+manpower optimisation, forecasting, offline field execution. No Vertical
+Service Pack logic — the four packs remain configuration over this engine.

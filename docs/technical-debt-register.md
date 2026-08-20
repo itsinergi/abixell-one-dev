@@ -552,3 +552,39 @@ or regression blocker was found (150/150 PASS at `b7b6d64`).
 
 ### OUTSTANDING (unchanged by this execution)
 `Business-Discovery-Workshop-Kit.docx` remains uncommitted at `docs/00-prd/` pending a Founder decision on versioning binaries. Platform Hardening items (CI/CD, CORS, rate limit, DR, deployment automation, reconciliation worker, advisories, PWA icons) remain as previously classified — none were touched.
+
+---
+
+## Phase 2 — Service Operations Core (2026-08-20)
+
+### MUST FIX BEFORE PHASE 2 CLOSURE
+- None. No defect met the closure-blocking bar.
+
+### RESOLVED in Phase 2
+- **Shared date formatter** — module-neutral helpers extracted to
+  `apps/web/src/shared/format.ts`; Complaint re-exports them (no behaviour change).
+
+### SHOULD FIX LATER (new)
+| Item | Detail |
+|---|---|
+| **Assignment uses a raw user id field** | The Work Order detail screen asks for an assignee user id rather than offering a people picker. Functional and correctly authorised, but poor operator UX. A picker over the existing `/users` endpoint is the natural fix. |
+| **Work Request has no UI** | Requests are fully supported by the API (create, cancel, convert) and covered by tests, but the Phase 2 UI starts at the Work Order. Client-side intake screens are the natural next increment of OPS.4. |
+| **Checklist checkbox has no optimistic state** | The control is fully server-authoritative, so the tick appears only after the reload completes. Correct, but momentarily laggy on a slow field connection. |
+| **`listWorkOrders` composes status per row** | One Workflow status lookup per row, mirroring the existing Complaint queue pattern. Not pathological at pilot volume; revisit together with the existing operational-queue N+1 item (PH-5). |
+
+### DEFERRED ADVANCED (unchanged, confirmed)
+Recurring service generation, advanced scheduling, route planning,
+productivity and manpower optimisation, forecasting, offline field execution.
+
+### CLIENT CONFIGURATION (confirmed)
+Service types, checklists, work lifecycle definition, SLA, assignment rules,
+scheduling rules, reference data (`service_category`, `work_priority`),
+numbering patterns, notification templates.
+
+### CLIENT EXTENSION CANDIDATES (confirmed)
+Client device/IoT integration, site access systems, client-specific
+operational calculations. Excluded from the product denominator.
+
+### PLATFORM HARDENING (unchanged)
+PH-1 through PH-8 untouched by Phase 2, as instructed. The Pilot gate remains
+blocked on Phase H, not on business capability.

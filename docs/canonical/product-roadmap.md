@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.1 |
+| **Roadmap Baseline** | v1.2 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-20 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
@@ -48,9 +48,10 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 1C** (1C.1–1C.8) | Complaint experience layer, management dashboard, administration, responsive/PWA | BC-2 Service Quality |
 | **Phase 1D** (1D.1–1D.3) | Generic Survey & Assessment Engine + admin/respondent UX | BC-3 Survey & Assessment |
 | **Phase 1E** (1E.1–1E.3) | Survey-to-Action integration + management attention | **Advanced** over BC-2/BC-3 |
+| **Phase 2** | Service Operations & Work Management Core | BC-4 Service Operations |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02).**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED.**
 
 ---
 
@@ -58,11 +59,11 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master` @ `b7b6d64` |
-| Migrations | 14 |
-| Tables | 58 |
-| Permissions | 42 |
-| Tests | 150 PASS (15 files) |
+| Branch / commit | `master` @ `cc0d0b5` (Phase 2) |
+| Migrations | 15 |
+| Tables | 63 |
+| Permissions | 47 |
+| Tests | 163 PASS (16 files) |
 | typecheck / lint / build | PASS |
 
 ---
@@ -100,7 +101,7 @@ Pilot/production readiness. **Not** business capability.
 | PH-7 | PWA installability assets (PNG 192/512) | 1 | PLANNED | Pilot |
 | PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | Production |
 
-## 8. Roadmap units — Business Core (weight 117, 31 completed)
+## 8. Roadmap units — Business Core (weight 117, 44 completed)
 
 ### BC-1 Customer & Commercial — 7/9
 | ID | Unit | W | Status |
@@ -128,14 +129,14 @@ Pilot/production readiness. **Not** business capability.
 | SRV.2 | Survey admin + respondent experience | 3 | COMPLETED |
 | SRV.3 | Survey engine stabilization | 1 | COMPLETED |
 
-### BC-4 Service Operations & Work Management — 0/13
+### BC-4 Service Operations & Work Management — 13/13 · COMPLETED
 | ID | Unit | W | Status |
 |---|---|---:|---|
-| OPS.1 | Service request / work order master + lifecycle | 3 | PLANNED |
-| OPS.2 | Scheduling & team assignment | 3 | PLANNED |
-| OPS.3 | Field execution & evidence capture | 3 | PLANNED |
-| OPS.4 | Supervisor / field operational UX | 3 | PLANNED |
-| OPS.5 | Stabilization | 1 | PLANNED |
+| OPS.1 | Service request / work order master + lifecycle | 3 | COMPLETED |
+| OPS.2 | Scheduling & team assignment | 3 | COMPLETED |
+| OPS.3 | Field execution & evidence capture | 3 | COMPLETED |
+| OPS.4 | Supervisor / field operational UX | 3 | COMPLETED |
+| OPS.5 | Stabilization | 1 | COMPLETED |
 
 ### BC-5 Workforce (HR) Core — 0/10
 | ID | Unit | W | Status |
@@ -221,7 +222,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 
 | Phase | Name | Units | W | Depends on | Status |
 |---|---|---|---:|---|---|
-| **Phase 2** | Service Operations & Work Management Core | OPS.1–OPS.5 | 13 | Platform Core, BC-1 | PLANNED |
+| ~~Phase 2~~ | Service Operations & Work Management Core | OPS.1–OPS.5 | 13 | — | **COMPLETED** |
 | **Phase 3** | Workforce (HR) Core | HR.1–HR.5 | 10 | Platform Core | PLANNED |
 | **Phase 4** | Supply Chain Core | SCM.1–SCM.6 | 14 | Platform Core | PLANNED |
 | **Phase 5** | Asset Core | AST.1–AST.4 | 8 | Platform Core, BC-6 (spares) | PLANNED |
@@ -251,6 +252,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 | Version | Date | Change |
 |---|---|---|
 | v1.0 | 2026-08-20 | First canonical roadmap. Replaces template-shaped `22-…`. Establishes layers, 11 Business Core modules, weighted units, dual progress metric. Records Phase 1F as NOT APPLICABLE. |
+| v1.2 | 2026-08-20 | Phase 2 delivered: OPS.1–OPS.5 COMPLETED (13 pts earned). Denominator unchanged at 174 / 353 — no scope was added, so the movement is pure earned progress. |
 | v1.1 | 2026-08-20 | Founder-aligned baseline after PRD reconstruction. Roadmap units reconciled against canonical PRD requirement IDs; IGSEP legacy requirements migrated via the [traceability matrix](../prd/abixell-one/14-traceability-matrix.md) with **no denominator change** (all legacy items were ADOPT/ADAPT/MERGE/RECLASSIFY into units that already existed, or SUPERSEDE/pack items that do not add weight). Repository architecture rules frozen in the blueprint. |
 
 ## 14. Roadmap unit ↔ PRD requirement mapping

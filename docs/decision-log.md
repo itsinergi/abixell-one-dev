@@ -357,3 +357,18 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 12 | `docs/decision-log.md`, `docs/adr/`, `docs/implementation-notes.md` **kept at `docs/` root** rather than moved into the ideal tree | They are cited by path from 15 source-code comments; moving them creates stale references for no benefit | §39 |
 | 13 | Pre-Phase-0 founder decisions **copied** into `docs/history/pre-phase-0/` (originals in the parent directory left untouched) | The product's founding decisions must be version-controlled; the Founder's own copies are not this execution's to relocate | §65 |
 | 14 | `Business-Discovery-Workshop-Kit.docx` **not committed** | Binaries stay outside the active repository pending explicit Founder decision | §64 |
+
+## 2026-08-20 — Phase 2 (Service Operations & Work Management Core)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Built under the frozen target architecture (`modules/service-operations/core/...`); existing Phase 0/1 code left in place | New code must follow the target; migrating old code was deferred for churn reasons | Blueprint §11A |
+| 2 | `work_orders` has **no status column**; `workflow_instance_id` is the only lifecycle link | Prevents a second state machine competing with the Workflow Engine | SO-CORE-004 |
+| 3 | Work Request state is **derived** (converted/cancelled), not stored | Intake bookkeeping must not drift into a lifecycle of its own | SO-CORE-002 |
+| 4 | Checklist is **snapshotted** onto the Work Order at creation | A Service Definition is configuration and will change; executed history must stay truthful | SO-CORE-007 |
+| 5 | Evidence reuses Document Core with a `work_order` entity authorization resolver | No second attachment subsystem; attachments inherit the Work Order's authorization | SO-CORE-009, ADR-0012 |
+| 6 | Five capability permissions (read/manage/execute/verify/configure); no role names | Segregation of duties must be configurable per client | SO-CORE §29 |
+| 7 | Lifecycle dispatch requires `read` + **any** operational capability, not `execute` | Coordinators, executors, and verifiers all legitimately advance lifecycle; Workflow eligibility stays the precise gate (found by testing) | SO-CORE-004 |
+| 8 | Work Order visibility includes the **assignee path** alongside Customer Data Scope | A field executor is authorised by assignment, not by owning the customer's scope | SO-CORE-012 |
+| 9 | Start/complete/verify are idempotent via guarded UPDATEs | Duplicate actions must never overwrite original facts or duplicate side effects | Phase 2 §48 |
+| 10 | Module-neutral formatters moved to `apps/web/src/shared/format.ts`, Complaint re-exports them | Retires the shared-formatter debt with zero behaviour change and no churn | Debt register |
