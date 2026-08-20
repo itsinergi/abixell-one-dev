@@ -240,7 +240,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 ## 11. Gates
 
 - **Pilot Gate:** Platform Core ✅ + ≥1 Business Core module ✅ + Phase H complete + client configuration loaded.
-  *Current status:* functionality satisfied (3 modules); **blocked on Phase H**.
+  *Current status:* functionality satisfied (4 modules delivered); **blocked on Phase H**.
 - **Production Gate:** Pilot Gate + Phase H2 + security review + DR tested.
 
 ## 12. Deferred / optional
