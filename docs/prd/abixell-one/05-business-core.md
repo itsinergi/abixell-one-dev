@@ -13,7 +13,7 @@ Eleven business domains. Each has its own PRD under [`modules/`](modules/). A mo
 | 3 | Survey & Assessment | [survey-assessment.md](modules/survey-assessment.md) | What did we ask, who answered, what was the result? | DELIVERED |
 | 4 | Service Operations & Work Management | [service-operations.md](modules/service-operations.md) | What work is requested/scheduled, who executes it, was it done? | DELIVERED |
 | 5 | Workforce (HR) | [workforce.md](modules/workforce.md) | Who is the employee and where do they belong organisationally? | DELIVERED |
-| 6 | Supply Chain | [supply-chain.md](modules/supply-chain.md) | What item exists, how much, what moved, purchased from whom? | PLANNED |
+| 6 | Supply Chain | [supply-chain.md](modules/supply-chain.md) | What item exists, how much, what moved, purchased from whom? | DELIVERED |
 | 7 | Asset | [asset.md](modules/asset.md) | What asset exists, where is it, who holds it, how did it move? | PLANNED |
 | 8 | Finance | [finance.md](modules/finance.md) | What money came in/out, how much, when, for what? | PLANNED |
 | 9 | HSE | [hse.md](modules/hse.md) | What incident/observation occurred, and was it followed up? | PLANNED |

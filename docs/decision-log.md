@@ -389,3 +389,22 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 10 | Ending employment sets an effective end and preserves history; no hard delete | Business history and downstream references must survive | Phase 3 §23/§47 |
 | 11 | Deliberate data minimisation: no statutory, tax, banking, medical, biometric, or family fields | Workforce Core must stay internationally reusable and privacy-respecting | Phase 3 §10/§40 |
 | 12 | Calendar dates handled as plain `YYYY-MM-DD` strings, never via `toISOString()` | pg returns `date` at local midnight; UTC conversion shifted dates by a day (bug found in testing) | Phase 3 bug fix |
+
+## 2026-08-20 — Phase 4 (Supply Chain Core)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Built under the frozen target architecture (`modules/supply-chain/core/...`) | Third module proving the target; Phase 0/1 code untouched | Blueprint §11A |
+| 2 | Stock location is the existing **Site**; no warehouse/zone/bin topology | Core answers how much exists where, not warehouse layout | SCM-CORE-003, Phase 4 §15 |
+| 3 | Two **partial** unique indexes for tenant-level vs per-site balances | A plain UNIQUE would not constrain rows with a NULL site (NULL never equals NULL) | ADR-0006 lesson |
+| 4 | Movements are an immutable ledger with positive quantity + direction type | Corrections must be compensating movements, never edits | SCM-CORE-006 |
+| 5 | Sufficiency and over-receipt checks live **inside** the mutating SQL statement | A separate read-then-write would let concurrent operations overspend or over-receive; this makes the invariant atomic | Phase 4 §32/§33 |
+| 6 | Movement + balance always written in ONE transaction | A partial success would corrupt quantity | Phase 4 §32 |
+| 7 | Negative stock is prohibited in Core | PRD gives no policy for it; silently allowing it would misrepresent operational truth. A configurable policy would be Advanced | Phase 4 §19 |
+| 8 | Purchase Request lifecycle = Workflow Engine; no status column | Avoids a second state machine | SCM-CORE-008, Phase 4 §23 |
+| 9 | Purchase Order uses a one-way `issued_at` transition with line immutability, not Workflow | PRD requires approval only for the request; Workflow must not be used merely because it exists | Phase 4 §44/§61 |
+| 10 | Receipt is a goods-in movement referencing the order line — no receipts table | The movement already carries every fact a receipt needs | SCM-CORE-010 |
+| 11 | Purchase order price is procurement data only — no valuation, AP, journal, or GL | Inventory accounting belongs to Finance/Advanced | Phase 4 §25/§54/§59 |
+| 12 | Supplier kept distinct from Customer | Shared "organisation" shape does not justify a polymorphic party model | Phase 4 §13 |
+| 13 | Four capabilities separating master data, purchasing, and stock duties | Segregation of duties must be configurable per client | Phase 4 §37 |
+| 14 | An order with received quantity cannot be cancelled | Cancelling after physical receipt would misrepresent stock history | Phase 4 §62 |

@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.3 |
+| **Roadmap Baseline** | v1.4 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-20 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
@@ -50,9 +50,10 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 1E** (1E.1–1E.3) | Survey-to-Action integration + management attention | **Advanced** over BC-2/BC-3 |
 | **Phase 2** | Service Operations & Work Management Core | BC-4 Service Operations |
 | **Phase 3** | Workforce / HR Core | BC-5 Workforce |
+| **Phase 4** | Supply Chain Core | BC-6 Supply Chain |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED.**
 
 ---
 
@@ -60,11 +61,11 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master` @ `688de8a` (Phase 3) |
-| Migrations | 16 |
-| Tables | 66 |
-| Permissions | 51 |
-| Tests | 179 PASS (17 files) |
+| Branch / commit | `master` @ `00d811e` (Phase 4) |
+| Migrations | 17 |
+| Tables | 74 |
+| Permissions | 55 |
+| Tests | 195 PASS (18 files) |
 | typecheck / lint / build | PASS |
 
 ---
@@ -102,7 +103,7 @@ Pilot/production readiness. **Not** business capability.
 | PH-7 | PWA installability assets (PNG 192/512) | 1 | PLANNED | Pilot |
 | PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | Production |
 
-## 8. Roadmap units — Business Core (weight 117, 54 completed)
+## 8. Roadmap units — Business Core (weight 117, 68 completed)
 
 ### BC-1 Customer & Commercial — 7/9
 | ID | Unit | W | Status |
@@ -148,15 +149,15 @@ Pilot/production readiness. **Not** business capability.
 | HR.4 | Workforce admin UX | 2 | COMPLETED |
 | HR.5 | Stabilization | 1 | COMPLETED |
 
-### BC-6 Supply Chain Core — 0/14
+### BC-6 Supply Chain Core — 14/14 · COMPLETED
 | ID | Unit | W | Status |
 |---|---|---:|---|
-| SCM.1 | Item master + supplier master | 3 | PLANNED |
-| SCM.2 | Stock balance + goods in/out | 3 | PLANNED |
-| SCM.3 | Purchase request | 2 | PLANNED |
-| SCM.4 | Purchase order + receipt | 3 | PLANNED |
-| SCM.5 | Operational UX | 2 | PLANNED |
-| SCM.6 | Stabilization | 1 | PLANNED |
+| SCM.1 | Item master + supplier master | 3 | COMPLETED |
+| SCM.2 | Stock balance + goods in/out | 3 | COMPLETED |
+| SCM.3 | Purchase request | 2 | COMPLETED |
+| SCM.4 | Purchase order + receipt | 3 | COMPLETED |
+| SCM.5 | Operational UX | 2 | COMPLETED |
+| SCM.6 | Stabilization | 1 | COMPLETED |
 
 ### BC-7 Asset Core — 0/8
 | ID | Unit | W | Status |
@@ -225,7 +226,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 |---|---|---|---:|---|---|
 | ~~Phase 2~~ | Service Operations & Work Management Core | OPS.1–OPS.5 | 13 | — | **COMPLETED** |
 | ~~Phase 3~~ | Workforce (HR) Core | HR.1–HR.5 | 10 | — | **COMPLETED** |
-| **Phase 4** | Supply Chain Core | SCM.1–SCM.6 | 14 | Platform Core | PLANNED |
+| ~~Phase 4~~ | Supply Chain Core | SCM.1–SCM.6 | 14 | — | **COMPLETED** |
 | **Phase 5** | Asset Core | AST.1–AST.4 | 8 | Platform Core, BC-6 (spares) | PLANNED |
 | **Phase 6** | Finance Core | FIN.1–FIN.6 | 12 | Platform Core, BC-1 | PLANNED |
 | **Phase 7** | HSE Core | HSE.1–HSE.4 | 9 | Platform Core, BC-4 | PLANNED |
@@ -241,7 +242,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 ## 11. Gates
 
 - **Pilot Gate:** Platform Core ✅ + ≥1 Business Core module ✅ + Phase H complete + client configuration loaded.
-  *Current status:* functionality satisfied (5 modules delivered); **blocked on Phase H**.
+  *Current status:* functionality satisfied (6 modules delivered); **blocked on Phase H**.
 - **Production Gate:** Pilot Gate + Phase H2 + security review + DR tested.
 
 ## 12. Deferred / optional
@@ -253,6 +254,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 | Version | Date | Change |
 |---|---|---|
 | v1.0 | 2026-08-20 | First canonical roadmap. Replaces template-shaped `22-…`. Establishes layers, 11 Business Core modules, weighted units, dual progress metric. Records Phase 1F as NOT APPLICABLE. |
+| v1.4 | 2026-08-20 | Phase 4 delivered: SCM.1–SCM.6 COMPLETED (14 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.3 | 2026-08-20 | Phase 3 delivered: HR.1–HR.5 COMPLETED (10 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.2 | 2026-08-20 | Phase 2 delivered: OPS.1–OPS.5 COMPLETED (13 pts earned). Denominator unchanged at 174 / 353 — no scope was added, so the movement is pure earned progress. |
 | v1.1 | 2026-08-20 | Founder-aligned baseline after PRD reconstruction. Roadmap units reconciled against canonical PRD requirement IDs; IGSEP legacy requirements migrated via the [traceability matrix](../prd/abixell-one/14-traceability-matrix.md) with **no denominator change** (all legacy items were ADOPT/ADAPT/MERGE/RECLASSIFY into units that already existed, or SUPERSEDE/pack items that do not add weight). Repository architecture rules frozen in the blueprint. |

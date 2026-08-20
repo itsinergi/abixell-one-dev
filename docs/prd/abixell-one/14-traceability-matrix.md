@@ -70,15 +70,15 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 
 | Legacy area | Abixell One requirement | Disposition | New classification | Impl. status | Roadmap unit |
 |---|---|---|---|---|---|
-| Purchase Request | `SCM-CORE-007/008` | ADOPT | Business Core | PLANNED | SCM.3 |
-| Purchase Order / Receiving | `SCM-CORE-009/010` | ADOPT | Business Core | PLANNED | SCM.4 |
-| Vendor (master) | `SCM-CORE-002` | **MERGE** into Supply Chain | Business Core | PLANNED | SCM.1 |
+| Purchase Request | `SCM-CORE-007/008` | ADOPT | Business Core | DELIVERED | SCM.3 |
+| Purchase Order / Receiving | `SCM-CORE-009/010` | ADOPT | Business Core | DELIVERED | SCM.4 |
+| Vendor (master) | `SCM-CORE-002` | **MERGE** into Supply Chain | Business Core | DELIVERED | SCM.1 |
 | RFQ / Vendor Quotation | `SCM-ADV-006` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 | Vendor Evaluation | `SCM-ADV-007` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| Item / Storage | `SCM-CORE-001/003` | ADOPT | Business Core | PLANNED | SCM.1/SCM.2 |
-| Receiving / Issue (stock) | `SCM-CORE-004/005` | ADOPT | Business Core | PLANNED | SCM.2 |
+| Item / Storage | `SCM-CORE-001/003` | ADOPT | Business Core | DELIVERED | SCM.1/SCM.2 |
+| Receiving / Issue (stock) | `SCM-CORE-004/005` | ADOPT | Business Core | DELIVERED | SCM.2 |
 | Transfer / Stock Opname / Adjustment | `SCM-ADV-004` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| Inventory History | `SCM-CORE-006` | ADAPT (immutable movements) | Business Core | PLANNED | SCM.2 |
+| Inventory History | `SCM-CORE-006` | ADAPT (immutable movements) | Business Core | DELIVERED | SCM.2 |
 | Warehouse (as separate module) | `SCM-ADV-001` | **MERGE + RECLASSIFY** | Advanced | DEFERRED | Wave A |
 
 ### Assets

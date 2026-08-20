@@ -621,3 +621,41 @@ interfaces. Excluded from the product denominator.
 ### PLATFORM HARDENING (unchanged)
 PH-1 through PH-8 untouched by Phase 3. The Pilot gate remains blocked on
 Phase H, not on business capability.
+
+---
+
+## Phase 4 — Supply Chain Core (2026-08-20)
+
+### MUST FIX BEFORE PHASE 4 CLOSURE
+- None. The transactional invariants were verified explicitly: no corrupted
+  balance, no duplicate stock effect, no cross-tenant reference, no invalid
+  lifecycle mutation, no silent edit of an issued order, no orphan line.
+
+### SHOULD FIX LATER (new)
+| Item | Detail |
+|---|---|
+| **Purchase request supports one line in the UI** | The API accepts many lines and is tested with them; the Purchasing screen currently raises a single-line request. Multi-line entry is the natural next increment of SCM.5. |
+| **Purchase order lines cannot be priced from the UI** | The API stores `unitPrice` per line (covered by tests); the screen does not yet expose a price field when creating an order from a request. |
+| **Stock movement site selection is not exposed in the UI** | The API supports per-site movements and the tests cover both tenant-level and per-site balances; the screen currently posts tenant-level movements only. |
+| **Item on-hand is summed client-side across locations** | The list adds up the balances the API already returned. Correct at pilot volume; a server-side aggregate would be better once an item spans many locations. |
+| **No purchase document upload surface** | Document Core resolvers for `purchase_request` and `purchase_order` are registered and authorised, but no upload control exists on the purchasing screen yet. |
+
+### DEFERRED ADVANCED (confirmed, none implemented)
+Multi-warehouse · bin location · batch/lot/serial · reservation · reorder
+planning · transfers · stock opname · inventory valuation · FIFO/moving
+average · landed cost · RFQ · tender · bid comparison · supplier
+evaluation/scorecard · contract purchasing · spend analytics · demand
+forecasting · MRP.
+
+### CLIENT CONFIGURATION (confirmed)
+Item categories · units of measure · supplier categories · stock locations
+(sites) · purchase request approval workflow and thresholds · numbering
+patterns.
+
+### CLIENT EXTENSION CANDIDATES (confirmed)
+Client e-procurement/e-catalog platforms · supplier EDI. Excluded from the
+product denominator.
+
+### PLATFORM HARDENING (unchanged)
+PH-1 through PH-8 untouched by Phase 4. The Pilot gate remains blocked on
+Phase H, not on business capability.

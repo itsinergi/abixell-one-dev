@@ -1821,3 +1821,92 @@ form controls label-associated on the detail page.
 Attendance, shift/roster, leave, overtime, payroll (and any statutory
 contribution or income-tax handling), recruitment, performance, competency,
 training, career, manpower planning. No country-specific compliance.
+
+
+## 2026-08-20 — Phase 4 (Supply Chain Core)
+
+Third module under the frozen target architecture: backend at
+`apps/api/src/modules/supply-chain/core/`, frontend at
+`apps/web/src/modules/supply-chain/`.
+
+### Domain model (8 tables, 66 → 74)
+`items`, `suppliers`, `stock_balances`, `stock_movements`,
+`purchase_requests` + `purchase_request_lines`, `purchase_orders` +
+`purchase_order_lines`.
+
+### Stock model
+Balance is kept per item and stock **location**, where the location is the
+existing Site — there is no warehouse/zone/bin topology in Core. A null
+`site_id` means tenant-level stock, so two PARTIAL unique indexes are used
+rather than one plain UNIQUE (NULL never equals NULL — the same trap ADR-0006
+documented).
+
+Movements are the ledger and balances are the fast read. Quantity on a
+movement is always positive; direction is the type. A correction is a new
+compensating movement, never an edit (SCM-CORE-006).
+
+### Transactional and concurrency safety
+This was the phase's hardest requirement and its defining property:
+
+- Every quantity change writes the movement AND applies the balance effect
+  inside **one transaction**. A rejected movement leaves nothing behind —
+  proven by test (a rejected issue leaves the balance untouched and writes no
+  ledger row).
+- The sufficiency check lives **inside** the decrement statement
+  (`... AND quantity >= $qty`), not in a separate read. Two concurrent issues
+  therefore cannot both pass a stale read and overspend. Proven by test: six
+  parallel issues of 2 against a balance of 10 produce exactly five
+  successes, one 409, a final balance of zero, and exactly five outbound
+  ledger rows.
+- The over-receipt check lives inside the statement that advances
+  `quantity_received`, so concurrent receipts cannot jointly exceed the
+  ordered quantity.
+
+### Lifecycle
+Purchase Request approval belongs to the configured Workflow Engine
+(`workflow_instance_id`; no status column). A Purchase Order deliberately has
+no second state machine: `issued_at` null means draft, set means issued and
+line-immutable — a one-way transition with an invariant, the same pattern
+used for Work Request in Phase 2.
+
+Receipt against an order line is simply a goods-in movement referencing that
+line, so no receipts table was needed.
+
+### Money boundary
+Purchase order unit price is procurement transaction data only. There is no
+valuation, cost layer, AP liability, journal, or GL posting anywhere in this
+module — inventory accounting belongs to Finance/Advanced.
+
+### Platform Core reuse
+Workflow (PR approval), Numbering (`purchase_request`, `purchase_order`),
+Configuration (reference types `item_category`, `unit_of_measure`,
+`supplier_category`), Documents (resolvers for `purchase_request` and
+`purchase_order`), Audit, Events, RBAC, hierarchical Organization Unit Data
+Scope. Supplier is kept distinct from Customer — no polymorphic party model.
+
+### Authorization
+Four capabilities separating duties: `supply_chain.read`, `.configure`
+(master data), `.manage` (purchasing), `.stock.manage` (movements). Verified
+by test that a store keeper cannot raise orders and a buyer cannot move
+stock.
+
+### Tests / Regression
+`supply-chain.test.ts` — 16 tests covering master data, inactive-item guard,
+goods in/out, insufficient-stock rollback, **concurrency**, per-location
+balances, PR workflow lifecycle and invalid transitions, PR→PO conversion
+(exactly once, approved-only), issue guard, partial receipt, over-receipt
+rejection, cancellation rules, authorization separation, Data Scope,
+cross-tenant isolation, validation, and historical safety. Suite
+**195/195 PASS**.
+
+### Live acceptance (real Chromium, through the UI)
+Item → supplier → purchase request for 40 → submit → approve → order from
+the approved request → issue → receive 25 of 40 → stock reads 25 → issue 10
+out → an overspend attempt rejected with a clear "Insufficient stock"
+message. No horizontal overflow at 375/390/768/desktop.
+
+### Deliberately NOT built (Advanced, deferred)
+Multi-warehouse, bin location, batch/lot/serial, reservation, reorder
+planning, transfers, stock opname, inventory valuation, FIFO/moving average,
+landed cost, RFQ, tender, bid comparison, supplier evaluation/scorecard,
+contract purchasing, spend analytics, demand forecasting, MRP.
