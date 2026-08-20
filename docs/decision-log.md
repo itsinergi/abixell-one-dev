@@ -338,3 +338,22 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 10 | Client Extensions excluded from both denominators; client configuration data is not product progress | Otherwise every custom client request would permanently reduce "product completion" | audit §70/§71 |
 | 11 | Platform Hardening (CI/CD, CORS, rate limit, DR, deployment, advisories) tracked as its own track inside Core Readiness, never as business capability | Keeps infrastructure debt out of module classification while still gating pilot/production | audit §54–§56 |
 | 12 | `docs/00-prd/` recommended for commit as **supporting/historical** (excluding the DOCX); not committed in this run | Corpus is authoritative history but not implementation truth; Founder disposition required first | audit §51/§84 |
+
+## 2026-08-20 — Repository Architecture, IGSEP Migration & Canonical PRD Baseline
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Module structure is **`core/` + `advanced/` + `packs/`**, created only when non-empty | Founder-approved locked structure; empty folders for symmetry are noise | Architecture mandate §4/§13 |
+| 2 | **Cross-domain Advanced lives in `orchestration/`**, domain-specific Advanced inside its module | Prevents false ownership; Survey-to-Action spans Survey + Complaint + Notification + Events + Integration | §5/§44 |
+| 3 | Dependency direction frozen: `shared ← core ← modules ← orchestration`; packs depend on their module's core + configuration | Prevents `core → business module` and module-to-module internal coupling | §10 |
+| 4 | **Source-code restructure DEFERRED**; target architecture frozen and binding for all new (Phase 2+) code | 109 files carry 275 relative imports (130 cross-layer) across 73 files, + 34 test imports + 51 composition-root imports — ~309 path rewrites for zero behavioural benefit against a green suite | §11/§45/§47/§48 |
+| 5 | Migrations stay in one deterministic stream at `apps/api/migrations/`, ownership by filename | Global ordering must remain unambiguous | §18 |
+| 6 | **IGSEP is the predecessor of Abixell One**, preserved verbatim as *Legacy Product Requirement Source* at `docs/history/igsep/` | It is not an unrelated product; rewriting it to say "Abixell One" would destroy historical meaning and traceability | §19/§20/§21 |
+| 7 | Canonical PRD **reconstructed, not renamed**, at `docs/prd/abixell-one/` with stable requirement IDs and 11 module PRDs | PRD answers "what must the product do", separate from blueprint/roadmap/progress | §22–§29 |
+| 8 | All 70 IGSEP legacy requirement areas dispositioned (ADOPT 18 / ADAPT 14 / MERGE 5 / RECLASSIFY 21 / DEFER 2 / SUPERSEDE 10 / DROP 0) | No requirement silently ignored; traceability matrix is mandatory | §30/§31/§72 |
+| 9 | Four IGSEP vertical modules (Catering, Housekeeping, Camp, Facilities) **SUPERSEDED** into one Service Operations engine + four packs; four portal/mobile/dashboard "modules" superseded into experience surfaces | Prevents duplicate work-order/scheduling/workflow engines and audience-shaped pseudo-modules | §7/§33 |
+| 10 | Progress denominator **unchanged** (174 / 353) after PRD reconstruction | Legacy items mapped to existing units or to SUPERSEDE/pack dispositions that add no weight; only genuinely new approved scope may inflate the denominator | §55–§57 |
+| 11 | Baselines frozen: Blueprint v1.1, PRD v1.0, Roadmap v1.1, Progress Model v1.0, Documentation Governance v1.0 | Explicit versioning enables future change explanation | §58 |
+| 12 | `docs/decision-log.md`, `docs/adr/`, `docs/implementation-notes.md` **kept at `docs/` root** rather than moved into the ideal tree | They are cited by path from 15 source-code comments; moving them creates stale references for no benefit | §39 |
+| 13 | Pre-Phase-0 founder decisions **copied** into `docs/history/pre-phase-0/` (originals in the parent directory left untouched) | The product's founding decisions must be version-controlled; the Founder's own copies are not this execution's to relocate | §65 |
+| 14 | `Business-Discovery-Workshop-Kit.docx` **not committed** | Binaries stay outside the active repository pending explicit Founder decision | §64 |

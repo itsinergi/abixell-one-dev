@@ -528,3 +528,27 @@ disposition of the untracked `docs/00-prd/` corpus.
 ### MUST FIX BEFORE GLOBAL AUDIT
 None outstanding — this audit is complete. No security, tenant-isolation, data-integrity,
 or regression blocker was found (150/150 PASS at `b7b6d64`).
+
+---
+
+## Post-Audit Restructure — Architecture Debt (2026-08-20)
+
+### ARCHITECTURE CLEANUP (new category)
+| Item | Detail | Priority |
+|---|---|---|
+| **Existing source is layer-first, target is module-first** | `apps/api/src/{domain,application,infrastructure,interfaces}/*` predates the frozen target (`modules/<module>/core\|advanced\|packs`, `orchestration/`, `core/`, `shared/`). Deferred deliberately: ~309 import-path rewrites across 73 files for zero behavioural gain. Migrate module-by-module opportunistically, never as a big bang. | SHOULD FIX LATER |
+| **Survey-to-Action lives at `application/survey-integration/`** | Correct behaviour, correct boundary, non-target folder. Belongs at `orchestration/survey-to-action/`. Move when the orchestration layer is first created for Phase 2+. | SHOULD FIX LATER |
+| **`docs/decision-log.md`, `docs/adr/`, `docs/implementation-notes.md` not in the ideal doc tree** | Kept at `docs/` root because 15 source-code comments cite them by path. Relocate together with a comment-update pass. | FUTURE CLEANUP |
+| **Shared date-format util** | Survey pages import from `../complaints/format`. Under the target rules this belongs in `shared/`. | SHOULD FIX LATER |
+
+### DOCUMENTATION GOVERNANCE (resolved)
+| Item | Resolution |
+|---|---|
+| Source-of-truth ambiguity (IGSEP corpus self-declared SSOT) | Resolved — `docs/canonical/documentation-map.md` defines authority + reading order |
+| Untracked PRD corpus | Resolved — preserved at `docs/history/igsep/` with a legacy README |
+| Founding decisions outside version control | Resolved — copied to `docs/history/pre-phase-0/` (originals untouched) |
+| No canonical requirements | Resolved — `docs/prd/abixell-one/` with stable requirement IDs + traceability |
+| Stale README | Resolved |
+
+### OUTSTANDING (unchanged by this execution)
+`Business-Discovery-Workshop-Kit.docx` remains uncommitted at `docs/00-prd/` pending a Founder decision on versioning binaries. Platform Hardening items (CI/CD, CORS, rate limit, DR, deployment automation, reconciliation worker, advisories, PWA icons) remain as previously classified — none were touched.
