@@ -59,6 +59,8 @@ import { PgServiceOperationsRepository } from "./modules/service-operations/core
 import { ServiceOperationsService } from "./modules/service-operations/core/application/service-operations.service.js";
 import { PgWorkforceRepository } from "./modules/workforce/core/infrastructure/workforce.repository.pg.js";
 import { WorkforceService } from "./modules/workforce/core/application/workforce.service.js";
+import { PgSupplyChainRepository } from "./modules/supply-chain/core/infrastructure/supply-chain.repository.pg.js";
+import { SupplyChainService } from "./modules/supply-chain/core/application/supply-chain.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -184,6 +186,17 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 4 — Supply Chain Core. Built before DocumentService so its
+  // purchase-document resolvers can close over it (ADR-0012).
+  const supplyChain = new SupplyChainService(
+    new PgSupplyChainRepository(pool),
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -200,6 +213,14 @@ export function buildContainer() {
     [
       "employee",
       { canAccess: (actor, entityId) => workforce.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "purchase_request",
+      { canAccess: (actor, entityId) => supplyChain.canAccessRequestForDocument(actor, entityId) },
+    ],
+    [
+      "purchase_order",
+      { canAccess: (actor, entityId) => supplyChain.canAccessOrderForDocument(actor, entityId) },
     ],
   ]);
   const document = new DocumentService(
@@ -313,6 +334,7 @@ export function buildContainer() {
     surveyIntegration,
     serviceOperations,
     workforce,
+    supplyChain,
   };
 }
 
