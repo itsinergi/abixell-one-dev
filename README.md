@@ -12,17 +12,21 @@ Internal positioning: *Whitelabel Integrated Enterprise Management System*.
 
 ## Canonical documentation
 
-Start here — these four documents are the source of truth:
+Start with [docs/canonical/documentation-map.md](docs/canonical/documentation-map.md) — it
+defines authority and reading order. The sources of truth are:
 
 | Document | Purpose |
 |---|---|
-| [docs/product-blueprint.md](docs/product-blueprint.md) | What the product is: architecture layers, Platform Core, Business Core modules, Advanced / Configuration / Extension boundaries |
-| [docs/product-roadmap.md](docs/product-roadmap.md) | Historical delivery, future phases, roadmap units and weights |
-| [docs/product-progress.md](docs/product-progress.md) | Measured progress and its calculation basis |
-| [docs/decision-log.md](docs/decision-log.md) | Founder decisions and architectural choices |
+| [docs/prd/abixell-one/](docs/prd/abixell-one/00-README.md) | **What must the product do?** — requirements with stable IDs, per module |
+| [docs/canonical/product-blueprint.md](docs/canonical/product-blueprint.md) | **How is it structured?** — architecture layers, Platform Core, 11 Business Core modules, Advanced / Configuration / Extension, repository architecture rules |
+| [docs/canonical/product-roadmap.md](docs/canonical/product-roadmap.md) | **When is it delivered?** — historical delivery, future phases, roadmap units and weights |
+| [docs/canonical/product-progress.md](docs/canonical/product-progress.md) | **How much is done?** — measured progress with calculation basis |
+| [docs/decision-log.md](docs/decision-log.md) · [docs/adr/](docs/adr/) | **Why?** — product and architecture decisions |
 
 Supporting: [docs/technical-debt-register.md](docs/technical-debt-register.md),
-[docs/implementation-notes.md](docs/implementation-notes.md), [docs/adr/](docs/adr/).
+[docs/implementation-notes.md](docs/implementation-notes.md).
+Historical: [docs/history/](docs/history/) — IGSEP legacy requirements, pre-Phase-0
+founding decisions, Phase 0 specification. **Never** derive current scope from it.
 
 ## Current state
 
@@ -34,9 +38,19 @@ Quality (Complaint) end-to-end, Survey & Assessment engine, and Survey-to-Action
 integration. Remaining domains (Service Operations, HR, Supply Chain, Asset,
 Finance, HSE, Project, Reporting) are planned — see the roadmap.
 
-Historical blueprint material for the earlier IGSEP product concept lives in
-`docs/00-prd/` and is **supporting/historical input**, not the implementation
-source of truth.
+Abixell One is the successor to **IGSEP**, an earlier vertical product concept.
+That corpus is preserved as a legacy requirement source in
+[docs/history/igsep/](docs/history/igsep/README.md) and is **not** the
+implementation source of truth.
+
+## Contributing new modules
+
+New code must follow the target repository architecture frozen in
+[the blueprint](docs/canonical/product-blueprint.md#11a-repository-architecture-target--binding-for-new-code):
+`modules/<module>/core|advanced|packs`, cross-domain capability in
+`orchestration/`, platform capability in `core/`, technical helpers in `shared/`,
+and a single migration stream. Existing Phase 0/1 code predates this layout;
+its migration is deliberately deferred.
 
 ## Repository layout
 
@@ -87,5 +101,5 @@ Demo also seeds `customeruser@democlient.local` / `CustomerUser12345!`
 | Core Product Readiness | 41.4 % |
 | Full Approved Roadmap | 22.1 % |
 
-Progress figures and their calculation basis: [docs/product-progress.md](docs/product-progress.md).
-Next phase awaits Founder approval — see [docs/product-roadmap.md](docs/product-roadmap.md).
+Progress figures and their calculation basis: [docs/canonical/product-progress.md](docs/canonical/product-progress.md).
+Next phase awaits Founder approval — see [docs/canonical/product-roadmap.md](docs/canonical/product-roadmap.md).

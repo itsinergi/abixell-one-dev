@@ -4,11 +4,11 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.0 |
+| **Roadmap Baseline** | v1.1 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-20 |
-| **Supersedes** | `docs/00-prd/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
-| **Related** | [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [decision-log.md](decision-log.md) |
+| **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
+| **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) |
 
 ---
 
@@ -251,3 +251,27 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 | Version | Date | Change |
 |---|---|---|
 | v1.0 | 2026-08-20 | First canonical roadmap. Replaces template-shaped `22-…`. Establishes layers, 11 Business Core modules, weighted units, dual progress metric. Records Phase 1F as NOT APPLICABLE. |
+| v1.1 | 2026-08-20 | Founder-aligned baseline after PRD reconstruction. Roadmap units reconciled against canonical PRD requirement IDs; IGSEP legacy requirements migrated via the [traceability matrix](../prd/abixell-one/14-traceability-matrix.md) with **no denominator change** (all legacy items were ADOPT/ADAPT/MERGE/RECLASSIFY into units that already existed, or SUPERSEDE/pack items that do not add weight). Repository architecture rules frozen in the blueprint. |
+
+## 14. Roadmap unit ↔ PRD requirement mapping
+
+Every roadmap unit traces to canonical PRD requirement IDs:
+
+| Roadmap unit(s) | PRD requirements |
+|---|---|
+| PC-1…PC-13 | `PLT-CORE-001`…`PLT-CORE-018`, `SEC-*`, `INT-001`…`INT-010`, `UX-001`…`UX-004` |
+| PH-1…PH-8 | `OPS-010`…`OPS-023`, `SEC-010`, `SEC-011`, `INT-011`, `UX-005` |
+| CUS.1–CUS.4 | `CUS-CORE-001`…`CUS-CORE-009` |
+| CMP.1–CMP.7 | `SQ-CORE-001`…`SQ-CORE-016` |
+| SRV.1–SRV.3 | `SUR-CORE-001`…`SUR-CORE-016` |
+| Advanced (delivered) | `SUR-ADV-001`, `SUR-ADV-002` |
+| OPS.1–OPS.5 | `SO-CORE-001`…`SO-CORE-015` |
+| HR.1–HR.5 | `HR-CORE-001`…`HR-CORE-010` |
+| SCM.1–SCM.6 | `SCM-CORE-001`…`SCM-CORE-013` |
+| AST.1–AST.4 | `AST-CORE-001`…`AST-CORE-010` |
+| FIN.1–FIN.6 | `FIN-CORE-001`…`FIN-CORE-011` |
+| HSE.1–HSE.4 | `HSE-CORE-001`…`HSE-CORE-010` |
+| PRJ.1–PRJ.4 | `PRJ-CORE-001`…`PRJ-CORE-010` |
+| RPT.1–RPT.4 | `RPT-CORE-001`…`RPT-CORE-008` |
+| Advanced waves | all `*-ADV-*` requirements |
+| Pack wave | `PACK-001`…`PACK-004` |

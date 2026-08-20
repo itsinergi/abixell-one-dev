@@ -4,11 +4,11 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.0 |
+| **Roadmap Baseline** | v1.1 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-20 |
 | **Measured at** | `master` @ `b7b6d64` · 150/150 tests · 58 tables · 14 migrations |
-| **Related** | [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) |
+| **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
@@ -132,5 +132,17 @@ All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-4…BC-11, and all Adva
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
 | v1.0 | 2026-08-20 | 41.4 % | 22.1 % | First measured baseline. No prior figure existed — nothing to compare against. |
+| v1.1 | 2026-08-20 | 41.4 % | 22.1 % | **No change.** PRD reconstruction migrated 70 IGSEP legacy requirement areas; every one mapped to an existing roadmap unit (ADOPT/ADAPT/MERGE/RECLASSIFY) or to a SUPERSEDE/pack disposition that adds no weight. Denominator unchanged at 174 / 353; numerator unchanged at 72 / 78. |
+
+### Why the denominator did not move
+
+A PRD reconstruction of this size would normally inflate scope. It did not, because:
+
+1. **`SUPERSEDE` items add nothing.** Four IGSEP vertical modules became configuration packs over one Service Operations engine already counted (`OPS.1–OPS.5`); four IGSEP "portal/mobile/dashboard" modules became experience surfaces already counted inside module UI units.
+2. **`RECLASSIFY` items moved layer, not weight.** Attendance, payroll, RFQ, maintenance, ledgers, etc. were already in the Advanced backlog (179 pts).
+3. **`ADOPT`/`ADAPT`/`MERGE` items were already modelled** as Business Core units in Roadmap v1.0.
+4. **No `DROP` items** — and dropped items would not have changed the denominator anyway.
+
+This is the intended behaviour of the change-control rule: legacy requirements enter the denominator only when they represent genuinely new approved scope.
 
 > Future note: a *decrease* caused by adding approved scope to the denominator is **not** regression. Always state the reason alongside the number.

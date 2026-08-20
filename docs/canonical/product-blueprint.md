@@ -4,10 +4,10 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Baseline Version** | Blueprint v1.0 |
+| **Baseline Version** | Blueprint v1.1 |
 | **Last Updated** | 2026-08-20 |
-| **Supersedes** | `docs/00-prd/09-Module-Architecture.md` (module catalog, IGSEP-era) as the implementation-authoritative module map |
-| **Related** | [product-roadmap.md](product-roadmap.md) · [product-progress.md](product-progress.md) · [decision-log.md](decision-log.md) · [technical-debt-register.md](technical-debt-register.md) |
+| **Supersedes** | `docs/history/igsep/09-Module-Architecture.md` (module catalog, IGSEP-era) as the implementation-authoritative module map |
+| **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) · [technical-debt-register.md](../technical-debt-register.md) |
 
 ---
 
@@ -23,11 +23,11 @@ Client-facing positioning: *Designed Around Your Business.* The words *Whitelabe
 
 ### Product lineage (important)
 
-The `docs/00-prd/` corpus (documents 01–25) describes **IGSEP — Integrated General Services Enterprise Platform**: a vertical platform for one General Services company (Industrial Catering, Housekeeping, Managed Workforce, Camp Management, Facilities Management).
+The [`docs/history/igsep/`](../history/igsep/README.md) corpus (documents 01–25) describes **IGSEP — Integrated General Services Enterprise Platform**: a vertical platform for one General Services company (Industrial Catering, Housekeeping, Managed Workforce, Camp Management, Facilities Management).
 
-Abixell One is the **productized, whitelabel evolution** of that concept: the same business domains, but built as generic reusable engines configured per client rather than a single-company vertical application. That pivot is recorded in `01-FOUNDER-DECISION-PRE-PHASE-0.md` (Decisions 3 & 4).
+Abixell One is the **productized, whitelabel evolution** of that concept — its direct successor: the same business domains, but built as generic reusable engines configured per client rather than a single-company vertical application. That pivot is recorded in [`01-FOUNDER-DECISION-PRE-PHASE-0.md`](../history/pre-phase-0/01-FOUNDER-DECISION-PRE-PHASE-0.md) (Decisions 3 & 4).
 
-Consequence: the IGSEP corpus remains valuable **domain input**, but it is **not** the implementation source of truth. This blueprint is.
+Consequence: IGSEP is preserved as **Legacy Product Requirement Source** — valuable domain input, migrated requirement-by-requirement in the [traceability matrix](../prd/abixell-one/14-traceability-matrix.md) — but it is **not** the implementation source of truth. This blueprint is.
 
 ---
 
@@ -289,6 +289,86 @@ Security (authn, RBAC, Data Scope, tenant isolation, audit), integration (bounda
 ## 11. Deployment model
 
 Dedicated deployment per client; architecture multi-tenant-ready. PostgreSQL; modular monolith with hexagonal boundaries (domain / application / infrastructure / interfaces) and a composition root for wiring.
+
+---
+
+## 11A. Repository architecture (target — binding for new code)
+
+### Module structure
+
+Every functional module follows:
+
+```text
+modules/<module>/
+├── core/          minimum reusable domain capability (genuine operational value)
+│   ├── domain/  application/  infrastructure/  api/
+├── advanced/      deeper capability owned primarily by this domain
+└── packs/         packaged vertical use cases composed over this module
+```
+
+`advanced/` and `packs/` are created **only when they exist** — never empty folders for symmetry. A module with only Core is simply `modules/<module>/core/`.
+
+### Cross-domain orchestration
+
+> **Binding rule:** domain-specific Advanced lives **inside** its module. Cross-domain Advanced lives in **`orchestration/`**.
+
+A capability belongs in `orchestration/` when it coordinates two or more bounded contexts and placing it inside one module would create false ownership or coupling.
+
+Reference implementation — Survey-to-Action spans Survey, Service Quality, Notification, Events, and Integration:
+
+```text
+orchestration/survey-to-action/     ← correct
+modules/survey/advanced/            ← would imply Survey owns Complaint semantics
+```
+
+### Target source layout
+
+```text
+apps/api/src/
+├── app/            application bootstrap, HTTP wiring, composition root
+├── core/           Platform Core capabilities (identity, tenancy, organization,
+│                   rbac, configuration, reference-data, metadata, workflow,
+│                   audit, events, notification, document, scheduler,
+│                   integration, observability, feature-management)
+├── modules/        the 11 Business Core modules
+├── orchestration/  cross-domain capability (e.g. survey-to-action)
+└── shared/         technical building blocks with no product semantics
+
+apps/web/src/
+├── app/  core/  modules/  shared/
+```
+
+### Dependency direction (binding)
+
+```text
+shared  ←  core  ←  modules  ←  orchestration
+packs → their module's core + configuration
+```
+
+Prohibited: `core → <business module>` · `<module A> core → <module B> internals` · any circular module import. Cross-module behaviour uses **application ports, domain events, orchestration, or the trusted integration boundary** — never direct internal imports.
+
+### `core/` vs `shared/`
+
+| | Contains | Example |
+|---|---|---|
+| `shared/` | technical building blocks with little or no product semantics | date formatting, validation helpers, error types, test helpers, generic DB utilities |
+| `core/` | platform capability with explicit reusable responsibility | workflow engine, RBAC, configuration engine |
+
+`shared/` must never accumulate business logic. `ComplaintService`, `FinanceRule`, or `SurveyBusinessLogic` in `shared/` is a defect.
+
+### Migration stream
+
+Database migrations stay in a **single deterministic stream** at `apps/api/migrations/`, never distributed into module folders — global ordering must remain unambiguous. Ownership is expressed through descriptive filenames (e.g. `*_service_operations_schema`, `*_service_operations_permissions`).
+
+### Adoption status
+
+| Scope | Status |
+|---|---|
+| Target architecture | **Frozen** (this section is binding) |
+| Existing Phase 0/1 implementation | **Migration deferred** — current layout is layer-first (`domain/`, `application/`, `infrastructure/`, `interfaces/`) |
+| All new code from Phase 2 onward | **Must follow the target structure** |
+
+Rationale for deferral: the existing 109 API source files carry 275 relative imports (130 cross-layer) across 73 files, plus 34 test imports and 51 composition-root imports. A module-first move would rewrite roughly 309 import paths with **zero behavioural benefit**, against a fully green regression suite. Stability outweighs folder aesthetics; a staged migration can follow later, module by module, once new modules have established the target shape.
 
 ---
 
