@@ -55,6 +55,8 @@ import { SurveyService } from "./application/survey/survey.service.js";
 import { SurveyResponseService } from "./application/survey/survey-response.service.js";
 import { PgSurveyIntegrationRepository } from "./infrastructure/persistence/repositories/survey-integration.repository.pg.js";
 import { SurveyIntegrationService } from "./application/survey-integration/survey-integration.service.js";
+import { PgServiceOperationsRepository } from "./modules/service-operations/core/infrastructure/service-operations.repository.pg.js";
+import { ServiceOperationsService } from "./modules/service-operations/core/application/service-operations.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -152,6 +154,22 @@ export function buildContainer() {
     workflow,
   );
 
+  // Phase 2 — Service Operations & Work Management Core. First module built
+  // under the frozen target repository architecture
+  // (`modules/service-operations/core/...`, blueprint §11A). Constructed
+  // before DocumentService so its `work_order` Entity Authorization Resolver
+  // can close over `serviceOperations.canAccessForDocument`, exactly as
+  // `customer` and `complaint` do (ADR-0012).
+  const serviceOperations = new ServiceOperationsService(
+    new PgServiceOperationsRepository(pool),
+    customer,
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -160,6 +178,10 @@ export function buildContainer() {
     [
       "complaint",
       { canAccess: (actor, entityId) => complaint.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "work_order",
+      { canAccess: (actor, entityId) => serviceOperations.canAccessForDocument(actor, entityId) },
     ],
   ]);
   const document = new DocumentService(
@@ -271,6 +293,7 @@ export function buildContainer() {
     survey,
     surveyResponse,
     surveyIntegration,
+    serviceOperations,
   };
 }
 
