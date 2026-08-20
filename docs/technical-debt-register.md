@@ -659,3 +659,48 @@ product denominator.
 ### PLATFORM HARDENING (unchanged)
 PH-1 through PH-8 untouched by Phase 4. The Pilot gate remains blocked on
 Phase H, not on business capability.
+
+---
+
+## Phase 5 — Asset Core (2026-08-20)
+
+### MUST FIX BEFORE PHASE 5 CLOSURE
+- None. The transactional invariants were verified explicitly, in the test
+  suite and by a closure query over every asset the suite touched: asset
+  version equals the highest applied movement sequence; current placement
+  equals what that movement resolved to; terminal status and the retirement
+  stamp move together; no half-written ledger row (an unapplied movement
+  never claims a sequence, an applied one always does); a failed movement
+  writes nothing; no duplicate asset identifier; no cross-tenant reference;
+  retired history intact.
+
+### SHOULD FIX LATER (new)
+| Item | Detail |
+|---|---|
+| **Only one movement may await approval at a time** | Enforced in the service by reading the open movement and its Workflow status. The read-then-insert has a tiny benign race: two pending movements could be created, and each would still apply atomically and chain correctly. A partial unique index would close it, but "open" is derived from Workflow state, so it needs a stored closed-marker first. |
+| **Asset category is free text in the UI** | The `asset_category` Reference Data type is registered by the migration; the register screen currently accepts a typed value rather than offering the tenant's catalogue. |
+| **Movement reason is free text in the UI** | Same shape: the `asset_movement_reason` type exists; the movement form does not yet offer it as a picker. |
+| **Bulk movement is not supported** | Moving twenty assets to a new site is twenty actions. The ledger and API model it correctly; a batch surface would be an AST.3 increment. |
+| **Location catalogue is resolved per customer** | The web layer fetches sites and projects for every customer to build one picker, because no tenant-wide site list endpoint exists. Correct and bounded at pilot volume; a tenant-wide list belongs with `CUS.4`. |
+| **No asset label/QR printing** | The physical tag is stored and searchable, but nothing generates a printable label. |
+
+### DEFERRED ADVANCED (confirmed, none implemented)
+Preventive maintenance scheduling · corrective maintenance · maintenance work
+orders · maintenance planning · meter reading and usage-based triggers ·
+spare-part consumption · downtime tracking · MTBF/MTTR and reliability ·
+predictive maintenance · condition monitoring · IoT/telematics/GPS ·
+depreciation · book value · capitalisation · fixed-asset accounting ·
+disposal gain/loss.
+
+### CLIENT CONFIGURATION (confirmed)
+Asset categories · movement reasons · numbering/tagging pattern · movement
+approval workflow (including whether one exists at all) · locations, via the
+existing organisation / project / site hierarchy.
+
+### CLIENT EXTENSION CANDIDATES (confirmed)
+Client CMMS integrations · telematics and IoT sensor platforms. Excluded from
+the product denominator.
+
+### PLATFORM HARDENING (unchanged)
+PH-1 through PH-8 untouched by Phase 5. The Pilot gate remains blocked on
+Phase H, not on business capability.

@@ -1910,3 +1910,74 @@ Multi-warehouse, bin location, batch/lot/serial, reservation, reorder
 planning, transfers, stock opname, inventory valuation, FIFO/moving average,
 landed cost, RFQ, tender, bid comparison, supplier evaluation/scorecard,
 contract purchasing, spend analytics, demand forecasting, MRP.
+
+---
+
+## 2026-08-20 — Phase 5 (Asset Core)
+
+**Roadmap units:** AST.1–AST.4 (8 pts) · **Requirements:** AST-CORE-001…010
+**Commits:** `b238b07` (Foundation), `6ad67e7` (Experience), Regression and Closure
+**Baseline moved:** 74 → 76 tables · 17 → 18 migrations · 55 → 59 permissions · 195 → 213 tests
+
+### What Asset Core is
+A **register**, not a maintenance system. It answers: what asset exists,
+what is its identity and tag, where is it, who is responsible for it, what
+is its status, and how did it move.
+
+### Shape
+```text
+apps/api/src/modules/asset/core/{domain,application,infrastructure,api}
+apps/web/src/modules/asset/{AssetsPage,AssetDetailPage,locations,status}
+apps/api/migrations/1766000000000_asset_core_schema.cjs
+apps/api/tests/integration/asset.test.ts   (18 tests)
+```
+
+Two tables: `assets` (current state) and `asset_movements` (history).
+
+### The invariant that shaped everything
+Current state must never contradict history. So:
+
+1. Placement and status are **not editable** on the master record. The only
+   way they change is a movement.
+2. Every applied movement runs inside one transaction that locks the asset
+   row (`SELECT … FOR UPDATE`), snapshots the real previous placement into
+   `from_*`, writes the resolved `to_*`, and bumps `assets.version`.
+3. The movement's `sequence` **is** the version it produced, and a partial
+   unique index on `(asset_id, sequence)` makes two movements claiming the
+   same version impossible at the database level.
+
+Six parallel transfers against one asset produce sequences 1…6, an unbroken
+from/to chain, and current state equal to the last applied movement. A
+closure query asserts the invariant over every asset the suite touched.
+
+### Optional approval, without a second lifecycle engine
+AST-CORE-007 is conditional — *"where the client requires one"*. A published
+`asset_movement_approval` Workflow Definition **is** that requirement. With
+one, a movement is recorded unapplied and applied on approval; without one it
+applies immediately. There is no status column on the movement: pending /
+approved / rejected comes from the Workflow instance, and "took effect" is
+`applied_at`.
+
+`requested_change` (JSONB) stores what was asked, so a movement waiting for
+approval does not freeze a stale absolute target — the from/to snapshot is
+resolved at apply time against whatever the asset actually is by then.
+
+### Custodian without coupling
+`custodian_employee_id` is a real FK to `employees`, but Asset imports
+nothing from Workforce. A narrow `CustodianReference` port returning
+`{ id, employeeNumber, fullName }` is implemented in Asset's own repository,
+batched for lists. No employment, contact, or sensitive data reaches an Asset
+payload.
+
+### Nothing is ever deleted
+Retirement and disposal are terminal statuses recorded through the same
+ledger. There is no delete endpoint. A retired asset keeps its record,
+documents, and full history; it drops out of the default working list and
+returns with one toggle; it simply stops moving.
+
+### Deliberately NOT built (Advanced, deferred)
+Preventive/corrective maintenance, maintenance work orders, maintenance
+planning, meter reading, spare-part consumption, downtime tracking,
+MTBF/MTTR, predictive maintenance, condition monitoring, IoT/telematics/GPS,
+depreciation, book value, capitalisation, fixed-asset accounting, disposal
+gain/loss.

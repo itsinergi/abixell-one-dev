@@ -408,3 +408,24 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 12 | Supplier kept distinct from Customer | Shared "organisation" shape does not justify a polymorphic party model | Phase 4 §13 |
 | 13 | Four capabilities separating master data, purchasing, and stock duties | Segregation of duties must be configurable per client | Phase 4 §37 |
 | 14 | An order with received quantity cannot be cancelled | Cancelling after physical receipt would misrepresent stock history | Phase 4 §62 |
+
+## 2026-08-20 — Phase 5 (Asset Core)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Built under the frozen target architecture (`modules/asset/core/...`) | Fourth module proving the target; Phase 0/1 code untouched | Blueprint §11A |
+| 2 | **FD-P5-01** — Core status is `in_use · idle · retired · disposed`; "under repair" is deliberately NOT a Core value | The PRD lists it only as an example. An equipment condition driven by a repair job belongs to Asset Advanced (Maintenance); admitting it would put a maintenance state into a register with no maintenance engine behind it. A narrowing, never a broadening | AST-CORE-005, Phase 5 §12 |
+| 3 | Identity is two-part: `asset_number` from Numbering Core (always) + OPTIONAL `asset_tag` (physical), unique per tenant via a partial index | The PRD says "identifier/tag"; a system reference and a sticker on the machine are different facts. NULL never equals NULL, so the tag needs a partial index | AST-CORE-001, Phase 5 §10 |
+| 4 | Responsibility (organisation unit + custodian) modelled separately from physical location (project / site / location detail) | A site is a place, not an owner. Conflating them would make Data Scope depend on where equipment happens to sit | AST-CORE-003/004, Phase 5 §15 |
+| 5 | No `legal_entity_id` on the asset | The responsible organisation unit already determines it; duplicating it would create two answers to one question | Phase 5 §9 |
+| 6 | Location, custodian, and status change **only** through the movement ledger; `PATCH /assets/:id` touches descriptive fields only | An in-place placement edit would destroy history silently — the exact failure §41 warns about | AST-CORE-006, Phase 5 §41 |
+| 7 | Every applied movement locks the asset row (`SELECT … FOR UPDATE`), snapshots the real previous state, and takes the resulting `version` as its `sequence`, in ONE transaction | Current state must never contradict history, and a concurrent transfer must not be lost | Phase 5 §19/§20/§63 |
+| 8 | A partial unique index on `(asset_id, sequence)` enforces no-lost-update at the database level | A convention in application code is not a guarantee; the database is | Phase 5 §52 |
+| 9 | Movement approval is optional and belongs to the Workflow Engine: a published `asset_movement_approval` definition IS the client's requirement | AST-CORE-007 is explicitly conditional ("where the client requires one"); no status column and no second lifecycle engine | AST-CORE-007, Phase 5 §7 |
+| 10 | `requested_change` (JSONB) holds what was asked; the from/to snapshots are resolved at APPLY time | A pending movement must not freeze a stale absolute target while the asset legitimately moves for another reason | Phase 5 §18 |
+| 11 | Custodian is an `employees` FK plus a narrow `CustodianReference` port implemented inside Asset's own repository | Asset imports nothing from Workforce, and only `{ id, employeeNumber, fullName }` ever reaches an Asset payload — no employment, contact, or sensitive data | Phase 5 §14/§26/§59/§61 |
+| 12 | Acquisition reference is free text; there is **no** Supply Chain FK | Not every asset originates from a purchase order, and PO→asset creation is cross-domain integration, not Core | AST-CORE-002, Phase 5 §25 |
+| 13 | Retirement/disposal is a terminal status recorded through the same ledger; there is no delete endpoint | An asset with business history must never be destroyed, and it must stay readable | Phase 5 §21/§22/§42 |
+| 14 | History access follows access to the asset, anchored on its CURRENT responsible unit | A deliberate, stated policy rather than an accident: movement history is never exposed tenant-wide to someone who cannot see the asset | Phase 5 §33 |
+| 15 | Four capabilities: `asset.read`, `asset.manage`, `asset.move`, `asset.documents.read` | Registering, describing, moving, and reading ownership evidence are different duties | Phase 5 §29 |
+| 16 | Asset owns no site or project master; the web layer resolves the location catalogue once per screen | Reuses the Customer & Commercial hierarchy and avoids a per-history-row lookup | Phase 5 §28/§60 |

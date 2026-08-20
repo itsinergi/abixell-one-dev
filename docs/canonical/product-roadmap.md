@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.4 |
+| **Roadmap Baseline** | v1.5 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-20 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
@@ -51,9 +51,10 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 2** | Service Operations & Work Management Core | BC-4 Service Operations |
 | **Phase 3** | Workforce / HR Core | BC-5 Workforce |
 | **Phase 4** | Supply Chain Core | BC-6 Supply Chain |
+| **Phase 5** | Asset Core | BC-7 Asset |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED.**
 
 ---
 
@@ -61,11 +62,11 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master` @ `00d811e` (Phase 4) |
-| Migrations | 17 |
-| Tables | 74 |
-| Permissions | 55 |
-| Tests | 195 PASS (18 files) |
+| Branch / commit | `master` @ `6ad67e7` (Phase 5) |
+| Migrations | 18 |
+| Tables | 76 |
+| Permissions | 59 |
+| Tests | 213 PASS (19 files) |
 | typecheck / lint / build | PASS |
 
 ---
@@ -103,7 +104,7 @@ Pilot/production readiness. **Not** business capability.
 | PH-7 | PWA installability assets (PNG 192/512) | 1 | PLANNED | Pilot |
 | PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | Production |
 
-## 8. Roadmap units — Business Core (weight 117, 68 completed)
+## 8. Roadmap units — Business Core (weight 117, 76 completed)
 
 ### BC-1 Customer & Commercial — 7/9
 | ID | Unit | W | Status |
@@ -159,13 +160,13 @@ Pilot/production readiness. **Not** business capability.
 | SCM.5 | Operational UX | 2 | COMPLETED |
 | SCM.6 | Stabilization | 1 | COMPLETED |
 
-### BC-7 Asset Core — 0/8
+### BC-7 Asset Core — 8/8 · COMPLETED
 | ID | Unit | W | Status |
 |---|---|---:|---|
-| AST.1 | Asset master + tag / location / custodian | 3 | PLANNED |
-| AST.2 | Movement & status history | 2 | PLANNED |
-| AST.3 | Asset UX + documents | 2 | PLANNED |
-| AST.4 | Stabilization | 1 | PLANNED |
+| AST.1 | Asset master + tag / location / custodian | 3 | COMPLETED |
+| AST.2 | Movement & status history | 2 | COMPLETED |
+| AST.3 | Asset UX + documents | 2 | COMPLETED |
+| AST.4 | Stabilization | 1 | COMPLETED |
 
 ### BC-8 Finance Core — 0/12
 | ID | Unit | W | Status |
@@ -227,7 +228,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Phase 2~~ | Service Operations & Work Management Core | OPS.1–OPS.5 | 13 | — | **COMPLETED** |
 | ~~Phase 3~~ | Workforce (HR) Core | HR.1–HR.5 | 10 | — | **COMPLETED** |
 | ~~Phase 4~~ | Supply Chain Core | SCM.1–SCM.6 | 14 | — | **COMPLETED** |
-| **Phase 5** | Asset Core | AST.1–AST.4 | 8 | Platform Core, BC-6 (spares) | PLANNED |
+| ~~Phase 5~~ | Asset Core | AST.1–AST.4 | 8 | Platform Core | **COMPLETED** |
 | **Phase 6** | Finance Core | FIN.1–FIN.6 | 12 | Platform Core, BC-1 | PLANNED |
 | **Phase 7** | HSE Core | HSE.1–HSE.4 | 9 | Platform Core, BC-4 | PLANNED |
 | **Phase 8** | Project Delivery Core | PRJ.1–PRJ.4 | 8 | BC-1 | PLANNED |
@@ -242,7 +243,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 ## 11. Gates
 
 - **Pilot Gate:** Platform Core ✅ + ≥1 Business Core module ✅ + Phase H complete + client configuration loaded.
-  *Current status:* functionality satisfied (6 modules delivered); **blocked on Phase H**.
+  *Current status:* functionality satisfied (7 modules delivered); **blocked on Phase H**.
 - **Production Gate:** Pilot Gate + Phase H2 + security review + DR tested.
 
 ## 12. Deferred / optional
@@ -253,6 +254,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.5 | 2026-08-20 | Phase 5 delivered: AST.1–AST.4 COMPLETED (8 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.0 | 2026-08-20 | First canonical roadmap. Replaces template-shaped `22-…`. Establishes layers, 11 Business Core modules, weighted units, dual progress metric. Records Phase 1F as NOT APPLICABLE. |
 | v1.4 | 2026-08-20 | Phase 4 delivered: SCM.1–SCM.6 COMPLETED (14 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.3 | 2026-08-20 | Phase 3 delivered: HR.1–HR.5 COMPLETED (10 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |

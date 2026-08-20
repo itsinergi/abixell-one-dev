@@ -85,7 +85,7 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 
 | Legacy area | Abixell One requirement | Disposition | New classification | Impl. status | Roadmap unit |
 |---|---|---|---|---|---|
-| Asset Register / Assignment / Transfer / Retirement / History | `AST-CORE-001…010` | ADOPT | Business Core | PLANNED | AST.1–AST.3 |
+| Asset Register / Assignment / Transfer / Retirement / History | `AST-CORE-001…010` | ADOPT | Business Core | DELIVERED | AST.1–AST.4 |
 | Asset Inspection / Maintenance / Repair | `AST-ADV-001/002` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 
 ### Finance
