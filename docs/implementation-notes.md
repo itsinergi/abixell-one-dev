@@ -1981,3 +1981,94 @@ planning, meter reading, spare-part consumption, downtime tracking,
 MTBF/MTTR, predictive maintenance, condition monitoring, IoT/telematics/GPS,
 depreciation, book value, capitalisation, fixed-asset accounting, disposal
 gain/loss.
+
+---
+
+## 2026-08-20 — Phase 6 (Finance Core)
+
+**Roadmap units:** FIN.1–FIN.6 (12 pts) · **Requirements:** FIN-CORE-001…011
+**Commits:** `f901de5` (Foundation), `317f1c2` (Experience), Regression and Closure
+**Baseline moved:** 76 → 78 tables · 18 → 19 migrations · 59 → 64 permissions · 213 → 234 tests
+
+### What Finance Core is
+**Operational cash reality, not accounting.** It answers: what money came in
+or went out, how much, when, through which cash/bank account, for what
+category, and what evidence supports it.
+
+### Shape
+```text
+apps/api/src/modules/finance/core/{domain,application,infrastructure,api}
+apps/web/src/modules/finance/{FinanceAccountsPage,FinanceTransactionsPage,
+                              FinanceTransactionDetailPage,CashflowPage,money}
+apps/api/migrations/1767000000000_finance_core_schema.cjs
+apps/api/tests/integration/finance.test.ts   (21 tests)
+```
+
+Two tables: `finance_accounts` (operational money containers, **not** GL
+accounts) and `finance_transactions` (one authoritative money movement,
+direction as a column). Categories are Reference Data — no third table.
+
+### Money never becomes a JavaScript number
+This is the rule the whole module is built around.
+
+- Database: `numeric(18,2)`.
+- node-postgres returns `numeric` as a **string**, and it stays a string
+  through the repository, the service, the HTTP response, the web API
+  client, and the React components.
+- Every addition, subtraction, and SUM is written in SQL. There is no
+  `Number()`, `parseFloat`, `toFixed`, or `+` applied to money anywhere in
+  the module.
+- Even validation avoids floats: "greater than zero" is `/[1-9]/` on the
+  text, because `parseFloat` would lose digits on the largest amounts the
+  pattern allows.
+- Even *display* avoids floats: `money.ts` groups thousands by string
+  manipulation and deliberately does not use `Intl.NumberFormat`, which
+  takes a `number`.
+
+Contrast with Supply Chain, where quantities are numbers. A quantity
+tolerates a rounding artefact; money does not.
+
+Proven: `100.10 + 200.20 − 50.05` = exactly `250.25`; `0.10 + 0.20` =
+exactly `0.30`; `9999999999999.99 + 0.01` = exactly `10000000000000.00`.
+
+### The ledger is authoritative
+`finance_accounts.balance` is a derived cache with **no write surface** —
+the update statement does not contain the column. It moves only when a
+transaction is applied:
+
+1. lock the transaction row, refuse if already applied;
+2. lock the account row (`SELECT … FOR UPDATE`);
+3. move the balance in one guarded UPDATE whose WHERE clause contains the
+   sufficiency check — so a stale read can never authorise an overdraw;
+4. stamp `applied_at` under `WHERE applied_at IS NULL`;
+5. any failure rolls the whole thing back.
+
+Ten concurrent approvals of `100.00` → exactly `1000.00` and ten applied
+rows. Three concurrent expenses of `60.00` against `100.00` → exactly one
+success, balance `40.00`.
+
+### Lifecycle without a second engine, and without the word "posted"
+FIN-CORE-006 is unconditional, so every transaction starts a
+`finance_transaction_approval` Workflow instance. There is no status column:
+pending / approved / rejected / cancelled comes from the instance, and "the
+money actually moved" is `applied_at`.
+
+"Posted" is deliberately absent from the vocabulary. It implies posting to a
+ledger, and there is no ledger to post to. Terminology is part of the
+Core/Advanced boundary here, not a style preference.
+
+### Corrections, not edits
+A transaction has no PATCH, PUT, or DELETE route at all — immutability by
+absence of a mutation path rather than by a runtime check. Correcting an
+applied transaction creates a NEW opposite-direction transaction of the same
+amount, account, and currency, linked both ways, which goes through the same
+approval before the money moves back. A partial unique index on
+`reverses_transaction_id` means the database, not convention, prevents a
+double correction.
+
+### Deliberately NOT built (Advanced, deferred)
+Chart of accounts, double-entry, journals, general ledger, trial balance,
+AP/AR, aging, budgeting, cost centres, bank reconciliation, tax, fixed-asset
+accounting, depreciation, consolidation, P&L, balance sheet, statutory
+cash-flow statement, financial closing, fiscal period lock, multi-ledger, and
+every FX conversion/revaluation concept.

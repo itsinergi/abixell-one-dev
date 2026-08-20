@@ -92,7 +92,7 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 
 | Legacy area | Abixell One requirement | Disposition | New classification | Impl. status | Roadmap unit |
 |---|---|---|---|---|---|
-| Billing / Invoice | `FIN-CORE-001` + `FIN-ADV-002` | ADAPT (income capture Core; AR Advanced) | Business Core / Advanced | PLANNED | FIN.1 |
+| Billing / Invoice | `FIN-CORE-001` + `FIN-ADV-002` | ADAPT (income capture Core; AR Advanced) | Business Core / Advanced | DELIVERED (Core) | FIN.1–FIN.6 |
 | Cost Center / Budget | `FIN-ADV-003` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 | Project Cost | `PRJ-ADV-007/008` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 | AR / AP | `FIN-ADV-002` | RECLASSIFY | Advanced | DEFERRED | Wave A |

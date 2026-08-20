@@ -429,3 +429,25 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 14 | History access follows access to the asset, anchored on its CURRENT responsible unit | A deliberate, stated policy rather than an accident: movement history is never exposed tenant-wide to someone who cannot see the asset | Phase 5 §33 |
 | 15 | Four capabilities: `asset.read`, `asset.manage`, `asset.move`, `asset.documents.read` | Registering, describing, moving, and reading ownership evidence are different duties | Phase 5 §29 |
 | 16 | Asset owns no site or project master; the web layer resolves the location catalogue once per screen | Reuses the Customer & Commercial hierarchy and avoids a per-history-row lookup | Phase 5 §28/§60 |
+
+## 2026-08-20 — Phase 6 (Finance Core)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Built under the frozen target architecture (`modules/finance/core/...`) | Fifth module proving the target; Phase 0/1 code untouched | Blueprint §11A |
+| 2 | **Money is `numeric(18,2)` in the database and a STRING everywhere above it** | node-postgres returns numeric as a string; keeping it one means no money value ever touches binary floating point. Every sum and balance change is computed by PostgreSQL inside the mutating statement | FIN-CORE-001/002, Phase 6 §10/§50/§57 |
+| 3 | `isValidMoney` decides "greater than zero" from the TEXT (`/[1-9]/`), not `parseFloat(value) > 0` | A float conversion in validation would be the one place money met floating point, and it loses digits on the largest amounts the pattern allows. Found by the module's own precision scan | Phase 6 §57 |
+| 4 | ONE authoritative transaction with a `direction` column | Separate income/expense/cash-movement aggregates for one fact would eventually disagree | Phase 6 §9 |
+| 5 | The ledger is authoritative; `finance_accounts.balance` is a derived cache with no write surface | A directly editable balance is the failure §21 warns about; it moves only as the atomic consequence of applying a transaction | FIN-CORE-004, Phase 6 §21 |
+| 6 | Applying a transaction locks the account row and checks sufficiency INSIDE the statement that moves the balance | A read-then-write would let concurrent approvals overdraw; this makes the invariant atomic | Phase 6 §23/§24/§55 |
+| 7 | **Negative balances are prohibited for every account type** | The PRD gives no overdraft policy, and silently allowing a negative cash position would misrepresent operational reality — the same reasoning approved for negative stock in Phase 4. An overdraft facility would be configurable Advanced, not a Core default | Phase 6 §24/§25 |
+| 8 | Lifecycle = Workflow Engine via `workflow_instance_id`; no status column | Avoids a second approval engine | FIN-CORE-006, Phase 6 §17/§18 |
+| 9 | **No state named "posted"** — "took effect" is `applied_at` | "Posted" implies GL posting, and there is no ledger to post to. Terminology is part of the Core/Advanced boundary | Phase 6 §17/§66 |
+| 10 | An applied transaction has no PATCH, PUT, or DELETE surface at all | Immutability enforced by the absence of a mutation path, not by a runtime check that could be bypassed | FIN-CORE-008, Phase 6 §19 |
+| 11 | A correction is a NEW opposite-direction transaction, linked both ways, that goes through the same approval; reversible at most once via a partial unique index | Compensating entries, never edits or deletes — and the database, not convention, prevents a double correction | FIN-CORE-008, Phase 6 §20 |
+| 12 | No `finance_categories` table — FIN-CORE-003 is satisfied by Reference Data | The Configuration Engine already provides a per-tenant configurable catalog with CRUD; a third table would duplicate a platform capability. Categories are NOT a chart of accounts | FIN-CORE-003, Phase 6 §14/§43 |
+| 13 | **No opening-balance field** | The PRD does not ask for one, and a writable starting balance is exactly the editable balance this design forbids. An opening position is an ordinary approved income transaction | Phase 6 §22 |
+| 14 | Customer is referenced (Core revenue context); **supplier and purchase order are not** | This module's Dependencies section marks Supply Chain purchase context *Advanced*. No AP, no AR, no invoice link | FIN-CORE-001, Phase 6 §28/§29 |
+| 15 | Currency lives on the account and is copied onto the transaction; no FX engine | Multi-currency without conversion is honest; a rate table would be Advanced | Phase 6 §11/§64 |
+| 16 | Five capabilities: `finance.read`, `.manage`, `.approve`, `.configure`, `.documents.read` | Recording, deciding, configuring, and reading receipts are different duties, and financial evidence is more sensitive than the transaction row | Phase 6 §33/§35 |
+| 17 | The cashflow aggregate obeys the same hierarchical Data Scope as the list | "Strict data scope" must apply to totals too, or a scoped user reads tenant-wide money through an aggregate | FIN-CORE-010, Phase 6 §34/§37 |

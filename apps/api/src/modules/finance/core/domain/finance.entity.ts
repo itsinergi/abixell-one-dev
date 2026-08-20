@@ -33,8 +33,16 @@ export type Money = string;
 /** Two decimal places, optional sign handled by `direction`. */
 export const MONEY_PATTERN = /^\d{1,16}(\.\d{1,2})?$/;
 
+/**
+ * Shape and positivity, both decided on the TEXT.
+ *
+ * "Greater than zero" is `contains a non-zero digit` rather than
+ * `parseFloat(value) > 0` on purpose: a float conversion here would be the
+ * one place in the module where a money value touches binary floating point,
+ * and it would lose digits on the largest amounts the pattern allows.
+ */
 export function isValidMoney(value: string): boolean {
-  return MONEY_PATTERN.test(value) && Number.parseFloat(value) > 0;
+  return MONEY_PATTERN.test(value) && /[1-9]/.test(value);
 }
 
 /** Operational money containers. NOT chart-of-accounts / GL accounts. */

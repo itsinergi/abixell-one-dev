@@ -704,3 +704,48 @@ the product denominator.
 ### PLATFORM HARDENING (unchanged)
 PH-1 through PH-8 untouched by Phase 5. The Pilot gate remains blocked on
 Phase H, not on business capability.
+
+---
+
+## Phase 6 — Finance Core (2026-08-20)
+
+### MUST FIX BEFORE PHASE 6 CLOSURE
+- None. The money and integrity invariants were verified explicitly, in the
+  test suite and by a closure query over every account and transaction the
+  suite touched: each cached balance equals the sum of its applied ledger,
+  no balance is negative, no transaction is half-applied (an applied stamp
+  without an applied timestamp or vice versa), every amount is positive with
+  exactly two decimal places, and every reversal mirrors its original in
+  amount, account, currency, and opposite direction.
+
+### SHOULD FIX LATER (new)
+| Item | Detail |
+|---|---|
+| **Cashflow scope resolution reads the tenant's transactions to derive covered units** | For a user without tenant scope, the aggregate resolves which organisation units their Data Scope covers by listing transactions first. Correct and bounded at pilot volume, but it is a second query that a scope-aware SQL predicate could replace once RBAC exposes a "covered unit ids" projection. |
+| **No transfer between own accounts** | Moving money from bank to petty cash is currently two transactions (expense + income) under a tenant-configured category. A first-class transfer would be a natural FIN.1 increment, and it must stay a pair of ledger rows rather than becoming a journal. |
+| **Category is a flat catalog** | Reference Data has no parent/child, so category grouping in the cashflow breakdown is flat. Adequate for operational cash; grouping belongs with Reporting (BC-11) or Finance Advanced. |
+| **No recurring or scheduled transactions** | Rent and subscriptions are re-entered each period. Scheduler Core exists and could drive this later; it is not part of FIN-CORE-001…011. |
+| **Evidence is listed but not previewed** | The detail page lists attached file names and uploads new ones; it does not render a thumbnail or inline preview of a receipt. |
+| **Amount input has no locale-aware entry helper** | The field accepts `1250.75` with a dot decimal separator only. Deliberate for now — a locale-aware parser is exactly the kind of conversion that risks precision — but a client using comma decimals will notice. |
+
+### DEFERRED ADVANCED (confirmed, none implemented)
+Chart of accounts · double-entry · journals · general ledger · trial balance ·
+accounts payable · accounts receivable · aging · budgeting · cost centres ·
+commitments/encumbrance · bank reconciliation · statement import · tax
+(PPN/VAT/PPh/withholding) · fixed-asset accounting · depreciation ·
+consolidation · profit & loss · balance sheet · statutory cash-flow
+statement · financial closing · fiscal period lock · multi-ledger · FX
+conversion, revaluation, and gain/loss.
+
+### CLIENT CONFIGURATION (confirmed)
+Transaction categories · cash/bank accounts and their currencies · the
+transaction approval workflow and its thresholds · numbering patterns ·
+organisation/legal-entity placement of accounts.
+
+### CLIENT EXTENSION CANDIDATES (confirmed)
+Posting bridges to a client's accounting system · bank host-to-host
+interfaces. Excluded from the product denominator.
+
+### PLATFORM HARDENING (unchanged)
+PH-1 through PH-8 untouched by Phase 6. The Pilot gate remains blocked on
+Phase H, not on business capability.
