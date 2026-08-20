@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.2 |
+| **Roadmap Baseline** | v1.3 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-20 |
-| **Measured at** | `master` @ `cc0d0b5` · 163/163 tests · 63 tables · 15 migrations |
+| **Measured at** | `master` @ `688de8a` · 179/179 tests · 66 tables · 16 migrations |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.1 |
+| Metric | Value | Δ since v1.2 |
 |---|---:|---:|
-| **Core Product Readiness** | **48.9 %** | ▲ 7.5 pts |
-| **Full Approved Roadmap Progress** | **25.8 %** | ▲ 3.7 pts |
+| **Core Product Readiness** | **54.6 %** | ▲ 5.7 pts |
+| **Full Approved Roadmap Progress** | **28.6 %** | ▲ 2.8 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -33,7 +33,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 |---|---:|---:|
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 0 / 16 | **0 %** |
-| Business Core | 44 / 117 | **37.6 %** |
+| Business Core | 54 / 117 | **46.2 %** |
 | Advanced Capabilities | 6 / 179 | **3.4 %** |
 
 ## 3. Per-module progress
@@ -45,7 +45,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 | Service Quality (Complaint) | 15 / 15 | **100 %** |
 | Survey & Assessment | 9 / 9 | **100 %** |
 | Service Operations & Work Mgmt | 13 / 13 | **100 %** |
-| Workforce (HR) Core | 0 / 10 | 0 % |
+| Workforce (HR) Core | 10 / 10 | **100 %** |
 | Supply Chain Core | 0 / 14 | 0 % |
 | Asset Core | 0 / 8 | 0 % |
 | Finance Core | 0 / 12 | 0 % |
@@ -64,7 +64,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 | HSE Core | 0 / 23 | 0 % |
 | Service Operations & Work Mgmt | 13 / 26 | 50.0 % |
 | Finance Core | 0 / 33 | 0 % |
-| Workforce (HR) Core | 0 / 34 | 0 % |
+| Workforce (HR) Core | 10 / 34 | 29.4 % |
 | Supply Chain Core | 0 / 36 | 0 % |
 | Reporting & Operational Insight | 0 / 20 | 0 % |
 | Platform (cross-cutting Advanced) | 0 / 13 | 0 % |
@@ -79,19 +79,19 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 ```text
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed   0
-Business Core          total 117   completed  44   (+13 — Phase 2 OPS.1–OPS.5)
+Business Core          total 117   completed  54   (+10 — Phase 3 HR.1–HR.5)
 Advanced Capabilities  total 179   completed   6
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
-  completed   = 41 +  44 +  0 =  85
+  completed   = 41 +  54 +  0 =  95
   in-progress earned          =   0
-  (85 + 0) / 174 × 100 = 48.9 %
+  (95 + 0) / 174 × 100 = 54.6 %
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   =  85 +   6 =  91
-  (91 + 0) / 353 × 100 = 25.8 %
+  completed   =  95 +   6 = 101
+  (101 + 0) / 353 × 100 = 28.6 %
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
@@ -121,11 +121,11 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 
 ## 6. Pending roadmap units
 
-All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-5…BC-11, and all Advanced units except the two delivered Survey-to-Action units.
+All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-6…BC-11, and all Advanced units except the two delivered Survey-to-Action units.
 
 ## 7. Active phase
 
-**None.** Phase 2 closed; next phase awaits Founder approval. Per the canonical roadmap the next dependency-ordered phase is **Phase 3 — Workforce (HR) Core**, with **Phase H (Platform Hardening — Pilot gate)** still runnable in parallel and still the only thing blocking the Pilot gate.
+**None.** Phase 3 closed; next phase awaits Founder approval. Per the canonical roadmap the next dependency-ordered phase is **Phase 4 — Supply Chain Core**, with **Phase H (Platform Hardening — Pilot gate)** still runnable in parallel and still the only thing blocking the Pilot gate.
 
 ## 8. Progress change log
 
@@ -134,6 +134,7 @@ All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-5…BC-11, and all Adva
 | v1.0 | 2026-08-20 | 41.4 % | 22.1 % | First measured baseline. No prior figure existed — nothing to compare against. |
 | v1.1 | 2026-08-20 | 41.4 % | 22.1 % | **No change.** PRD reconstruction migrated 70 IGSEP legacy requirement areas; every one mapped to an existing roadmap unit (ADOPT/ADAPT/MERGE/RECLASSIFY) or to a SUPERSEDE/pack disposition that adds no weight. Denominator unchanged at 174 / 353; numerator unchanged at 72 / 78. |
 | v1.2 | 2026-08-20 | 48.9 % | 25.8 % | **Phase 2 delivered.** Numerator +13 (OPS.1–OPS.5); denominator unchanged at 174 / 353. Pure earned progress — no scope was added or reclassified. |
+| v1.3 | 2026-08-20 | 54.6 % | 28.6 % | **Phase 3 delivered.** Numerator +10 (HR.1–HR.5); denominator unchanged at 174 / 353. Pure earned progress. |
 
 ### Why the denominator did not move
 

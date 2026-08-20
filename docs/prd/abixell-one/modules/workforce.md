@@ -1,6 +1,6 @@
 # Module PRD — Workforce / HR (`HR-*`)
 
-**PRD v1.0** · Business Core module 5 of 11 · Status: **PLANNED**
+**PRD v1.0** · Business Core module 5 of 11 · Status: **DELIVERED** (Phase 3)
 
 > **Core question:** Who is the employee and where do they belong organisationally?
 
@@ -10,16 +10,16 @@ Core deliberately stops at **identity and placement**. Everything time-, money-,
 
 | ID | Requirement | Status |
 |---|---|---|
-| **HR-CORE-001** | The system shall maintain an employee master per tenant with a unique employee identifier. | PLANNED |
-| **HR-CORE-002** | The system shall record employment status (e.g. active, inactive, ended) and employment type. | PLANNED |
-| **HR-CORE-003** | The system shall place each employee in the organisation structure (legal entity, organisation unit, and where relevant project/site). | PLANNED |
-| **HR-CORE-004** | The system shall record position/role title for each employee. | PLANNED |
-| **HR-CORE-005** | The system shall record employee contact information. | PLANNED |
-| **HR-CORE-006** | The system shall attach employee documents, inheriting the employee record's authorisation. | PLANNED |
-| **HR-CORE-007** | The system shall retain basic employment history (placement and status changes over time). | PLANNED |
-| **HR-CORE-008** | Employee records shall be linkable to platform user accounts where the employee uses the system. | PLANNED |
-| **HR-CORE-009** | Access to employee data shall respect data scope; a scoped supervisor shall not browse the whole tenant's workforce. | PLANNED |
-| **HR-CORE-010** | Authorised users shall maintain workforce records through the application UI. | PLANNED |
+| **HR-CORE-001** | The system shall maintain an employee master per tenant with a unique employee identifier. | DELIVERED |
+| **HR-CORE-002** | The system shall record employment status (e.g. active, inactive, ended) and employment type. | DELIVERED |
+| **HR-CORE-003** | The system shall place each employee in the organisation structure (legal entity, organisation unit, and where relevant project/site). | DELIVERED |
+| **HR-CORE-004** | The system shall record position/role title for each employee. | DELIVERED |
+| **HR-CORE-005** | The system shall record employee contact information. | DELIVERED |
+| **HR-CORE-006** | The system shall attach employee documents, inheriting the employee record's authorisation. | DELIVERED |
+| **HR-CORE-007** | The system shall retain basic employment history (placement and status changes over time). | DELIVERED |
+| **HR-CORE-008** | Employee records shall be linkable to platform user accounts where the employee uses the system. | DELIVERED |
+| **HR-CORE-009** | Access to employee data shall respect data scope; a scoped supervisor shall not browse the whole tenant's workforce. | DELIVERED |
+| **HR-CORE-010** | Authorised users shall maintain workforce records through the application UI. | DELIVERED |
 
 ## Advanced requirements
 
@@ -48,6 +48,29 @@ Biometric/attendance devices, payroll bank files, and government reporting inter
 Platform Core: tenancy/organisation, RBAC + data scope, documents, configuration, audit.
 Consumed by: Service Operations (executor identity), Asset (custodian), HSE (person involved), Project Delivery (PIC).
 
+## Implementation reality
+
+Delivered in Phase 3 (roadmap units HR.1–HR.5). Backend at
+`apps/api/src/modules/workforce/core/`, frontend at
+`apps/web/src/modules/workforce/`.
+
+Three tables: `positions`, `employees` (current placement + optional
+`user_id`), and `employee_assignments` (one row per placement/status period).
+A placement change closes the open period and opens a new one, so historical
+facts are never rewritten; a partial unique index allows at most one open
+period per employee.
+
+Employee is deliberately **not** a system user: the account link is optional
+and one-to-one per tenant, and linking never creates, modifies, or
+deactivates the account itself. Organisation is not duplicated — placement
+references the platform's Legal Entity and Organization Unit hierarchy, with
+hierarchical Data Scope reused rather than re-derived. Employee documents
+reuse Document Core behind a dedicated `workforce.documents.read` capability
+because they are more sensitive than ordinary business records.
+
+Evidence: `workforce.test.ts` (16 tests) plus a real-browser acceptance
+covering create → document → transfer → end employment with history intact.
+
 ## Note on scope discipline
 
-Payroll is the largest single Advanced item in the product. It must never be treated as a prerequisite for Workforce Core: a client must be able to use employee master and placement without any payroll capability.
+Payroll is the largest single Advanced item in the product. It must never be treated as a prerequisite for Workforce Core: a client must be able to use employee master and placement without any payroll capability. Phase 3 honoured this — no attendance, shift/roster, leave, overtime, payroll, recruitment, performance, competency, or manpower-planning capability exists in Core, and no country-specific compliance fields were introduced.

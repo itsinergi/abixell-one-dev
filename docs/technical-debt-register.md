@@ -588,3 +588,36 @@ operational calculations. Excluded from the product denominator.
 ### PLATFORM HARDENING (unchanged)
 PH-1 through PH-8 untouched by Phase 2, as instructed. The Pilot gate remains
 blocked on Phase H, not on business capability.
+
+---
+
+## Phase 3 — Workforce / HR Core (2026-08-20)
+
+### MUST FIX BEFORE PHASE 3 CLOSURE
+- None. The one defect found (calendar dates shifting by a day through UTC
+  conversion) was fixed within the phase and is covered by tests.
+
+### SHOULD FIX LATER (new)
+| Item | Detail |
+|---|---|
+| **User-account link has no UI** | The API supports linking/unlinking an employee to a platform user (with all guards and tests), but the employee detail screen only displays whether an account is linked. A picker over the existing `/users` endpoint is the natural next increment. |
+| **Employment type is a free-text field in the UI** | The reference data type `employment_type` is registered, but the create form does not yet render a picker from it. Values are still tenant configuration; only the input control is missing. |
+| **Position administration has no screen** | Positions are created through the API/seed. The employee forms consume them correctly, but maintaining the catalogue needs an admin surface. |
+| **Employee list search uses ILIKE** | Adequate at pilot scale and index-friendly enough for now; revisit only if a client's workforce size makes it measurably slow. Deliberately no search infrastructure was introduced. |
+
+### DEFERRED ADVANCED (confirmed, none implemented)
+Attendance · shift & roster · leave · overtime · payroll (including statutory
+contributions and income-tax withholding) · recruitment · performance ·
+competency · training · career · manpower planning · workforce optimisation.
+
+### CLIENT CONFIGURATION (confirmed)
+Employment types (reference data) · positions · organisation structure ·
+employee numbering pattern · document types · terminology.
+
+### CLIENT EXTENSION CANDIDATES (confirmed)
+Biometric/attendance devices · payroll bank files · government reporting
+interfaces. Excluded from the product denominator.
+
+### PLATFORM HARDENING (unchanged)
+PH-1 through PH-8 untouched by Phase 3. The Pilot gate remains blocked on
+Phase H, not on business capability.

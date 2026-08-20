@@ -1741,3 +1741,83 @@ The "shared date formatter" debt: module-neutral helpers now live at
 Recurring service, advanced scheduling, route planning, productivity and
 manpower optimisation, forecasting, offline field execution. No Vertical
 Service Pack logic — the four packs remain configuration over this engine.
+
+
+## 2026-08-20 — Phase 3 (Workforce / HR Core)
+
+Second module under the frozen target architecture: backend at
+`apps/api/src/modules/workforce/core/`, frontend at
+`apps/web/src/modules/workforce/`.
+
+### Domain model (3 tables, 63 → 66)
+- `positions` — reusable job titles per tenant.
+- `employees` — the master record. Carries the CURRENT placement for
+  querying, plus an OPTIONAL `user_id`.
+- `employee_assignments` — one row per placement/status period
+  (`effective_from` … `effective_to`, null = current).
+
+### Employee is not a system user
+`user_id` is nullable and a partial unique index makes the link one-to-one
+per tenant. An employee may exist with no login at all; linking or unlinking
+never creates, modifies, or deactivates the account. Identity stays a
+separate domain and Workforce never becomes an authentication system.
+
+### History without a temporal database
+A placement change closes the open period and opens a new one — historical
+facts are never rewritten. A partial unique index (`WHERE effective_to IS
+NULL`) allows at most one open period per employee. Ending employment records
+an effective end and keeps the record readable; nothing is hard-deleted.
+
+### Organisation is not duplicated
+Placement references the platform's `legal_entities` and
+`organization_units`. There is no `hr_companies` / `hr_departments` shadow
+hierarchy. Hierarchical Organization Unit Data Scope is **reused**:
+`RbacService.isOrganizationUnitScopeCovered` was made public so list
+filtering applies the platform's exact rule rather than re-deriving it.
+Transfers are also scope-checked at the destination, so scope cannot be
+escaped by moving an employee out of it.
+
+### Documents
+Reuse Document Core with `entityType: 'employee'` plus an entity
+authorization resolver. Employee documents require the dedicated
+`workforce.documents.read` capability **in addition** to Data Scope — holding
+`workforce.read` is deliberately not enough, because employment documents are
+more sensitive than ordinary business records. A person can always reach
+their own documents.
+
+### No Workflow for master-data CRUD
+The Workflow Engine was deliberately not used: Core employee maintenance has
+no approval lifecycle, and using workflow merely because it exists would add
+configuration burden with no business value.
+
+### Privacy and data minimisation
+No statutory identifiers, tax, banking, medical, biometric, religion,
+marital, or family fields. Audit metadata records the employee number and
+placement ids only — never contact details.
+
+### Bug found and fixed
+pg returns `date` columns as a JS Date at LOCAL midnight; formatting those
+with `toISOString()` shifted every calendar date back one day in any timezone
+east of UTC (`2026-02-01` became `2026-01-31`). Caught by the placement-history
+test. Calendar dates are now read and written as plain `YYYY-MM-DD` strings
+with no timezone conversion.
+
+### Tests / Regression
+`workforce.test.ts` — 16 tests: employee master, explicit vs generated
+numbers, employee-without-login, placement history, ending employment,
+user-link rules (optional, one-to-one, tenant-bound), self-service record,
+hierarchical Data Scope (including descendant units and transfer guard),
+authorization, document capability separation, cross-tenant isolation,
+validation, and search/filter. Suite **179/179 PASS**.
+
+### Live acceptance (real Chromium, through the UI)
+Create employee with legal entity, organization unit, position and join date
+→ attach an employment document → record a transfer with a new position and
+effective date → end employment. The record stayed readable with three
+history periods intact. No horizontal overflow at 375/390/768/desktop; 9/9
+form controls label-associated on the detail page.
+
+### Deliberately NOT built (Advanced, deferred)
+Attendance, shift/roster, leave, overtime, payroll (and any statutory
+contribution or income-tax handling), recruitment, performance, competency,
+training, career, manpower planning. No country-specific compliance.

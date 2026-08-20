@@ -57,13 +57,13 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 
 | Legacy area | Abixell One requirement | Disposition | New classification | Impl. status | Roadmap unit |
 |---|---|---|---|---|---|
-| Employee identity, Deployment, Rotation, Termination | `HR-CORE-001…010` | ADAPT | Business Core | PLANNED | HR.1–HR.4 |
+| Employee identity, Deployment, Rotation, Termination | `HR-CORE-001…010` | ADAPT | Business Core | DELIVERED | HR.1–HR.4 |
 | Attendance | `HR-ADV-001` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 | Shift | `HR-ADV-002` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 | Leave | `HR-ADV-003` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 | Recruitment | `HR-ADV-006` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 | Training / Competency / Evaluation | `HR-ADV-007/008` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| Medical | `HR-CORE-006` (as document) + HSE | MERGE | Business Core / Advanced | PLANNED | HR.3 |
+| Medical | `HR-CORE-006` (as document) + HSE | MERGE | Business Core / Advanced | PARTIAL (document mechanism delivered; no medical fields by design) | HR.3 |
 | Payroll (implied by attendance/shift) | `HR-ADV-005` | DEFER | Advanced | DEFERRED | Wave A |
 
 ### Procurement / Warehouse / Inventory

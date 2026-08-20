@@ -372,3 +372,20 @@ Checkpoint 1E. Events (`survey.submitted` etc.) are emitted as the seam.
 | 8 | Work Order visibility includes the **assignee path** alongside Customer Data Scope | A field executor is authorised by assignment, not by owning the customer's scope | SO-CORE-012 |
 | 9 | Start/complete/verify are idempotent via guarded UPDATEs | Duplicate actions must never overwrite original facts or duplicate side effects | Phase 2 §48 |
 | 10 | Module-neutral formatters moved to `apps/web/src/shared/format.ts`, Complaint re-exports them | Retires the shared-formatter debt with zero behaviour change and no churn | Debt register |
+
+## 2026-08-20 — Phase 3 (Workforce / HR Core)
+
+| # | Decision | Reason | Reference |
+|---|---|---|---|
+| 1 | Built under the frozen target architecture (`modules/workforce/core/...`) | Second proof that new modules follow the target; Phase 0/1 code left untouched | Blueprint §11A |
+| 2 | **Employee is not a system user**: `user_id` nullable, one-to-one per tenant via partial unique index | An employee may have no login; Identity remains a separate domain and Workforce never becomes an auth system | HR-CORE-008 |
+| 3 | Linking/unlinking a user account never creates, modifies, or deactivates it | Hidden destructive side effects across domain boundaries are prohibited | Phase 3 §23/§24 |
+| 4 | Current placement lives on `employees`; every period lives in `employee_assignments` with a partial unique index on the open row | History must be preserved without adopting a full temporal database | HR-CORE-003/007 |
+| 5 | Organisation is referenced, never duplicated; `RbacService.isOrganizationUnitScopeCovered` made public | List filtering must reuse the platform's hierarchical scope rule instead of re-deriving it | HR-CORE-009, ADR-0009 |
+| 6 | A transfer is scope-checked at the DESTINATION unit too | Otherwise Data Scope could be escaped by moving an employee out of it | HR-CORE-009 |
+| 7 | Separate `workforce.documents.read` capability for employee documents | Employment documents are more sensitive than ordinary business records; `workforce.read` alone must not grant them | HR-CORE-006, Phase 3 §19 |
+| 8 | Employment STATUS is a finite Core value; employment TYPE is Reference Data | Status drives behaviour; type is client vocabulary | HR-CORE-002, Phase 3 §16 |
+| 9 | No Workflow Engine for employee master-data CRUD | Workflow must not be used merely because it exists; Core HR has no approval lifecycle | Phase 3 §22 |
+| 10 | Ending employment sets an effective end and preserves history; no hard delete | Business history and downstream references must survive | Phase 3 §23/§47 |
+| 11 | Deliberate data minimisation: no statutory, tax, banking, medical, biometric, or family fields | Workforce Core must stay internationally reusable and privacy-respecting | Phase 3 §10/§40 |
+| 12 | Calendar dates handled as plain `YYYY-MM-DD` strings, never via `toISOString()` | pg returns `date` at local midnight; UTC conversion shifted dates by a day (bug found in testing) | Phase 3 bug fix |
