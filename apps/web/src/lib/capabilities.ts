@@ -39,6 +39,10 @@ export const PERMISSIONS = {
   configManage: "config.manage",
   surveyManage: "survey.manage",
   surveyRespond: "survey.respond",
+  serviceOperationsRead: "service_operations.read",
+  serviceOperationsManage: "service_operations.manage",
+  serviceOperationsExecute: "service_operations.execute",
+  serviceOperationsConfigure: "service_operations.configure",
 } as const;
 
 export interface NavSection {
@@ -134,6 +138,28 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Surveys",
     description: "Author survey definitions, publish versions, and assign them.",
     requiresAnyOf: [PERMISSIONS.surveyManage],
+  },
+  {
+    key: "my-work",
+    path: "/my-work",
+    label: "My Work",
+    description: "The jobs assigned to you — record what you did in the field.",
+    requiresAnyOf: [PERMISSIONS.serviceOperationsExecute],
+  },
+  {
+    key: "work-orders",
+    path: "/work-orders",
+    label: "Work Orders",
+    description: "Plan, assign, and follow the work your teams are delivering.",
+    requiresAnyOf: [PERMISSIONS.serviceOperationsManage, PERMISSIONS.serviceOperationsRead],
+    requiresInternal: true,
+  },
+  {
+    key: "service-types",
+    path: "/service-types",
+    label: "Service Types",
+    description: "Define the reusable services your teams deliver.",
+    requiresAnyOf: [PERMISSIONS.serviceOperationsConfigure],
   },
   {
     key: "administration",

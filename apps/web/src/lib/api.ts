@@ -534,6 +534,176 @@ export const api = {
     request<{ ok: boolean }>(`/survey-assignments/${id}/answers`, { method: "POST", token, body: { answers } }),
   submitSurvey: (token: string, id: string) =>
     request<SurveyAssignment>(`/survey-assignments/${id}/submit`, { method: "POST", token }),
+
+  // --- Service Operations & Work Management (Phase 2) -----------------
+  serviceDefinitions: (token: string) => request<ServiceDefinition[]>("/service-definitions", { token }),
+  serviceDefinition: (token: string, code: string) =>
+    request<{ definition: ServiceDefinition; checklist: ServiceChecklistTemplateItem[] }>(
+      `/service-definitions/${code}`,
+      { token },
+    ),
+  createServiceDefinition: (
+    token: string,
+    body: { code: string; name: string; description?: string | null; category?: string | null },
+  ) => request<ServiceDefinition>("/service-definitions", { method: "POST", token, body }),
+  addServiceChecklistItem: (
+    token: string,
+    code: string,
+    body: { code: string; label: string; isRequired?: boolean; sortOrder?: number },
+  ) =>
+    request<ServiceChecklistTemplateItem>(`/service-definitions/${code}/checklist-items`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  setServiceDefinitionActive: (token: string, code: string, isActive: boolean) =>
+    request<ServiceDefinition>(`/service-definitions/${code}/active`, {
+      method: "PATCH",
+      token,
+      body: { isActive },
+    }),
+
+  workRequests: (token: string) => request<WorkRequestRow[]>("/work-requests", { token }),
+  createWorkRequest: (
+    token: string,
+    body: {
+      customerId: string;
+      siteId?: string | null;
+      serviceDefinitionCode: string;
+      description: string;
+      priority?: string | null;
+    },
+  ) => request<WorkRequest>("/work-requests", { method: "POST", token, body }),
+  cancelWorkRequest: (token: string, id: string, reason: string | null) =>
+    request<WorkRequest>(`/work-requests/${id}/cancel`, { method: "POST", token, body: { reason } }),
+  convertWorkRequest: (token: string, id: string, body: { title?: string; dueAt?: string | null }) =>
+    request<WorkOrder>(`/work-requests/${id}/convert`, { method: "POST", token, body }),
+
+  workOrders: (token: string) => request<WorkOrderRow[]>("/work-orders", { token }),
+  myWorkOrders: (token: string) => request<WorkOrderRow[]>("/work-orders/my", { token }),
+  workOrder: (token: string, id: string) => request<WorkOrderDetail>(`/work-orders/${id}`, { token }),
+  createWorkOrder: (
+    token: string,
+    body: {
+      customerId: string;
+      siteId?: string | null;
+      serviceDefinitionCode: string;
+      title: string;
+      description?: string | null;
+      priority?: string | null;
+      dueAt?: string | null;
+    },
+  ) => request<WorkOrder>("/work-orders", { method: "POST", token, body }),
+  assignWorkOrder: (token: string, id: string, assigneeUserId: string) =>
+    request<WorkOrder>(`/work-orders/${id}/assign`, { method: "POST", token, body: { assigneeUserId } }),
+  scheduleWorkOrder: (
+    token: string,
+    id: string,
+    body: { plannedStartAt?: string | null; plannedEndAt?: string | null; dueAt?: string | null },
+  ) => request<WorkOrder>(`/work-orders/${id}/schedule`, { method: "POST", token, body }),
+  actOnWorkOrder: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ workOrder: WorkOrder }>(`/work-orders/${id}/actions/${actionCode}`, {
+      method: "POST",
+      token,
+      body: { comment: comment ?? null },
+    }),
+  startWorkOrder: (token: string, id: string) =>
+    request<WorkOrder>(`/work-orders/${id}/start`, { method: "POST", token }),
+  setWorkOrderChecklistItem: (
+    token: string,
+    id: string,
+    itemId: string,
+    body: { isCompleted: boolean; note?: string | null },
+  ) => request<WorkOrderChecklistItem>(`/work-orders/${id}/checklist/${itemId}`, { method: "POST", token, body }),
+  completeWorkOrder: (token: string, id: string, notes: string | null) =>
+    request<WorkOrder>(`/work-orders/${id}/complete`, { method: "POST", token, body: { notes } }),
+  verifyWorkOrder: (token: string, id: string, notes: string | null) =>
+    request<WorkOrder>(`/work-orders/${id}/verify`, { method: "POST", token, body: { notes } }),
+};
+
+// --- Service Operations types (Phase 2) --------------------------------
+
+export type ServiceDefinition = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  isActive: boolean;
+};
+
+export type ServiceChecklistTemplateItem = {
+  id: string;
+  code: string;
+  label: string;
+  isRequired: boolean;
+  sortOrder: number;
+};
+
+export type WorkRequest = {
+  id: string;
+  requestNumber: string;
+  customerId: string;
+  siteId: string | null;
+  serviceDefinitionId: string;
+  description: string;
+  priority: string | null;
+  requestedAt: string;
+  convertedWorkOrderId: string | null;
+  cancelledAt: string | null;
+};
+
+export type WorkRequestRow = { request: WorkRequest; state: string };
+
+export type WorkOrder = {
+  id: string;
+  workOrderNumber: string;
+  workRequestId: string | null;
+  customerId: string;
+  siteId: string | null;
+  serviceDefinitionId: string;
+  title: string;
+  description: string | null;
+  priority: string | null;
+  plannedStartAt: string | null;
+  plannedEndAt: string | null;
+  dueAt: string | null;
+  assignedToUserId: string | null;
+  startedAt: string | null;
+  completionNotes: string | null;
+  completedAt: string | null;
+  verificationNotes: string | null;
+  verifiedAt: string | null;
+  workflowInstanceId: string | null;
+};
+
+export type WorkOrderChecklistItem = {
+  id: string;
+  code: string;
+  label: string;
+  isRequired: boolean;
+  sortOrder: number;
+  isCompleted: boolean;
+  note: string | null;
+  completedAt: string | null;
+};
+
+export type WorkOrderStatus = {
+  stepCode: string | null;
+  stepName: string | null;
+  instanceStatus: string;
+  sla: { dueAt: string | null; slaHours: number | null } | null;
+  assignment: { roleCode: string | null; userId: string | null; isMine: boolean } | null;
+};
+
+export type WorkOrderRow = { workOrder: WorkOrder; status: WorkOrderStatus | null };
+
+export type WorkOrderDetail = {
+  workOrder: WorkOrder;
+  serviceDefinition: ServiceDefinition | null;
+  checklist: WorkOrderChecklistItem[];
+  status: WorkOrderStatus | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
 };
 
 export type WorkflowInstance = {

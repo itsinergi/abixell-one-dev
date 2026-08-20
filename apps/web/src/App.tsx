@@ -16,6 +16,11 @@ import { SurveyListPage } from "./pages/survey/SurveyListPage";
 import { SurveyDetailPage } from "./pages/survey/SurveyDetailPage";
 import { MySurveysPage } from "./pages/survey/MySurveysPage";
 import { MySurveyDetailPage } from "./pages/survey/MySurveyDetailPage";
+import { WorkOrderQueuePage } from "./modules/service-operations/WorkOrderQueuePage";
+import { WorkOrderDetailPage } from "./modules/service-operations/WorkOrderDetailPage";
+import { MyWorkPage } from "./modules/service-operations/MyWorkPage";
+import { MyWorkDetailPage } from "./modules/service-operations/MyWorkDetailPage";
+import { ServiceDefinitionsPage } from "./modules/service-operations/ServiceDefinitionsPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -65,6 +70,12 @@ export default function App() {
           <Route path="surveys/:code" element={<SurveyDetailPage />} />
           <Route path="my-surveys" element={<MySurveysPage />} />
           <Route path="my-surveys/:assignmentId" element={<MySurveyDetailPage />} />
+          {/* Phase 2 — Service Operations & Work Management */}
+          <Route path="work-orders" element={<WorkOrderQueuePage />} />
+          <Route path="work-orders/:workOrderId" element={<WorkOrderDetailPage />} />
+          <Route path="my-work" element={<MyWorkPage />} />
+          <Route path="my-work/:workOrderId" element={<MyWorkDetailPage />} />
+          <Route path="service-types" element={<ServiceDefinitionsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

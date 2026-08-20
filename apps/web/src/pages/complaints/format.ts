@@ -7,23 +7,11 @@
  * backend. Tone selection here is purely cosmetic and safe to hardcode.
  */
 import type { ComplaintSla } from "../../lib/api";
+import type { Tone } from "../../shared/format";
 
-type Tone = "neutral" | "info" | "success" | "warning" | "danger";
-
-/** Cosmetic tone for a Workflow instance status. */
-export function statusTone(instanceStatus: string | null | undefined): Tone {
-  switch (instanceStatus) {
-    case "approved":
-      return "success";
-    case "rejected":
-    case "cancelled":
-      return "danger";
-    case "in_progress":
-      return "info";
-    default:
-      return "neutral";
-  }
-}
+// Module-neutral helpers now live in `shared/` (blueprint §11A). Re-exported
+// here so existing Complaint imports keep working unchanged.
+export { statusTone, formatDate, formatDateShort } from "../../shared/format";
 
 /** Cosmetic tone for a severity code (values are Tenant configuration; the
  * common ones get a colour, anything else falls back to neutral). */
@@ -38,16 +26,6 @@ export function severityTone(severity: string | null | undefined): Tone {
     default:
       return "neutral";
   }
-}
-
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
-}
-
-export function formatDateShort(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString();
 }
 
 /** Human, customer-friendly SLA indicator derived only from the backend's
