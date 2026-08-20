@@ -45,6 +45,10 @@ export const PERMISSIONS = {
   serviceOperationsConfigure: "service_operations.configure",
   workforceRead: "workforce.read",
   workforceManage: "workforce.manage",
+  supplyChainRead: "supply_chain.read",
+  supplyChainManage: "supply_chain.manage",
+  supplyChainStockManage: "supply_chain.stock.manage",
+  supplyChainConfigure: "supply_chain.configure",
 } as const;
 
 export interface NavSection {
@@ -169,6 +173,30 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Employees",
     description: "Who works here, and where they belong in the organisation.",
     requiresAnyOf: [PERMISSIONS.workforceRead, PERMISSIONS.workforceManage],
+    requiresInternal: true,
+  },
+  {
+    key: "items",
+    path: "/items",
+    label: "Items & Stock",
+    description: "What exists, how much of it, and what moved.",
+    requiresAnyOf: [PERMISSIONS.supplyChainRead],
+    requiresInternal: true,
+  },
+  {
+    key: "suppliers",
+    path: "/suppliers",
+    label: "Suppliers",
+    description: "Who you buy from.",
+    requiresAnyOf: [PERMISSIONS.supplyChainRead],
+    requiresInternal: true,
+  },
+  {
+    key: "purchasing",
+    path: "/purchasing",
+    label: "Purchasing",
+    description: "Request, order, and receive what your teams need.",
+    requiresAnyOf: [PERMISSIONS.supplyChainManage, PERMISSIONS.supplyChainStockManage],
     requiresInternal: true,
   },
   {

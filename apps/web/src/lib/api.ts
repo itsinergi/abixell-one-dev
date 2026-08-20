@@ -669,6 +669,184 @@ export const api = {
   ) => request<EmployeeDetail>(`/employees/${id}/placement`, { method: "POST", token, body }),
   setEmployeeUserLink: (token: string, id: string, userId: string | null) =>
     request<Employee>(`/employees/${id}/user-link`, { method: "POST", token, body: { userId } }),
+
+  // --- Supply Chain (Phase 4) -----------------------------------------
+  scmItems: (token: string, query: { search?: string } = {}) => {
+    const qs = query.search ? `?search=${encodeURIComponent(query.search)}` : "";
+    return request<ScmItem[]>(`/items${qs}`, { token });
+  },
+  scmItem: (token: string, code: string) =>
+    request<{ item: ScmItem; balances: StockBalanceRecord[] }>(`/items/${code}`, { token }),
+  createScmItem: (
+    token: string,
+    body: { code: string; name: string; description?: string | null; category?: string | null; unitOfMeasure: string },
+  ) => request<ScmItem>("/items", { method: "POST", token, body }),
+  updateScmItem: (token: string, code: string, body: { name?: string; isActive?: boolean }) =>
+    request<ScmItem>(`/items/${code}`, { method: "PATCH", token, body }),
+
+  suppliers: (token: string, query: { search?: string } = {}) => {
+    const qs = query.search ? `?search=${encodeURIComponent(query.search)}` : "";
+    return request<SupplierRecord[]>(`/suppliers${qs}`, { token });
+  },
+  createSupplier: (
+    token: string,
+    body: { code: string; name: string; contactName?: string | null; email?: string | null; phone?: string | null },
+  ) => request<SupplierRecord>("/suppliers", { method: "POST", token, body }),
+
+  stockBalances: (token: string, query: { itemCode?: string } = {}) => {
+    const qs = query.itemCode ? `?itemCode=${encodeURIComponent(query.itemCode)}` : "";
+    return request<StockBalanceRecord[]>(`/stock/balances${qs}`, { token });
+  },
+  stockMovements: (token: string, query: { itemCode?: string } = {}) => {
+    const qs = query.itemCode ? `?itemCode=${encodeURIComponent(query.itemCode)}` : "";
+    return request<StockMovementRecord[]>(`/stock/movements${qs}`, { token });
+  },
+  recordGoodsIn: (
+    token: string,
+    body: { itemCode: string; quantity: number; siteId?: string | null; reference?: string | null },
+  ) => request<StockMovementResult>("/stock/goods-in", { method: "POST", token, body }),
+  recordGoodsOut: (
+    token: string,
+    body: { itemCode: string; quantity: number; siteId?: string | null; reference?: string | null },
+  ) => request<StockMovementResult>("/stock/goods-out", { method: "POST", token, body }),
+
+  purchaseRequests: (token: string) => request<PurchaseRequestRecord[]>("/purchase-requests", { token }),
+  purchaseRequest: (token: string, id: string) =>
+    request<PurchaseRequestDetail>(`/purchase-requests/${id}`, { token }),
+  createPurchaseRequest: (
+    token: string,
+    body: {
+      justification: string;
+      organizationUnitId?: string | null;
+      requiredDate?: string | null;
+      lines: { itemCode: string; quantity: number; note?: string | null }[];
+    },
+  ) => request<PurchaseRequestDetail>("/purchase-requests", { method: "POST", token, body }),
+  actOnPurchaseRequest: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ request: PurchaseRequestRecord }>(`/purchase-requests/${id}/actions/${actionCode}`, {
+      method: "POST",
+      token,
+      body: { comment: comment ?? null },
+    }),
+
+  purchaseOrders: (token: string) => request<PurchaseOrderRecord[]>("/purchase-orders", { token }),
+  purchaseOrder: (token: string, id: string) => request<PurchaseOrderDetail>(`/purchase-orders/${id}`, { token }),
+  createPurchaseOrder: (
+    token: string,
+    body: {
+      supplierCode: string;
+      purchaseRequestId?: string | null;
+      currency?: string | null;
+      expectedDate?: string | null;
+      lines?: { itemCode: string; quantity: number; unitPrice?: number | null }[];
+    },
+  ) => request<PurchaseOrderDetail>("/purchase-orders", { method: "POST", token, body }),
+  issuePurchaseOrder: (token: string, id: string) =>
+    request<PurchaseOrderDetail>(`/purchase-orders/${id}/issue`, { method: "POST", token }),
+  receiveAgainstOrder: (
+    token: string,
+    id: string,
+    body: { lineId: string; quantity: number; note?: string | null },
+  ) => request<StockMovementResult>(`/purchase-orders/${id}/receipts`, { method: "POST", token, body }),
+};
+
+// --- Supply Chain types (Phase 4) --------------------------------------
+
+export type ScmItem = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  unitOfMeasure: string;
+  isActive: boolean;
+};
+
+export type SupplierRecord = {
+  id: string;
+  code: string;
+  name: string;
+  category: string | null;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  isActive: boolean;
+};
+
+export type StockBalanceRecord = {
+  id: string;
+  itemId: string;
+  siteId: string | null;
+  quantity: number;
+  updatedAt: string;
+};
+
+export type StockMovementRecord = {
+  id: string;
+  itemId: string;
+  siteId: string | null;
+  movementType: "in" | "out";
+  quantity: number;
+  reference: string | null;
+  note: string | null;
+  purchaseOrderId: string | null;
+  occurredAt: string;
+};
+
+export type StockMovementResult = {
+  movement: StockMovementRecord;
+  balance: StockBalanceRecord;
+  line?: PurchaseOrderLineRecord;
+};
+
+export type PurchaseRequestRecord = {
+  id: string;
+  requestNumber: string;
+  organizationUnitId: string | null;
+  justification: string;
+  requiredDate: string | null;
+  workflowInstanceId: string | null;
+  convertedPurchaseOrderId: string | null;
+};
+
+export type PurchaseRequestLineRecord = {
+  id: string;
+  itemId: string;
+  quantity: number;
+  note: string | null;
+};
+
+export type PurchaseRequestDetail = {
+  request: PurchaseRequestRecord;
+  lines: PurchaseRequestLineRecord[];
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type PurchaseOrderRecord = {
+  id: string;
+  orderNumber: string;
+  supplierId: string;
+  purchaseRequestId: string | null;
+  currency: string | null;
+  expectedDate: string | null;
+  issuedAt: string | null;
+  cancelledAt: string | null;
+};
+
+export type PurchaseOrderLineRecord = {
+  id: string;
+  itemId: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  unitPrice: number | null;
+};
+
+export type PurchaseOrderDetail = {
+  order: PurchaseOrderRecord;
+  lines: PurchaseOrderLineRecord[];
+  supplier: SupplierRecord | null;
+  state: string;
 };
 
 // --- Workforce types (Phase 3) -----------------------------------------

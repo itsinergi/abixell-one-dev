@@ -23,6 +23,9 @@ import { MyWorkDetailPage } from "./modules/service-operations/MyWorkDetailPage"
 import { ServiceDefinitionsPage } from "./modules/service-operations/ServiceDefinitionsPage";
 import { EmployeesPage } from "./modules/workforce/EmployeesPage";
 import { EmployeeDetailPage } from "./modules/workforce/EmployeeDetailPage";
+import { ItemsPage } from "./modules/supply-chain/ItemsPage";
+import { SuppliersPage } from "./modules/supply-chain/SuppliersPage";
+import { PurchasingPage } from "./modules/supply-chain/PurchasingPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -81,6 +84,10 @@ export default function App() {
           {/* Phase 3 — Workforce / HR */}
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="employees/:employeeId" element={<EmployeeDetailPage />} />
+          {/* Phase 4 — Supply Chain */}
+          <Route path="items" element={<ItemsPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="purchasing" element={<PurchasingPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
