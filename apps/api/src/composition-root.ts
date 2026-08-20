@@ -63,6 +63,8 @@ import { PgSupplyChainRepository } from "./modules/supply-chain/core/infrastruct
 import { SupplyChainService } from "./modules/supply-chain/core/application/supply-chain.service.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
+import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finance.repository.pg.js";
+import { FinanceService } from "./modules/finance/core/application/finance.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -212,6 +214,19 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 6 — Finance Core. Built before DocumentService so its
+  // `finance_transaction` Entity Authorization Resolver can close over
+  // `finance.canAccessForDocument` (ADR-0012). Financial evidence is gated
+  // by a dedicated capability AND the transaction's Data Scope.
+  const finance = new FinanceService(
+    new PgFinanceRepository(pool),
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -240,6 +255,10 @@ export function buildContainer() {
     [
       "asset",
       { canAccess: (actor, entityId) => asset.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "finance_transaction",
+      { canAccess: (actor, entityId) => finance.canAccessForDocument(actor, entityId) },
     ],
   ]);
   const document = new DocumentService(
@@ -355,6 +374,7 @@ export function buildContainer() {
     workforce,
     supplyChain,
     asset,
+    finance,
   };
 }
 
