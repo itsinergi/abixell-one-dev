@@ -26,6 +26,8 @@ import { EmployeeDetailPage } from "./modules/workforce/EmployeeDetailPage";
 import { ItemsPage } from "./modules/supply-chain/ItemsPage";
 import { SuppliersPage } from "./modules/supply-chain/SuppliersPage";
 import { PurchasingPage } from "./modules/supply-chain/PurchasingPage";
+import { AssetsPage } from "./modules/asset/AssetsPage";
+import { AssetDetailPage } from "./modules/asset/AssetDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -88,6 +90,9 @@ export default function App() {
           <Route path="items" element={<ItemsPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="purchasing" element={<PurchasingPage />} />
+          {/* Phase 5 — Asset */}
+          <Route path="assets" element={<AssetsPage />} />
+          <Route path="assets/:assetId" element={<AssetDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

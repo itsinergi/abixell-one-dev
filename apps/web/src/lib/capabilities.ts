@@ -49,6 +49,9 @@ export const PERMISSIONS = {
   supplyChainManage: "supply_chain.manage",
   supplyChainStockManage: "supply_chain.stock.manage",
   supplyChainConfigure: "supply_chain.configure",
+  assetRead: "asset.read",
+  assetManage: "asset.manage",
+  assetMove: "asset.move",
 } as const;
 
 export interface NavSection {
@@ -197,6 +200,14 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Purchasing",
     description: "Request, order, and receive what your teams need.",
     requiresAnyOf: [PERMISSIONS.supplyChainManage, PERMISSIONS.supplyChainStockManage],
+    requiresInternal: true,
+  },
+  {
+    key: "assets",
+    path: "/assets",
+    label: "Assets",
+    description: "What you own, where it is, and who holds it.",
+    requiresAnyOf: [PERMISSIONS.assetRead, PERMISSIONS.assetManage, PERMISSIONS.assetMove],
     requiresInternal: true,
   },
   {

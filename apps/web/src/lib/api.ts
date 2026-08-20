@@ -748,6 +748,180 @@ export const api = {
     id: string,
     body: { lineId: string; quantity: number; note?: string | null },
   ) => request<StockMovementResult>(`/purchase-orders/${id}/receipts`, { method: "POST", token, body }),
+
+  // --- Asset (Phase 5) --------------------------------------------------
+  assets: (token: string, query: AssetQuery = {}) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "" && value !== false) qs.set(key, String(value));
+    }
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<AssetListResult>(`/assets${suffix}`, { token });
+  },
+  asset: (token: string, id: string) => request<AssetDetail>(`/assets/${id}`, { token }),
+  createAsset: (token: string, body: CreateAssetBody) =>
+    request<AssetDetail>("/assets", { method: "POST", token, body }),
+  updateAsset: (token: string, id: string, body: UpdateAssetBody) =>
+    request<AssetDetail>(`/assets/${id}`, { method: "PATCH", token, body }),
+  moveAsset: (token: string, id: string, body: MoveAssetBody) =>
+    request<AssetDetail>(`/assets/${id}/movements`, { method: "POST", token, body }),
+  changeAssetStatus: (
+    token: string,
+    id: string,
+    body: { status: AssetStatusValue; reason?: string | null; effectiveDate?: string | null },
+  ) => request<AssetDetail>(`/assets/${id}/status`, { method: "POST", token, body }),
+  retireAsset: (
+    token: string,
+    id: string,
+    body: { status?: "retired" | "disposed"; reason?: string | null; effectiveDate?: string | null },
+  ) => request<AssetDetail>(`/assets/${id}/retirement`, { method: "POST", token, body }),
+  actOnAssetMovement: (token: string, movementId: string, actionCode: string, comment?: string | null) =>
+    request<AssetDetail>(`/asset-movements/${movementId}/actions/${actionCode}`, {
+      method: "POST",
+      token,
+      body: { comment: comment ?? null },
+    }),
+
+  // Location pickers reuse the existing Customer & Commercial hierarchy —
+  // Asset never owns its own site or project master.
+  sitesForCustomer: (token: string, customerId: string) =>
+    request<SiteRecord[]>(`/sites?customerId=${customerId}`, { token }),
+  projectsForCustomer: (token: string, customerId: string) =>
+    request<ProjectRecord[]>(`/projects?customerId=${customerId}`, { token }),
+};
+
+// --- Asset types (Phase 5) ---------------------------------------------
+
+export type AssetStatusValue = "in_use" | "idle" | "retired" | "disposed";
+
+export type AssetRecord = {
+  id: string;
+  assetNumber: string;
+  assetTag: string | null;
+  name: string;
+  description: string | null;
+  category: string | null;
+  status: AssetStatusValue;
+  organizationUnitId: string | null;
+  custodianEmployeeId: string | null;
+  projectId: string | null;
+  siteId: string | null;
+  locationDetail: string | null;
+  acquisitionReference: string | null;
+  acquiredAt: string | null;
+  version: number;
+  retiredAt: string | null;
+};
+
+export type CustodianReference = {
+  id: string;
+  employeeNumber: string;
+  fullName: string;
+};
+
+export type AssetMovementRecord = {
+  id: string;
+  assetId: string;
+  sequence: number | null;
+  movementType: "transfer" | "status_change";
+  reason: string | null;
+  effectiveDate: string | null;
+  fromOrganizationUnitId: string | null;
+  fromCustodianEmployeeId: string | null;
+  fromProjectId: string | null;
+  fromSiteId: string | null;
+  fromLocationDetail: string | null;
+  fromStatus: AssetStatusValue | null;
+  toOrganizationUnitId: string | null;
+  toCustodianEmployeeId: string | null;
+  toProjectId: string | null;
+  toSiteId: string | null;
+  toLocationDetail: string | null;
+  toStatus: AssetStatusValue | null;
+  workflowInstanceId: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+};
+
+export type AssetMovementView = {
+  movement: AssetMovementRecord;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type AssetDetail = {
+  asset: AssetRecord;
+  custodian: CustodianReference | null;
+  movements: AssetMovementRecord[];
+  pendingMovement: AssetMovementView | null;
+};
+
+export type AssetListResult = {
+  assets: AssetRecord[];
+  custodians: CustodianReference[];
+};
+
+export type AssetQuery = {
+  search?: string;
+  category?: string;
+  status?: string;
+  organizationUnitId?: string;
+  siteId?: string;
+  custodianEmployeeId?: string;
+  includeTerminal?: boolean;
+};
+
+export type CreateAssetBody = {
+  name: string;
+  assetTag?: string | null;
+  description?: string | null;
+  category?: string | null;
+  status?: AssetStatusValue;
+  organizationUnitId?: string | null;
+  custodianEmployeeId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  locationDetail?: string | null;
+  acquisitionReference?: string | null;
+  acquiredAt?: string | null;
+};
+
+export type UpdateAssetBody = {
+  assetTag?: string | null;
+  name?: string;
+  description?: string | null;
+  category?: string | null;
+  acquisitionReference?: string | null;
+  acquiredAt?: string | null;
+};
+
+export type MoveAssetBody = {
+  organizationUnitId?: string | null;
+  custodianEmployeeId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  locationDetail?: string | null;
+  reason?: string | null;
+  effectiveDate?: string | null;
+};
+
+export type SiteRecord = {
+  id: string;
+  customerId: string;
+  projectId: string | null;
+  code: string;
+  name: string;
+  address: string | null;
+  status: string;
+};
+
+export type ProjectRecord = {
+  id: string;
+  customerId: string;
+  contractId: string | null;
+  code: string;
+  name: string;
+  status: string;
 };
 
 // --- Supply Chain types (Phase 4) --------------------------------------
