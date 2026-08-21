@@ -744,19 +744,30 @@ describe("Phase 7 — HSE Core", () => {
     // hse.documents.read holder can list documents for this HSE record
     const docAllowed = await get(`/documents?entityType=hse_record&entityId=${id}`, docReaderToken);
     expect(docAllowed.statusCode).toBe(200);
-    expect(docAllowed.json().length).toBeGreaterThan(0);
+    const docs = docAllowed.json();
+    expect(docs.length).toBeGreaterThan(0);
+    const docId = docs[0].id;
+
+    // hse.documents.read holder can download the document
+    const downloadAllowed = await get(`/documents/${docId}/download`, docReaderToken);
+    expect(downloadAllowed.statusCode).toBe(200);
+    expect(downloadAllowed.payload).toContain("safety photo evidence");
 
     // hse.manage holder (staff) can list documents for this HSE record
     const staffAllowed = await get(`/documents?entityType=hse_record&entityId=${id}`, hseStaffToken);
     expect(staffAllowed.statusCode).toBe(200);
     expect(staffAllowed.json().length).toBeGreaterThan(0);
 
-    // hse.read alone is NOT enough to access HSE evidence
+    // hse.read alone is NOT enough to access HSE evidence (list or download)
     const readerDenied = await get(`/documents?entityType=hse_record&entityId=${id}`, readerToken);
     expect([403, 404]).toContain(readerDenied.statusCode);
+    const readerDownloadDenied = await get(`/documents/${docId}/download`, readerToken);
+    expect([403, 404]).toContain(readerDownloadDenied.statusCode);
 
-    // Other tenant cannot access HSE evidence
+    // Other tenant cannot access HSE evidence (list or download)
     const crossTenantDenied = await get(`/documents?entityType=hse_record&entityId=${id}`, otherAdminToken);
     expect([403, 404]).toContain(crossTenantDenied.statusCode);
+    const crossTenantDownloadDenied = await get(`/documents/${docId}/download`, otherAdminToken);
+    expect([403, 404]).toContain(crossTenantDownloadDenied.statusCode);
   });
 });

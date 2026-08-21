@@ -213,6 +213,20 @@ export function HseDetailPage() {
     }
   }
 
+  async function downloadEvidence(doc: DocumentRecord) {
+    try {
+      const blob = await api.downloadDocument(token, doc.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Download failed");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader title={record.recordNumber} subtitle={record.title} />
@@ -468,14 +482,14 @@ export function HseDetailPage() {
                   {documents.map((doc) => (
                     <li key={doc.id} className="flex items-center justify-between rounded border border-slate-100 p-2">
                       <span className="font-medium">{doc.fileName}</span>
-                      <a
-                        href={api.documentDownloadUrl(doc.id)}
-                        className="text-xs text-blue-600 hover:underline"
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => void downloadEvidence(doc)}
+                        className="text-xs font-medium text-blue-600 hover:underline"
+                        disabled={busy}
                       >
                         Download
-                      </a>
+                      </button>
                     </li>
                   ))}
                 </ul>
