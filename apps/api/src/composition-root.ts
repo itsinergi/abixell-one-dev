@@ -65,6 +65,8 @@ import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.rep
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
 import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finance.repository.pg.js";
 import { FinanceService } from "./modules/finance/core/application/finance.service.js";
+import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
+import { HseService } from "./modules/hse/core/application/hse.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -227,6 +229,18 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
+  // Entity Authorization Resolver can close over `hse.canAccessForDocument`
+  // (ADR-0012). HSE evidence is gated by hse.documents.read AND Data Scope.
+  const hse = new HseService(
+    new PgHseRepository(pool),
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -259,6 +273,10 @@ export function buildContainer() {
     [
       "finance_transaction",
       { canAccess: (actor, entityId) => finance.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "hse_record",
+      { canAccess: (actor, entityId) => hse.canAccessForDocument(actor, entityId) },
     ],
   ]);
   const document = new DocumentService(
@@ -375,6 +393,7 @@ export function buildContainer() {
     supplyChain,
     asset,
     finance,
+    hse,
   };
 }
 
