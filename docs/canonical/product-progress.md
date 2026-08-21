@@ -6,8 +6,8 @@
 | **Authority** | Founder (Insting Tekno Sinergi) |
 | **Roadmap Baseline** | v1.6 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-20 |
-| **Measured at** | `master` @ `317f1c2` · 234/234 tests · 78 tables · 19 migrations |
+| **Last Updated** | 2026-08-21 |
+| **Measured at** | `master` @ `7964a35` · 256/256 tests · 81 tables · 20 migrations |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
@@ -16,8 +16,8 @@
 
 | Metric | Value | Δ since v1.5 |
 |---|---:|---:|
-| **Core Product Readiness** | **74.1 %** | ▲ 6.9 pts |
-| **Full Approved Roadmap Progress** | **38.2 %** | ▲ 3.4 pts |
+| **Core Product Readiness** | **79.3 %** | ▲ 12.1 pts |
+| **Full Approved Roadmap Progress** | **40.8 %** | ▲ 5.9 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -33,7 +33,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 |---|---:|---:|
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 0 / 16 | **0 %** |
-| Business Core | 88 / 117 | **75.2 %** |
+| Business Core | 97 / 117 | **82.9 %** |
 | Advanced Capabilities | 6 / 179 | **3.4 %** |
 
 ## 3. Per-module progress
@@ -49,7 +49,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 | Supply Chain Core | 14 / 14 | **100 %** |
 | Asset Core | 8 / 8 | **100 %** |
 | Finance Core | 12 / 12 | **100 %** |
-| HSE Core | 0 / 9 | 0 % |
+| HSE Core | 9 / 9 | **100 %** |
 | Project Delivery Core | 0 / 8 | 0 % |
 | Reporting & Operational Insight | 0 / 10 | 0 % |
 
@@ -61,7 +61,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 | Survey & Assessment | 15 / 28 | 53.6 % |
 | Asset Core | 8 / 19 | 42.1 % |
 | Project Delivery Core | 0 / 21 | 0 % |
-| HSE Core | 0 / 23 | 0 % |
+| HSE Core | 9 / 23 | 39.1 % |
 | Service Operations & Work Mgmt | 13 / 26 | 50.0 % |
 | Finance Core | 12 / 33 | 36.4 % |
 | Workforce (HR) Core | 10 / 34 | 29.4 % |
@@ -79,19 +79,19 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 ```text
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed   0
-Business Core          total 117   completed  88   (+12 — Phase 6 FIN.1–FIN.6)
+Business Core          total 117   completed  97   (+9 — Phase 7 HSE.1–HSE.4)
 Advanced Capabilities  total 179   completed   6
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
-  completed   = 41 +  88 +  0 = 129
+  completed   = 41 +  97 +  0 = 138
   in-progress earned          =   0
-  (129 + 0) / 174 × 100 = 74.1 %
+  (138 + 0) / 174 × 100 = 79.3 %
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 129 +   6 = 135
-  (135 + 0) / 353 × 100 = 38.2 %
+  completed   = 138 +   6 = 144
+  (144 + 0) / 353 × 100 = 40.8 %
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
@@ -117,17 +117,18 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 | CUS.1–CUS.3 | Phase 1A; migration `1757000000000`; `customer-foundation.test.ts` (16) |
 | CMP.1–CMP.7 | Phases 1B/1C; migrations `1758000000000`, `1759000000000`; `complaint-engine.test.ts` (16), `customer-complaint-experience.test.ts` (8), `operational-complaint-experience.test.ts` (10), `verification-complaint-experience.test.ts` (7), `management-dashboard.test.ts` (7), `complaint-configuration.test.ts` (7) |
 | FIN.1–FIN.6 | Phase 6; migration `1767000000000`; `finance.test.ts` (21); commits `f901de5`, `317f1c2` |
+| HSE.1–HSE.4 | Phase 7; migration `1768000000000`; `hse.test.ts` (22); frontend pages (register, report, detail); commits `463b94d`, `7964a35` |
 | AST.1–AST.4 | Phase 5; migration `1766000000000`; `asset.test.ts` (18); commits `b238b07`, `6ad67e7` |
 | SRV.1–SRV.3 | Phase 1D; migrations `1760000000000`, `1760000100000`; `survey-engine.test.ts` (16); commit `5c6e14a` |
 | ADV-SRV Survey-to-Action ×2 | Phase 1E; migrations `1761000000000`, `1762000000000`; `survey-integration.test.ts` (18); commits `8d64666`, `9fb8bbf`, `b7b6d64` |
 
 ## 6. Pending roadmap units
 
-All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-9…BC-11, and all Advanced units except the two delivered Survey-to-Action units.
+All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-10…BC-11, and all Advanced units except the two delivered Survey-to-Action units. HSE Advanced (HSE-ADV-1…14) is not yet scoped.
 
 ## 7. Active phase
 
-**None.** Phase 6 closed; next phase awaits Founder approval. Per the canonical roadmap the next dependency-ordered phase is **Phase 7 — HSE Core**, with **Phase H (Platform Hardening — Pilot gate)** still runnable in parallel and still the only thing blocking the Pilot gate.
+**None.** Phase 7 closed. Per the canonical roadmap: **Phase 8 — Project Delivery Core (PDL.1–PDL.4)** is the next dependency-ordered phase. **Phase H (Platform Hardening — Pilot gate)** remains critical path and is the only blocker for pilot launch; it is still runnable in parallel with any Business Core phase.
 
 ## 8. Progress change log
 
@@ -140,6 +141,7 @@ All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-9…BC-11, and all Adva
 | v1.4 | 2026-08-20 | 62.6 % | 32.6 % | **Phase 4 delivered.** Numerator +14 (SCM.1–SCM.6); denominator unchanged at 174 / 353. Pure earned progress. |
 | v1.5 | 2026-08-20 | 67.2 % | 34.8 % | **Phase 5 delivered.** Numerator +8 (AST.1–AST.4); denominator unchanged at 174 / 353. Pure earned progress. |
 | v1.6 | 2026-08-20 | 74.1 % | 38.2 % | **Phase 6 delivered.** Numerator +12 (FIN.1–FIN.6); denominator unchanged at 174 / 353. Pure earned progress. |
+| v1.7 | 2026-08-21 | 79.3 % | 40.8 % | **Phase 7 delivered.** Numerator +9 (HSE.1–HSE.4); denominator unchanged at 174 / 353. Pure earned progress. 256/256 tests passing. |
 
 ### Why the denominator did not move
 
