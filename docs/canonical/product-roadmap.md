@@ -63,11 +63,11 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 7ee5d88` (Phase 10) |
+| Branch / commit | `master @ 89fbff4` (Phase 10 correction) |
 | Migrations | 22 |
 | Tables | 83 |
 | Permissions | 75 |
-| Tests | 276 PASS (23 files) |
+| Tests | 278 PASS (23 files) |
 | typecheck / lint / build | PASS |
 
 ---
@@ -113,7 +113,7 @@ Pilot/production readiness. **Not** business capability.
 | CUS.1 | Customer + contacts master | 2 | COMPLETED |
 | CUS.2 | Contract / Project / Site / Service catalog + links | 3 | COMPLETED |
 | CUS.3 | Customer Data Scope authorization (ADR-0011) | 2 | COMPLETED |
-| CUS.4 | Customer & commercial admin UI | 2 | COMPLETED |
+| CUS.4 | Customer & commercial admin UI + maintenance | 2 | COMPLETED |
 
 ### BC-2 Service Quality (Complaint) — 15/15 · COMPLETED
 | ID | Unit | W | Status |
@@ -255,7 +255,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
-| v1.10 | 2026-08-21 | Phase 10 delivered: CUS.4 COMPLETED (2 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
+| v1.10 | 2026-08-21 | Phase 10 delivered and corrected: CUS.4 COMPLETED with CUS-CORE-009 maintenance route/UI/test evidence (2 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.9 | 2026-08-21 | Phase 9 delivered: RPT.1–RPT.4 COMPLETED (10 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.8 | 2026-08-21 | Phase 8 delivered: PRJ.1–PRJ.4 COMPLETED (8 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.7 | 2026-08-21 | Phase 7 delivered: HSE.1–HSE.4 COMPLETED (9 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
