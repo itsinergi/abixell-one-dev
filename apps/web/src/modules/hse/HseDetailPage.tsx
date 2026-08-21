@@ -10,12 +10,13 @@
  *
  * Allows editing classification, adding persons/follow-ups, acting on workflow.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
   api,
   ApiError,
+  type DocumentRecord,
   type HseRecordDetail,
 } from "../../lib/api";
 import {
@@ -37,8 +38,11 @@ export function HseDetailPage() {
   const { recordId } = useParams<{ recordId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [detail, setDetail] = useState<HseRecordDetail | null>(null);
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [documentsBlocked, setDocumentsBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "location" | "evidence" | "follow-ups" | "timeline">("overview");
@@ -76,6 +80,15 @@ export function HseDetailPage() {
       setEditCategory(data.record.categoryCode ?? "");
       setEditSeverity(data.record.severityCode ?? "");
       setEditResponsibleUserId(data.record.responsibleUserId ?? "");
+
+      // HSE evidence documents need hse.documents.read or hse.manage
+      try {
+        setDocuments(await api.documentsForEntity(token, "hse_record", recordId));
+        setDocumentsBlocked(false);
+      } catch {
+        setDocuments([]);
+        setDocumentsBlocked(true);
+      }
     } catch (error) {
       setError(error instanceof ApiError ? error.message : "Could not load record.");
     } finally {
@@ -181,6 +194,20 @@ export function HseDetailPage() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not perform action.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadEvidence(file: File) {
+    if (!recordId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.uploadDocument(token, "hse_record", recordId, file);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not upload evidence document.");
     } finally {
       setBusy(false);
     }
@@ -427,7 +454,50 @@ export function HseDetailPage() {
       {/* Evidence Tab */}
       {activeTab === "evidence" && (
         <Card>
-          <p className="text-sm text-slate-600">Document attachments coming in Document Core integration.</p>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">Evidence Documents</h2>
+          {documentsBlocked ? (
+            <Alert tone="info">
+              HSE evidence documents require dedicated permissions (<code>hse.documents.read</code> or <code>hse.manage</code>). Ask an administrator if you need access.
+            </Alert>
+          ) : (
+            <>
+              {documents.length === 0 ? (
+                <p className="mb-3 text-sm text-slate-500">No evidence documents attached.</p>
+              ) : (
+                <ul className="mb-3 space-y-1 text-sm text-slate-800">
+                  {documents.map((doc) => (
+                    <li key={doc.id} className="flex items-center justify-between rounded border border-slate-100 p-2">
+                      <span className="font-medium">{doc.fileName}</span>
+                      <a
+                        href={api.documentDownloadUrl(doc.id)}
+                        className="text-xs text-blue-600 hover:underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Download
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="border-t border-slate-100 pt-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  aria-label="Attach HSE evidence document"
+                  className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
+                  disabled={busy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      void uploadEvidence(file);
+                    }
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                />
+              </div>
+            </>
+          )}
         </Card>
       )}
 

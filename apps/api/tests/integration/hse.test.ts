@@ -32,6 +32,7 @@ describe("Phase 7 — HSE Core", () => {
   let adminToken: string;
   let hseStaffToken: string;
   let hseApproverToken: string;
+  let docReaderToken: string;
   let readerToken: string;
   let scopedToken: string;
 
@@ -156,12 +157,14 @@ describe("Phase 7 — HSE Core", () => {
       "workflow.instance.act",
     ]);
     await createReadOnlyRole(tenantId, "HSE_READER_P7", ["hse.read"]);
+    await createReadOnlyRole(tenantId, "HSE_DOC_READER_P7", ["hse.read", "hse.documents.read"]);
 
     const mkUser = (email: string, roleCode: string, scope: Record<string, unknown> = { scopeType: "tenant" }) =>
       post("/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", roleCode, ...scope });
 
     await mkUser("staff@p7.local", "HSE_STAFF_P7");
     await mkUser("approver@p7.local", "HSE_APPROVER_P7");
+    await mkUser("docreader@p7.local", "HSE_DOC_READER_P7");
     await mkUser("reader@p7.local", "HSE_READER_P7");
     await mkUser("scoped@p7.local", "HSE_STAFF_P7", {
       scopeType: "organization_unit",
@@ -171,6 +174,7 @@ describe("Phase 7 — HSE Core", () => {
     const tok = async (email: string) => (await login(app, TENANT, email, "Passw0rd12345!")).body.accessToken;
     hseStaffToken = await tok("staff@p7.local");
     hseApproverToken = await tok("approver@p7.local");
+    docReaderToken = await tok("docreader@p7.local");
     readerToken = await tok("reader@p7.local");
     scopedToken = await tok("scoped@p7.local");
 
@@ -707,5 +711,52 @@ describe("Phase 7 — HSE Core", () => {
       comment: "Should be denied",
     });
     expect(denied.statusCode).toBe(403); // Forbidden
+  });
+
+  // ========================================================================
+  // Evidence Documents Authorization (HSE-CORE-005 / ADR-0012)
+  // ========================================================================
+
+  it("attaches evidence documents and enforces HSE document authorization", async () => {
+    const record = await report(hseStaffToken, {
+      recordType: "incident",
+      occurredAt: new Date().toISOString(),
+      title: "Evidence attachment test incident",
+      categoryCode: "injury",
+      severityCode: "minor",
+    });
+    const id = record.id;
+
+    // Upload evidence document via Document Core
+    const upload = await app.inject({
+      method: "POST",
+      url: "/documents",
+      headers: { ...authHeader(hseStaffToken), "content-type": "multipart/form-data; boundary=----p7evidence" },
+      payload: Buffer.from(
+        `------p7evidence\r\nContent-Disposition: form-data; name="entityType"\r\n\r\nhse_record\r\n` +
+          `------p7evidence\r\nContent-Disposition: form-data; name="entityId"\r\n\r\n${id}\r\n` +
+          `------p7evidence\r\nContent-Disposition: form-data; name="file"; filename="incident_photo.txt"\r\n` +
+          `Content-Type: text/plain\r\n\r\nsafety photo evidence\r\n------p7evidence--\r\n`,
+      ),
+    });
+    expect(upload.statusCode).toBe(201);
+
+    // hse.documents.read holder can list documents for this HSE record
+    const docAllowed = await get(`/documents?entityType=hse_record&entityId=${id}`, docReaderToken);
+    expect(docAllowed.statusCode).toBe(200);
+    expect(docAllowed.json().length).toBeGreaterThan(0);
+
+    // hse.manage holder (staff) can list documents for this HSE record
+    const staffAllowed = await get(`/documents?entityType=hse_record&entityId=${id}`, hseStaffToken);
+    expect(staffAllowed.statusCode).toBe(200);
+    expect(staffAllowed.json().length).toBeGreaterThan(0);
+
+    // hse.read alone is NOT enough to access HSE evidence
+    const readerDenied = await get(`/documents?entityType=hse_record&entityId=${id}`, readerToken);
+    expect([403, 404]).toContain(readerDenied.statusCode);
+
+    // Other tenant cannot access HSE evidence
+    const crossTenantDenied = await get(`/documents?entityType=hse_record&entityId=${id}`, otherAdminToken);
+    expect([403, 404]).toContain(crossTenantDenied.statusCode);
   });
 });

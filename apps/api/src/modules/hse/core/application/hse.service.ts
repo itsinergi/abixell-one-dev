@@ -618,9 +618,13 @@ export class HseService {
     // Reporter retains access to their own record's evidence (prompt §34)
     if (record.reportedByUserId === actor.userId) return true;
 
+    if (!record.organizationUnitId) {
+      return this.rbac.hasTenantScope(actor.userId);
+    }
+
     return this.rbac.isOrganizationUnitScopeCovered(
       actor.userId,
-      record.organizationUnitId ?? "",
+      record.organizationUnitId,
     );
   }
 
