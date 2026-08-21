@@ -359,6 +359,58 @@ export const api = {
     },
   ) => request<CustomerContact>("/customer-contacts", { method: "POST", token, body: payload }),
 
+  contracts: (token: string, customerId: string) =>
+    request<ContractRecord[]>(`/contracts?customerId=${customerId}`, { token }),
+
+  createContract: (
+    token: string,
+    payload: {
+      customerId: string;
+      code: string;
+      name: string;
+      startDate?: string | null;
+      endDate?: string | null;
+      status?: string;
+    },
+  ) => request<ContractRecord>("/contracts", { method: "POST", token, body: payload }),
+
+  createProject: (
+    token: string,
+    payload: { customerId: string; contractId?: string | null; code: string; name: string; status?: string },
+  ) => request<ProjectRecord>("/projects", { method: "POST", token, body: payload }),
+
+  createSite: (
+    token: string,
+    payload: {
+      customerId: string;
+      projectId?: string | null;
+      code: string;
+      name: string;
+      address?: string | null;
+      status?: string;
+    },
+  ) => request<SiteRecord>("/sites", { method: "POST", token, body: payload }),
+
+  commercialServices: (token: string) => request<CommercialService[]>("/services", { token }),
+
+  createCommercialService: (token: string, payload: { code: string; name: string; description?: string | null }) =>
+    request<CommercialService>("/services", { method: "POST", token, body: payload }),
+
+  customerServiceLinks: (token: string, customerId: string) =>
+    request<CustomerServiceLink[]>(`/customer-service-links?customerId=${customerId}`, { token }),
+
+  createCustomerServiceLink: (
+    token: string,
+    payload: {
+      customerId: string;
+      serviceId: string;
+      contractId?: string | null;
+      projectId?: string | null;
+      siteId?: string | null;
+      internalPicUserId?: string | null;
+    },
+  ) => request<CustomerServiceLink>("/customer-service-links", { method: "POST", token, body: payload }),
+
   // --- Checkpoint 1B: Generic Customer Complaint Engine ---------------------
   // Lifecycle/SLA/assignment all live in the Workflow Engine; these methods
   // are the Complaint-specific surface. `actOnComplaint` forwards a
@@ -1767,6 +1819,35 @@ export type CustomerContact = {
   email: string | null;
   phone: string | null;
   isPrimary: boolean;
+};
+
+export type ContractRecord = {
+  id: string;
+  customerId: string;
+  code: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  status: string;
+};
+
+export type CommercialService = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+};
+
+export type CustomerServiceLink = {
+  id: string;
+  customerId: string;
+  serviceId: string;
+  contractId: string | null;
+  projectId: string | null;
+  siteId: string | null;
+  internalPicUserId: string | null;
+  status: string;
 };
 
 export type Complaint = {

@@ -21,6 +21,7 @@ import { WorkOrderDetailPage } from "./modules/service-operations/WorkOrderDetai
 import { MyWorkPage } from "./modules/service-operations/MyWorkPage";
 import { MyWorkDetailPage } from "./modules/service-operations/MyWorkDetailPage";
 import { ServiceDefinitionsPage } from "./modules/service-operations/ServiceDefinitionsPage";
+import { CustomerCommercialPage } from "./modules/customer-commercial/CustomerCommercialPage";
 import { EmployeesPage } from "./modules/workforce/EmployeesPage";
 import { EmployeeDetailPage } from "./modules/workforce/EmployeeDetailPage";
 import { ItemsPage } from "./modules/supply-chain/ItemsPage";
@@ -93,6 +94,8 @@ export default function App() {
           <Route path="my-work" element={<MyWorkPage />} />
           <Route path="my-work/:workOrderId" element={<MyWorkDetailPage />} />
           <Route path="service-types" element={<ServiceDefinitionsPage />} />
+          {/* Phase 10 — Customer & Commercial completion */}
+          <Route path="customer-commercial" element={<CustomerCommercialPage />} />
           {/* Phase 3 — Workforce / HR */}
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="employees/:employeeId" element={<EmployeeDetailPage />} />
