@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.10 |
+| **Roadmap Baseline** | v1.11 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-21 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
@@ -63,11 +63,11 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 89fbff4` (Phase 10 correction) |
+| Branch / commit | `master @ 05c3a11` (Phase H Pilot platform hardening) |
 | Migrations | 22 |
 | Tables | 83 |
 | Permissions | 75 |
-| Tests | 278 PASS (23 files) |
+| Tests | 280 PASS (23 files) |
 | typecheck / lint / build | PASS |
 
 ---
@@ -90,19 +90,19 @@ Git history and checkpoint names are preserved exactly as delivered.
 | PC-12 | Observability | 2 | COMPLETED |
 | PC-13 | App Shell, Design System, responsive, PWA | 3 | COMPLETED |
 
-## 7. Roadmap units — Platform Hardening (weight 16, 0 completed)
+## 7. Roadmap units — Platform Hardening (weight 16, 9 completed)
 
 Pilot/production readiness. **Not** business capability.
 
 | ID | Unit | W | Status | Gate |
 |---|---|---:|---|---|
-| PH-1 | CI/CD pipeline (lint/typecheck/test/build) | 3 | PLANNED | Pilot |
-| PH-2 | CORS allowlist + rate-limit tuning + header review | 2 | PLANNED | Pilot |
+| PH-1 | CI/CD pipeline (lint/typecheck/test/build) | 3 | COMPLETED | Pilot |
+| PH-2 | CORS allowlist + rate-limit tuning + header review | 2 | COMPLETED | Pilot |
 | PH-3 | Backup / restore / DR runbook | 2 | PLANNED | Production |
 | PH-4 | Deployment & environment provisioning automation | 3 | PLANNED | Production |
-| PH-5 | Performance fixes (operational queue N+1) | 2 | PLANNED | Pilot |
-| PH-6 | Dependency advisory remediation | 1 | PLANNED | Pilot |
-| PH-7 | PWA installability assets (PNG 192/512) | 1 | PLANNED | Pilot |
+| PH-5 | Performance fixes (operational queue N+1) | 2 | COMPLETED | Pilot |
+| PH-6 | Dependency advisory remediation | 1 | COMPLETED | Pilot |
+| PH-7 | PWA installability assets (PNG 192/512) | 1 | COMPLETED | Pilot |
 | PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | Production |
 
 ## 8. Roadmap units — Business Core (weight 117, 117 completed)
@@ -255,6 +255,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.11 | 2026-08-21 | Phase H (Pilot Hardening) delivered: PH-1, PH-2, PH-5, PH-6, PH-7 COMPLETED (9 pts earned). Pilot readiness gate satisfied. Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.10 | 2026-08-21 | Phase 10 delivered and corrected: CUS.4 COMPLETED with CUS-CORE-009 maintenance route/UI/test evidence (2 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.9 | 2026-08-21 | Phase 9 delivered: RPT.1–RPT.4 COMPLETED (10 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.8 | 2026-08-21 | Phase 8 delivered: PRJ.1–PRJ.4 COMPLETED (8 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
