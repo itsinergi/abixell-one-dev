@@ -63,7 +63,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master` @ `71ac9db` (Phase 7) |
+| Branch / commit | `master` @ `bae485a` (Phase 7) |
 | Migrations | 20 |
 | Tables | 81 |
 | Permissions | 70 |
