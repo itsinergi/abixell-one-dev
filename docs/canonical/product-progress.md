@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.7 |
+| **Roadmap Baseline** | v1.8 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-21 |
-| **Measured at** | `master` @ `bae485a` · 262/262 tests · 81 tables · 20 migrations |
+| **Measured at** | `master @ fc6e4a2` · 271/271 tests · 83 tables · 21 migrations |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.6 |
+| Metric | Value | Δ since v1.7 |
 |---|---:|---:|
-| **Core Product Readiness** | **79.3 %** | ▲ 5.2 pts |
-| **Full Approved Roadmap Progress** | **40.8 %** | ▲ 2.6 pts |
+| **Core Product Readiness** | **83.9 %** | ▲ 4.6 pts |
+| **Full Approved Roadmap Progress** | **43.1 %** | ▲ 2.3 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -33,7 +33,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 |---|---:|---:|
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 0 / 16 | **0 %** |
-| Business Core | 97 / 117 | **82.9 %** |
+| Business Core | 105 / 117 | **89.7 %** |
 | Advanced Capabilities | 6 / 179 | **3.4 %** |
 
 ## 3. Per-module progress
@@ -50,7 +50,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 | Asset Core | 8 / 8 | **100 %** |
 | Finance Core | 12 / 12 | **100 %** |
 | HSE Core | 9 / 9 | **100 %** |
-| Project Delivery Core | 0 / 8 | 0 % |
+| Project Delivery Core | 8 / 8 | **100 %** |
 | Reporting & Operational Insight | 0 / 10 | 0 % |
 
 ### Module including its Advanced capabilities
@@ -60,7 +60,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 | Service Quality (Complaint) | 15 / 26 | 57.7 % |
 | Survey & Assessment | 15 / 28 | 53.6 % |
 | Asset Core | 8 / 19 | 42.1 % |
-| Project Delivery Core | 0 / 21 | 0 % |
+| Project Delivery Core | 8 / 21 | 38.1 % |
 | HSE Core | 9 / 23 | 39.1 % |
 | Service Operations & Work Mgmt | 13 / 26 | 50.0 % |
 | Finance Core | 12 / 33 | 36.4 % |
@@ -79,19 +79,19 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 ```text
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed   0
-Business Core          total 117   completed  97   (+9 — Phase 7 HSE.1–HSE.4)
+Business Core          total 117   completed 105   (+8 — Phase 8 PRJ.1–PRJ.4)
 Advanced Capabilities  total 179   completed   6
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
-  completed   = 41 +  97 +  0 = 138
+  completed   = 41 + 105 +  0 = 146
   in-progress earned          =   0
-  (138 + 0) / 174 × 100 = 79.3 %
+  (146 + 0) / 174 × 100 = 83.9 %
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 138 +   6 = 144
-  (144 + 0) / 353 × 100 = 40.8 %
+  completed   = 146 +   6 = 152
+  (152 + 0) / 353 × 100 = 43.1 %
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
@@ -118,17 +118,18 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 | CMP.1–CMP.7 | Phases 1B/1C; migrations `1758000000000`, `1759000000000`; `complaint-engine.test.ts` (16), `customer-complaint-experience.test.ts` (8), `operational-complaint-experience.test.ts` (10), `verification-complaint-experience.test.ts` (7), `management-dashboard.test.ts` (7), `complaint-configuration.test.ts` (7) |
 | FIN.1–FIN.6 | Phase 6; migration `1767000000000`; `finance.test.ts` (21); commits `f901de5`, `317f1c2` |
 | HSE.1–HSE.4 | Phase 7; migration `1768000000000`; `hse.test.ts` (28); frontend pages (register, report, detail); commits `463b94d`, `7964a35`, `105810f`, `a7bcd2a`, `e146f95`, `094c918`, `b032355`, `bae485a` |
+| PRJ.1–PRJ.4 | Phase 8; migration `1769000000000`; `project-delivery.test.ts` (9); frontend pages (list, detail/progress/documents); commit `fc6e4a2` |
 | AST.1–AST.4 | Phase 5; migration `1766000000000`; `asset.test.ts` (18); commits `b238b07`, `6ad67e7` |
 | SRV.1–SRV.3 | Phase 1D; migrations `1760000000000`, `1760000100000`; `survey-engine.test.ts` (16); commit `5c6e14a` |
 | ADV-SRV Survey-to-Action ×2 | Phase 1E; migrations `1761000000000`, `1762000000000`; `survey-integration.test.ts` (18); commits `8d64666`, `9fb8bbf`, `b7b6d64` |
 
 ## 6. Pending roadmap units
 
-All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-10…BC-11, and all Advanced units except the two delivered Survey-to-Action units. HSE Advanced (HSE-ADV-1…14) is not yet scoped.
+All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-11, and all Advanced units except the two delivered Survey-to-Action units. Project Delivery Advanced (WBS/dependencies/Gantt, resource loading/baseline, earned value/cost/accounting) remains out of Core scope; HSE Advanced (HSE-ADV-1…14) is not yet scoped.
 
 ## 7. Active phase
 
-**None.** Phase 7 closed. Per the canonical roadmap: **Phase 8 — Project Delivery Core (PRJ.1–PRJ.4)** is the next dependency-ordered phase. **Phase H (Platform Hardening — Pilot gate)** remains critical path and is the only blocker for pilot launch; it is still runnable in parallel with any Business Core phase.
+**None.** Phase 8 closed. Per the canonical roadmap: **Phase 9 — Reporting & Operational Insight (RPT.1–RPT.4)** is the next dependency-ordered Business Core phase. **Phase H (Platform Hardening — Pilot gate)** remains critical path and is the only blocker for pilot launch; it is still runnable in parallel with any Business Core phase.
 
 ## 8. Progress change log
 
@@ -141,6 +142,7 @@ All Platform Hardening (PH-1…PH-8), `CUS.4`, all of BC-10…BC-11, and all Adv
 | v1.4 | 2026-08-20 | 62.6 % | 32.6 % | **Phase 4 delivered.** Numerator +14 (SCM.1–SCM.6); denominator unchanged at 174 / 353. Pure earned progress. |
 | v1.5 | 2026-08-20 | 67.2 % | 34.8 % | **Phase 5 delivered.** Numerator +8 (AST.1–AST.4); denominator unchanged at 174 / 353. Pure earned progress. |
 | v1.6 | 2026-08-20 | 74.1 % | 38.2 % | **Phase 6 delivered.** Numerator +12 (FIN.1–FIN.6); denominator unchanged at 174 / 353. Pure earned progress. |
+| v1.8 | 2026-08-21 | 83.9 % | 43.1 % | **Phase 8 delivered.** Numerator +8 (PRJ.1–PRJ.4); denominator unchanged at 174 / 353. Pure earned progress. 271/271 tests passing. |
 | v1.7 | 2026-08-21 | 79.3 % | 40.8 % | **Phase 7 delivered.** Numerator +9 (HSE.1–HSE.4); denominator unchanged at 174 / 353. Pure earned progress. 262/262 tests passing. |
 
 ### Why the denominator did not move
