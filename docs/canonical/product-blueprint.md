@@ -103,12 +103,12 @@ Eleven domains. Boundaries follow business responsibility, owned data, lifecycle
 | BC-1 | **Customer & Commercial** | Who is the client, under what contract, at which project/site, for which service? | Core delivered (UI gap) |
 | BC-2 | **Service Quality (Complaint)** | What went wrong, who handles it, was it fixed and confirmed? | Core delivered |
 | BC-3 | **Survey & Assessment** | What did we ask, who answered, what was the result? | Core delivered |
-| BC-4 | **Service Operations & Work Management** | What work is requested/scheduled, who executes it, was it done? | Planned |
-| BC-5 | **Workforce (HR) Core** | Who is the employee and where do they belong organizationally? | Planned |
-| BC-6 | **Supply Chain Core** | What item exists, how much, what moved, what was purchased from whom? | Planned |
-| BC-7 | **Asset Core** | What asset exists, where is it, who holds it, how did it move? | Planned |
-| BC-8 | **Finance Core** | What money came in/out, how much, when, for what? | Planned |
-| BC-9 | **HSE Core** | What incident/observation occurred, and was it followed up? | Planned |
+| BC-4 | **Service Operations & Work Management** | What work is requested/scheduled, who executes it, was it done? | Core delivered |
+| BC-5 | **Workforce (HR) Core** | Who is the employee and where do they belong organizationally? | Core delivered |
+| BC-6 | **Supply Chain Core** | What item exists, how much, what moved, what was purchased from whom? | Core delivered |
+| BC-7 | **Asset Core** | What asset exists, where is it, who holds it, how did it move? | Core delivered |
+| BC-8 | **Finance Core** | What money came in/out, how much, when, for what? | Core delivered |
+| BC-9 | **HSE Core** | What incident/observation occurred, and was it followed up? | Core delivered |
 | BC-10 | **Project Delivery Core** | What activities/milestones exist and what is their progress? | Planned |
 | BC-11 | **Reporting & Operational Insight** | What is the cross-module operational picture? | Planned |
 
