@@ -37,6 +37,7 @@ import { HseReportPage } from "./modules/hse/HseReportPage";
 import { HseDetailPage } from "./modules/hse/HseDetailPage";
 import { ProjectDeliveryPage } from "./modules/project-delivery/ProjectDeliveryPage";
 import { ProjectDeliveryDetailPage } from "./modules/project-delivery/ProjectDeliveryDetailPage";
+import { ReportingInsightPage } from "./modules/reporting-insight/ReportingInsightPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -114,6 +115,8 @@ export default function App() {
           {/* Phase 8 — Project Delivery */}
           <Route path="project-delivery" element={<ProjectDeliveryPage />} />
           <Route path="project-delivery/:projectId" element={<ProjectDeliveryDetailPage />} />
+          {/* Phase 9 — Reporting & Operational Insight */}
+          <Route path="reporting" element={<ReportingInsightPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

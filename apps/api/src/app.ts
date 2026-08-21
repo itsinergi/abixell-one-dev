@@ -36,6 +36,7 @@ import { registerAssetRoutes } from "./modules/asset/core/api/asset.routes.js";
 import { registerFinanceRoutes } from "./modules/finance/core/api/finance.routes.js";
 import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
+import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
 import { buildContainer } from "./composition-root.js";
 
 export function buildApp(): FastifyInstance {
@@ -156,6 +157,8 @@ export function buildApp(): FastifyInstance {
     registerHseRoutes(scoped, container);
     // Phase 8 — Project Delivery Core
     registerProjectDeliveryRoutes(scoped, container);
+    // Phase 9 — Reporting & Operational Insight Core
+    registerReportingInsightRoutes(scoped, container);
   });
 
   // Scheduler / Background Jobs (Checkpoint 0E): start the in-process

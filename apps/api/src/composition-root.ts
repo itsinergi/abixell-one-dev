@@ -69,6 +69,8 @@ import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repositor
 import { HseService } from "./modules/hse/core/application/hse.service.js";
 import { PgProjectDeliveryRepository } from "./modules/project-delivery/core/infrastructure/project-delivery.repository.pg.js";
 import { ProjectDeliveryService } from "./modules/project-delivery/core/application/project-delivery.service.js";
+import { PgReportingInsightRepository } from "./modules/reporting-insight/core/infrastructure/reporting-insight.repository.pg.js";
+import { ReportingInsightService } from "./modules/reporting-insight/core/application/reporting-insight.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -253,6 +255,14 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 9 — Reporting & Operational Insight Core. Read-only projections over
+  // activated modules; explicit reporting permissions and Data Scope enforced
+  // in the service/repository, without importing business-module internals.
+  const reportingInsight = new ReportingInsightService(
+    new PgReportingInsightRepository(pool),
+    rbac,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -421,6 +431,7 @@ export function buildContainer() {
     finance,
     hse,
     projectDelivery,
+    reportingInsight,
   };
 }
 

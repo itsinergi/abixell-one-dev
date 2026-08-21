@@ -58,6 +58,8 @@ export const PERMISSIONS = {
   financeConfigure: "finance.configure",
   projectDeliveryRead: "project_delivery.read",
   projectDeliveryManage: "project_delivery.manage",
+  reportingRead: "reporting.read",
+  reportingExport: "reporting.export",
 } as const;
 
 export interface NavSection {
@@ -246,6 +248,14 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Project Delivery",
     description: "Track project activities, milestones, and delivery progress.",
     requiresAnyOf: [PERMISSIONS.projectDeliveryRead, PERMISSIONS.projectDeliveryManage],
+    requiresInternal: true,
+  },
+  {
+    key: "reporting-insight",
+    path: "/reporting",
+    label: "Reporting",
+    description: "Scope-safe operational reports, exports, and executive dashboard.",
+    requiresAnyOf: [PERMISSIONS.reportingRead],
     requiresInternal: true,
   },
   {

@@ -836,6 +836,22 @@ export const api = {
     return request<CashflowResult>(`/finance/cashflow?${qs}`, { token });
   },
 
+  // --- Reporting & Operational Insight (Phase 9) ------------------------
+  reportingReports: (token: string) => request<ReportDefinition[]>("/reporting/reports", { token }),
+  reportingReport: (token: string, code: string) =>
+    request<StandardReportResult>(`/reporting/reports/${encodeURIComponent(code)}`, { token }),
+  reportingDashboard: (token: string) => request<ExecutiveDashboard>("/reporting/dashboard", { token }),
+  exportReportingReport: async (token: string, code: string): Promise<{ filename: string; content: string }> => {
+    const response = await fetch(`${API_BASE}/reporting/reports/${encodeURIComponent(code)}/export`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const content = await response.text();
+    if (!response.ok) throw new ApiError(response.status, content || `Export failed (${response.status})`);
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? `${code}.csv`;
+    return { filename, content };
+  },
+
   // --- Project Delivery (Phase 8) --------------------------------------
   projectDeliveryProjects: (token: string) =>
     request<ProjectDeliveryProjectSummary[]>("/project-delivery/projects", { token }),
@@ -878,6 +894,69 @@ export const api = {
     request<HseFollowUp>(`/hse/records/${recordId}/follow-ups`, { method: "POST", token, body }),
   completeHseFollowUp: (token: string, recordId: string, followUpId: string, body: CompleteHseFollowUpBody) =>
     request<HseFollowUp>(`/hse/records/${recordId}/follow-ups/${followUpId}/complete`, { method: "POST", token, body }),
+};
+
+// --- Reporting & Operational Insight types (Phase 9) --------------------
+
+export type ReportModuleCode =
+  | "customer_commercial"
+  | "customer_complaint"
+  | "survey_assessment"
+  | "service_operations"
+  | "workforce"
+  | "supply_chain"
+  | "asset"
+  | "finance"
+  | "hse"
+  | "project_delivery";
+
+export type ReportColumnType = "text" | "number" | "money" | "percent";
+
+export type ReportDefinition = {
+  code: string;
+  title: string;
+  description: string;
+  moduleCode: ReportModuleCode;
+  requiredPermission: string;
+};
+
+export type ReportColumn = {
+  key: string;
+  label: string;
+  type: ReportColumnType;
+};
+
+export type ReportRow = {
+  label: string;
+  [key: string]: string | number | null;
+};
+
+export type StandardReportResult = {
+  code: string;
+  title: string;
+  moduleCode: ReportModuleCode;
+  moduleName: string;
+  generatedAt: string;
+  columns: ReportColumn[];
+  summary: Record<string, string | number>;
+  rows: ReportRow[];
+};
+
+export type DashboardCard = {
+  label: string;
+  value: string | number;
+  tone?: "neutral" | "info" | "success" | "warning" | "danger";
+};
+
+export type DashboardModule = {
+  moduleCode: ReportModuleCode;
+  moduleName: string;
+  cards: DashboardCard[];
+};
+
+export type ExecutiveDashboard = {
+  generatedAt: string;
+  modules: DashboardModule[];
 };
 
 // --- Finance types (Phase 6) -------------------------------------------
