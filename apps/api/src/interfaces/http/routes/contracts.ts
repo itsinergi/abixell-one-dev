@@ -11,6 +11,10 @@ const createSchema = z.object({
   status: z.string().optional(),
 });
 
+const updateSchema = createSchema.omit({ customerId: true }).partial();
+
+const idParamSchema = z.object({ id: z.string().uuid() });
+
 export function registerContractRoutes(app: FastifyInstance, container: Container) {
   app.post("/contracts", { preHandler: app.authenticate }, async (request, reply) => {
     const body = createSchema.parse(request.body);
@@ -22,5 +26,12 @@ export function registerContractRoutes(app: FastifyInstance, container: Containe
     const query = z.object({ customerId: z.string().uuid() }).parse(request.query);
     const list = await container.contract.listByCustomer(request.actor!, query.customerId);
     return reply.send(list);
+  });
+
+  app.patch("/contracts/:id", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = idParamSchema.parse(request.params);
+    const body = updateSchema.parse(request.body);
+    const contract = await container.contract.update(request.actor!, params.id, body);
+    return reply.send(contract);
   });
 }

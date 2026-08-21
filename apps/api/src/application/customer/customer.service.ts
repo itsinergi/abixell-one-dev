@@ -1,5 +1,6 @@
 import type {
   Customer,
+  CustomerContact,
   CustomerContactRepository,
   CustomerRepository,
 } from "../../domain/customer/customer.entity.js";
@@ -19,6 +20,21 @@ export interface CreateCustomerInput {
 export interface CreateCustomerContactInput {
   customerId: string;
   name: string;
+  email?: string | null;
+  phone?: string | null;
+  isPrimary?: boolean;
+}
+
+export interface UpdateCustomerInput {
+  code?: string;
+  name?: string;
+  status?: string;
+  ownerOrganizationUnitId?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateCustomerContactInput {
+  name?: string;
   email?: string | null;
   phone?: string | null;
   isPrimary?: boolean;
@@ -58,6 +74,28 @@ export class CustomerService {
       entityType: "customer",
       entityId: customer.id,
       metadata: { code: customer.code, name: customer.name },
+    });
+
+    return customer;
+  }
+
+  async update(actor: ActorContext, id: string, input: UpdateCustomerInput): Promise<Customer> {
+    await this.rbac.requirePermission(actor.userId, "customer.manage");
+    const current = await this.getAuthorized(actor, id);
+    if (input.ownerOrganizationUnitId) {
+      await this.rbac.requireOrganizationUnitScope(actor.userId, input.ownerOrganizationUnitId);
+    }
+
+    const customer = await this.repo.update(current.id, input, actor.userId);
+    if (!customer) throw new NotFoundError("Customer", id);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "customer.updated",
+      entityType: "customer",
+      entityId: customer.id,
+      metadata: { code: customer.code, name: customer.name, status: customer.status },
     });
 
     return customer;
@@ -168,6 +206,33 @@ export class CustomerService {
       entityType: "customer_contact",
       entityId: contact.id,
       metadata: { customerId: customer.id, name: contact.name },
+    });
+
+    return contact;
+  }
+
+  async updateContact(
+    actor: ActorContext,
+    id: string,
+    input: UpdateCustomerContactInput,
+  ): Promise<CustomerContact> {
+    await this.rbac.requirePermission(actor.userId, "customer.manage");
+    const current = await this.contactRepo.findById(id);
+    if (!current || current.tenantId !== actor.tenantId) {
+      throw new NotFoundError("CustomerContact", id);
+    }
+    await this.getAuthorized(actor, current.customerId);
+
+    const contact = await this.contactRepo.update(current.id, input, actor.userId);
+    if (!contact) throw new NotFoundError("CustomerContact", id);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "customer.contact_updated",
+      entityType: "customer_contact",
+      entityId: contact.id,
+      metadata: { customerId: contact.customerId, name: contact.name },
     });
 
     return contact;

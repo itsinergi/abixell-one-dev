@@ -3,6 +3,7 @@ import type {
   CreateProjectInput,
   Project,
   ProjectRepository,
+  UpdateProjectInput,
 } from "../../../domain/customer/project.entity.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,6 +41,30 @@ export class PgProjectRepository implements ProjectRepository {
       ],
     );
     return mapRow(result.rows[0]);
+  }
+
+  async update(id: string, input: UpdateProjectInput, updatedBy: string | null): Promise<Project | null> {
+    const result = await this.pool.query(
+      `UPDATE projects
+          SET contract_id = CASE WHEN $2::boolean THEN $3 ELSE contract_id END,
+              code = COALESCE($4, code),
+              name = COALESCE($5, name),
+              status = COALESCE($6, status),
+              updated_by = $7,
+              updated_at = now()
+        WHERE id = $1 AND deleted_at IS NULL
+        RETURNING *`,
+      [
+        id,
+        Object.prototype.hasOwnProperty.call(input, "contractId"),
+        input.contractId ?? null,
+        input.code ?? null,
+        input.name ?? null,
+        input.status ?? null,
+        updatedBy,
+      ],
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
   }
 
   async findById(id: string): Promise<Project | null> {

@@ -1,8 +1,9 @@
-import type { Contract, ContractRepository } from "../../domain/customer/contract.entity.js";
+import type { Contract, ContractRepository, UpdateContractInput } from "../../domain/customer/contract.entity.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 import type { CustomerService } from "./customer.service.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
+import { NotFoundError } from "../../domain/shared-kernel/errors.js";
 
 export interface CreateContractInput {
   customerId: string;
@@ -36,6 +37,29 @@ export class ContractService {
       entityType: "contract",
       entityId: contract.id,
       metadata: { customerId: input.customerId, code: contract.code },
+    });
+
+    return contract;
+  }
+
+  async update(actor: ActorContext, id: string, input: UpdateContractInput): Promise<Contract> {
+    await this.rbac.requirePermission(actor.userId, "contract.manage");
+    const current = await this.repo.findById(id);
+    if (!current || current.tenantId !== actor.tenantId) {
+      throw new NotFoundError("Contract", id);
+    }
+    await this.customers.getAuthorized(actor, current.customerId);
+
+    const contract = await this.repo.update(current.id, input, actor.userId);
+    if (!contract) throw new NotFoundError("Contract", id);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "contract.updated",
+      entityType: "contract",
+      entityId: contract.id,
+      metadata: { customerId: contract.customerId, code: contract.code, status: contract.status },
     });
 
     return contract;

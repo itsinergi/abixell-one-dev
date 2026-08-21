@@ -3,6 +3,7 @@ import type {
   Contract,
   ContractRepository,
   CreateContractInput,
+  UpdateContractInput,
 } from "../../../domain/customer/contract.entity.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,6 +43,33 @@ export class PgContractRepository implements ContractRepository {
       ],
     );
     return mapRow(result.rows[0]);
+  }
+
+  async update(id: string, input: UpdateContractInput, updatedBy: string | null): Promise<Contract | null> {
+    const result = await this.pool.query(
+      `UPDATE contracts
+          SET code = COALESCE($2, code),
+              name = COALESCE($3, name),
+              start_date = CASE WHEN $4::boolean THEN $5 ELSE start_date END,
+              end_date = CASE WHEN $6::boolean THEN $7 ELSE end_date END,
+              status = COALESCE($8, status),
+              updated_by = $9,
+              updated_at = now()
+        WHERE id = $1 AND deleted_at IS NULL
+        RETURNING *`,
+      [
+        id,
+        input.code ?? null,
+        input.name ?? null,
+        Object.prototype.hasOwnProperty.call(input, "startDate"),
+        input.startDate ?? null,
+        Object.prototype.hasOwnProperty.call(input, "endDate"),
+        input.endDate ?? null,
+        input.status ?? null,
+        updatedBy,
+      ],
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
   }
 
   async findById(id: string): Promise<Contract | null> {

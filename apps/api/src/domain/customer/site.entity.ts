@@ -21,8 +21,17 @@ export interface CreateSiteInput {
   status?: string;
 }
 
+export interface UpdateSiteInput {
+  projectId?: string | null;
+  code?: string;
+  name?: string;
+  address?: string | null;
+  status?: string;
+}
+
 export interface SiteRepository {
   create(input: CreateSiteInput, createdBy: string | null): Promise<Site>;
+  update(id: string, input: UpdateSiteInput, updatedBy: string | null): Promise<Site | null>;
   findById(id: string): Promise<Site | null>;
   listByCustomer(customerId: string): Promise<Site[]>;
 }

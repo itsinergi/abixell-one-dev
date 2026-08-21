@@ -55,11 +55,16 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
   let siblingOrgUnitId: string;
   let customerAId: string;
   let customerBId: string;
+  let contactId: string;
   let contractId: string;
   let projectId: string;
   let customerSiteId: string;
   let serviceId: string;
+  let customerServiceLinkId: string;
   let supervisorToken: string;
+  let scopedManagerToken: string;
+  let outOfScopeManagerToken: string;
+  let crossTenantAdminToken: string;
   let customerUserAToken: string;
   let customerUserBToken: string;
   let documentIdOnCustomerA: string;
@@ -146,6 +151,7 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
       payload: { customerId: customerAId, name: "Test PIC", email: "pic@customer-a.local", isPrimary: true },
     });
     expect(response.statusCode).toBe(201);
+    contactId = response.json().id;
 
     const auditRow = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'customer_contact' AND action = 'customer.contact_created'`,
@@ -205,6 +211,7 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
       },
     });
     expect(link.statusCode).toBe(201);
+    customerServiceLinkId = link.json().id;
 
     const auditRow = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'customer_service_link' AND action = 'customer.service_assigned'`,
@@ -253,6 +260,181 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
       headers: authHeader(supervisorToken),
     });
     expect(response.statusCode).toBe(403);
+  });
+
+  it("CUS-CORE-009: scoped manager updates commercial records and transitions active/inactive without hard delete", async () => {
+    await createReadOnlyRole(tenantId, "COMMERCIAL_MANAGER_1A", [
+      "customer.read",
+      "customer.manage",
+      "contract.read",
+      "contract.manage",
+      "project.read",
+      "project.manage",
+      "site.read",
+      "site.manage",
+      "service.read",
+      "service.manage",
+    ]);
+
+    const manager = await app.inject({
+      method: "POST",
+      url: "/users",
+      headers: authHeader(adminToken),
+      payload: {
+        email: "commercial-manager@test1a.local",
+        fullName: "Commercial Manager",
+        password: "Manager12345!",
+        roleCode: "COMMERCIAL_MANAGER_1A",
+        scopeType: "organization_unit",
+        scopeOrganizationUnitId: regionId,
+      },
+    });
+    expect(manager.statusCode).toBe(201);
+
+    const managerLogin = await login(app, TENANT_CODE, "commercial-manager@test1a.local", "Manager12345!");
+    expect(managerLogin.statusCode).toBe(200);
+    scopedManagerToken = managerLogin.body.accessToken;
+
+    const customer = await app.inject({
+      method: "PATCH",
+      url: `/customers/${customerAId}`,
+      headers: authHeader(scopedManagerToken),
+      payload: { name: "Customer A Maintained", status: "inactive" },
+    });
+    expect(customer.statusCode).toBe(200);
+    expect(customer.json().name).toBe("Customer A Maintained");
+    expect(customer.json().status).toBe("inactive");
+
+    const contact = await app.inject({
+      method: "PATCH",
+      url: `/customer-contacts/${contactId}`,
+      headers: authHeader(scopedManagerToken),
+      payload: { phone: "+62-21-0001", isPrimary: false },
+    });
+    expect(contact.statusCode).toBe(200);
+    expect(contact.json().phone).toBe("+62-21-0001");
+    expect(contact.json().isPrimary).toBe(false);
+
+    const contract = await app.inject({
+      method: "PATCH",
+      url: `/contracts/${contractId}`,
+      headers: authHeader(scopedManagerToken),
+      payload: { name: "Contract A1 Maintained", status: "inactive" },
+    });
+    expect(contract.statusCode).toBe(200);
+    expect(contract.json().status).toBe("inactive");
+
+    const project = await app.inject({
+      method: "PATCH",
+      url: `/projects/${projectId}`,
+      headers: authHeader(scopedManagerToken),
+      payload: { name: "Project A1 Maintained", status: "inactive" },
+    });
+    expect(project.statusCode).toBe(200);
+    expect(project.json().status).toBe("inactive");
+
+    const site = await app.inject({
+      method: "PATCH",
+      url: `/sites/${customerSiteId}`,
+      headers: authHeader(scopedManagerToken),
+      payload: { address: "Maintained Address", status: "inactive" },
+    });
+    expect(site.statusCode).toBe(200);
+    expect(site.json().status).toBe("inactive");
+
+    const service = await app.inject({
+      method: "PATCH",
+      url: `/services/${serviceId}`,
+      headers: authHeader(scopedManagerToken),
+      payload: { name: "Demo Service Maintained", isActive: false },
+    });
+    expect(service.statusCode).toBe(200);
+    expect(service.json().isActive).toBe(false);
+
+    const link = await app.inject({
+      method: "PATCH",
+      url: `/customer-service-links/${customerServiceLinkId}`,
+      headers: authHeader(scopedManagerToken),
+      payload: { status: "inactive" },
+    });
+    expect(link.statusCode).toBe(200);
+    expect(link.json().status).toBe("inactive");
+
+    const notDeleted = await pool.query(
+      `SELECT
+         (SELECT count(*) FROM customers WHERE id = $1 AND deleted_at IS NULL) AS customers,
+         (SELECT count(*) FROM customer_contacts WHERE id = $2 AND deleted_at IS NULL) AS contacts,
+         (SELECT count(*) FROM contracts WHERE id = $3 AND deleted_at IS NULL) AS contracts,
+         (SELECT count(*) FROM projects WHERE id = $4 AND deleted_at IS NULL) AS projects,
+         (SELECT count(*) FROM sites WHERE id = $5 AND deleted_at IS NULL) AS sites`,
+      [customerAId, contactId, contractId, projectId, customerSiteId],
+    );
+    expect(notDeleted.rows[0]).toMatchObject({ customers: "1", contacts: "1", contracts: "1", projects: "1", sites: "1" });
+
+    const reactivated = await Promise.all([
+      app.inject({ method: "PATCH", url: `/customers/${customerAId}`, headers: authHeader(scopedManagerToken), payload: { status: "active" } }),
+      app.inject({ method: "PATCH", url: `/contracts/${contractId}`, headers: authHeader(scopedManagerToken), payload: { status: "active" } }),
+      app.inject({ method: "PATCH", url: `/projects/${projectId}`, headers: authHeader(scopedManagerToken), payload: { status: "active" } }),
+      app.inject({ method: "PATCH", url: `/sites/${customerSiteId}`, headers: authHeader(scopedManagerToken), payload: { status: "active" } }),
+      app.inject({ method: "PATCH", url: `/services/${serviceId}`, headers: authHeader(scopedManagerToken), payload: { isActive: true } }),
+      app.inject({ method: "PATCH", url: `/customer-service-links/${customerServiceLinkId}`, headers: authHeader(scopedManagerToken), payload: { status: "active" } }),
+    ]);
+    expect(reactivated.map((response) => response.statusCode)).toEqual([200, 200, 200, 200, 200, 200]);
+  });
+
+  it("CUS-CORE-009: read-only, out-of-scope, and cross-tenant actors cannot maintain commercial records", async () => {
+    const readOnly = await app.inject({
+      method: "PATCH",
+      url: `/contracts/${contractId}`,
+      headers: authHeader(supervisorToken),
+      payload: { status: "inactive" },
+    });
+    expect(readOnly.statusCode).toBe(403);
+
+    await createReadOnlyRole(tenantId, "COMMERCIAL_MANAGER_OUT_OF_SCOPE_1A", [
+      "customer.manage",
+      "contract.manage",
+      "project.manage",
+      "site.manage",
+      "service.manage",
+    ]);
+    const outOfScopeManager = await app.inject({
+      method: "POST",
+      url: "/users",
+      headers: authHeader(adminToken),
+      payload: {
+        email: "commercial-out-of-scope@test1a.local",
+        fullName: "Commercial Out Of Scope",
+        password: "Manager12345!",
+        roleCode: "COMMERCIAL_MANAGER_OUT_OF_SCOPE_1A",
+        scopeType: "organization_unit",
+        scopeOrganizationUnitId: siblingOrgUnitId,
+      },
+    });
+    expect(outOfScopeManager.statusCode).toBe(201);
+    const outOfScopeLogin = await login(app, TENANT_CODE, "commercial-out-of-scope@test1a.local", "Manager12345!");
+    outOfScopeManagerToken = outOfScopeLogin.body.accessToken;
+
+    const outOfScope = await app.inject({
+      method: "PATCH",
+      url: `/customers/${customerAId}`,
+      headers: authHeader(outOfScopeManagerToken),
+      payload: { status: "inactive" },
+    });
+    expect(outOfScope.statusCode).toBe(403);
+
+    const otherTenant = await bootstrapTenant(app, `${TENANT_CODE}-other`, "Other Tenant 1A");
+    await provisionFirstAdmin({ tenantId: otherTenant.id, email: "admin@other1a.local", password: "Admin12345!" });
+    const otherLogin = await login(app, `${TENANT_CODE}-other`, "admin@other1a.local", "Admin12345!");
+    crossTenantAdminToken = otherLogin.body.accessToken;
+
+    const crossTenant = await app.inject({
+      method: "PATCH",
+      url: `/customers/${customerAId}`,
+      headers: authHeader(crossTenantAdminToken),
+      payload: { status: "inactive" },
+    });
+    expect(crossTenant.statusCode).toBe(404);
   });
 
   it("Administrator creates a Customer User for Customer A (Customer Data Scope, ADR-0011)", async () => {

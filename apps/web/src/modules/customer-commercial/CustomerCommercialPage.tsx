@@ -64,6 +64,12 @@ function optionalValue(value: FormDataEntryValue | null): string | undefined {
   return text ? text : undefined;
 }
 
+function maintenanceStatus(status: string): { label: string; next: string } {
+  return status.toLowerCase() === "active"
+    ? { label: "Deactivate", next: "inactive" }
+    : { label: "Reactivate", next: "active" };
+}
+
 export function CustomerCommercialPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -197,6 +203,31 @@ export function CustomerCommercialPage() {
     { header: "Code", cell: (row) => row.code },
     { header: "Owner OU", cell: (row) => orgUnits.find((unit) => unit.id === row.ownerOrganizationUnitId)?.name ?? "—" },
     { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    ...(canManageCustomer
+      ? [
+          {
+            header: "Actions",
+            cell: (row) => {
+              const transition = maintenanceStatus(row.status);
+              return (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void api
+                      .updateCustomer(token, row.id, { status: transition.next })
+                      .then(() => reloadSelected(`Customer ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Status update failed." }));
+                  }}
+                >
+                  {transition.label}
+                </Button>
+              );
+            },
+          } satisfies Column<Customer>,
+        ]
+      : []),
   ];
 
   const contactColumns: Column<CustomerContact>[] = [
@@ -204,6 +235,28 @@ export function CustomerCommercialPage() {
     { header: "Email", cell: (row) => row.email ?? "—" },
     { header: "Phone", cell: (row) => row.phone ?? "—" },
     { header: "Primary", cell: (row) => (row.isPrimary ? <StatusPill tone="success">Primary</StatusPill> : "—") },
+    ...(canManageCustomer
+      ? [
+          {
+            header: "Actions",
+            cell: (row) => (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void api
+                    .updateCustomerContact(token, row.id, { isPrimary: !row.isPrimary })
+                    .then(() => reloadSelected("Contact updated."))
+                    .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Contact update failed." }));
+                }}
+              >
+                {row.isPrimary ? "Unset primary" : "Set primary"}
+              </Button>
+            ),
+          } satisfies Column<CustomerContact>,
+        ]
+      : []),
   ];
 
   const contractColumns: Column<ContractRecord>[] = [
@@ -211,6 +264,30 @@ export function CustomerCommercialPage() {
     { header: "Code", cell: (row) => row.code },
     { header: "Period", cell: (row) => `${row.startDate ?? "—"} → ${row.endDate ?? "—"}` },
     { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    ...(canManageContract
+      ? [
+          {
+            header: "Actions",
+            cell: (row) => {
+              const transition = maintenanceStatus(row.status);
+              return (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    void api
+                      .updateContract(token, row.id, { status: transition.next })
+                      .then(() => reloadSelected(`Contract ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Contract update failed." }))
+                  }
+                >
+                  {transition.label}
+                </Button>
+              );
+            },
+          } satisfies Column<ContractRecord>,
+        ]
+      : []),
   ];
 
   const projectColumns: Column<ProjectRecord>[] = [
@@ -218,6 +295,30 @@ export function CustomerCommercialPage() {
     { header: "Code", cell: (row) => row.code },
     { header: "Contract", cell: (row) => detail.contracts.find((contract) => contract.id === row.contractId)?.code ?? "—" },
     { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    ...(canManageProject
+      ? [
+          {
+            header: "Actions",
+            cell: (row) => {
+              const transition = maintenanceStatus(row.status);
+              return (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    void api
+                      .updateProject(token, row.id, { status: transition.next })
+                      .then(() => reloadSelected(`Project ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Project update failed." }))
+                  }
+                >
+                  {transition.label}
+                </Button>
+              );
+            },
+          } satisfies Column<ProjectRecord>,
+        ]
+      : []),
   ];
 
   const siteColumns: Column<SiteRecord>[] = [
@@ -226,6 +327,30 @@ export function CustomerCommercialPage() {
     { header: "Project", cell: (row) => detail.projects.find((project) => project.id === row.projectId)?.code ?? "—" },
     { header: "Address", cell: (row) => row.address ?? "—" },
     { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    ...(canManageSite
+      ? [
+          {
+            header: "Actions",
+            cell: (row) => {
+              const transition = maintenanceStatus(row.status);
+              return (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    void api
+                      .updateSite(token, row.id, { status: transition.next })
+                      .then(() => reloadSelected(`Site ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Site update failed." }))
+                  }
+                >
+                  {transition.label}
+                </Button>
+              );
+            },
+          } satisfies Column<SiteRecord>,
+        ]
+      : []),
   ];
 
   const serviceColumns: Column<CommercialService>[] = [
@@ -233,6 +358,27 @@ export function CustomerCommercialPage() {
     { header: "Code", cell: (row) => row.code },
     { header: "Description", cell: (row) => row.description ?? "—" },
     { header: "Active", cell: (row) => <StatusPill tone={row.isActive ? "success" : "danger"}>{row.isActive ? "Active" : "Inactive"}</StatusPill> },
+    ...(canManageService
+      ? [
+          {
+            header: "Actions",
+            cell: (row) => (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  void api
+                    .updateCommercialService(token, row.id, { isActive: !row.isActive })
+                    .then(() => reloadSelected(`Service ${row.isActive ? "deactivated" : "reactivated"}.`))
+                    .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Service update failed." }))
+                }
+              >
+                {row.isActive ? "Deactivate" : "Reactivate"}
+              </Button>
+            ),
+          } satisfies Column<CommercialService>,
+        ]
+      : []),
   ];
 
   const linkColumns: Column<CustomerServiceLink>[] = [
@@ -241,6 +387,30 @@ export function CustomerCommercialPage() {
     { header: "Project", cell: (row) => detail.projects.find((project) => project.id === row.projectId)?.code ?? "—" },
     { header: "Site", cell: (row) => detail.sites.find((site) => site.id === row.siteId)?.code ?? "—" },
     { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    ...(canManageService
+      ? [
+          {
+            header: "Actions",
+            cell: (row) => {
+              const transition = maintenanceStatus(row.status);
+              return (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    void api
+                      .updateCustomerServiceLink(token, row.id, { status: transition.next })
+                      .then(() => reloadSelected(`Service link ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Service link update failed." }))
+                  }
+                >
+                  {transition.label}
+                </Button>
+              );
+            },
+          } satisfies Column<CustomerServiceLink>,
+        ]
+      : []),
   ];
 
   return (
@@ -255,7 +425,7 @@ export function CustomerCommercialPage() {
 
       <Card>
         <p className="text-sm text-slate-600">
-          Create/list operations use the existing Customer & Commercial backend endpoints with tenant isolation, RBAC, and Customer Data Scope enforced server-side. Update and deactivate/reactivate actions are not shown because the current backend surface does not expose those CUS.4 endpoints yet.
+          Create, update, and deactivate/reactivate maintenance uses Customer & Commercial backend endpoints with tenant isolation, RBAC, Customer Data Scope, audit logging, and no hard-delete behavior enforced server-side.
         </p>
       </Card>
 

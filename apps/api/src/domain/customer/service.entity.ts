@@ -23,8 +23,17 @@ export interface CreateServiceInput {
   description?: string | null;
 }
 
+export interface UpdateServiceInput {
+  code?: string;
+  name?: string;
+  description?: string | null;
+  isActive?: boolean;
+}
+
 export interface ServiceRepository {
   create(input: CreateServiceInput, createdBy: string | null): Promise<Service>;
+  update(id: string, input: UpdateServiceInput, updatedBy: string | null): Promise<Service | null>;
+  findById(id: string): Promise<Service | null>;
   listByTenant(tenantId: string): Promise<Service[]>;
 }
 
@@ -52,10 +61,25 @@ export interface CreateCustomerServiceLinkInput {
   internalPicUserId?: string | null;
 }
 
+export interface UpdateCustomerServiceLinkInput {
+  serviceId?: string;
+  contractId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  internalPicUserId?: string | null;
+  status?: string;
+}
+
 export interface CustomerServiceLinkRepository {
   create(
     input: CreateCustomerServiceLinkInput,
     createdBy: string | null,
   ): Promise<CustomerServiceLink>;
+  update(
+    id: string,
+    input: UpdateCustomerServiceLinkInput,
+    updatedBy: string | null,
+  ): Promise<CustomerServiceLink | null>;
+  findById(id: string): Promise<CustomerServiceLink | null>;
   listByCustomer(customerId: string): Promise<CustomerServiceLink[]>;
 }

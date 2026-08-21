@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { CreateSiteInput, Site, SiteRepository } from "../../../domain/customer/site.entity.js";
+import type { CreateSiteInput, Site, SiteRepository, UpdateSiteInput } from "../../../domain/customer/site.entity.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRow(row: any): Site {
@@ -38,6 +38,33 @@ export class PgSiteRepository implements SiteRepository {
       ],
     );
     return mapRow(result.rows[0]);
+  }
+
+  async update(id: string, input: UpdateSiteInput, updatedBy: string | null): Promise<Site | null> {
+    const result = await this.pool.query(
+      `UPDATE sites
+          SET project_id = CASE WHEN $2::boolean THEN $3 ELSE project_id END,
+              code = COALESCE($4, code),
+              name = COALESCE($5, name),
+              address = CASE WHEN $6::boolean THEN $7 ELSE address END,
+              status = COALESCE($8, status),
+              updated_by = $9,
+              updated_at = now()
+        WHERE id = $1 AND deleted_at IS NULL
+        RETURNING *`,
+      [
+        id,
+        Object.prototype.hasOwnProperty.call(input, "projectId"),
+        input.projectId ?? null,
+        input.code ?? null,
+        input.name ?? null,
+        Object.prototype.hasOwnProperty.call(input, "address"),
+        input.address ?? null,
+        input.status ?? null,
+        updatedBy,
+      ],
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
   }
 
   async findById(id: string): Promise<Site | null> {

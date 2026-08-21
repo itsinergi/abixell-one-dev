@@ -30,8 +30,17 @@ export interface CreateCustomerInput {
   notes?: string | null;
 }
 
+export interface UpdateCustomerInput {
+  code?: string;
+  name?: string;
+  status?: string;
+  ownerOrganizationUnitId?: string | null;
+  notes?: string | null;
+}
+
 export interface CustomerRepository {
   create(input: CreateCustomerInput, createdBy: string | null): Promise<Customer>;
+  update(id: string, input: UpdateCustomerInput, updatedBy: string | null): Promise<Customer | null>;
   findById(id: string): Promise<Customer | null>;
   listByTenant(tenantId: string): Promise<Customer[]>;
 }
@@ -57,7 +66,16 @@ export interface CreateCustomerContactInput {
   isPrimary?: boolean;
 }
 
+export interface UpdateCustomerContactInput {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  isPrimary?: boolean;
+}
+
 export interface CustomerContactRepository {
   create(input: CreateCustomerContactInput, createdBy: string | null): Promise<CustomerContact>;
+  update(id: string, input: UpdateCustomerContactInput, updatedBy: string | null): Promise<CustomerContact | null>;
+  findById(id: string): Promise<CustomerContact | null>;
   listByCustomer(customerId: string): Promise<CustomerContact[]>;
 }

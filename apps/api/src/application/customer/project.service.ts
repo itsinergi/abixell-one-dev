@@ -1,8 +1,9 @@
-import type { Project, ProjectRepository } from "../../domain/customer/project.entity.js";
+import type { Project, ProjectRepository, UpdateProjectInput } from "../../domain/customer/project.entity.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 import type { CustomerService } from "./customer.service.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
+import { NotFoundError } from "../../domain/shared-kernel/errors.js";
 
 export interface CreateProjectInput {
   customerId: string;
@@ -33,6 +34,29 @@ export class ProjectService {
       entityType: "project",
       entityId: project.id,
       metadata: { customerId: input.customerId, code: project.code },
+    });
+
+    return project;
+  }
+
+  async update(actor: ActorContext, id: string, input: UpdateProjectInput): Promise<Project> {
+    await this.rbac.requirePermission(actor.userId, "project.manage");
+    const current = await this.repo.findById(id);
+    if (!current || current.tenantId !== actor.tenantId) {
+      throw new NotFoundError("Project", id);
+    }
+    await this.customers.getAuthorized(actor, current.customerId);
+
+    const project = await this.repo.update(current.id, input, actor.userId);
+    if (!project) throw new NotFoundError("Project", id);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "project.updated",
+      entityType: "project",
+      entityId: project.id,
+      metadata: { customerId: project.customerId, code: project.code, status: project.status },
     });
 
     return project;

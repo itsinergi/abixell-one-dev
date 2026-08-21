@@ -17,6 +17,14 @@ const createAssignmentSchema = z.object({
   internalPicUserId: z.string().uuid().nullable().optional(),
 });
 
+const updateServiceSchema = createServiceSchema.extend({ isActive: z.boolean().optional() }).partial();
+
+const updateAssignmentSchema = z.object({
+  status: z.string().optional(),
+});
+
+const idParamSchema = z.object({ id: z.string().uuid() });
+
 export function registerServiceRoutes(app: FastifyInstance, container: Container) {
   app.post("/services", { preHandler: app.authenticate }, async (request, reply) => {
     const body = createServiceSchema.parse(request.body);
@@ -27,6 +35,13 @@ export function registerServiceRoutes(app: FastifyInstance, container: Container
   app.get("/services", { preHandler: app.authenticate }, async (request, reply) => {
     const list = await container.serviceCatalog.listServices(request.actor!);
     return reply.send(list);
+  });
+
+  app.patch("/services/:id", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = idParamSchema.parse(request.params);
+    const body = updateServiceSchema.parse(request.body);
+    const service = await container.serviceCatalog.updateService(request.actor!, params.id, body);
+    return reply.send(service);
   });
 
   app.post("/customer-service-links", { preHandler: app.authenticate }, async (request, reply) => {
@@ -42,5 +57,12 @@ export function registerServiceRoutes(app: FastifyInstance, container: Container
       query.customerId,
     );
     return reply.send(list);
+  });
+
+  app.patch("/customer-service-links/:id", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = idParamSchema.parse(request.params);
+    const body = updateAssignmentSchema.parse(request.body);
+    const link = await container.serviceCatalog.updateAssignment(request.actor!, params.id, body);
+    return reply.send(link);
   });
 }

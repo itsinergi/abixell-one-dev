@@ -10,6 +10,14 @@ const createSchema = z.object({
   status: z.string().optional(),
 });
 
+const updateSchema = z.object({
+  code: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  status: z.string().optional(),
+});
+
+const idParamSchema = z.object({ id: z.string().uuid() });
+
 export function registerProjectRoutes(app: FastifyInstance, container: Container) {
   app.post("/projects", { preHandler: app.authenticate }, async (request, reply) => {
     const body = createSchema.parse(request.body);
@@ -21,5 +29,12 @@ export function registerProjectRoutes(app: FastifyInstance, container: Container
     const query = z.object({ customerId: z.string().uuid() }).parse(request.query);
     const list = await container.project.listByCustomer(request.actor!, query.customerId);
     return reply.send(list);
+  });
+
+  app.patch("/projects/:id", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = idParamSchema.parse(request.params);
+    const body = updateSchema.parse(request.body);
+    const project = await container.project.update(request.actor!, params.id, body);
+    return reply.send(project);
   });
 }

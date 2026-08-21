@@ -1,6 +1,6 @@
 # Module PRD — Customer & Commercial (`CUS-*`)
 
-**PRD v1.0** · Business Core module 1 of 11 · Status: **COMPLETED (CUS.4 UI)**
+**PRD v1.0** · Business Core module 1 of 11 · Status: **COMPLETED (CUS.4 maintenance)**
 
 > **Core question:** Who is the client, under what contract, at which project/site, for which service?
 
@@ -16,7 +16,7 @@
 | **CUS-CORE-006** | The system shall maintain a service catalog and link the services delivered to each customer. | DELIVERED |
 | **CUS-CORE-007** | The system shall constrain customer-related access by Customer Data Scope, so a client user sees only their own organisation's records. | DELIVERED |
 | **CUS-CORE-008** | Authorised internal users shall create and maintain customers, contacts, contracts, projects, sites, and services through the application UI. | COMPLETED |
-| **CUS-CORE-009** | The system shall support updating and deactivating commercial master records. | PLANNED (backend route surface absent) |
+| **CUS-CORE-009** | The system shall support updating and deactivating commercial master records. | COMPLETED |
 
 ## Advanced requirements
 
@@ -40,13 +40,14 @@ Consumed by: Service Quality, Survey & Assessment, Service Operations, Finance, 
 
 ## Core delivery evidence (2026-08-21)
 
-- Historical Phase 1A delivered the backend domain, tenant isolation, RBAC, Customer Data Scope, and integration coverage (`customer-foundation.test.ts`, 16 tests) for customer master, contacts, contracts, projects, sites/locations, service catalog, and customer-service links.
+- Historical Phase 1A delivered the backend domain, tenant isolation, RBAC, Customer Data Scope, and integration coverage (`customer-foundation.test.ts`) for customer master, contacts, contracts, projects, sites/locations, service catalog, and customer-service links.
 - Phase 10 adds a dedicated Customer & Commercial frontend screen at `/customer-commercial`, gated by existing customer permissions and internal scope in the shared navigation capability model.
-- The screen lists scoped customers and, for the selected customer, loads contacts, contracts, projects, sites/locations, and service links from the existing backend APIs; the service catalog is loaded from the existing tenant-level service catalog endpoint.
-- Authorized users can create customers, contacts, contracts, projects, sites/locations, service catalog entries, and customer-service links through the application UI using the existing POST endpoints. Backend RBAC and Customer Data Scope remain authoritative.
-- Update and deactivate/reactivate controls are intentionally not exposed in Phase 10 because the currently approved Customer & Commercial backend route surface exposes create/list endpoints only. The UI still displays existing `status` / `isActive` fields and does not fabricate unsupported mutation actions.
-- Validation evidence for Phase 10: workspace typecheck and lint passed during implementation; full required validation is recorded in the canonical baseline after completion.
+- The screen lists scoped customers and, for the selected customer, loads contacts, contracts, projects, sites/locations, and service links from the backend APIs; the service catalog is loaded from the tenant-level service catalog endpoint.
+- Authorized users can create customers, contacts, contracts, projects, sites/locations, service catalog entries, and customer-service links through the application UI.
+- CUS-CORE-009 is delivered with backend PATCH maintenance endpoints for customers, customer contacts, contracts, projects, sites/locations, service catalog entries, and customer-service links. Deactivate/reactivate uses `status` transitions for customer-context records and customer-service links, and `isActive` transitions for service catalog entries; customer contacts support update because no contact status/isActive field is modeled.
+- Maintenance actions preserve tenant isolation, RBAC, Customer Data Scope, audit logging, and no hard-delete behavior. Focused integration coverage proves scoped manage success, inactive/active transitions without hard delete, read-only denial, out-of-scope denial, and cross-tenant denial.
+- Validation evidence for the correction pass: `npm run typecheck` passed; `npm run test -w apps/api` passed (23 files, 278 tests).
 
 ## Implementation reality
 
-Delivered in historical Phase 1A as backend/API-only; completed in Phase 10 with dedicated Customer & Commercial management UI over the existing backend APIs. Advanced sales/opportunity/quotation and expanded self-service portal capabilities remain deferred.
+Delivered in historical Phase 1A as backend/API foundation; completed in Phase 10 with dedicated Customer & Commercial management UI plus backend maintenance routes for CUS-CORE-009. Advanced sales/opportunity/quotation and expanded self-service portal capabilities remain deferred.

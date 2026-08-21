@@ -18,6 +18,12 @@ const createContactSchema = z.object({
   isPrimary: z.boolean().optional(),
 });
 
+const updateCustomerSchema = createCustomerSchema.partial();
+
+const updateContactSchema = createContactSchema.omit({ customerId: true }).partial();
+
+const idParamSchema = z.object({ id: z.string().uuid() });
+
 export function registerCustomerRoutes(app: FastifyInstance, container: Container) {
   app.post("/customers", { preHandler: app.authenticate }, async (request, reply) => {
     const body = createCustomerSchema.parse(request.body);
@@ -30,6 +36,13 @@ export function registerCustomerRoutes(app: FastifyInstance, container: Containe
     return reply.send(list);
   });
 
+  app.patch("/customers/:id", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = idParamSchema.parse(request.params);
+    const body = updateCustomerSchema.parse(request.body);
+    const customer = await container.customer.update(request.actor!, params.id, body);
+    return reply.send(customer);
+  });
+
   app.post("/customer-contacts", { preHandler: app.authenticate }, async (request, reply) => {
     const body = createContactSchema.parse(request.body);
     const contact = await container.customer.createContact(request.actor!, body);
@@ -40,5 +53,12 @@ export function registerCustomerRoutes(app: FastifyInstance, container: Containe
     const query = z.object({ customerId: z.string().uuid() }).parse(request.query);
     const list = await container.customer.listContacts(request.actor!, query.customerId);
     return reply.send(list);
+  });
+
+  app.patch("/customer-contacts/:id", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = idParamSchema.parse(request.params);
+    const body = updateContactSchema.parse(request.body);
+    const contact = await container.customer.updateContact(request.actor!, params.id, body);
+    return reply.send(contact);
   });
 }
