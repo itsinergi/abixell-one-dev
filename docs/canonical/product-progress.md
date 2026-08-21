@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.9 |
+| **Roadmap Baseline** | v1.10 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-21 |
-| **Measured at** | `master @ 81df359` · 276/276 tests · 83 tables · 22 migrations |
+| **Measured at** | `master @ 7ee5d88` · 276/276 tests · 83 tables · 22 migrations |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.8 |
+| Metric | Value | Δ since v1.9 |
 |---|---:|---:|
-| **Core Product Readiness** | **89.7 %** | ▲ 5.8 pts |
-| **Full Approved Roadmap Progress** | **45.9 %** | ▲ 2.8 pts |
+| **Core Product Readiness** | **90.8 %** | ▲ 1.1 pts |
+| **Full Approved Roadmap Progress** | **46.5 %** | ▲ 0.6 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -33,7 +33,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 |---|---:|---:|
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 0 / 16 | **0 %** |
-| Business Core | 115 / 117 | **98.3 %** |
+| Business Core | 117 / 117 | **100 %** |
 | Advanced Capabilities | 6 / 179 | **3.4 %** |
 
 ## 3. Per-module progress
@@ -41,7 +41,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 ### Business Core only
 | Module | Completed / Total | % |
 |---|---:|---:|
-| Customer & Commercial | 7 / 9 | 77.8 % |
+| Customer & Commercial | 9 / 9 | **100 %** |
 | Service Quality (Complaint) | 15 / 15 | **100 %** |
 | Survey & Assessment | 9 / 9 | **100 %** |
 | Service Operations & Work Mgmt | 13 / 13 | **100 %** |
@@ -56,7 +56,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 ### Module including its Advanced capabilities
 | Module | Completed / Total | % |
 |---|---:|---:|
-| Customer & Commercial | 7 / 17 | 41.2 % |
+| Customer & Commercial | 9 / 17 | 52.9 % |
 | Service Quality (Complaint) | 15 / 26 | 57.7 % |
 | Survey & Assessment | 15 / 28 | 53.6 % |
 | Asset Core | 8 / 19 | 42.1 % |
@@ -79,19 +79,19 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 ```text
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed   0
-Business Core          total 117   completed 115   (+10 — Phase 9 RPT.1–RPT.4)
+Business Core          total 117   completed 117   (+2 — Phase 10 CUS.4)
 Advanced Capabilities  total 179   completed   6
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
-  completed   = 41 + 115 +  0 = 156
+  completed   = 41 + 117 +  0 = 158
   in-progress earned          =   0
-  (156 + 0) / 174 × 100 = 89.7 %
+  (158 + 0) / 174 × 100 = 90.8 %
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 156 +   6 = 162
-  (162 + 0) / 353 × 100 = 45.9 %
+  completed   = 158 +   6 = 164
+  (164 + 0) / 353 × 100 = 46.5 %
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
@@ -102,7 +102,7 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 
 ### Assumptions
 1. Survey-to-Action (Phase 1E) is counted as **Advanced — delivered**, not Business Core (pending FD-B).
-2. `CUS.4` (Customer admin UI) is PLANNED: the Customer domain has API + tests but no dedicated screens.
+2. `CUS.4` (Customer admin UI) is COMPLETED: Phase 10 added dedicated screens over the existing backend APIs.
 3. Platform Hardening is inside Core Readiness because a client cannot go live without it.
 4. Individual client configuration data is **not** product progress.
 5. Advanced units are approved-but-optional; their presence lowers the *Full* metric without implying regression.
@@ -114,7 +114,7 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 | Unit(s) | Evidence |
 |---|---|
 | PC-1…PC-13 | Phase 0 checkpoints 0A–0F; migrations `1755500000000`–`1756000000000`; `phase0-stabilization.test.ts`, `workflow.test.ts`, `configuration.test.ts`, `shared-services.test.ts`, `vertical-slice.test.ts`; `docs/phase0-final-review.md` |
-| CUS.1–CUS.3 | Phase 1A; migration `1757000000000`; `customer-foundation.test.ts` (16) |
+| CUS.1–CUS.4 | Phase 1A + Phase 10; migration `1757000000000`; `customer-foundation.test.ts` (16); frontend page (customer/commercial admin UI); commit `7ee5d88` |
 | CMP.1–CMP.7 | Phases 1B/1C; migrations `1758000000000`, `1759000000000`; `complaint-engine.test.ts` (16), `customer-complaint-experience.test.ts` (8), `operational-complaint-experience.test.ts` (10), `verification-complaint-experience.test.ts` (7), `management-dashboard.test.ts` (7), `complaint-configuration.test.ts` (7) |
 | FIN.1–FIN.6 | Phase 6; migration `1767000000000`; `finance.test.ts` (21); commits `f901de5`, `317f1c2` |
 | HSE.1–HSE.4 | Phase 7; migration `1768000000000`; `hse.test.ts` (28); frontend pages (register, report, detail); commits `463b94d`, `7964a35`, `105810f`, `a7bcd2a`, `e146f95`, `094c918`, `b032355`, `bae485a` |
@@ -126,11 +126,11 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 
 ## 6. Pending roadmap units
 
-All Platform Hardening (PH-1…PH-8), `CUS.4`, and all Advanced units except the two delivered Survey-to-Action units. Reporting Advanced (self-service BI / warehouse, predictive analytics), Project Delivery Advanced (WBS/dependencies/Gantt, resource loading/baseline, earned value/cost/accounting), and HSE Advanced (HSE-ADV-1…14) remain out of Core scope.
+All Platform Hardening (PH-1…PH-8) and all Advanced units except the two delivered Survey-to-Action units. Customer & Commercial Advanced (sales/opportunity/quotation and expanded self-service portal), Reporting Advanced (self-service BI / warehouse, predictive analytics), Project Delivery Advanced (WBS/dependencies/Gantt, resource loading/baseline, earned value/cost/accounting), and HSE Advanced (HSE-ADV-1…14) remain out of Core scope.
 
 ## 7. Active phase
 
-**None.** Phase 9 closed. Per the canonical roadmap: **Phase 10 — Customer & Commercial completion (CUS.4)** is the next dependency-ordered Business Core phase. **Phase H (Platform Hardening — Pilot gate)** remains critical path and is the only blocker for pilot launch; it is still runnable in parallel with any Business Core phase.
+**None.** Phase 10 closed; all Business Core roadmap units are complete. **Phase H (Platform Hardening — Pilot gate)** remains critical path and is the only blocker for pilot launch; Phase H2 and Advanced waves remain planned / optional until explicitly authorized.
 
 ## 8. Progress change log
 
@@ -143,6 +143,7 @@ All Platform Hardening (PH-1…PH-8), `CUS.4`, and all Advanced units except the
 | v1.4 | 2026-08-20 | 62.6 % | 32.6 % | **Phase 4 delivered.** Numerator +14 (SCM.1–SCM.6); denominator unchanged at 174 / 353. Pure earned progress. |
 | v1.5 | 2026-08-20 | 67.2 % | 34.8 % | **Phase 5 delivered.** Numerator +8 (AST.1–AST.4); denominator unchanged at 174 / 353. Pure earned progress. |
 | v1.6 | 2026-08-20 | 74.1 % | 38.2 % | **Phase 6 delivered.** Numerator +12 (FIN.1–FIN.6); denominator unchanged at 174 / 353. Pure earned progress. |
+| v1.10 | 2026-08-21 | 90.8 % | 46.5 % | **Phase 10 delivered.** Numerator +2 (CUS.4); denominator unchanged at 174 / 353. Pure earned progress. 276/276 tests passing. |
 | v1.9 | 2026-08-21 | 89.7 % | 45.9 % | **Phase 9 delivered.** Numerator +10 (RPT.1–RPT.4); denominator unchanged at 174 / 353. Pure earned progress. 276/276 tests passing. |
 | v1.8 | 2026-08-21 | 83.9 % | 43.1 % | **Phase 8 delivered.** Numerator +8 (PRJ.1–PRJ.4); denominator unchanged at 174 / 353. Pure earned progress. 271/271 tests passing. |
 | v1.7 | 2026-08-21 | 79.3 % | 40.8 % | **Phase 7 delivered.** Numerator +9 (HSE.1–HSE.4); denominator unchanged at 174 / 353. Pure earned progress. 262/262 tests passing. |

@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.9 |
+| **Roadmap Baseline** | v1.10 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-21 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
@@ -55,7 +55,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 6** | Finance Core | BC-8 Finance |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED.**
 
 ---
 
@@ -63,7 +63,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 81df359` (Phase 9) |
+| Branch / commit | `master @ 7ee5d88` (Phase 10) |
 | Migrations | 22 |
 | Tables | 83 |
 | Permissions | 75 |
@@ -105,15 +105,15 @@ Pilot/production readiness. **Not** business capability.
 | PH-7 | PWA installability assets (PNG 192/512) | 1 | PLANNED | Pilot |
 | PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | Production |
 
-## 8. Roadmap units — Business Core (weight 117, 115 completed)
+## 8. Roadmap units — Business Core (weight 117, 117 completed)
 
-### BC-1 Customer & Commercial — 7/9
+### BC-1 Customer & Commercial — 9/9 · COMPLETED
 | ID | Unit | W | Status |
 |---|---|---:|---|
 | CUS.1 | Customer + contacts master | 2 | COMPLETED |
 | CUS.2 | Contract / Project / Site / Service catalog + links | 3 | COMPLETED |
 | CUS.3 | Customer Data Scope authorization (ADR-0011) | 2 | COMPLETED |
-| CUS.4 | Customer & commercial admin UI | 2 | **PLANNED** (API-only today) |
+| CUS.4 | Customer & commercial admin UI | 2 | COMPLETED |
 
 ### BC-2 Service Quality (Complaint) — 15/15 · COMPLETED
 | ID | Unit | W | Status |
@@ -234,7 +234,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Phase 7~~ | HSE Core | HSE.1–HSE.4 | 9 | Platform Core, BC-4 | **COMPLETED** |
 | ~~Phase 8~~ | Project Delivery Core | PRJ.1–PRJ.4 | 8 | BC-1 | **COMPLETED** |
 | ~~Phase 9~~ | Reporting & Operational Insight | RPT.1–RPT.4 | 10 | ≥3 Business Cores | **COMPLETED** |
-| **Phase 10** | Customer & Commercial completion | CUS.4 | 2 | BC-1 | PLANNED |
+| ~~Phase 10~~ | Customer & Commercial completion | CUS.4 | 2 | BC-1 | **COMPLETED** |
 | **Phase H** | Platform Hardening (Pilot gate) | PH-1, PH-2, PH-5, PH-6, PH-7 | 9 | — | PLANNED |
 | **Phase H2** | Platform Hardening (Production gate) | PH-3, PH-4, PH-8 | 7 | Phase H | PLANNED |
 | **Wave A+** | Advanced capability waves | per module | 179 | respective Core | PLANNED / OPTIONAL |
@@ -244,7 +244,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 ## 11. Gates
 
 - **Pilot Gate:** Platform Core ✅ + ≥1 Business Core module ✅ + Phase H complete + client configuration loaded.
-  *Current status:* functionality satisfied (10 Business Core modules delivered); **blocked on Phase H**.
+  *Current status:* functionality satisfied (all 11 Business Core modules delivered); **blocked on Phase H**.
 - **Production Gate:** Pilot Gate + Phase H2 + security review + DR tested.
 
 ## 12. Deferred / optional
@@ -255,6 +255,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.10 | 2026-08-21 | Phase 10 delivered: CUS.4 COMPLETED (2 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.9 | 2026-08-21 | Phase 9 delivered: RPT.1–RPT.4 COMPLETED (10 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.8 | 2026-08-21 | Phase 8 delivered: PRJ.1–PRJ.4 COMPLETED (8 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.7 | 2026-08-21 | Phase 7 delivered: HSE.1–HSE.4 COMPLETED (9 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
