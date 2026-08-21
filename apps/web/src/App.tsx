@@ -35,6 +35,8 @@ import { CashflowPage } from "./modules/finance/CashflowPage";
 import { HseRegisterPage } from "./modules/hse/HseRegisterPage";
 import { HseReportPage } from "./modules/hse/HseReportPage";
 import { HseDetailPage } from "./modules/hse/HseDetailPage";
+import { ProjectDeliveryPage } from "./modules/project-delivery/ProjectDeliveryPage";
+import { ProjectDeliveryDetailPage } from "./modules/project-delivery/ProjectDeliveryDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -109,6 +111,9 @@ export default function App() {
           <Route path="hse" element={<HseRegisterPage />} />
           <Route path="hse/report" element={<HseReportPage />} />
           <Route path="hse/records/:recordId" element={<HseDetailPage />} />
+          {/* Phase 8 — Project Delivery */}
+          <Route path="project-delivery" element={<ProjectDeliveryPage />} />
+          <Route path="project-delivery/:projectId" element={<ProjectDeliveryDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

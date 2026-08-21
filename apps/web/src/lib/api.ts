@@ -836,6 +836,20 @@ export const api = {
     return request<CashflowResult>(`/finance/cashflow?${qs}`, { token });
   },
 
+  // --- Project Delivery (Phase 8) --------------------------------------
+  projectDeliveryProjects: (token: string) =>
+    request<ProjectDeliveryProjectSummary[]>("/project-delivery/projects", { token }),
+  projectDeliveryDetail: (token: string, projectId: string) =>
+    request<ProjectDeliveryDetail>(`/project-delivery/projects/${projectId}`, { token }),
+  createProjectDeliveryActivity: (token: string, projectId: string, body: CreateProjectDeliveryActivityBody) =>
+    request<ProjectDeliveryActivity>(`/project-delivery/projects/${projectId}/activities`, { method: "POST", token, body }),
+  updateProjectDeliveryActivity: (token: string, id: string, body: UpdateProjectDeliveryActivityBody) =>
+    request<ProjectDeliveryActivity>(`/project-delivery/activities/${id}`, { method: "PATCH", token, body }),
+  createProjectDeliveryMilestone: (token: string, projectId: string, body: CreateProjectDeliveryMilestoneBody) =>
+    request<ProjectDeliveryMilestone>(`/project-delivery/projects/${projectId}/milestones`, { method: "POST", token, body }),
+  updateProjectDeliveryMilestone: (token: string, id: string, body: UpdateProjectDeliveryMilestoneBody) =>
+    request<ProjectDeliveryMilestone>(`/project-delivery/milestones/${id}`, { method: "PATCH", token, body }),
+
   // --- HSE (Phase 7) ---------------------------------------------------
   hseRecords: (token: string, query: HseRecordQuery = {}) => {
     const qs = new URLSearchParams();
@@ -962,6 +976,99 @@ export type RecordFinanceTransactionBody = {
   projectId?: string | null;
   siteId?: string | null;
   customerId?: string | null;
+};
+
+// --- Project Delivery types (Phase 8) -----------------------------------
+
+export type ProjectDeliveryActivityStatus = "planned" | "in_progress" | "completed" | "on_hold" | "cancelled";
+export type ProjectDeliveryMilestoneStatus = "pending" | "achieved" | "missed" | "cancelled";
+
+export type ProjectDeliveryProject = {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  code: string;
+  name: string;
+  status: string;
+  ownerOrganizationUnitId: string | null;
+};
+
+export type ProjectDeliveryProgress = {
+  projectId: string;
+  activityCount: number;
+  completedActivityCount: number;
+  progressPercent: number;
+  milestoneCount: number;
+  achievedMilestoneCount: number;
+};
+
+export type ProjectDeliveryActivity = {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  title: string;
+  description: string | null;
+  activityTypeCode: string | null;
+  picUserId: string | null;
+  picEmployeeId: string | null;
+  plannedStartDate: string | null;
+  plannedEndDate: string | null;
+  actualStartDate: string | null;
+  actualEndDate: string | null;
+  status: ProjectDeliveryActivityStatus;
+  progressPercent: number;
+};
+
+export type ProjectDeliveryMilestone = {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  title: string;
+  description: string | null;
+  milestoneTypeCode: string | null;
+  plannedDate: string | null;
+  status: ProjectDeliveryMilestoneStatus;
+  achievedAt: string | null;
+  achievedByUserId: string | null;
+  achievementNote: string | null;
+};
+
+export type ProjectDeliveryProjectSummary = {
+  project: ProjectDeliveryProject;
+  progress: ProjectDeliveryProgress;
+};
+
+export type ProjectDeliveryDetail = ProjectDeliveryProjectSummary & {
+  activities: ProjectDeliveryActivity[];
+  milestones: ProjectDeliveryMilestone[];
+};
+
+export type CreateProjectDeliveryActivityBody = {
+  title: string;
+  description?: string | null;
+  activityTypeCode?: string | null;
+  picUserId?: string | null;
+  picEmployeeId?: string | null;
+  plannedStartDate?: string | null;
+  plannedEndDate?: string | null;
+  actualStartDate?: string | null;
+  actualEndDate?: string | null;
+  status?: ProjectDeliveryActivityStatus;
+  progressPercent?: number;
+};
+
+export type UpdateProjectDeliveryActivityBody = Partial<CreateProjectDeliveryActivityBody>;
+
+export type CreateProjectDeliveryMilestoneBody = {
+  title: string;
+  description?: string | null;
+  milestoneTypeCode?: string | null;
+  plannedDate?: string | null;
+  status?: ProjectDeliveryMilestoneStatus;
+};
+
+export type UpdateProjectDeliveryMilestoneBody = Partial<CreateProjectDeliveryMilestoneBody> & {
+  achievementNote?: string | null;
 };
 
 // --- HSE types (Phase 7) -----------------------------------------------

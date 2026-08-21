@@ -1,6 +1,6 @@
 # Module PRD — Project Delivery (`PRJ-*`)
 
-**PRD v1.0** · Business Core module 10 of 11 · Status: **PLANNED**
+**PRD v1.0** · Business Core module 10 of 11 · Status: **DELIVERED**
 
 > **Core question:** What activities and milestones exist, and what is their progress?
 
@@ -10,16 +10,16 @@ The **project entity itself** already exists in Customer & Commercial as a comme
 
 | ID | Requirement | Status |
 |---|---|---|
-| **PRJ-CORE-001** | The system shall define activities/tasks belonging to an existing project. | PLANNED |
-| **PRJ-CORE-002** | The system shall define milestones belonging to a project. | PLANNED |
-| **PRJ-CORE-003** | Each activity shall have a person in charge (PIC). | PLANNED |
-| **PRJ-CORE-004** | Each activity shall have planned start and end dates, and actual dates when executed. | PLANNED |
-| **PRJ-CORE-005** | Each activity shall have a status reflecting its execution state. | PLANNED |
-| **PRJ-CORE-006** | The system shall record progress against activities and derive project-level progress from it. | PLANNED |
-| **PRJ-CORE-007** | Activities and milestones shall support attachments, inheriting the project's authorisation. | PLANNED |
-| **PRJ-CORE-008** | Milestone achievement shall be recordable and auditable. | PLANNED |
-| **PRJ-CORE-009** | Project delivery records shall respect tenant isolation and data scope. | PLANNED |
-| **PRJ-CORE-010** | Authorised users shall manage project delivery through the application UI, including a project progress view. | PLANNED |
+| **PRJ-CORE-001** | The system shall define activities/tasks belonging to an existing project. | DELIVERED |
+| **PRJ-CORE-002** | The system shall define milestones belonging to a project. | DELIVERED |
+| **PRJ-CORE-003** | Each activity shall have a person in charge (PIC). | DELIVERED |
+| **PRJ-CORE-004** | Each activity shall have planned start and end dates, and actual dates when executed. | DELIVERED |
+| **PRJ-CORE-005** | Each activity shall have a status reflecting its execution state. | DELIVERED |
+| **PRJ-CORE-006** | The system shall record progress against activities and derive project-level progress from it. | DELIVERED |
+| **PRJ-CORE-007** | Activities and milestones shall support attachments, inheriting the project's authorisation. | DELIVERED |
+| **PRJ-CORE-008** | Milestone achievement shall be recordable and auditable. | DELIVERED |
+| **PRJ-CORE-009** | Project delivery records shall respect tenant isolation and data scope. | DELIVERED |
+| **PRJ-CORE-010** | Authorised users shall manage project delivery through the application UI, including a project progress view. | DELIVERED |
 
 ## Advanced requirements
 

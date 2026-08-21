@@ -56,6 +56,8 @@ export const PERMISSIONS = {
   financeManage: "finance.manage",
   financeApprove: "finance.approve",
   financeConfigure: "finance.configure",
+  projectDeliveryRead: "project_delivery.read",
+  projectDeliveryManage: "project_delivery.manage",
 } as const;
 
 export interface NavSection {
@@ -236,6 +238,14 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Cash & Bank",
     description: "Where the money actually sits.",
     requiresAnyOf: [PERMISSIONS.financeConfigure, PERMISSIONS.financeRead],
+    requiresInternal: true,
+  },
+  {
+    key: "project-delivery",
+    path: "/project-delivery",
+    label: "Project Delivery",
+    description: "Track project activities, milestones, and delivery progress.",
+    requiresAnyOf: [PERMISSIONS.projectDeliveryRead, PERMISSIONS.projectDeliveryManage],
     requiresInternal: true,
   },
   {

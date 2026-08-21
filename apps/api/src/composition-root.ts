@@ -67,6 +67,8 @@ import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finan
 import { FinanceService } from "./modules/finance/core/application/finance.service.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
 import { HseService } from "./modules/hse/core/application/hse.service.js";
+import { PgProjectDeliveryRepository } from "./modules/project-delivery/core/infrastructure/project-delivery.repository.pg.js";
+import { ProjectDeliveryService } from "./modules/project-delivery/core/application/project-delivery.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -241,6 +243,16 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 8 — Project Delivery Core. Built before DocumentService so activity
+  // and milestone documents use the shared entity authorization resolver and
+  // inherit project/customer Data Scope instead of a new attachment subsystem.
+  const projectDelivery = new ProjectDeliveryService(
+    new PgProjectDeliveryRepository(pool),
+    audit,
+    rbac,
+    eventBus,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -277,6 +289,20 @@ export function buildContainer() {
     [
       "hse_record",
       { canAccess: (actor, entityId) => hse.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "project_delivery_activity",
+      {
+        canAccess: (actor, entityId) =>
+          projectDelivery.canAccessForDocument(actor, "project_delivery_activity", entityId),
+      },
+    ],
+    [
+      "project_delivery_milestone",
+      {
+        canAccess: (actor, entityId) =>
+          projectDelivery.canAccessForDocument(actor, "project_delivery_milestone", entityId),
+      },
     ],
   ]);
   const document = new DocumentService(
@@ -394,6 +420,7 @@ export function buildContainer() {
     asset,
     finance,
     hse,
+    projectDelivery,
   };
 }
 
