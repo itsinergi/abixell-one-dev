@@ -32,6 +32,9 @@ import { FinanceAccountsPage } from "./modules/finance/FinanceAccountsPage";
 import { FinanceTransactionsPage } from "./modules/finance/FinanceTransactionsPage";
 import { FinanceTransactionDetailPage } from "./modules/finance/FinanceTransactionDetailPage";
 import { CashflowPage } from "./modules/finance/CashflowPage";
+import { HseRegisterPage } from "./modules/hse/HseRegisterPage";
+import { HseReportPage } from "./modules/hse/HseReportPage";
+import { HseDetailPage } from "./modules/hse/HseDetailPage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -102,6 +105,10 @@ export default function App() {
           <Route path="finance/transactions" element={<FinanceTransactionsPage />} />
           <Route path="finance/transactions/:transactionId" element={<FinanceTransactionDetailPage />} />
           <Route path="finance/cashflow" element={<CashflowPage />} />
+          {/* Phase 7 — HSE */}
+          <Route path="hse" element={<HseRegisterPage />} />
+          <Route path="hse/report" element={<HseReportPage />} />
+          <Route path="hse/records/:recordId" element={<HseDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

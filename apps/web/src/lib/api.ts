@@ -835,6 +835,35 @@ export const api = {
     if (query.accountCode) qs.set("accountCode", query.accountCode);
     return request<CashflowResult>(`/finance/cashflow?${qs}`, { token });
   },
+
+  // --- HSE (Phase 7) ---------------------------------------------------
+  hseRecords: (token: string, query: HseRecordQuery = {}) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    }
+    return request<HseRecord[]>(`/hse/records${qs.toString() ? `?${qs}` : ""}`, { token });
+  },
+  hseRecord: (token: string, id: string) =>
+    request<HseRecordDetail>(`/hse/records/${id}`, { token }),
+  reportHseRecord: (token: string, body: ReportHseRecordBody) =>
+    request<HseRecord>("/hse/records", { method: "POST", token, body }),
+  updateHseRecord: (token: string, id: string, body: UpdateHseRecordBody) =>
+    request<HseRecord>(`/hse/records/${id}`, { method: "PATCH", token, body }),
+  startHseRecordLifecycle: (token: string, id: string) =>
+    request<HseRecord>(`/hse/records/${id}/lifecycle`, { method: "POST", token }),
+  actOnHseRecord: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<HseRecord>(`/hse/records/${id}/actions/${actionCode}`, {
+      method: "POST",
+      token,
+      body: { comment: comment ?? null },
+    }),
+  addHsePersonInvolved: (token: string, recordId: string, body: AddHsePersonBody) =>
+    request<HsePersonInvolved>(`/hse/records/${recordId}/persons`, { method: "POST", token, body }),
+  createHseFollowUp: (token: string, recordId: string, body: CreateHseFollowUpBody) =>
+    request<HseFollowUp>(`/hse/records/${recordId}/follow-ups`, { method: "POST", token, body }),
+  completeHseFollowUp: (token: string, recordId: string, followUpId: string, body: CompleteHseFollowUpBody) =>
+    request<HseFollowUp>(`/hse/records/${recordId}/follow-ups/${followUpId}/complete`, { method: "POST", token, body }),
 };
 
 // --- Finance types (Phase 6) -------------------------------------------
@@ -933,6 +962,128 @@ export type RecordFinanceTransactionBody = {
   projectId?: string | null;
   siteId?: string | null;
   customerId?: string | null;
+};
+
+// --- HSE types (Phase 7) -----------------------------------------------
+
+export type HseRecordType = "incident" | "observation";
+
+export type HseRecord = {
+  id: string;
+  recordNumber: string;
+  recordType: HseRecordType;
+  categoryCode: string | null;
+  severityCode: string | null;
+  occurredAt: string;
+  reportedAt: string;
+  title: string;
+  summary: string | null;
+  description: string | null;
+  immediateAction: string | null;
+  organizationUnitId: string | null;
+  projectId: string | null;
+  siteId: string | null;
+  locationDetail: string | null;
+  reportedByUserId: string;
+  responsibleUserId: string | null;
+  responsibleOrgUnitId: string | null;
+  workflowInstanceId: string | null;
+};
+
+export type HsePersonInvolved = {
+  id: string;
+  hseRecordId: string;
+  employeeId: string | null;
+  personName: string | null;
+  personRole: string | null;
+  createdAt: string;
+};
+
+export type HseFollowUp = {
+  id: string;
+  hseRecordId: string;
+  title: string;
+  description: string | null;
+  assignedToUserId: string | null;
+  assignedToOrgUnitId: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  completedByUserId: string | null;
+  completionNotes: string | null;
+  createdAt: string;
+};
+
+export type HseRecordDetail = {
+  record: HseRecord;
+  personsInvolved: HsePersonInvolved[];
+  followUps: HseFollowUp[];
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type HseRecordQuery = {
+  recordType?: string;
+  categoryCode?: string;
+  severityCode?: string;
+  organizationUnitId?: string;
+  projectId?: string;
+  siteId?: string;
+  reportedByUserId?: string;
+  responsibleUserId?: string;
+  occurredFrom?: string;
+  occurredTo?: string;
+  search?: string;
+};
+
+export type ReportHseRecordBody = {
+  recordType: HseRecordType;
+  categoryCode?: string | null;
+  severityCode?: string | null;
+  occurredAt: string;
+  title: string;
+  summary?: string | null;
+  description?: string | null;
+  immediateAction?: string | null;
+  organizationUnitId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  locationDetail?: string | null;
+  responsibleUserId?: string | null;
+  responsibleOrgUnitId?: string | null;
+};
+
+export type UpdateHseRecordBody = {
+  categoryCode?: string | null;
+  severityCode?: string | null;
+  occurredAt?: string;
+  title?: string;
+  summary?: string | null;
+  description?: string | null;
+  immediateAction?: string | null;
+  organizationUnitId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  locationDetail?: string | null;
+  responsibleUserId?: string | null;
+  responsibleOrgUnitId?: string | null;
+};
+
+export type AddHsePersonBody = {
+  employeeId?: string | null;
+  personName?: string | null;
+  personRole?: string | null;
+};
+
+export type CreateHseFollowUpBody = {
+  title: string;
+  description?: string | null;
+  assignedToUserId?: string | null;
+  assignedToOrgUnitId?: string | null;
+  dueDate?: string | null;
+};
+
+export type CompleteHseFollowUpBody = {
+  completionNotes?: string | null;
 };
 
 // --- Asset types (Phase 5) ---------------------------------------------
