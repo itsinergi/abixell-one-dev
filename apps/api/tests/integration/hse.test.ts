@@ -151,7 +151,8 @@ describe("Phase 7 — HSE Core", () => {
     await createReadOnlyRole(tenantId, "HSE_STAFF_P7", ["hse.report", "hse.read", "hse.manage"]);
     await createReadOnlyRole(tenantId, "HSE_APPROVER_P7", [
       "hse.read",
-      "hse.approve",
+      "hse.manage",
+      "hse.close",
       "workflow.instance.act",
     ]);
     await createReadOnlyRole(tenantId, "HSE_READER_P7", ["hse.read"]);
@@ -625,5 +626,86 @@ describe("Phase 7 — HSE Core", () => {
     const otherRecords = await list(otherAdminToken);
     const found = otherRecords.find((r: any) => r.id === record.id);
     expect(found).toBeUndefined();
+  });
+
+  // Workflow Lifecycle (HSE-CORE-006)
+  // ========================================================================
+
+  it("starts HSE record lifecycle", async () => {
+    const record = await report(hseStaffToken, {
+      recordType: "incident",
+      occurredAt: new Date().toISOString(),
+      title: "Lifecycle test incident",
+      categoryCode: "injury",
+      severityCode: "major",
+    });
+
+    expect(record.workflowInstanceId).toBeNull();
+
+    const started = await post(`/hse/records/${record.id}/lifecycle`, hseStaffToken);
+    expect(started.statusCode).toBe(200);
+
+    const updated = started.json();
+    expect(updated.workflowInstanceId).toBeTruthy();
+    expect(updated.id).toBe(record.id);
+  });
+
+  it("rejects lifecycle start when already started", async () => {
+    const record = await report(hseStaffToken, {
+      recordType: "incident",
+      occurredAt: new Date().toISOString(),
+      title: "Double start test",
+    });
+
+    await post(`/hse/records/${record.id}/lifecycle`, hseStaffToken);
+    const double = await post(`/hse/records/${record.id}/lifecycle`, hseStaffToken);
+    expect(double.statusCode).toBe(409); // Conflict
+  });
+
+  it("acts on workflow assignment with approve action", async () => {
+    const record = await report(hseStaffToken, {
+      recordType: "incident",
+      occurredAt: new Date().toISOString(),
+      title: "Action test incident",
+    });
+
+    await post(`/hse/records/${record.id}/lifecycle`, hseStaffToken);
+
+    const acted = await post(`/hse/records/${record.id}/actions/approve`, hseApproverToken, {
+      comment: "Approved by system",
+    });
+    expect(acted.statusCode).toBe(200);
+    expect(acted.json().id).toBe(record.id);
+  });
+
+  it("requires hse.manage or hse.close permission for workflow actions", async () => {
+    const record = await report(hseStaffToken, {
+      recordType: "incident",
+      occurredAt: new Date().toISOString(),
+      title: "Permission test incident",
+    });
+
+    await post(`/hse/records/${record.id}/lifecycle`, hseStaffToken);
+
+    const denied = await post(`/hse/records/${record.id}/actions/approve`, readerToken, {
+      comment: "Should be denied",
+    });
+    expect(denied.statusCode).toBe(403); // Forbidden
+  });
+
+  it("requires workflow.instance.act permission to act on assignment", async () => {
+    const record = await report(hseStaffToken, {
+      recordType: "incident",
+      occurredAt: new Date().toISOString(),
+      title: "Workflow permission test",
+    });
+
+    await post(`/hse/records/${record.id}/lifecycle`, hseStaffToken);
+
+    // Staff has hse.manage but not workflow.instance.act
+    const denied = await post(`/hse/records/${record.id}/actions/approve`, hseStaffToken, {
+      comment: "Should be denied",
+    });
+    expect(denied.statusCode).toBe(403); // Forbidden
   });
 });

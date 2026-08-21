@@ -4,9 +4,9 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.6 |
+| **Roadmap Baseline** | v1.7 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-20 |
+| **Last Updated** | 2026-08-21 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) |
 
@@ -55,7 +55,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 6** | Finance Core | BC-8 Finance |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED.**
 
 ---
 
@@ -63,11 +63,11 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master` @ `317f1c2` (Phase 6) |
-| Migrations | 19 |
-| Tables | 78 |
-| Permissions | 64 |
-| Tests | 234 PASS (20 files) |
+| Branch / commit | `master` @ `105810f` (Phase 7) |
+| Migrations | 20 |
+| Tables | 81 |
+| Permissions | 70 |
+| Tests | 256 PASS (21 files) |
 | typecheck / lint / build | PASS |
 
 ---
@@ -179,13 +179,13 @@ Pilot/production readiness. **Not** business capability.
 | FIN.5 | Finance UX | 2 | COMPLETED |
 | FIN.6 | Stabilization | 1 | COMPLETED |
 
-### BC-9 HSE Core — 0/9
+### BC-9 HSE Core — 9/9
 | ID | Unit | W | Status |
 |---|---|---:|---|
-| HSE.1 | Incident + observation capture | 3 | PLANNED |
-| HSE.2 | Category / location / evidence + follow-up lifecycle | 3 | PLANNED |
-| HSE.3 | HSE UX | 2 | PLANNED |
-| HSE.4 | Stabilization | 1 | PLANNED |
+| HSE.1 | Incident + observation capture | 3 | COMPLETED |
+| HSE.2 | Category / location / evidence + follow-up lifecycle | 3 | COMPLETED |
+| HSE.3 | HSE UX | 2 | COMPLETED |
+| HSE.4 | Stabilization | 1 | COMPLETED |
 
 ### BC-10 Project Delivery Core — 0/8
 | ID | Unit | W | Status |
@@ -231,7 +231,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Phase 4~~ | Supply Chain Core | SCM.1–SCM.6 | 14 | — | **COMPLETED** |
 | ~~Phase 5~~ | Asset Core | AST.1–AST.4 | 8 | Platform Core | **COMPLETED** |
 | ~~Phase 6~~ | Finance Core | FIN.1–FIN.6 | 12 | Platform Core, BC-1 | **COMPLETED** |
-| **Phase 7** | HSE Core | HSE.1–HSE.4 | 9 | Platform Core, BC-4 | PLANNED |
+| ~~Phase 7~~ | HSE Core | HSE.1–HSE.4 | 9 | Platform Core, BC-4 | **COMPLETED** |
 | **Phase 8** | Project Delivery Core | PRJ.1–PRJ.4 | 8 | BC-1 | PLANNED |
 | **Phase 9** | Reporting & Operational Insight | RPT.1–RPT.4 | 10 | ≥3 Business Cores | PLANNED |
 | **Phase 10** | Customer & Commercial completion | CUS.4 | 2 | BC-1 | PLANNED |
