@@ -232,10 +232,41 @@ describe("Checkpoint 0F — Phase 0 Stabilization", () => {
     expect(statusCodes.filter((c) => c === 200).length).toBeGreaterThanOrEqual(1);
   });
 
+  it("Security: CORS uses an explicit allowlist and Helmet emits API security headers", async () => {
+    const previousCorsOrigins = process.env.CORS_ORIGINS;
+    process.env.CORS_ORIGINS = "https://pilot.example.test, http://localhost:5173/";
+    const isolatedApp = buildApp();
+
+    const allowed = await isolatedApp.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: "https://pilot.example.test" },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.headers["access-control-allow-origin"]).toBe("https://pilot.example.test");
+    expect(allowed.headers["x-content-type-options"]).toBe("nosniff");
+    expect(allowed.headers["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(allowed.headers["cross-origin-resource-policy"]).toBe("same-site");
+
+    const denied = await isolatedApp.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: "https://attacker.example.test" },
+    });
+    expect(denied.statusCode).toBe(200);
+    expect(denied.headers["access-control-allow-origin"]).toBeUndefined();
+
+    await isolatedApp.close();
+    if (previousCorsOrigins === undefined) delete process.env.CORS_ORIGINS;
+    else process.env.CORS_ORIGINS = previousCorsOrigins;
+  });
+
   it("Security: /auth/login is rate-limited per IP", async () => {
+    const previousAuthLimit = process.env.AUTH_RATE_LIMIT_MAX;
+    process.env.AUTH_RATE_LIMIT_MAX = "3";
     const isolatedApp = buildApp();
     const attempts = await Promise.all(
-      Array.from({ length: 12 }, () =>
+      Array.from({ length: 5 }, () =>
         isolatedApp.inject({
           method: "POST",
           url: "/auth/login",
@@ -246,6 +277,8 @@ describe("Checkpoint 0F — Phase 0 Stabilization", () => {
     const rateLimited = attempts.filter((r) => r.statusCode === 429);
     expect(rateLimited.length).toBeGreaterThan(0);
     await isolatedApp.close();
+    if (previousAuthLimit === undefined) delete process.env.AUTH_RATE_LIMIT_MAX;
+    else process.env.AUTH_RATE_LIMIT_MAX = previousAuthLimit;
   });
 
   it("Security: /auth/logout revokes the refresh token so it can no longer be used", async () => {

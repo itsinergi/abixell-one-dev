@@ -45,6 +45,10 @@ export interface EntityWorkflowStatus {
   assignment: { roleCode: string | null; userId: string | null; isMine: boolean } | null;
 }
 
+export interface EntityWorkflowStatusByInstance extends EntityWorkflowStatus {
+  instanceId: string;
+}
+
 export interface EntityWorkflowTimelineEntry {
   occurredAt: Date;
   actionCode: string;
@@ -488,30 +492,63 @@ export class WorkflowService {
    * (current Step + pending Assignment), never the full history/transitions.
    */
   async getEntityStatus(actor: ActorContext, instanceId: string): Promise<EntityWorkflowStatus> {
-    const instance = await this.getInstanceOrThrow(actor.tenantId, instanceId);
-    const currentStep = instance.currentStepId
-      ? await this.repo.findStepById(instance.currentStepId)
-      : null;
-    const assignments = await this.repo.listAssignmentsForInstance(instance.id);
-    const pending = assignments.find((a) => a.status === "pending") ?? null;
-    const sla =
-      currentStep && (pending?.dueAt != null || currentStep.slaHours != null)
-        ? { dueAt: pending?.dueAt ?? null, slaHours: currentStep.slaHours ?? null }
+    const statuses = await this.getEntityStatuses(actor, [instanceId]);
+    const status = statuses[0];
+    if (!status) throw new NotFoundError("WorkflowInstance", instanceId);
+    return status;
+  }
+
+  /** Phase H / PH-5 — batched form of `getEntityStatus` for operational
+   * queues. It preserves the exact live Workflow projection semantics while
+   * avoiding one Instance + Assignment query per row. */
+  async getEntityStatuses(actor: ActorContext, instanceIds: string[]): Promise<EntityWorkflowStatusByInstance[]> {
+    if (instanceIds.length === 0) return [];
+    const uniqueIds = Array.from(new Set(instanceIds));
+    const actorAssignments = await this.rbac.getAssignments(actor.userId);
+    const instances = (await this.repo.findInstancesByIds(uniqueIds)).filter((instance) => instance.tenantId === actor.tenantId);
+    const stepIds = Array.from(new Set(instances.map((instance) => instance.currentStepId).filter((id): id is string => id !== null)));
+    const steps = await Promise.all(stepIds.map((id) => this.repo.findStepById(id)));
+    const stepById = new Map(steps.filter((step): step is NonNullable<typeof step> => step !== null).map((step) => [step.id, step]));
+    const assignments = await this.repo.listAssignmentsForInstances(instances.map((instance) => instance.id));
+    const pendingByInstanceId = new Map<string, WorkflowInstanceAssignment>();
+    for (const assignment of assignments) {
+      if (assignment.status === "pending" && !pendingByInstanceId.has(assignment.workflowInstanceId)) {
+        pendingByInstanceId.set(assignment.workflowInstanceId, assignment);
+      }
+    }
+
+    const statuses: EntityWorkflowStatusByInstance[] = [];
+    for (const instance of instances) {
+      const currentStep = instance.currentStepId ? stepById.get(instance.currentStepId) ?? null : null;
+      const pending = pendingByInstanceId.get(instance.id) ?? null;
+      const sla =
+        currentStep && (pending?.dueAt != null || currentStep.slaHours != null)
+          ? { dueAt: pending?.dueAt ?? null, slaHours: currentStep.slaHours ?? null }
+          : null;
+      const assignment = pending
+        ? {
+            roleCode: pending.assignedRoleCode,
+            userId: pending.assignedUserId,
+            isMine:
+              pending.assignmentType === "specific_user"
+                ? pending.assignedUserId === actor.userId
+                : await this.rbac.doAssignmentsCoverRoleScope(
+                    actorAssignments,
+                    pending.assignedRoleCode!,
+                    pending.assignedOrganizationUnitId,
+                  ),
+          }
         : null;
-    const assignment = pending
-      ? {
-          roleCode: pending.assignedRoleCode,
-          userId: pending.assignedUserId,
-          isMine: await this.isActorEligibleForAssignment(actor, pending),
-        }
-      : null;
-    return {
-      stepCode: currentStep?.code ?? null,
-      stepName: currentStep?.name ?? null,
-      instanceStatus: instance.status,
-      sla,
-      assignment,
-    };
+      statuses.push({
+        instanceId: instance.id,
+        stepCode: currentStep?.code ?? null,
+        stepName: currentStep?.name ?? null,
+        instanceStatus: instance.status,
+        sla,
+        assignment,
+      });
+    }
+    return statuses;
   }
 
   /**

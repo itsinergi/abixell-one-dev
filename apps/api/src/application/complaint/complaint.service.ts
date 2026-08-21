@@ -380,24 +380,28 @@ export class ComplaintService {
     const customers = await this.customers.listForTenant(actor);
     const nameById = new Map(customers.map((c) => [c.id, c.name]));
 
-    const complaints: Complaint[] = [];
-    for (const customer of customers) {
-      if (filters.customerId && customer.id !== filters.customerId) continue;
-      complaints.push(...(await this.repo.listByCustomer(customer.id)));
-    }
+    const scopedCustomerIds = filters.customerId
+      ? customers.filter((customer) => customer.id === filters.customerId).map((customer) => customer.id)
+      : customers.map((customer) => customer.id);
+    const complaints = await this.repo.listByCustomers(scopedCustomerIds);
+
+    const statusRows = await this.workflow.getEntityStatuses(
+      actor,
+      complaints
+        .map((complaint) => complaint.workflowInstanceId)
+        .filter((id): id is string => id !== null),
+    );
+    const statusByInstanceId = new Map(statusRows.map((status) => [status.instanceId, status]));
 
     const now = Date.now();
     let items: OperationalQueueItem[] = [];
     for (const complaint of complaints) {
-      let status: OperationalQueueItem["status"] = null;
-      let sla: OperationalQueueItem["sla"] = null;
-      let assignment: OperationalQueueItem["assignment"] = null;
-      if (complaint.workflowInstanceId) {
-        const s = await this.workflow.getEntityStatus(actor, complaint.workflowInstanceId);
-        status = { stepCode: s.stepCode, stepName: s.stepName, instanceStatus: s.instanceStatus };
-        sla = s.sla;
-        assignment = s.assignment;
-      }
+      const s = complaint.workflowInstanceId ? statusByInstanceId.get(complaint.workflowInstanceId) : null;
+      const status = s
+        ? { stepCode: s.stepCode, stepName: s.stepName, instanceStatus: s.instanceStatus }
+        : null;
+      const sla = s?.sla ?? null;
+      const assignment = s?.assignment ?? null;
       const overdue = !!(
         sla?.dueAt &&
         status?.instanceStatus === "in_progress" &&

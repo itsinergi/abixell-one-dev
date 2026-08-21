@@ -96,6 +96,15 @@ export class PgComplaintRepository implements ComplaintRepository {
     return result.rows.map(mapRow);
   }
 
+  async listByCustomers(customerIds: string[]): Promise<Complaint[]> {
+    if (customerIds.length === 0) return [];
+    const result = await this.pool.query(
+      `SELECT * FROM complaints WHERE customer_id = ANY($1) AND deleted_at IS NULL ORDER BY created_at DESC`,
+      [customerIds],
+    );
+    return result.rows.map(mapRow);
+  }
+
   async setWorkflowInstance(id: string, workflowInstanceId: string): Promise<void> {
     await this.pool.query(`UPDATE complaints SET workflow_instance_id = $2 WHERE id = $1`, [
       id,

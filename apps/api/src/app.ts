@@ -38,6 +38,7 @@ import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
 import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
 import { buildContainer } from "./composition-root.js";
+import { getAllowedCorsOrigins, getGlobalRateLimitConfig, isCorsOriginAllowed } from "./infrastructure/security/http-hardening.js";
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({
@@ -65,42 +66,28 @@ export function buildApp(): FastifyInstance {
     },
   });
 
-  // Security hardening (Checkpoint 0F Phase 0 Stabilization): standard
-  // HTTP security response headers (X-Content-Type-Options, X-Frame-
-  // Options, etc.) via @fastify/helmet. `contentSecurityPolicy: false`
-  // because this is a pure JSON API — the frontend is a separately
-  // served SPA, not server-rendered HTML from this process, so a CSP
-  // header here would be meaningless/misleading rather than protective.
-  app.register(helmet, { contentSecurityPolicy: false });
+  // Security hardening (Phase H / PH-2): keep the API-oriented Helmet
+  // posture from 0F (standard response headers, no misleading CSP on a JSON
+  // API), and add explicit origin restriction for pilot readiness.
+  app.register(helmet, {
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "same-site" },
+  });
 
-  // CORS stays permissive (`origin: true`, reflects any Origin) for
-  // Phase 0: this is a Dedicated Deployment per client (ADR-0003), the
-  // API never uses cookies for auth (Bearer tokens only, no CSRF
-  // surface), and the pilot client's exact frontend origin is not yet
-  // known. Tracked as a Must-Fix-before-pilot item in the Technical
-  // Debt Register: replace with an explicit allowlist (`CORS_ORIGIN` env
-  // var) once the pilot deployment's real frontend domain is fixed.
-  app.register(cors, { origin: true });
+  const allowedCorsOrigins = getAllowedCorsOrigins();
+  app.register(cors, {
+    origin: (origin, cb) => cb(null, isCorsOriginAllowed(origin, allowedCorsOrigins)),
+  });
   app.register(sensible);
   app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
 
-  // Reliability/Security (Checkpoint 0F): global rate limit as a floor
-  // against accidental abuse/retries storms; `/auth/login` gets a much
-  // tighter per-route limit below (brute-force credential guessing is
-  // the specific risk there — see the route registration). Default
-  // raised to 1200/min per IP (~20 req/s sustained) after the
-  // Checkpoint 0F performance baseline benchmark (autocannon) was
-  // itself throttled by an initial, too-conservative 300/min — that
-  // number was picked with no real traffic data behind it. 1200/min is
-  // still a floor against runaway clients, not a considered production
-  // capacity limit; `RATE_LIMIT_MAX` lets it be tuned per deployment
-  // once real pilot usage patterns exist, tracked as a Must-Fix-before-
-  // pilot item in the Technical Debt Register (see performance-
-  // baseline.md).
+  // Reliability/Security (Phase H / PH-2): global rate limit remains a
+  // deployment-tunable floor against accidental abuse/retry storms. The
+  // legacy RATE_LIMIT_MAX env var is still accepted, while
+  // RATE_LIMIT_GLOBAL_MAX / RATE_LIMIT_WINDOW make the pilot posture explicit.
   app.register(rateLimit, {
     global: true,
-    max: process.env.RATE_LIMIT_MAX ? Number(process.env.RATE_LIMIT_MAX) : 1200,
-    timeWindow: "1 minute",
+    ...getGlobalRateLimitConfig(),
   });
 
   registerAuthDecorators(app);

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Container } from "../../../composition-root.js";
+import { getLoginRateLimitConfig } from "../../../infrastructure/security/http-hardening.js";
 
 const loginSchema = z.object({
   tenantCode: z.string().min(1),
@@ -23,7 +24,7 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
   // Fastify/rate-limit default keying).
   app.post(
     "/auth/login",
-    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    { config: { rateLimit: getLoginRateLimitConfig() } },
     async (request, reply) => {
       const body = loginSchema.parse(request.body);
       const result = await container.auth.login({ ...body, ip: request.ip });

@@ -27,6 +27,7 @@ describe("Checkpoint 1C.3 — Operational / Supervisor Experience", () => {
   let otherAdminToken: string;
   let siteId: string;
   let customerAId: string;
+  let customerBId: string;
   let customerUserAToken: string;
   let handlerToken: string;
   let managerToken: string;
@@ -76,6 +77,9 @@ describe("Checkpoint 1C.3 — Operational / Supervisor Experience", () => {
     customerAId = (
       await app.inject({ method: "POST", url: "/customers", headers: authHeader(adminToken), payload: { code: "CUST-1C3-A", name: "Customer 1C3 A", ownerOrganizationUnitId: siteId } })
     ).json().id;
+    customerBId = (
+      await app.inject({ method: "POST", url: "/customers", headers: authHeader(adminToken), payload: { code: "CUST-1C3-B", name: "Customer 1C3 B", ownerOrganizationUnitId: siteId } })
+    ).json().id;
 
     await createReadOnlyRole(tenantId, "HANDLER_1C3", ["complaint.read", "complaint.manage", "workflow.instance.act", "customer.read"]);
     await createReadOnlyRole(tenantId, "MANAGER_1C3", ["complaint.read", "complaint.manage", "workflow.instance.act", "customer.read"]);
@@ -110,15 +114,15 @@ describe("Checkpoint 1C.3 — Operational / Supervisor Experience", () => {
 
   let complaintId: string;
 
-  async function createAndSubmit() {
+  async function createAndSubmit(customerId = customerAId) {
     const create = await app.inject({
       method: "POST",
       url: "/complaints",
-      headers: authHeader(customerUserAToken),
-      payload: { customerId: customerAId, category: "service_quality", description: "Op test", priority: "high", severity: "major" },
+      headers: authHeader(adminToken),
+      payload: { customerId, category: "service_quality", description: "Op test", priority: "high", severity: "major" },
     });
     const id = create.json().id as string;
-    await app.inject({ method: "POST", url: `/complaints/${id}/submit`, headers: authHeader(customerUserAToken), payload: {} });
+    await app.inject({ method: "POST", url: `/complaints/${id}/submit`, headers: authHeader(adminToken), payload: {} });
     return id;
   }
 
@@ -140,6 +144,19 @@ describe("Checkpoint 1C.3 — Operational / Supervisor Experience", () => {
     const res = await app.inject({ method: "GET", url: "/complaints/queue?assignedToMe=true", headers: authHeader(handlerToken) });
     expect(res.statusCode).toBe(200);
     expect(res.json().items.some((i: { complaint: { id: string } }) => i.complaint.id === complaintId)).toBe(true);
+  });
+
+  it("Queue: filters by customer after batched scoped loading", async () => {
+    const otherComplaintId = await createAndSubmit(customerBId);
+    const res = await app.inject({
+      method: "GET",
+      url: `/complaints/queue?customerId=${customerBId}`,
+      headers: authHeader(handlerToken),
+    });
+    expect(res.statusCode).toBe(200);
+    const ids = res.json().items.map((i: { complaint: { id: string } }) => i.complaint.id);
+    expect(ids).toContain(otherComplaintId);
+    expect(ids).not.toContain(complaintId);
   });
 
   it("Queue: a Customer User is denied (operational area is internal-only)", async () => {

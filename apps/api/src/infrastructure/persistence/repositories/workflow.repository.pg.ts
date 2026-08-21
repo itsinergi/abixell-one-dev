@@ -369,6 +369,15 @@ export class PgWorkflowRepository implements WorkflowRepository {
     return result.rows[0] ? mapInstance(result.rows[0]) : null;
   }
 
+  async findInstancesByIds(ids: string[]): Promise<WorkflowInstance[]> {
+    if (ids.length === 0) return [];
+    const result = await this.pool.query(
+      `SELECT * FROM workflow_instances WHERE id = ANY($1)`,
+      [ids],
+    );
+    return result.rows.map(mapInstance);
+  }
+
   async listInstances(tenantId: string): Promise<WorkflowInstance[]> {
     const result = await this.pool.query(
       `SELECT * FROM workflow_instances WHERE tenant_id = $1 ORDER BY started_at DESC`,
@@ -440,6 +449,15 @@ export class PgWorkflowRepository implements WorkflowRepository {
     const result = await this.pool.query(
       `SELECT * FROM workflow_instance_assignments WHERE workflow_instance_id = $1 ORDER BY assigned_at`,
       [workflowInstanceId],
+    );
+    return result.rows.map(mapAssignment);
+  }
+
+  async listAssignmentsForInstances(workflowInstanceIds: string[]): Promise<WorkflowInstanceAssignment[]> {
+    if (workflowInstanceIds.length === 0) return [];
+    const result = await this.pool.query(
+      `SELECT * FROM workflow_instance_assignments WHERE workflow_instance_id = ANY($1) ORDER BY assigned_at`,
+      [workflowInstanceIds],
     );
     return result.rows.map(mapAssignment);
   }

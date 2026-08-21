@@ -275,6 +275,7 @@ export interface WorkflowRepository {
     startedBy: string;
   }): Promise<WorkflowInstance>;
   findInstanceById(id: string): Promise<WorkflowInstance | null>;
+  findInstancesByIds(ids: string[]): Promise<WorkflowInstance[]>;
   listInstances(tenantId: string): Promise<WorkflowInstance[]>;
   updateInstanceCurrentStep(id: string, stepId: string): Promise<void>;
   completeInstance(id: string, status: WorkflowInstanceStatus): Promise<void>;
@@ -295,6 +296,7 @@ export interface WorkflowRepository {
   }): Promise<WorkflowInstanceAssignment>;
   findAssignmentById(id: string): Promise<WorkflowInstanceAssignment | null>;
   listAssignmentsForInstance(workflowInstanceId: string): Promise<WorkflowInstanceAssignment[]>;
+  listAssignmentsForInstances(workflowInstanceIds: string[]): Promise<WorkflowInstanceAssignment[]>;
   listPendingAssignmentsByTenant(tenantId: string): Promise<WorkflowInstanceAssignment[]>;
   listOverdueAssignments(tenantId: string): Promise<WorkflowInstanceAssignment[]>;
   /** ADR-0008: atomic optimistic claim. Succeeds (returns the row) only

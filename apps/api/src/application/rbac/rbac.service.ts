@@ -102,6 +102,14 @@ export class RbacService {
     targetOrganizationUnitId: string | null,
   ): Promise<boolean> {
     const assignments = await this.repo.getAssignments(userId);
+    return this.doAssignmentsCoverRoleScope(assignments, roleCode, targetOrganizationUnitId);
+  }
+
+  async doAssignmentsCoverRoleScope(
+    assignments: UserRoleAssignment[],
+    roleCode: string,
+    targetOrganizationUnitId: string | null,
+  ): Promise<boolean> {
     const roleAssignments = assignments.filter((a) => a.roleCode === roleCode);
     if (roleAssignments.length === 0) return false;
     if (targetOrganizationUnitId === null) {

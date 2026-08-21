@@ -12,9 +12,9 @@
 | **SEC-006** | **Attachment authorisation.** Documents shall inherit their parent entity's authorisation; they shall have no independent access path. | DELIVERED |
 | **SEC-007** | **Audit trail.** Every authorisation-relevant mutation shall be recorded append-only with actor, action, entity, and timestamp. Automated actions shall be attributed as automation, never impersonated as a user. | DELIVERED |
 | **SEC-008** | **Credential handling.** Passwords shall be stored only as salted hashes; refresh material shall never be stored in reversible form. | DELIVERED |
-| **SEC-009** | **Transport & headers.** The API shall apply standard security response headers and shall be served over TLS in any deployed environment. | PARTIAL |
-| **SEC-010** | **Origin restriction.** Cross-origin access shall be restricted to the client's known frontend origins. | PLANNED (Platform Hardening) |
-| **SEC-011** | **Abuse protection.** Authentication and general endpoints shall be rate limited, tuned against real traffic. | PARTIAL |
+| **SEC-009** | **Transport & headers.** The API shall apply standard security response headers and shall be served over TLS in any deployed environment. | DELIVERED |
+| **SEC-010** | **Origin restriction.** Cross-origin access shall be restricted to the client's known frontend origins. | DELIVERED |
+| **SEC-011** | **Abuse protection.** Authentication and general endpoints shall be rate limited, tuned against real traffic. | DELIVERED |
 | **SEC-012** | **Client-facing vocabulary.** Internal product terms shall never appear in client-facing surfaces (ADR-0003). | DELIVERED |
 | **SEC-013** | **Sensitive data minimisation.** Notifications and cross-domain signals shall carry only the context needed, never bulk business content. | DELIVERED |
 | **SEC-014** | **Offline data safety.** Business data shall never be persisted to client-side offline caches. | DELIVERED |

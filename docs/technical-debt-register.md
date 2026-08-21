@@ -479,14 +479,14 @@ Global audit reclassification. Existing debt is **preserved**, not deleted;
 this section re-sorts it into the categories approved for the audit and maps
 each item to a Roadmap Unit so it is scheduled rather than merely noted.
 
-### MUST FIX BEFORE PILOT (Platform Hardening — Roadmap Phase H)
+### MUST FIX BEFORE PILOT (Platform Hardening — Roadmap Phase H — DELIVERED)
 | Item | Unit | Note |
 |---|---|---|
-| No CI/CD pipeline (carried since 0A) | PH-1 | Platform Hardening, **not** a business module. Every gate is manual today. |
-| CORS permissive (`origin: true`) + provisional rate limit | PH-2 | Replace with `CORS_ORIGIN` allowlist; tune `RATE_LIMIT_MAX` from real traffic. |
-| Operational queue N+1 enrichment | PH-5 | Only confirmed pathological query; fix before pilot load. |
-| `react-router-dom` moderate advisory | PH-6 | Evaluate applicability, then remediate. |
-| PWA PNG icons 192/512 | PH-7 | Full installability across browsers. |
+| No CI/CD pipeline (carried since 0A) | PH-1 | **DELIVERED**: `.github/workflows/ci.yml` and `npm run validate` composite runner. |
+| CORS permissive (`origin: true`) + provisional rate limit | PH-2 | **DELIVERED**: `CORS_ORIGINS` parse/allowlist, configurable rate limits, `@fastify/helmet` policy review. |
+| Operational queue N+1 enrichment | PH-5 | **DELIVERED**: Batched SQL customer query, batched workflow instance/assignment status projection, cached RBAC evaluation. |
+| `react-router-dom` moderate advisory | PH-6 | **DELIVERED**: Upgraded `react-router-dom` to `^7.18.2`; `npm audit --omit=dev` 0 vulnerabilities. |
+| PWA PNG icons 192/512 | PH-7 | **DELIVERED**: Generated standard `icon-192.png` and `icon-512.png`, manifest alignment, `validate:pwa` script. |
 
 ### MUST FIX BEFORE PRODUCTION (Roadmap Phase H2)
 | Item | Unit |
@@ -746,6 +746,5 @@ organisation/legal-entity placement of accounts.
 Posting bridges to a client's accounting system · bank host-to-host
 interfaces. Excluded from the product denominator.
 
-### PLATFORM HARDENING (unchanged)
-PH-1 through PH-8 untouched by Phase 6. The Pilot gate remains blocked on
-Phase H, not on business capability.
+### PLATFORM HARDENING (delivered)
+PH-1, PH-2, PH-5, PH-6, and PH-7 delivered in Phase H (Pilot Hardening). The Pilot gate is satisfied; Phase H2 (PH-3, PH-4, PH-8) remains planned for Production gate.

@@ -18,12 +18,12 @@ Requirements here are **platform**, never business capability. They gate pilot a
 
 | ID | Requirement | Status |
 |---|---|---|
-| **OPS-010** | **Continuous integration.** Lint, typecheck, build, and the full test suite shall run automatically on every change. | PLANNED |
-| **OPS-011** | **Origin allowlist.** Cross-origin access shall be restricted to the client's known frontend origins. | PLANNED |
-| **OPS-012** | **Rate limits tuned** against real pilot traffic rather than provisional defaults. | PLANNED |
-| **OPS-013** | **No pathological queries** on operational list endpoints at pilot data volume. | PLANNED |
-| **OPS-014** | **Dependency advisories** affecting runtime shall be assessed and remediated. | PLANNED |
-| **OPS-015** | **Installable client experience** (complete PWA asset set) across supported browsers. | PLANNED |
+| **OPS-010** | **Continuous integration.** Lint, typecheck, build, and the full test suite shall run automatically on every change. | DELIVERED |
+| **OPS-011** | **Origin allowlist.** Cross-origin access shall be restricted to the client's known frontend origins. | DELIVERED |
+| **OPS-012** | **Rate limits tuned** against real pilot traffic rather than provisional defaults. | DELIVERED |
+| **OPS-013** | **No pathological queries** on operational list endpoints at pilot data volume. | DELIVERED |
+| **OPS-014** | **Dependency advisories** affecting runtime shall be assessed and remediated. | DELIVERED |
+| **OPS-015** | **Installable client experience** (complete PWA asset set) across supported browsers. | DELIVERED |
 
 ## Production readiness gate
 

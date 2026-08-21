@@ -50,6 +50,14 @@ dinaikkan menjadi `1200`/menit (dapat di-tuning lewat env var
 brute-force credential guessing, throughput tinggi bukan requirement
 untuk endpoint tersebut).
 
+## Phase H Hardening — Operational Queue Query Batching (PH-5)
+
+Pada Phase H (Platform Hardening — Pilot gate), endpoint operasional queue komplain (`GET /complaints/operational-queue`) yang sebelumnya memicu N+1 query loop per entitas/workflow instance telah di-refactor secara penuh:
+- Query komplain per customer di-batch via SQL `WHERE customer_id = ANY($1) AND deleted_at IS NULL`.
+- Status workflow instance dan assignment per antrean di-batch via `WorkflowService.getEntityStatuses` (`findInstancesByIds` + `listAssignmentsForInstances` menggunakan operator array `ANY($1)`).
+- Penilaian scope aktor di-cache pada level memory (`RbacService.doAssignmentsCoverRoleScope`) tanpa query RBAC berulang per item antrean.
+- Menghilangkan degradasi linier `O(N)` query database pada volume data operasional pilot.
+
 ## Baseline ini BUKAN
 
 - Bukan pengujian dengan volume data produksi (ribuan Organization Unit,

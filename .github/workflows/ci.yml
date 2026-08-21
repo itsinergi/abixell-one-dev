@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  validate:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: abixell
+          POSTGRES_PASSWORD: abixell_dev_password
+          POSTGRES_DB: abixell_one
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://abixell:abixell_dev_password@localhost:5432/abixell_one
+      JWT_ACCESS_SECRET: ci-access-secret
+      PLATFORM_BOOTSTRAP_KEY: ci-bootstrap-secret
+      SCHEDULER_DISABLED: "true"
+      CORS_ORIGINS: http://localhost:5173
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run migrations
+        run: npm run migrate -w apps/api
+      - name: Validate
+        run: npm run validate

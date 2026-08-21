@@ -80,6 +80,7 @@ export interface ComplaintRepository {
   create(input: CreateComplaintInput, createdBy: string | null): Promise<Complaint>;
   findById(id: string): Promise<Complaint | null>;
   listByCustomer(customerId: string): Promise<Complaint[]>;
+  listByCustomers(customerIds: string[]): Promise<Complaint[]>;
   setWorkflowInstance(id: string, workflowInstanceId: string): Promise<void>;
   markSubmitted(id: string, submittedAt: Date): Promise<void>;
   updateInvestigation(id: string, input: UpdateInvestigationInput, updatedBy: string | null): Promise<Complaint>;
