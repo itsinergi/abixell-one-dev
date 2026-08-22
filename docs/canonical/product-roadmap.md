@@ -4,9 +4,9 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.11 |
+| **Roadmap Baseline** | v1.12 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-21 |
+| **Last Updated** | 2026-08-22 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) |
 
@@ -55,7 +55,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 6** | Finance Core | BC-8 Finance |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED.**
 
 ---
 
@@ -63,11 +63,12 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 05c3a11` (Phase H Pilot platform hardening) |
-| Migrations | 22 |
-| Tables | 83 |
+| Branch / commit | `master @ 0e24edb` (Phase H2 Production platform hardening) |
+| Migrations | 23 |
+| Tables | 84 |
 | Permissions | 75 |
-| Tests | 280 PASS (23 files) |
+| Tests | 287 PASS (24 files) |
+| Core / Full progress | 174 / 174 (100.0%) / 180 / 353 (51.0%) |
 | typecheck / lint / build | PASS |
 
 ---
@@ -90,7 +91,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | PC-12 | Observability | 2 | COMPLETED |
 | PC-13 | App Shell, Design System, responsive, PWA | 3 | COMPLETED |
 
-## 7. Roadmap units — Platform Hardening (weight 16, 9 completed)
+## 7. Roadmap units — Platform Hardening (COMPLETED, weight 16)
 
 Pilot/production readiness. **Not** business capability.
 
@@ -98,12 +99,12 @@ Pilot/production readiness. **Not** business capability.
 |---|---|---:|---|---|
 | PH-1 | CI/CD pipeline (lint/typecheck/test/build) | 3 | COMPLETED | Pilot |
 | PH-2 | CORS allowlist + rate-limit tuning + header review | 2 | COMPLETED | Pilot |
-| PH-3 | Backup / restore / DR runbook | 2 | PLANNED | Production |
-| PH-4 | Deployment & environment provisioning automation | 3 | PLANNED | Production |
+| PH-3 | Backup / restore / DR runbook | 2 | COMPLETED | Production |
+| PH-4 | Deployment & environment provisioning automation | 3 | COMPLETED | Production |
 | PH-5 | Performance fixes (operational queue N+1) | 2 | COMPLETED | Pilot |
 | PH-6 | Dependency advisory remediation | 1 | COMPLETED | Pilot |
 | PH-7 | PWA installability assets (PNG 192/512) | 1 | COMPLETED | Pilot |
-| PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | Production |
+| PH-8 | Integration reconciliation / outbox worker | 2 | COMPLETED | Production |
 
 ## 8. Roadmap units — Business Core (weight 117, 117 completed)
 
@@ -236,7 +237,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Phase 9~~ | Reporting & Operational Insight | RPT.1–RPT.4 | 10 | ≥3 Business Cores | **COMPLETED** |
 | ~~Phase 10~~ | Customer & Commercial completion | CUS.4 | 2 | BC-1 | **COMPLETED** |
 | ~~Phase H~~ | Platform Hardening (Pilot gate) | PH-1, PH-2, PH-5, PH-6, PH-7 | 9 | — | **COMPLETED** |
-| **Phase H2** | Platform Hardening (Production gate) | PH-3, PH-4, PH-8 | 7 | Phase H | PLANNED |
+| ~~Phase H2~~ | Platform Hardening (Production gate) | PH-3, PH-4, PH-8 | 7 | Phase H | **COMPLETED** |
 | **Wave A+** | Advanced capability waves | per module | 179 | respective Core | PLANNED / OPTIONAL |
 
 **Phase H may run in parallel** with any Business Core phase — it is infrastructure, not business capability.
@@ -246,6 +247,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 - **Pilot Gate:** Platform Core ✅ + ≥1 Business Core module ✅ + Phase H complete + client configuration loaded.
   *Current status:* Platform Core, all 11 Business Core modules, and Phase H pilot hardening are satisfied; deployment still requires the applicable client configuration to be loaded.
 - **Production Gate:** Pilot Gate + Phase H2 + security review + DR tested.
+  *Current status:* Phase H2 is complete and its isolated backup/restore drill passed; deployment still requires the applicable release security review and client configuration.
 
 ## 12. Deferred / optional
 
@@ -255,6 +257,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.12 | 2026-08-22 | Phase H2 (Production Hardening) delivered: PH-3, PH-4, PH-8 COMPLETED (7 pts earned). Platform Hardening and Core Product Readiness reach 100%; backup/restore drill, repeatable deployment, migration roundtrip, and durable Integration outbox validated. Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.11 | 2026-08-21 | Phase H (Pilot Hardening) delivered: PH-1, PH-2, PH-5, PH-6, PH-7 COMPLETED (9 pts earned). Pilot readiness gate satisfied. Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.10 | 2026-08-21 | Phase 10 delivered and corrected: CUS.4 COMPLETED with CUS-CORE-009 maintenance route/UI/test evidence (2 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.9 | 2026-08-21 | Phase 9 delivered: RPT.1–RPT.4 COMPLETED (10 pts earned). Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |

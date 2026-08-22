@@ -3,12 +3,12 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.11 and `docs/canonical/product-progress.md` v1.11 |
-| Starting point | Full Approved Roadmap Progress: 49.0% (173 / 353 pts) |
-| Starting Platform Hardening | 56.3% (9 / 16 pts) |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.12 and `docs/canonical/product-progress.md` v1.12 |
+| Current point | Full Approved Roadmap Progress: 51.0% (180 / 353 pts) |
+| Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2 and all Advanced waves remain PLANNED / OPTIONAL; this document starts no implementation |
+| Current authorization state | Phase H2 is COMPLETED; all Advanced waves remain PLANNED / OPTIONAL and this document starts no implementation |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -16,65 +16,64 @@ This document explains the remaining path from the current approved baseline to 
 
 ```text
 Platform Core          total  41   completed  41
-Platform Hardening     total  16   completed   9
+Platform Hardening     total  16   completed  16
 Business Core          total 117   completed 117
 Advanced Capabilities  total 179   completed   6
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174
-  completed   = 41 + 117 +  9 = 167
-  167 / 174 = 96.0%
+  completed   = 41 + 117 + 16 = 174
+  174 / 174 = 100.0%
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353
-  completed   = 167 +   6 = 173
-  173 / 353 = 49.0%
+  completed   = 174 +   6 = 180
+  180 / 353 = 51.0%
 ```
 
 Remaining to 100%:
 
 | Layer | Remaining | Meaning |
 |---|---:|---|
-| Platform Hardening | 7 pts | Phase H2 production gate |
+| Platform Hardening | 0 pts | Phase H2 production gate completed |
 | Advanced Capabilities | 173 pts | All Advanced backlog not yet delivered |
-| Total remaining | 180 pts | 353 - 173 |
+| Total remaining | 173 pts | 353 - 180 |
 
 ## 2. Recommended Phase Sequence
 
 The recommended route is:
 
-1. Finish Phase H2 first, because it closes Core Product Readiness to 100% and unlocks production-grade readiness.
+1. Preserve the completed Phase H2 Production Gate and Core Product Readiness baseline.
 2. Deliver Advanced waves in business-value clusters, not one giant wave.
 3. Keep every Advanced unit independently activatable and removable.
 4. Keep client extensions outside these denominators.
 
 | Seq | Phase | Scope | Pts | Cumulative pts | Full progress | Core readiness |
 |---:|---|---|---:|---:|---:|---:|
-| 0 | Current baseline | Completed work through Phase H Pilot Gate | 0 | 173 / 353 | 49.0% | 96.0% |
-| 1 | Phase H2 | Production Gate hardening | 7 | 180 / 353 | 51.0% | 100.0% |
-| 2 | Wave A1 | Customer & Commercial Advanced + Service Quality Advanced | 19 | 199 / 353 | 56.4% | 100.0% |
-| 3 | Wave A2 | Survey Advanced completion + Reporting Advanced | 23 | 222 / 353 | 62.9% | 100.0% |
-| 4 | Wave A3 | Service Operations Advanced + Asset Advanced | 24 | 246 / 353 | 69.7% | 100.0% |
-| 5 | Wave A4 | Workforce Advanced | 24 | 270 / 353 | 76.5% | 100.0% |
-| 6 | Wave A5 | Supply Chain Advanced | 22 | 292 / 353 | 82.7% | 100.0% |
-| 7 | Wave A6 | Finance Advanced | 21 | 313 / 353 | 88.7% | 100.0% |
-| 8 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 340 / 353 | 96.3% | 100.0% |
-| 9 | Wave A8 | Platform cross-cutting Advanced | 13 | 353 / 353 | 100.0% | 100.0% |
+| 0 | Current baseline | Completed work through Phase H2 Production Gate | 0 | 180 / 353 | 51.0% | 100.0% |
+| 1 | Wave A1 | Customer & Commercial Advanced + Service Quality Advanced | 19 | 199 / 353 | 56.4% | 100.0% |
+| 2 | Wave A2 | Survey Advanced completion + Reporting Advanced | 23 | 222 / 353 | 62.9% | 100.0% |
+| 3 | Wave A3 | Service Operations Advanced + Asset Advanced | 24 | 246 / 353 | 69.7% | 100.0% |
+| 4 | Wave A4 | Workforce Advanced | 24 | 270 / 353 | 76.5% | 100.0% |
+| 5 | Wave A5 | Supply Chain Advanced | 22 | 292 / 353 | 82.7% | 100.0% |
+| 6 | Wave A6 | Finance Advanced | 21 | 313 / 353 | 88.7% | 100.0% |
+| 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 340 / 353 | 96.3% | 100.0% |
+| 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 353 / 353 | 100.0% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2 is next in the recommended sequence; Wave A1–A8 remain planned / optional and are not started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2 is earned and complete; Wave A1–A8 remain planned / optional and are not started by this document.
 
 ## 3. Phase H2 - Production Gate
 
-Phase H2 is the next planned Production Gate and would complete Platform Hardening from 9 / 16 to 16 / 16. It remains **PLANNED** and has not started.
+Phase H2 is **COMPLETED** and raised Platform Hardening from 9 / 16 to 16 / 16.
 
-| Unit | Capability | Pts | Current status | Planned result after phase |
+| Unit | Capability | Pts | Status | Delivered evidence |
 |---|---|---:|---|---|
-| PH-3 | Backup / restore / disaster recovery runbook | 2 | PLANNED | COMPLETED |
-| PH-4 | Deployment and environment provisioning automation | 3 | PLANNED | COMPLETED |
-| PH-8 | Integration reconciliation / outbox worker | 2 | PLANNED | COMPLETED |
-| Total | Platform Hardening production gate | 7 | PLANNED | 16 / 16 |
+| PH-3 | Backup / restore / disaster recovery runbook | 2 | COMPLETED | Checksum-protected database/document backup, guarded isolated restore, representative restored-document byte verification, runbook, and successful restore drill |
+| PH-4 | Deployment and environment provisioning automation | 3 | COMPLETED | Separate immutable operations/runtime/Web images, validated environment contract, ordered Compose migration/permission-sync/start/smoke flow, repeat-deploy and rollback guidance |
+| PH-8 | Integration reconciliation / outbox worker | 2 | COMPLETED | Durable Tenant-scoped per-event/per-endpoint outbox, reconciliation, stale-claim recovery, retry/terminal visibility, Scheduler observability, and concurrent claim coverage |
+| Total | Platform Hardening production gate | 7 | COMPLETED | 16 / 16 |
 
-Expected result:
+Earned result:
 
 | Metric | Before | After |
 |---|---:|---:|
@@ -82,11 +81,11 @@ Expected result:
 | Core Product Readiness | 167 / 174 (96.0%) | 174 / 174 (100.0%) |
 | Full Approved Roadmap Progress | 173 / 353 (49.0%) | 180 / 353 (51.0%) |
 
-Acceptance focus:
+Validated acceptance:
 
 - Backup and restore procedure is documented, executable, and tested.
 - Deployment provisioning is repeatable and environment driven.
-- Integration work can be retried/reconciled without duplicate domain effects.
+- Integration work can be retried/reconciled without duplicate durable side effects.
 - Production Gate remains separate from client-specific hosting choices.
 
 ## 4. Wave A1 - Customer and Service Quality Advanced
@@ -301,10 +300,10 @@ Recommended boundaries:
 
 | Category | Remaining pts | Completion condition |
 |---|---:|---|
-| Phase H2 Production Gate | 7 | Platform Hardening reaches 16 / 16 |
+| Phase H2 Production Gate | 0 | Completed; Platform Hardening is 16 / 16 |
 | Advanced business-domain waves | 160 | Customer, Service Quality, Survey, Reporting, Service Operations, Asset, Workforce, Supply Chain, Finance, Project Delivery, and HSE Advanced complete |
 | Platform cross-cutting Advanced | 13 | Partner API, AI readiness, and marketplace ecosystem complete |
-| Total | 180 | Full Approved Roadmap reaches 353 / 353 |
+| Total | 173 | Full Approved Roadmap reaches 353 / 353 |
 
 After all phases:
 

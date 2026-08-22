@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.11 |
+| **Roadmap Baseline** | v1.12 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-21 |
-| **Measured at** | `master @ 05c3a11` · 280/280 tests · 83 tables · 22 migrations |
+| **Last Updated** | 2026-08-22 |
+| **Measured at** | `master @ 0e24edb` · 287/287 tests · 84 tables · 23 migrations |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.10 |
+| Metric | Value | Δ since v1.11 |
 |---|---:|---:|
-| **Core Product Readiness** | **96.0 %** | ▲ 5.2 pts |
-| **Full Approved Roadmap Progress** | **49.0 %** | ▲ 2.5 pts |
+| **Core Product Readiness** | **100.0 %** | ▲ 4.0 pts |
+| **Full Approved Roadmap Progress** | **51.0 %** | ▲ 2.0 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -32,7 +32,7 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 | Layer | Completed / Total | % |
 |---|---:|---:|
 | Platform Core | 41 / 41 | **100 %** |
-| Platform Hardening | 9 / 16 | **56.3 %** |
+| Platform Hardening | 16 / 16 | **100.0 %** |
 | Business Core | 117 / 117 | **100 %** |
 | Advanced Capabilities | 6 / 179 | **3.4 %** |
 
@@ -78,25 +78,25 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 
 ```text
 Platform Core          total  41   completed  41
-Platform Hardening     total  16   completed   9   (+9 — Phase H Pilot Hardening)
+Platform Hardening     total  16   completed  16   (+7 — Phase H2 Production Hardening)
 Business Core          total 117   completed 117
 Advanced Capabilities  total 179   completed   6
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
-  completed   = 41 + 117 +  9 = 167
+  completed   = 41 + 117 + 16 = 174
   in-progress earned          =   0
-  (167 + 0) / 174 × 100 = 96.0 %
+  (174 + 0) / 174 × 100 = 100.0 %
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 167 +   6 = 173
-  (173 + 0) / 353 × 100 = 49.0 %
+  completed   = 174 +   6 = 180
+  (180 + 0) / 353 × 100 = 51.0 %
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
 Business Core `9+15+9+13+10+14+8+12+9+8+10 = 117` ✓ ·
-Platform Hardening `3+2+2+3+2+1+1+2 = 16` (Pilot completed `3+2+2+1+1 = 9`) ✓ ·
+Platform Hardening `3+2+2+3+2+1+1+2 = 16` (completed `16`) ✓ ·
 Advanced `8+11+19+13+24+21+22+11+13+14+13+10 = 179` ✓ ·
 Core denominator `41+117+16 = 174` ✓ · Full denominator `174+179 = 353` ✓.
 Arithmetic was recomputed programmatically and by hand; both agree.
@@ -116,6 +116,7 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 |---|---|
 | PC-1…PC-13 | Phase 0 checkpoints 0A–0F; migrations `1755500000000`–`1756000000000`; `phase0-stabilization.test.ts`, `workflow.test.ts`, `configuration.test.ts`, `shared-services.test.ts`, `vertical-slice.test.ts`; `docs/phase0-final-review.md` |
 | PH-1, PH-2, PH-5, PH-6, PH-7 | Phase H (Pilot Hardening); `.github/workflows/ci.yml`, `apps/api/src/infrastructure/security/http-hardening.ts`, `operational-complaint-experience.test.ts` batch queries, `phase0-stabilization.test.ts` (CORS/headers/rate-limit), `react-router-dom` v7.18.2 upgrade, PNG 192/512 icons, `scripts/validate-pwa.mjs`; commit `05c3a11` |
+| PH-3, PH-4, PH-8 | Phase H2 (Production Hardening); backup/restore/verification scripts and DR runbook; multi-stage API operations/runtime and Web images; environment-validated Compose deploy/migrate/health/smoke flow; migration `1771000000000`; durable Tenant-scoped Integration outbox with reconciliation, stale-claim recovery, bounded retry, terminal visibility, and concurrent `SKIP LOCKED` claims; `phase-h2-integration-outbox.test.ts` (7); isolated restore drill (1 document checksum), migration up/down/up, fresh and repeated deployment validated; commit `0e24edb` |
 | CUS.1–CUS.4 | Phase 1A + Phase 10; migration `1757000000000`; `customer-foundation.test.ts` (18); frontend page (customer/commercial admin UI + maintenance controls); commit `89fbff4` |
 | CMP.1–CMP.7 | Phases 1B/1C; migrations `1758000000000`, `1759000000000`; `complaint-engine.test.ts` (16), `customer-complaint-experience.test.ts` (8), `operational-complaint-experience.test.ts` (10), `verification-complaint-experience.test.ts` (7), `management-dashboard.test.ts` (7), `complaint-configuration.test.ts` (7) |
 | FIN.1–FIN.6 | Phase 6; migration `1767000000000`; `finance.test.ts` (21); commits `f901de5`, `317f1c2` |
@@ -128,16 +129,17 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 
 ## 6. Pending roadmap units
 
-Platform Hardening Phase H2 Production gate (PH-3, PH-4, PH-8) and all Advanced units except the two delivered Survey-to-Action units. Customer & Commercial Advanced (sales/opportunity/quotation and expanded self-service portal), Reporting Advanced (self-service BI / warehouse, predictive analytics), Project Delivery Advanced (WBS/dependencies/Gantt, resource loading/baseline, earned value/cost/accounting), and HSE Advanced (HSE-ADV-1…14) remain out of Core scope.
+All Advanced units except the two delivered Survey-to-Action units. Customer & Commercial Advanced (sales/opportunity/quotation and expanded self-service portal), Reporting Advanced (self-service BI / warehouse, predictive analytics), Project Delivery Advanced (WBS/dependencies/Gantt, resource loading/baseline, earned value/cost/accounting), and HSE Advanced (HSE-ADV-1…14) remain optional and out of Core scope. Platform Hardening has no pending roadmap units.
 
 ## 7. Active phase
 
-**None.** Phase 10 and Phase H (Pilot Hardening) closed; all Business Core roadmap units and Pilot-gate Platform Hardening units are complete. Pilot deployment is unblocked; Phase H2 (Production gate) and Advanced capability waves remain planned / optional until explicitly authorized.
+**None.** Phase 10, Phase H (Pilot Hardening), and Phase H2 (Production Hardening) are closed; all Core Product Readiness units are complete. Advanced capability waves remain planned / optional until explicitly authorized.
 
 ## 8. Progress change log
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.12 | 2026-08-22 | 100.0 % | 51.0 % | **Phase H2 (Production Hardening) delivered.** Numerator +7 (PH-3, PH-4, PH-8); denominator unchanged at 174 / 353. Pure earned progress. 287/287 tests passing; 84 tables and 23 migrations. Core Product Readiness achieved. |
 | v1.11 | 2026-08-21 | 96.0 % | 49.0 % | **Phase H (Pilot Hardening) delivered.** Numerator +9 (PH-1, PH-2, PH-5, PH-6, PH-7); denominator unchanged at 174 / 353. Pure earned progress. 280/280 tests passing. Pilot readiness gate achieved. |
 | v1.0 | 2026-08-20 | 41.4 % | 22.1 % | First measured baseline. No prior figure existed — nothing to compare against. |
 | v1.1 | 2026-08-20 | 41.4 % | 22.1 % | **No change.** PRD reconstruction migrated 70 IGSEP legacy requirement areas; every one mapped to an existing roadmap unit (ADOPT/ADAPT/MERGE/RECLASSIFY) or to a SUPERSEDE/pack disposition that adds no weight. Denominator unchanged at 174 / 353; numerator unchanged at 72 / 78. |
