@@ -63,7 +63,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 6f6656c` (Phase H2 Production platform hardening) |
+| Branch / commit | `master @ 37f7343` (Phase H2 Production platform hardening) |
 | Migrations | 24 |
 | Tables | 85 |
 | Permissions | 75 |
