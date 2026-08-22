@@ -2,6 +2,18 @@
 
 Use this guide to open the current Abixell One Pilot build locally, sign in with the seeded demo administrator, and smoke-test the completed Core modules. The account and password below are for local/demo data only; they must never be reused as deployed-environment credentials.
 
+## Manual smoke closure — 2026-08-22
+
+Founder manual UI smoke testing passed after the local launcher correction:
+
+- login succeeded at `http://localhost:5173/login`;
+- the application remained reachable and did not redirect back to login after authentication;
+- tested internal Core pages returned no `401`, `403`, or `Unauthorized` result;
+- pages rendered without blank screens or crashes; and
+- module headings loaded successfully (empty tables were accepted for this navigation smoke).
+
+This records Pilot UI smoke evidence only. It does not change canonical progress, start Phase H2, authorize production deployment, or start any Advanced wave.
+
 ## 1. Prerequisites
 
 - Windows 11
