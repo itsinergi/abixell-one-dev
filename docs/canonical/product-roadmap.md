@@ -235,7 +235,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Phase 8~~ | Project Delivery Core | PRJ.1–PRJ.4 | 8 | BC-1 | **COMPLETED** |
 | ~~Phase 9~~ | Reporting & Operational Insight | RPT.1–RPT.4 | 10 | ≥3 Business Cores | **COMPLETED** |
 | ~~Phase 10~~ | Customer & Commercial completion | CUS.4 | 2 | BC-1 | **COMPLETED** |
-| **Phase H** | Platform Hardening (Pilot gate) | PH-1, PH-2, PH-5, PH-6, PH-7 | 9 | — | PLANNED |
+| ~~Phase H~~ | Platform Hardening (Pilot gate) | PH-1, PH-2, PH-5, PH-6, PH-7 | 9 | — | **COMPLETED** |
 | **Phase H2** | Platform Hardening (Production gate) | PH-3, PH-4, PH-8 | 7 | Phase H | PLANNED |
 | **Wave A+** | Advanced capability waves | per module | 179 | respective Core | PLANNED / OPTIONAL |
 
@@ -244,7 +244,7 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 ## 11. Gates
 
 - **Pilot Gate:** Platform Core ✅ + ≥1 Business Core module ✅ + Phase H complete + client configuration loaded.
-  *Current status:* functionality satisfied (all 11 Business Core modules delivered); **blocked on Phase H**.
+  *Current status:* Platform Core, all 11 Business Core modules, and Phase H pilot hardening are satisfied; deployment still requires the applicable client configuration to be loaded.
 - **Production Gate:** Pilot Gate + Phase H2 + security review + DR tested.
 
 ## 12. Deferred / optional
