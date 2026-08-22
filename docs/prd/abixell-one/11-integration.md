@@ -14,7 +14,7 @@
 | **INT-008** | **Cross-domain orchestration.** Coordination between business domains shall occur in an orchestration layer using domain events and application ports — never by one module importing another's internals. | DELIVERED |
 | **INT-009** | **Automation idempotency.** Automated cross-domain actions shall be exactly-once per source occurrence, enforced at the database, not in memory. | DELIVERED |
 | **INT-010** | **Side-effect isolation.** Failure of an integration side effect shall never roll back the completed business action that triggered it; the failure shall be durably recorded instead. | DELIVERED |
-| **INT-011** | **Delivery reliability.** The platform shall reconcile integration work that failed or was interrupted, without duplicating effects. | PLANNED (Platform Hardening) |
+| **INT-011** | **Delivery reliability.** The platform shall reconcile integration work that failed or was interrupted, without duplicating effects. | DELIVERED |
 | **INT-012** | **Partner API surface.** The platform shall expose a documented, versioned API for partner/client system integration. | DEFERRED (Advanced) |
 | **INT-013** | **Master-data synchronisation.** The platform shall support inbound synchronisation of client master data (e.g. customers, employees, items) through the integration boundary. | DEFERRED |
 
@@ -29,6 +29,8 @@
 | **INT-R5** | Automation shall act through the target domain's application service so that domain's eligibility rules apply. |
 | **INT-R6** | Cross-tenant integration is prohibited in all directions. |
 
-## Known reliability limitation
+## Delivery reliability boundary
 
-The event bus is in-process and fire-once: a subscriber failure is isolated and logged but not retried. Automation therefore persists its own durable execution record so failures remain observable. Reliable asynchronous reconciliation (`INT-011`) is an approved Platform Hardening item, not yet built.
+The EventBus remains synchronous and best-effort for existing subscribers, preserving side-effect isolation. Outbound Integration delivery now adds an idempotent durable layer after the Domain Event is persisted: one Tenant-scoped outbox row per `(domain_event_id, integration_endpoint_id)`, immediate enqueue, reconciliation from the durable `domain_events` source, `FOR UPDATE SKIP LOCKED` claims, stale-claim recovery, bounded exponential retry, terminal-failure visibility, and transactional completion/logging. Concurrent Scheduler/worker triggers partition claims without duplicate logged effects.
+
+This closes the interruption window **after a Domain Event exists** for outbound Integration work. It does not claim that every business mutation and its Domain Event are one database transaction, exactly-once delivery across a future external HTTP boundary, or durable retry for every EventBus subscriber. The current outbound transport remains the established logged stub until a separately approved endpoint adapter and credentials exist. No arbitrary response bodies, credentials, webhook payloads, or stack traces belong in outbox error metadata.

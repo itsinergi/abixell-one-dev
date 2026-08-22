@@ -1,0 +1,188 @@
+name: ${COMPOSE_PROJECT_NAME:?Set a unique dedicated deployment project name}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?Use a PostgreSQL 16 patch-pinned image or digest}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  migrate:
+    image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image tag or digest}
+    pull_policy: always
+    restart: "no"
+    working_dir: /app
+    entrypoint: ["npm"]
+    command: ["run", "migrate:production", "-w", "apps/api"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    profiles: [operations]
+
+  sync-permissions:
+    image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image tag or digest}
+    pull_policy: always
+    restart: "no"
+    working_dir: /app
+    entrypoint: ["npm"]
+    command: ["run", "sync-permissions", "-w", "apps/api"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    profiles: [operations]
+
+  backup:
+    image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image tag or digest}
+    pull_policy: always
+    restart: "no"
+    working_dir: /app
+    entrypoint: ["node"]
+    command: ["scripts/backup-postgres.mjs"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      BACKUP_ROOT: /data/backups
+      FILE_STORAGE_ROOT: /data/documents
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:?Set DEPLOYMENT_ENVIRONMENT}
+      APPLICATION_RELEASE: ${APPLICATION_RELEASE:?Set APPLICATION_RELEASE}
+    volumes:
+      - document-data:/data/documents:ro
+      - type: bind
+        source: ${BACKUP_ROOT:?Set protected BACKUP_ROOT}
+        target: /data/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    profiles: [operations]
+
+  restore:
+    image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image tag or digest}
+    pull_policy: always
+    restart: "no"
+    working_dir: /app
+    entrypoint: ["node"]
+    command: ["scripts/restore-postgres.mjs"]
+    environment:
+      RESTORE_BACKUP_DIR: /data/restore-source
+      RESTORE_DATABASE_URL: ${RESTORE_DATABASE_URL:?Set fresh RESTORE_DATABASE_URL for the restore operation}
+      RESTORE_FILE_STORAGE_ROOT: /restore-output/documents
+      RESTORE_CONFIRM: ${RESTORE_CONFIRM:-}
+    volumes:
+      - type: bind
+        source: ${RESTORE_BACKUP_DIR:?Set RESTORE_BACKUP_DIR for the restore operation}
+        target: /data/restore-source
+        read_only: true
+      - type: bind
+        source: ${RESTORE_FILE_STORAGE_PARENT:?Set RESTORE_FILE_STORAGE_PARENT for the restore operation}
+        target: /restore-output
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    profiles: [restore]
+
+  verify-restore:
+    image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image tag or digest}
+    pull_policy: always
+    restart: "no"
+    working_dir: /app
+    entrypoint: ["node"]
+    command: ["scripts/verify-restore.mjs"]
+    environment:
+      RESTORE_BACKUP_DIR: /data/restore-source
+      RESTORE_DATABASE_URL: ${RESTORE_DATABASE_URL:?Set fresh RESTORE_DATABASE_URL for verification}
+      RESTORE_FILE_STORAGE_ROOT: /restore-output/documents
+      RESTORE_HEALTH_URL: ${RESTORE_HEALTH_URL:-}
+      RESTORE_DB_HEALTH_URL: ${RESTORE_DB_HEALTH_URL:-}
+    volumes:
+      - type: bind
+        source: ${RESTORE_BACKUP_DIR:?Set RESTORE_BACKUP_DIR for verification}
+        target: /data/restore-source
+        read_only: true
+      - type: bind
+        source: ${RESTORE_FILE_STORAGE_PARENT:?Set RESTORE_FILE_STORAGE_PARENT for verification}
+        target: /restore-output
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    profiles: [restore]
+
+  api:
+    image: ${API_IMAGE:?Set immutable API image tag or digest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET}
+      PLATFORM_BOOTSTRAP_KEY: ${PLATFORM_BOOTSTRAP_KEY:?Set PLATFORM_BOOTSTRAP_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+      RATE_LIMIT_GLOBAL_MAX: ${RATE_LIMIT_GLOBAL_MAX:-1200}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      AUTH_RATE_LIMIT_WINDOW: ${AUTH_RATE_LIMIT_WINDOW:-1 minute}
+      FILE_STORAGE_ROOT: /data/documents
+      SCHEDULER_DISABLED: ${SCHEDULER_DISABLED:-false}
+      INTEGRATION_OUTBOX_BATCH_SIZE: ${INTEGRATION_OUTBOX_BATCH_SIZE:-100}
+      INTEGRATION_OUTBOX_MAX_ATTEMPTS: ${INTEGRATION_OUTBOX_MAX_ATTEMPTS:-5}
+      INTEGRATION_OUTBOX_RETRY_BASE_SECONDS: ${INTEGRATION_OUTBOX_RETRY_BASE_SECONDS:-30}
+      INTEGRATION_OUTBOX_CLAIM_TIMEOUT_SECONDS: ${INTEGRATION_OUTBOX_CLAIM_TIMEOUT_SECONDS:-300}
+    volumes:
+      - document-data:/data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health/db').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web:
+    image: ${WEB_IMAGE:?Set immutable Web image tag or digest}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    networks: [backend, ingress]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+networks:
+  backend:
+    internal: true
+  ingress:
+
+volumes:
+  postgres-data:
+  document-data:

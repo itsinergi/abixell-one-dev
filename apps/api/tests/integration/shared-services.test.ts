@@ -507,6 +507,17 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
       payload: { definitionCode, entityId: tx.json().id, contextData: { organizationUnitId: siteId } },
     });
 
+    // Phase H2: EventBus enqueue is durable; the registered reconciliation
+    // worker performs the outbound logged-stub side effect. The manual trigger
+    // executes the same handler as the timer without test races.
+    const outboxRun = await app.inject({
+      method: "POST",
+      url: "/scheduler/jobs/integration-outbox-reconciliation/trigger",
+      headers: authHeader(adminToken),
+    });
+    expect(outboxRun.statusCode).toBe(200);
+    expect(outboxRun.json().status).toBe("success");
+
     const log = await app.inject({ method: "GET", url: "/integration/log", headers: authHeader(adminToken) });
     expect(log.statusCode).toBe(200);
     const outboundEntry = log

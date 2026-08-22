@@ -127,28 +127,34 @@ export class SchedulerService {
     }
     this.runningJobCodes.add(jobCode);
 
-    const run = await this.repo.startRun(job.id, trigger, triggeredBy);
-    const startedAt = Date.now();
     try {
-      const resultSummary = await handler();
-      const finished = await this.repo.finishRun(run.id, { status: "success", resultSummary, errorMessage: null });
-      await this.repo.updateJobLastRun(job.id, {
-        lastRunAt: new Date(),
-        lastStatus: "success",
-        lastDurationMs: Date.now() - startedAt,
-        lastError: null,
-      });
-      return finished;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown job error";
-      const finished = await this.repo.finishRun(run.id, { status: "failed", resultSummary: null, errorMessage: message });
-      await this.repo.updateJobLastRun(job.id, {
-        lastRunAt: new Date(),
-        lastStatus: "failed",
-        lastDurationMs: Date.now() - startedAt,
-        lastError: message,
-      });
-      return finished;
+      const run = await this.repo.startRun(job.id, trigger, triggeredBy);
+      const startedAt = Date.now();
+      try {
+        const resultSummary = await handler();
+        const finished = await this.repo.finishRun(run.id, {
+          status: "success",
+          resultSummary,
+          errorMessage: null,
+        });
+        await this.repo.updateJobLastRun(job.id, {
+          lastRunAt: new Date(),
+          lastStatus: "success",
+          lastDurationMs: Date.now() - startedAt,
+          lastError: null,
+        });
+        return finished;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown job error";
+        const finished = await this.repo.finishRun(run.id, { status: "failed", resultSummary: null, errorMessage: message });
+        await this.repo.updateJobLastRun(job.id, {
+          lastRunAt: new Date(),
+          lastStatus: "failed",
+          lastDurationMs: Date.now() - startedAt,
+          lastError: message,
+        });
+        return finished;
+      }
     } finally {
       this.runningJobCodes.delete(jobCode);
     }

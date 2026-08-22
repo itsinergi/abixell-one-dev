@@ -1,4 +1,5 @@
 import type { TenantRepository } from "../../domain/tenant/tenant.entity.js";
+import type { IntegrationService } from "../integration/integration.service.js";
 import type { WorkflowService } from "../workflow/workflow.service.js";
 import type { SchedulerService } from "./scheduler.service.js";
 
@@ -18,7 +19,11 @@ import type { SchedulerService } from "./scheduler.service.js";
  */
 export function registerJobHandlers(
   scheduler: SchedulerService,
-  deps: { tenantRepo: TenantRepository; workflow: WorkflowService },
+  deps: {
+    tenantRepo: TenantRepository;
+    workflow: WorkflowService;
+    integration: IntegrationService;
+  },
 ): void {
   scheduler.registerHandler("workflow-escalation-sweep", async () => {
     const tenants = await deps.tenantRepo.list();
@@ -30,5 +35,36 @@ export function registerJobHandlers(
       totalEscalated += escalated.length;
     }
     return { tenantsSwept: tenants.length, totalEscalated, perTenant };
+  });
+
+  // Phase H2 / PH-8: the reconciliation pass uses durable Domain Events to
+  // backfill any enqueue missed during an interrupted EventBus subscriber,
+  // then safely claims and processes each Tenant's due deliveries.
+  scheduler.registerHandler("integration-outbox-reconciliation", async () => {
+    const tenants = await deps.tenantRepo.list();
+    const totals = {
+      reconciled: 0,
+      claimed: 0,
+      succeeded: 0,
+      retried: 0,
+      terminalFailed: 0,
+    };
+    const perTenant: Record<string, Record<string, number>> = {};
+    for (const tenant of tenants) {
+      const result = await deps.integration.reconcileAndProcessTenant(tenant.id);
+      perTenant[tenant.code] = {
+        reconciled: result.reconciled,
+        claimed: result.claimed,
+        succeeded: result.succeeded,
+        retried: result.retried,
+        terminalFailed: result.terminalFailed,
+      };
+      totals.reconciled += result.reconciled;
+      totals.claimed += result.claimed;
+      totals.succeeded += result.succeeded;
+      totals.retried += result.retried;
+      totals.terminalFailed += result.terminalFailed;
+    }
+    return { tenantsSwept: tenants.length, ...totals, perTenant };
   });
 }

@@ -15,3 +15,13 @@ apps/api/dist/
 # Document/File Service local storage (Checkpoint 0E) — runtime-uploaded
 # files, not source; see infrastructure/storage/local-file-storage.ts
 apps/api/storage/
+
+# Phase H2 deployment runtime data and protected environment
+infra/deployment/.env
+infra/deployment/.env.*
+!infra/deployment/.env.example
+infra/deployment/.state/
+backups/
+*.partial
+*.pre-restore
+*.restore-staging

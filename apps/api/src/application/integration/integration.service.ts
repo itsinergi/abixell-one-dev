@@ -8,6 +8,8 @@ import type {
   IntegrationDirection,
   IntegrationEndpoint,
   IntegrationLogEntry,
+  IntegrationOutboxDelivery,
+  IntegrationOutboxSummary,
   IntegrationRepository,
 } from "../../domain/integration/integration.entity.js";
 import type { DomainEvent } from "../../domain/event/event.entity.js";
@@ -77,21 +79,112 @@ export class IntegrationService {
     return this.repo.listLog(actor.tenantId, limit);
   }
 
-  /** Outbound stub — EventBus wildcard subscriber. */
+  /**
+   * Phase H2 outbound dispatch point. EventBus keeps its existing synchronous,
+   * best-effort subscriber behavior, but the subscriber now only performs an
+   * idempotent durable enqueue. The worker handles side effects separately, so
+   * a subscriber failure never rolls back the publishing business operation.
+   */
   async handleDomainEvent(event: DomainEvent): Promise<void> {
-    const endpoints = await this.repo.listEndpoints(event.tenantId);
-    const activeOutbound = endpoints.filter((e) => e.direction === "outbound" && e.isActive);
-    for (const endpoint of activeOutbound) {
-      await this.repo.logEvent({
-        tenantId: event.tenantId,
-        integrationEndpointId: endpoint.id,
-        direction: "outbound",
-        eventType: event.eventType,
-        payload: event.payload,
-        status: "sent",
-        errorMessage: null,
-      });
+    await this.repo.enqueueOutboundDeliveries({
+      tenantId: event.tenantId,
+      domainEventId: event.id,
+    });
+  }
+
+  /**
+   * Reconcile every persisted Domain Event against the Tenant's currently
+   * active outbound Endpoints, recover interrupted claims, and process due
+   * deliveries. PostgreSQL uniqueness makes both enqueue and reconciliation
+   * repeatable; tenant-scoped claims plus SKIP LOCKED make parallel workers
+   * safe even beyond the Scheduler's in-process overlap guard.
+   */
+  async reconcileAndProcessTenant(tenantId: string): Promise<IntegrationOutboxSummary> {
+    const reconciled = await this.repo.reconcileMissingOutboundDeliveries(tenantId);
+    await this.repo.recoverStaleOutboundClaims(
+      tenantId,
+      new Date(Date.now() - this.outboxClaimTimeoutMs()),
+    );
+
+    let claimedCount = 0;
+    let succeeded = 0;
+    let retried = 0;
+    let terminalFailed = 0;
+    for (;;) {
+      const claimed = await this.repo.claimDueOutboundDeliveries(
+        tenantId,
+        this.outboxBatchSize(),
+      );
+      if (claimed.length === 0) break;
+      claimedCount += claimed.length;
+      for (const delivery of claimed) {
+        const outcome = await this.processOutboundDelivery(delivery);
+        if (outcome === "succeeded") succeeded += 1;
+        if (outcome === "retry") retried += 1;
+        if (outcome === "terminal_failed") terminalFailed += 1;
+      }
+      if (claimed.length < this.outboxBatchSize()) break;
     }
+
+    return {
+      tenantId,
+      reconciled,
+      claimed: claimedCount,
+      succeeded,
+      retried,
+      terminalFailed,
+    };
+  }
+
+  private async processOutboundDelivery(
+    delivery: IntegrationOutboxDelivery,
+  ): Promise<"succeeded" | "retry" | "terminal_failed"> {
+    try {
+      await this.dispatchOutbound();
+      await this.repo.markOutboundDeliverySucceeded(delivery.id);
+      return "succeeded";
+    } catch (error) {
+      const errorMessage = sanitizeOperationalError(error);
+      if (delivery.attemptCount >= this.outboxMaxAttempts()) {
+        await this.repo.markOutboundDeliveryTerminalFailed({
+          deliveryId: delivery.id,
+          errorMessage,
+        });
+        return "terminal_failed";
+      }
+
+      await this.repo.markOutboundDeliveryRetry({
+        deliveryId: delivery.id,
+        nextAttemptAt: new Date(Date.now() + this.retryDelayMs(delivery.attemptCount)),
+        errorMessage,
+      });
+      return "retry";
+    }
+  }
+
+  /**
+   * Transport hook for a future, separately approved endpoint adapter. The
+   * current Integration Boundary is still a logged stub, so successful
+   * delivery has no external side effect here; repository completion writes
+   * the existing `sent` log in the same transaction as outbox completion.
+   */
+  protected async dispatchOutbound(): Promise<void> {}
+
+  private outboxBatchSize(): number {
+    return positiveInteger(process.env.INTEGRATION_OUTBOX_BATCH_SIZE, 100);
+  }
+
+  private outboxMaxAttempts(): number {
+    return positiveInteger(process.env.INTEGRATION_OUTBOX_MAX_ATTEMPTS, 5);
+  }
+
+  private outboxClaimTimeoutMs(): number {
+    return positiveInteger(process.env.INTEGRATION_OUTBOX_CLAIM_TIMEOUT_SECONDS, 300) * 1000;
+  }
+
+  private retryDelayMs(attemptCount: number): number {
+    const baseSeconds = positiveInteger(process.env.INTEGRATION_OUTBOX_RETRY_BASE_SECONDS, 30);
+    return baseSeconds * 2 ** Math.min(Math.max(attemptCount - 1, 0), 10) * 1000;
   }
 
   /** Inbound webhook receiver. `tenantCode` + `endpointCode` together
@@ -206,4 +299,20 @@ function safeParseJson(raw: string): Record<string, unknown> {
   } catch {
     return { raw };
   }
+}
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/** Keep worker/audit metadata operational: never persist arbitrary objects,
+ * response bodies, webhook payloads, URLs, credentials, or stack traces. */
+function sanitizeOperationalError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : "Unknown outbound integration error";
+  return raw
+    .replace(/\b(?:postgres(?:ql)?|https?):\/\/[^\s]+/gi, "[redacted-url]")
+    .replace(/\b(?:authorization|cookie|set-cookie|api[-_ ]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .replace(/[\r\n\t]+/g, " ")
+    .slice(0, 500);
 }

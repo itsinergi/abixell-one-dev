@@ -16,6 +16,12 @@
 
 export type IntegrationDirection = "outbound" | "inbound";
 export type IntegrationLogStatus = "sent" | "failed" | "received" | "rejected";
+export type IntegrationOutboxStatus =
+  | "pending"
+  | "processing"
+  | "retry"
+  | "succeeded"
+  | "terminal_failed";
 
 export interface IntegrationEndpoint {
   id: string;
@@ -45,6 +51,34 @@ export interface IntegrationLogEntry {
   createdAt: Date;
 }
 
+export interface IntegrationOutboxDelivery {
+  id: string;
+  tenantId: string;
+  domainEventId: string;
+  integrationEndpointId: string;
+  endpointCode: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  status: IntegrationOutboxStatus;
+  attemptCount: number;
+  nextAttemptAt: Date;
+  lockedAt: Date | null;
+  lastError: string | null;
+  lastLogStatus: "sent" | "failed" | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IntegrationOutboxSummary {
+  tenantId: string;
+  reconciled: number;
+  claimed: number;
+  succeeded: number;
+  retried: number;
+  terminalFailed: number;
+}
+
 export interface IntegrationRepository {
   createEndpoint(input: {
     tenantId: string;
@@ -69,6 +103,27 @@ export interface IntegrationRepository {
     errorMessage: string | null;
     idempotencyKey?: string | null;
   }): Promise<IntegrationLogEntry>;
+
+  enqueueOutboundDeliveries(input: {
+    tenantId: string;
+    domainEventId: string;
+  }): Promise<number>;
+  reconcileMissingOutboundDeliveries(tenantId: string): Promise<number>;
+  recoverStaleOutboundClaims(tenantId: string, staleBefore: Date): Promise<number>;
+  claimDueOutboundDeliveries(
+    tenantId: string,
+    limit: number,
+  ): Promise<IntegrationOutboxDelivery[]>;
+  markOutboundDeliverySucceeded(deliveryId: string): Promise<void>;
+  markOutboundDeliveryRetry(input: {
+    deliveryId: string;
+    nextAttemptAt: Date;
+    errorMessage: string;
+  }): Promise<void>;
+  markOutboundDeliveryTerminalFailed(input: {
+    deliveryId: string;
+    errorMessage: string;
+  }): Promise<void>;
 
   /** Checkpoint 0F — the existing log entry for a prior inbound delivery
    * with this exact (endpointId, idempotencyKey) pair, if any. Used to

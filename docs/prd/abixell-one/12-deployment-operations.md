@@ -29,10 +29,17 @@ Requirements here are **platform**, never business capability. They gate pilot a
 
 | ID | Requirement | Status |
 |---|---|---|
-| **OPS-020** | **Backup, restore, and disaster recovery** shall be documented and tested. | PLANNED |
-| **OPS-021** | **Deployment & environment provisioning** shall be repeatable and automated. | PLANNED |
-| **OPS-022** | **Integration reconciliation** shall recover interrupted automation without duplicate effects. | PLANNED |
-| **OPS-023** | **Operational monitoring** shall surface health, error rates, and failed automations. | PARTIAL |
+| **OPS-020** | **Backup, restore, and disaster recovery** shall be documented and tested. | DELIVERED |
+| **OPS-021** | **Deployment & environment provisioning** shall be repeatable and automated. | DELIVERED |
+| **OPS-022** | **Integration reconciliation** shall recover interrupted automation without duplicate effects. | DELIVERED |
+| **OPS-023** | **Operational monitoring** shall surface health, error rates, and failed automations. | DELIVERED |
+
+## Production Gate evidence
+
+- **OPS-020 / PH-3:** PostgreSQL custom-format backup plus document-volume archive, SHA-256 manifest, migration-head recording, fresh-target restore refusal, archive/checksum verification, representative restored-document checksum, default RPO/RTO assumptions, and documented rollback/incident handling. Compose operations run on the internal database network without publishing PostgreSQL.
+- **OPS-021 / PH-4:** separate immutable API runtime/operations images, unprivileged Web runtime, generic dedicated-deployment Compose topology, protected environment validation, ordered pull/migrate/permission-sync/start/health/smoke automation, non-secret release evidence, and forward-only rollback policy.
+- **OPS-022 / PH-8:** Tenant-scoped durable Integration outbox reconciliation with database uniqueness, `SKIP LOCKED` claims, persisted retry/terminal states, stale-claim recovery, transactional completion/logging, and concurrent-worker tests proving no duplicate logged effect.
+- **OPS-023:** `/health`, `/health/db`, `/healthz`, Scheduler run history, aggregate worker result summaries, Integration log failures, and terminal outbox state provide the approved Production Gate surface. Provider-level infrastructure metrics and alert routing remain deployment-operations responsibilities rather than new product capability.
 
 ## Operability requirements
 

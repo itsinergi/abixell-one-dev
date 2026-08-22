@@ -395,7 +395,7 @@ export function buildContainer() {
   const scheduler = new SchedulerService(schedulerRepo, rbac, (jobCode, error) => {
     console.error(`[Scheduler] job '${jobCode}' failed:`, error);
   });
-  registerJobHandlers(scheduler, { tenantRepo, workflow });
+  registerJobHandlers(scheduler, { tenantRepo, workflow, integration });
 
   return {
     pool,

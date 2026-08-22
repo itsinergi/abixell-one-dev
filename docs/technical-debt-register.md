@@ -488,12 +488,14 @@ each item to a Roadmap Unit so it is scheduled rather than merely noted.
 | `react-router-dom` moderate advisory | PH-6 | **DELIVERED**: Upgraded `react-router-dom` to `^7.18.2`; `npm audit --omit=dev` 0 vulnerabilities. |
 | PWA PNG icons 192/512 | PH-7 | **DELIVERED**: Generated standard `icon-192.png` and `icon-512.png`, manifest alignment, `validate:pwa` script. |
 
-### MUST FIX BEFORE PRODUCTION (Roadmap Phase H2)
-| Item | Unit |
-|---|---|
-| Backup / restore / DR runbook | PH-3 |
-| Deployment & environment provisioning automation | PH-4 |
-| Integration reconciliation / outbox worker (EventBus is in-process, fire-once, swallows subscriber errors) | PH-8 |
+### MUST FIX BEFORE PRODUCTION (Roadmap Phase H2 — DELIVERED)
+| Item | Unit | Resolution |
+|---|---|---|
+| Backup / restore / DR runbook | PH-3 | **DELIVERED:** complete database + document backup unit, manifests/checksums, fresh-target restore, automated representative document-byte verification, RPO/RTO and failure/rollback runbook, and Compose operational path. |
+| Deployment & environment provisioning automation | PH-4 | **DELIVERED:** separate immutable runtime/operations images, generic dedicated-deployment Compose, environment validation, ordered migrate/sync/start/health/smoke, repeat-safe forward deployment, and rollback notes. |
+| Integration reconciliation / outbox worker | PH-8 | **DELIVERED:** durable per-event/per-endpoint outbox, idempotent reconciliation, Tenant-scoped `SKIP LOCKED` claims, stale recovery, persisted retry/terminal state, transactional log completion, and concurrent-worker evidence. |
+
+Residual boundaries are preserved rather than hidden: outbound Integration remains a logged stub until a separately approved transport exists; the durable reconciliation guarantee starts after a Domain Event has been persisted and does not make every business mutation/event pair transactional; Notification and other EventBus subscriber retries remain outside PH-8; external HTTP exactly-once semantics cannot be claimed without a downstream idempotency contract.
 
 ### SHOULD FIX LATER
 - Shared date-format util (survey pages import from `../complaints/format`).
