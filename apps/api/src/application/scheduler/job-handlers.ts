@@ -25,23 +25,31 @@ export function registerJobHandlers(
     integration: IntegrationService;
   },
 ): void {
-  scheduler.registerHandler("workflow-escalation-sweep", async () => {
-    const tenants = await deps.tenantRepo.list();
+  scheduler.registerHandler("workflow-escalation-sweep", async ({ actor }) => {
+    const tenants = actor
+      ? [await deps.tenantRepo.findById(actor.tenantId)].filter((tenant) => tenant !== null)
+      : await deps.tenantRepo.list();
     let totalEscalated = 0;
     const perTenant: Record<string, number> = {};
     for (const tenant of tenants) {
       const escalated = await deps.workflow.escalateOverdueAssignmentsForTenant(tenant.id);
-      perTenant[tenant.code] = escalated.length;
+      if (!actor) perTenant[tenant.code] = escalated.length;
       totalEscalated += escalated.length;
     }
-    return { tenantsSwept: tenants.length, totalEscalated, perTenant };
+    return {
+      tenantsSwept: tenants.length,
+      totalEscalated,
+      ...(actor ? {} : { perTenant }),
+    };
   });
 
   // Phase H2 / PH-8: the reconciliation pass uses durable Domain Events to
   // backfill any enqueue missed during an interrupted EventBus subscriber,
   // then safely claims and processes each Tenant's due deliveries.
-  scheduler.registerHandler("integration-outbox-reconciliation", async () => {
-    const tenants = await deps.tenantRepo.list();
+  scheduler.registerHandler("integration-outbox-reconciliation", async ({ actor }) => {
+    const tenants = actor
+      ? [await deps.tenantRepo.findById(actor.tenantId)].filter((tenant) => tenant !== null)
+      : await deps.tenantRepo.list();
     const totals = {
       reconciled: 0,
       claimed: 0,
@@ -52,19 +60,25 @@ export function registerJobHandlers(
     const perTenant: Record<string, Record<string, number>> = {};
     for (const tenant of tenants) {
       const result = await deps.integration.reconcileAndProcessTenant(tenant.id);
-      perTenant[tenant.code] = {
-        reconciled: result.reconciled,
-        claimed: result.claimed,
-        succeeded: result.succeeded,
-        retried: result.retried,
-        terminalFailed: result.terminalFailed,
-      };
+      if (!actor) {
+        perTenant[tenant.code] = {
+          reconciled: result.reconciled,
+          claimed: result.claimed,
+          succeeded: result.succeeded,
+          retried: result.retried,
+          terminalFailed: result.terminalFailed,
+        };
+      }
       totals.reconciled += result.reconciled;
       totals.claimed += result.claimed;
       totals.succeeded += result.succeeded;
       totals.retried += result.retried;
       totals.terminalFailed += result.terminalFailed;
     }
-    return { tenantsSwept: tenants.length, ...totals, perTenant };
+    return {
+      tenantsSwept: tenants.length,
+      ...totals,
+      ...(actor ? {} : { perTenant }),
+    };
   });
 }

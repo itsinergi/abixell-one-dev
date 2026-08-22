@@ -32,6 +32,7 @@ export interface IntegrationEndpoint {
   baseUrl: string | null;
   webhookSecret: string | null;
   isActive: boolean;
+  eligibleFrom: Date;
   createdAt: Date;
 }
 
@@ -63,6 +64,7 @@ export interface IntegrationOutboxDelivery {
   attemptCount: number;
   nextAttemptAt: Date;
   lockedAt: Date | null;
+  claimToken: string;
   lastError: string | null;
   lastLogStatus: "sent" | "failed" | null;
   completedAt: Date | null;
@@ -109,21 +111,30 @@ export interface IntegrationRepository {
     domainEventId: string;
   }): Promise<number>;
   reconcileMissingOutboundDeliveries(tenantId: string): Promise<number>;
-  recoverStaleOutboundClaims(tenantId: string, staleBefore: Date): Promise<number>;
+  recoverStaleOutboundClaims(
+    tenantId: string,
+    staleBefore: Date,
+    maxAttempts: number,
+    errorMessage: string,
+  ): Promise<{ recovered: number; terminalFailed: number }>;
   claimDueOutboundDeliveries(
     tenantId: string,
     limit: number,
+    maxAttempts: number,
   ): Promise<IntegrationOutboxDelivery[]>;
-  markOutboundDeliverySucceeded(deliveryId: string): Promise<void>;
+  renewOutboundDeliveryClaim(deliveryId: string, claimToken: string): Promise<boolean>;
+  markOutboundDeliverySucceeded(deliveryId: string, claimToken: string): Promise<boolean>;
   markOutboundDeliveryRetry(input: {
     deliveryId: string;
+    claimToken: string;
     nextAttemptAt: Date;
     errorMessage: string;
-  }): Promise<void>;
+  }): Promise<boolean>;
   markOutboundDeliveryTerminalFailed(input: {
     deliveryId: string;
+    claimToken: string;
     errorMessage: string;
-  }): Promise<void>;
+  }): Promise<boolean>;
 
   /** Checkpoint 0F — the existing log entry for a prior inbound delivery
    * with this exact (endpointId, idempotencyKey) pair, if any. Used to

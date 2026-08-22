@@ -32,6 +32,7 @@ export interface ScheduledJobRun {
   scheduledJobId: string;
   trigger: ScheduledJobRunTrigger;
   triggeredBy: string | null;
+  tenantId: string | null;
   startedAt: Date;
   finishedAt: Date | null;
   status: ScheduledJobRunStatus;
@@ -42,9 +43,26 @@ export interface ScheduledJobRun {
 export interface SchedulerRepository {
   listJobs(): Promise<ScheduledJob[]>;
   findJobByCode(jobCode: string): Promise<ScheduledJob | null>;
-  setEnabled(jobCode: string, isEnabled: boolean): Promise<ScheduledJob | null>;
 
-  startRun(scheduledJobId: string, trigger: ScheduledJobRunTrigger, triggeredBy: string | null): Promise<ScheduledJobRun>;
+  claimExecution(
+    jobId: string,
+    staleBefore: Date,
+  ): Promise<string | null>;
+  renewExecution(
+    jobId: string,
+    lockToken: string,
+  ): Promise<boolean>;
+  releaseExecution(
+    jobId: string,
+    lockToken: string,
+  ): Promise<void>;
+
+  startRun(
+    scheduledJobId: string,
+    trigger: ScheduledJobRunTrigger,
+    triggeredBy: string | null,
+    tenantId: string | null,
+  ): Promise<ScheduledJobRun>;
   finishRun(
     runId: string,
     input: { status: "success" | "failed"; resultSummary: Record<string, unknown> | null; errorMessage: string | null },
@@ -54,5 +72,9 @@ export interface SchedulerRepository {
     input: { lastRunAt: Date; lastStatus: ScheduledJobRunStatus; lastDurationMs: number; lastError: string | null },
   ): Promise<void>;
 
-  listRuns(scheduledJobId: string, limit: number): Promise<ScheduledJobRun[]>;
+  listRuns(
+    scheduledJobId: string,
+    limit: number,
+    tenantId?: string,
+  ): Promise<ScheduledJobRun[]>;
 }

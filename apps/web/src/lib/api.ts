@@ -312,9 +312,6 @@ export const api = {
   triggerScheduledJob: (token: string, jobCode: string) =>
     request<ScheduledJobRun>(`/scheduler/jobs/${jobCode}/trigger`, { method: "POST", token }),
 
-  setScheduledJobEnabled: (token: string, jobCode: string, isEnabled: boolean) =>
-    request<ScheduledJob>(`/scheduler/jobs/${jobCode}/enabled`, { method: "POST", token, body: { isEnabled } }),
-
   integrationEndpoints: (token: string) => request<IntegrationEndpoint[]>("/integration/endpoints", { token }),
 
   createIntegrationEndpoint: (

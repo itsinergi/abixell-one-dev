@@ -45,11 +45,57 @@ export class PgIntegrationRepository implements IntegrationRepository {
   }
 
   async setEndpointActive(id: string, isActive: boolean): Promise<IntegrationEndpoint | null> {
-    const result = await this.pool.query(
-      `UPDATE integration_endpoints SET is_active = $2 WHERE id = $1 RETURNING *`,
-      [id, isActive],
-    );
-    return result.rows[0] ? mapEndpoint(result.rows[0]) : null;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        `SELECT * FROM integration_endpoints WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
+      const endpoint = current.rows[0];
+      if (!endpoint) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      if (endpoint.is_active === isActive) {
+        await client.query("COMMIT");
+        return mapEndpoint(endpoint);
+      }
+      const changedAt = new Date();
+      if (!isActive) {
+        const result = await client.query(
+          `UPDATE integration_endpoints
+              SET is_active = false, deactivated_at = $2
+            WHERE id = $1
+           RETURNING *`,
+          [id, changedAt],
+        );
+        await client.query("COMMIT");
+        return mapEndpoint(result.rows[0]);
+      }
+      if (endpoint.deactivated_at) {
+        await client.query(
+          `INSERT INTO integration_endpoint_inactive_windows
+             (integration_endpoint_id, inactive_from, inactive_to)
+           VALUES ($1, $2, $3)`,
+          [id, endpoint.deactivated_at, changedAt],
+        );
+      }
+      const result = await client.query(
+        `UPDATE integration_endpoints
+            SET is_active = true, deactivated_at = NULL
+          WHERE id = $1
+         RETURNING *`,
+        [id],
+      );
+      await client.query("COMMIT");
+      return mapEndpoint(result.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async logEvent(input: {
@@ -95,6 +141,14 @@ export class PgIntegrationRepository implements IntegrationRepository {
            ON ie.tenant_id = de.tenant_id
           AND ie.direction = 'outbound'
           AND ie.is_active = true
+          AND de.occurred_at >= ie.eligible_from
+          AND NOT EXISTS (
+            SELECT 1
+              FROM integration_endpoint_inactive_windows inactive_window
+             WHERE inactive_window.integration_endpoint_id = ie.id
+               AND de.occurred_at >= inactive_window.inactive_from
+               AND de.occurred_at < inactive_window.inactive_to
+          )
         WHERE de.id = $1
           AND de.tenant_id = $2
        ON CONFLICT (domain_event_id, integration_endpoint_id) DO NOTHING`,
@@ -113,6 +167,14 @@ export class PgIntegrationRepository implements IntegrationRepository {
            ON ie.tenant_id = de.tenant_id
           AND ie.direction = 'outbound'
           AND ie.is_active = true
+          AND de.occurred_at >= ie.eligible_from
+          AND NOT EXISTS (
+            SELECT 1
+              FROM integration_endpoint_inactive_windows inactive_window
+             WHERE inactive_window.integration_endpoint_id = ie.id
+               AND de.occurred_at >= inactive_window.inactive_from
+               AND de.occurred_at < inactive_window.inactive_to
+          )
         WHERE de.tenant_id = $1
        ON CONFLICT (domain_event_id, integration_endpoint_id) DO NOTHING`,
       [tenantId],
@@ -120,25 +182,117 @@ export class PgIntegrationRepository implements IntegrationRepository {
     return result.rowCount ?? 0;
   }
 
-  async recoverStaleOutboundClaims(tenantId: string, staleBefore: Date): Promise<number> {
-    const result = await this.pool.query(
-      `UPDATE integration_outbox_deliveries
-          SET status = 'retry',
-              next_attempt_at = now(),
-              locked_at = NULL,
-              last_error = 'Recovered interrupted delivery claim',
-              updated_at = now()
-        WHERE tenant_id = $1
-          AND status = 'processing'
-          AND locked_at < $2`,
-      [tenantId, staleBefore],
-    );
-    return result.rowCount ?? 0;
+  async recoverStaleOutboundClaims(
+    tenantId: string,
+    staleBefore: Date,
+    maxAttempts: number,
+    errorMessage: string,
+  ): Promise<{ recovered: number; terminalFailed: number }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const terminal = await client.query(
+        `WITH stale AS (
+           SELECT iod.id, iod.integration_endpoint_id, de.event_type
+             FROM integration_outbox_deliveries iod
+             JOIN domain_events de
+               ON de.id = iod.domain_event_id
+              AND de.tenant_id = iod.tenant_id
+            WHERE iod.tenant_id = $1
+              AND iod.status = 'processing'
+              AND iod.locked_at < $2
+              AND iod.attempt_count >= $3
+            FOR UPDATE OF iod SKIP LOCKED
+         ), logged AS (
+           INSERT INTO integration_event_log
+             (tenant_id, integration_endpoint_id, direction, event_type, payload,
+              status, error_message, idempotency_key)
+           SELECT $1, stale.integration_endpoint_id, 'outbound', stale.event_type,
+                  '{}'::jsonb, 'failed', $4, NULL
+             FROM stale
+           RETURNING integration_endpoint_id
+         )
+         UPDATE integration_outbox_deliveries iod
+            SET status = 'terminal_failed',
+                completed_at = now(),
+                locked_at = NULL,
+                claim_token = NULL,
+                last_error = $4,
+                last_log_status = 'failed',
+                updated_at = now()
+           FROM stale
+          WHERE iod.id = stale.id`,
+        [tenantId, staleBefore, maxAttempts, errorMessage],
+      );
+      const retry = await client.query(
+        `UPDATE integration_outbox_deliveries
+            SET status = 'retry',
+                next_attempt_at = now(),
+                locked_at = NULL,
+                claim_token = NULL,
+                last_error = $4,
+                updated_at = now()
+          WHERE tenant_id = $1
+            AND status = 'processing'
+            AND locked_at < $2
+            AND attempt_count < $3`,
+        [tenantId, staleBefore, maxAttempts, errorMessage],
+      );
+      const stranded = await client.query(
+        `WITH exhausted AS (
+           SELECT iod.id, iod.integration_endpoint_id, de.event_type
+             FROM integration_outbox_deliveries iod
+             JOIN domain_events de
+               ON de.id = iod.domain_event_id
+              AND de.tenant_id = iod.tenant_id
+            WHERE iod.tenant_id = $1
+              AND iod.status IN ('pending', 'retry')
+              AND iod.attempt_count >= $2
+            FOR UPDATE OF iod SKIP LOCKED
+         ), logged AS (
+           INSERT INTO integration_event_log
+             (tenant_id, integration_endpoint_id, direction, event_type, payload,
+              status, error_message, idempotency_key)
+           SELECT $1, exhausted.integration_endpoint_id, 'outbound',
+                  exhausted.event_type, '{}'::jsonb, 'failed', $3, NULL
+             FROM exhausted
+           RETURNING integration_endpoint_id
+         )
+         UPDATE integration_outbox_deliveries iod
+            SET status = 'terminal_failed',
+                completed_at = now(),
+                locked_at = NULL,
+                claim_token = NULL,
+                last_error = $3,
+                last_log_status = 'failed',
+                updated_at = now()
+           FROM exhausted
+          WHERE iod.id = exhausted.id`,
+        [
+          tenantId,
+          maxAttempts,
+          "Delivery reached the configured maximum attempts",
+        ],
+      );
+      await client.query("COMMIT");
+      return {
+        recovered: retry.rowCount ?? 0,
+        terminalFailed:
+          (terminal.rowCount ?? 0) +
+          (stranded.rowCount ?? 0),
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async claimDueOutboundDeliveries(
     tenantId: string,
     limit: number,
+    maxAttempts: number,
   ): Promise<IntegrationOutboxDelivery[]> {
     const result = await this.pool.query(
       `WITH due AS (
@@ -150,6 +304,7 @@ export class PgIntegrationRepository implements IntegrationRepository {
           WHERE iod.tenant_id = $1
             AND iod.status IN ('pending', 'retry')
             AND iod.next_attempt_at <= now()
+            AND iod.attempt_count < $3
             AND ie.direction = 'outbound'
             AND ie.is_active = true
           ORDER BY iod.next_attempt_at, iod.created_at
@@ -160,6 +315,7 @@ export class PgIntegrationRepository implements IntegrationRepository {
           SET status = 'processing',
               attempt_count = iod.attempt_count + 1,
               locked_at = now(),
+              claim_token = gen_random_uuid(),
               updated_at = now()
          FROM due
         WHERE iod.id = due.id
@@ -167,12 +323,22 @@ export class PgIntegrationRepository implements IntegrationRepository {
          (SELECT ie.code FROM integration_endpoints ie WHERE ie.id = iod.integration_endpoint_id) AS endpoint_code,
          (SELECT de.event_type FROM domain_events de WHERE de.id = iod.domain_event_id) AS event_type,
          (SELECT de.payload FROM domain_events de WHERE de.id = iod.domain_event_id) AS event_payload`,
-      [tenantId, limit],
+      [tenantId, limit, maxAttempts],
     );
     return result.rows.map(mapOutboxDelivery);
   }
 
-  async markOutboundDeliverySucceeded(deliveryId: string): Promise<void> {
+  async renewOutboundDeliveryClaim(deliveryId: string, claimToken: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE integration_outbox_deliveries
+          SET locked_at = now(), updated_at = now()
+        WHERE id = $1 AND status = 'processing' AND claim_token = $2`,
+      [deliveryId, claimToken],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  async markOutboundDeliverySucceeded(deliveryId: string, claimToken: string): Promise<boolean> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -183,13 +349,15 @@ export class PgIntegrationRepository implements IntegrationRepository {
              ON de.id = iod.domain_event_id
             AND de.tenant_id = iod.tenant_id
           WHERE iod.id = $1
+            AND iod.status = 'processing'
+            AND iod.claim_token = $2
           FOR UPDATE OF iod`,
-        [deliveryId],
+        [deliveryId, claimToken],
       );
       const row = delivery.rows[0];
-      if (!row || row.status !== "processing") {
+      if (!row) {
         await client.query("ROLLBACK");
-        return;
+        return false;
       }
       if (row.last_log_status !== "sent") {
         await client.query(
@@ -200,14 +368,16 @@ export class PgIntegrationRepository implements IntegrationRepository {
           [row.tenant_id, row.integration_endpoint_id, row.event_type, row.payload],
         );
       }
-      await client.query(
+      const updated = await client.query(
         `UPDATE integration_outbox_deliveries
             SET status = 'succeeded', completed_at = now(), locked_at = NULL,
-                last_error = NULL, last_log_status = 'sent', updated_at = now()
-          WHERE id = $1`,
-        [deliveryId],
+                claim_token = NULL, last_error = NULL, last_log_status = 'sent',
+                updated_at = now()
+          WHERE id = $1 AND status = 'processing' AND claim_token = $2`,
+        [deliveryId, claimToken],
       );
       await client.query("COMMIT");
+      return (updated.rowCount ?? 0) === 1;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -218,22 +388,25 @@ export class PgIntegrationRepository implements IntegrationRepository {
 
   async markOutboundDeliveryRetry(input: {
     deliveryId: string;
+    claimToken: string;
     nextAttemptAt: Date;
     errorMessage: string;
-  }): Promise<void> {
-    await this.pool.query(
+  }): Promise<boolean> {
+    const result = await this.pool.query(
       `UPDATE integration_outbox_deliveries
-          SET status = 'retry', next_attempt_at = $2, locked_at = NULL,
-              last_error = $3, updated_at = now()
-        WHERE id = $1 AND status = 'processing'`,
-      [input.deliveryId, input.nextAttemptAt, input.errorMessage],
+          SET status = 'retry', next_attempt_at = $3, locked_at = NULL,
+              claim_token = NULL, last_error = $4, updated_at = now()
+        WHERE id = $1 AND status = 'processing' AND claim_token = $2`,
+      [input.deliveryId, input.claimToken, input.nextAttemptAt, input.errorMessage],
     );
+    return (result.rowCount ?? 0) === 1;
   }
 
   async markOutboundDeliveryTerminalFailed(input: {
     deliveryId: string;
+    claimToken: string;
     errorMessage: string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -244,13 +417,15 @@ export class PgIntegrationRepository implements IntegrationRepository {
              ON de.id = iod.domain_event_id
             AND de.tenant_id = iod.tenant_id
           WHERE iod.id = $1
+            AND iod.status = 'processing'
+            AND iod.claim_token = $2
           FOR UPDATE OF iod`,
-        [input.deliveryId],
+        [input.deliveryId, input.claimToken],
       );
       const row = delivery.rows[0];
-      if (!row || row.status !== "processing") {
+      if (!row) {
         await client.query("ROLLBACK");
-        return;
+        return false;
       }
       if (row.last_log_status !== "failed") {
         await client.query(
@@ -261,14 +436,16 @@ export class PgIntegrationRepository implements IntegrationRepository {
           [row.tenant_id, row.integration_endpoint_id, row.event_type, input.errorMessage],
         );
       }
-      await client.query(
+      const updated = await client.query(
         `UPDATE integration_outbox_deliveries
             SET status = 'terminal_failed', completed_at = now(), locked_at = NULL,
-                last_error = $2, last_log_status = 'failed', updated_at = now()
-          WHERE id = $1`,
-        [input.deliveryId, input.errorMessage],
+                claim_token = NULL, last_error = $3, last_log_status = 'failed',
+                updated_at = now()
+          WHERE id = $1 AND status = 'processing' AND claim_token = $2`,
+        [input.deliveryId, input.claimToken, input.errorMessage],
       );
       await client.query("COMMIT");
+      return (updated.rowCount ?? 0) === 1;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -309,6 +486,7 @@ function mapEndpoint(row: QueryResultRow): IntegrationEndpoint {
     baseUrl: row.base_url,
     webhookSecret: row.webhook_secret,
     isActive: row.is_active,
+    eligibleFrom: row.eligible_from,
     createdAt: row.created_at,
   };
 }
@@ -341,6 +519,7 @@ function mapOutboxDelivery(row: QueryResultRow): IntegrationOutboxDelivery {
     attemptCount: row.attempt_count,
     nextAttemptAt: row.next_attempt_at,
     lockedAt: row.locked_at,
+    claimToken: row.claim_token,
     lastError: row.last_error,
     lastLogStatus: row.last_log_status,
     completedAt: row.completed_at,

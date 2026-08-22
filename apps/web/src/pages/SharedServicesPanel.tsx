@@ -235,8 +235,8 @@ export function SharedServicesPanel({
           <section className="rounded border border-slate-200 bg-white p-4">
             <h3 className="mb-2 text-sm font-semibold">Scheduler / Background Jobs</h3>
             <p className="mb-2 text-xs text-slate-500">
-              The Workflow Escalation Sweep runs automatically on this interval — this is its run history,
-              proving "scheduler"-triggered runs (not just manual clicks) actually happen.
+              Jobs run automatically on their configured intervals. The visible status and history are scoped
+              to this Tenant; manual runs appear here without exposing another Tenant's details.
             </p>
             <ul className="space-y-2 text-xs text-slate-700">
               {jobs.map((j) => (
@@ -246,7 +246,7 @@ export function SharedServicesPanel({
                     <span className="text-slate-400">every {j.intervalSeconds}s</span>
                   </div>
                   <div className="text-slate-500">
-                    last run: {j.lastRunAt ? new Date(j.lastRunAt).toLocaleString() : "never"}
+                    last visible Tenant run: {j.lastRunAt ? new Date(j.lastRunAt).toLocaleString() : "none"}
                     {j.lastStatus && ` (${j.lastStatus})`}
                   </div>
                   <div className="mt-1 flex gap-2">

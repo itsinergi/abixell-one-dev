@@ -101,29 +101,34 @@ export class IntegrationService {
    */
   async reconcileAndProcessTenant(tenantId: string): Promise<IntegrationOutboxSummary> {
     const reconciled = await this.repo.reconcileMissingOutboundDeliveries(tenantId);
-    await this.repo.recoverStaleOutboundClaims(
+    const recovery = await this.repo.recoverStaleOutboundClaims(
       tenantId,
       new Date(Date.now() - this.outboxClaimTimeoutMs()),
+      this.outboxMaxAttempts(),
+      "Recovered interrupted delivery claim at maximum attempts",
     );
 
     let claimedCount = 0;
     let succeeded = 0;
     let retried = 0;
-    let terminalFailed = 0;
-    for (;;) {
-      const claimed = await this.repo.claimDueOutboundDeliveries(
-        tenantId,
-        this.outboxBatchSize(),
-      );
-      if (claimed.length === 0) break;
-      claimedCount += claimed.length;
-      for (const delivery of claimed) {
-        const outcome = await this.processOutboundDelivery(delivery);
-        if (outcome === "succeeded") succeeded += 1;
-        if (outcome === "retry") retried += 1;
-        if (outcome === "terminal_failed") terminalFailed += 1;
-      }
-      if (claimed.length < this.outboxBatchSize()) break;
+    let terminalFailed = recovery.terminalFailed;
+    // Claim one delivery at a time so a batch does not hold leases while
+    // preceding rows are dispatched. The configured batch size bounds the
+    // complete invocation, preserving fairness across Tenants and timer runs.
+    while (claimedCount < this.outboxBatchSize()) {
+      const delivery = (
+        await this.repo.claimDueOutboundDeliveries(
+          tenantId,
+          1,
+          this.outboxMaxAttempts(),
+        )
+      )[0];
+      if (!delivery) break;
+      claimedCount += 1;
+      const outcome = await this.processOutboundDelivery(delivery);
+      if (outcome === "succeeded") succeeded += 1;
+      if (outcome === "retry") retried += 1;
+      if (outcome === "terminal_failed") terminalFailed += 1;
     }
 
     return {
@@ -138,27 +143,43 @@ export class IntegrationService {
 
   private async processOutboundDelivery(
     delivery: IntegrationOutboxDelivery,
-  ): Promise<"succeeded" | "retry" | "terminal_failed"> {
+  ): Promise<"succeeded" | "retry" | "terminal_failed" | null> {
+    if (!(await this.repo.renewOutboundDeliveryClaim(delivery.id, delivery.claimToken))) {
+      return null;
+    }
+
+    const heartbeat = setInterval(() => {
+      this.repo.renewOutboundDeliveryClaim(delivery.id, delivery.claimToken).catch(() => {});
+    }, Math.max(1_000, Math.floor(this.outboxClaimTimeoutMs() / 3)));
+    heartbeat.unref?.();
+
     try {
       await this.dispatchOutbound();
-      await this.repo.markOutboundDeliverySucceeded(delivery.id);
-      return "succeeded";
+      return (await this.repo.markOutboundDeliverySucceeded(delivery.id, delivery.claimToken))
+        ? "succeeded"
+        : null;
     } catch (error) {
       const errorMessage = sanitizeOperationalError(error);
       if (delivery.attemptCount >= this.outboxMaxAttempts()) {
-        await this.repo.markOutboundDeliveryTerminalFailed({
+        return (await this.repo.markOutboundDeliveryTerminalFailed({
           deliveryId: delivery.id,
+          claimToken: delivery.claimToken,
           errorMessage,
-        });
-        return "terminal_failed";
+        }))
+          ? "terminal_failed"
+          : null;
       }
 
-      await this.repo.markOutboundDeliveryRetry({
+      return (await this.repo.markOutboundDeliveryRetry({
         deliveryId: delivery.id,
+        claimToken: delivery.claimToken,
         nextAttemptAt: new Date(Date.now() + this.retryDelayMs(delivery.attemptCount)),
         errorMessage,
-      });
-      return "retry";
+      }))
+        ? "retry"
+        : null;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 

@@ -392,9 +392,14 @@ export function buildContainer() {
   // of Complaint semantics and Complaint Core is never called from here.
   eventBus.subscribe("survey.submitted", (event) => surveyIntegration.handleSurveySubmitted(event));
 
-  const scheduler = new SchedulerService(schedulerRepo, rbac, (jobCode, error) => {
-    console.error(`[Scheduler] job '${jobCode}' failed:`, error);
-  });
+  const scheduler = new SchedulerService(
+    schedulerRepo,
+    rbac,
+    (jobCode, error) => {
+      console.error(`[Scheduler] job '${jobCode}' failed:`, error);
+    },
+    { timersDisabled: process.env.SCHEDULER_DISABLED === "true" },
+  );
   registerJobHandlers(scheduler, { tenantRepo, workflow, integration });
 
   return {

@@ -63,11 +63,11 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 0e24edb` (Phase H2 Production platform hardening) |
-| Migrations | 23 |
-| Tables | 84 |
+| Branch / commit | `master @ 6f6656c` (Phase H2 Production platform hardening) |
+| Migrations | 24 |
+| Tables | 85 |
 | Permissions | 75 |
-| Tests | 287 PASS (24 files) |
+| Tests | 294 PASS (24 files) |
 | Core / Full progress | 174 / 174 (100.0%) / 180 / 353 (51.0%) |
 | typecheck / lint / build | PASS |
 

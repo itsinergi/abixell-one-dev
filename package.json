@@ -25,12 +25,13 @@
     "restore": "node scripts/restore-postgres.mjs",
     "verify:restore": "node scripts/verify-restore.mjs",
     "deploy:validate": "node infra/deployment/validate-env.mjs",
+    "restore:validate": "node infra/deployment/validate-restore-env.mjs",
     "deploy": "node infra/deployment/deploy.mjs",
     "deploy:smoke": "node infra/deployment/smoke.mjs",
     "db:up": "docker compose -f infra/postgres/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/postgres/docker-compose.yml down",
     "migrate": "npm run migrate -w apps/api",
-    "migrate:generate": "npm run migrate:create -w apps/api"
+    "migrate:generate": "npm run migrate:generate -w apps/api"
   },
   "devDependencies": {
     "prettier": "^3.3.3"

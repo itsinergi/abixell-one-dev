@@ -26,7 +26,7 @@ Files:
 - [`infra/deployment/nginx.conf`](../../infra/deployment/nginx.conf)
 - [`infra/deployment/.env.example`](../../infra/deployment/.env.example)
 
-API/Web releases should be built in CI and pushed under immutable Git-SHA tags or image digests. Do not build a mutable checkout on a production host and do not deploy `latest`. The API Dockerfile exposes distinct `operations` and `runtime` targets. Publish both: `API_OPERATIONS_IMAGE` contains migration, permission-sync, PostgreSQL client, and PH-3 backup/restore tooling; `API_IMAGE` is the smaller non-root runtime. Compose deliberately requires separate immutable references and never runs the operations image as the public API.
+API/Web releases should be built in CI, pushed, and referenced by immutable SHA-256 image digests. Validation rejects tags, including Git-SHA-shaped tags, because registries can retag them. Do not build a mutable checkout on a production host and do not deploy `latest`. The API Dockerfile exposes distinct `operations` and `runtime` targets. Publish both: `API_OPERATIONS_IMAGE` contains migration, permission-sync, PostgreSQL client, and PH-3 backup/restore tooling; `API_IMAGE` is the smaller non-root runtime. Compose deliberately requires separate immutable references and never runs the operations image as the public API.
 
 ## 2. First environment provisioning
 
@@ -59,7 +59,7 @@ npm run deploy:validate -- /protected/path/deployment.env
 npm run deploy -- /protected/path/deployment.env
 ```
 
-7. Automation acquires a deployment lock, validates configuration, pulls images, starts/waits for PostgreSQL, applies migrations, synchronizes full-access roles, starts API/Web, waits for health, runs smoke checks, and records only non-secret release metadata in `.state/last-success.json`. PostgreSQL/API use the internal backend network; Web is dual-homed onto that network plus a dedicated ingress network so Docker can publish only the Web port.
+7. Automation acquires a PID-validated, host-global lock keyed by `COMPOSE_PROJECT_NAME`, validates configuration, pulls immutable images, starts/waits for PostgreSQL, and detects whether application tables exist. For an existing deployment it stops Web/API write traffic, creates a complete PH-3 backup labelled with the prior successful `APPLICATION_RELEASE`, then applies migrations, synchronizes full-access roles, starts API/Web, waits for health, runs smoke checks, and records only non-secret release metadata in the deployment state root. PostgreSQL/API use the internal backend network; Web is dual-homed onto that network plus a dedicated ingress network so Docker can publish only the Web port.
 8. Point the approved TLS ingress at `WEB_BIND_ADDRESS:WEB_PORT` and verify the public same-origin paths.
 9. Bootstrap initial Tenant/admin through the approved protected procedure. Never run `npm run seed` in staging/production.
 10. Rotate or restrict the bootstrap secret after initial provisioning according to the deployment's secret-management policy.
@@ -70,10 +70,12 @@ npm run deploy -- /protected/path/deployment.env
 Before every deployment:
 
 - approved commit and CI validation are green;
-- image references are immutable;
+- image references, including PostgreSQL, are immutable SHA-256 digests;
 - release notes include migration compatibility;
-- recent known-good backup exists; before a data-shape migration, create and verify a fresh pre-deployment backup;
-- only one operator/automation run holds the deployment lock; and
+- protected `BACKUP_ROOT` is writable and off-host retention is operational; the deployment command quiesces Web/API writes and creates a fresh complete pre-migration set whenever application tables already exist;
+- the prior successful state exists in the host-global state root so the backup is labelled with the release it actually captures;
+- single-quote environment values containing a literal `$`, and require `deploy:validate` to compare them with the rendered Compose model;
+- only one operator/automation run holds the deployment lock for this `COMPOSE_PROJECT_NAME`; and
 - `SCHEDULER_DISABLED=false` is set on exactly one API process.
 
 Use the same command as provisioning:
@@ -92,7 +94,7 @@ The required order is intentionally fixed:
 2. validate deployment environment and Compose model;
 3. pull artifacts before changing running services;
 4. ensure PostgreSQL is healthy;
-5. create/verify pre-migration backup when an existing deployment is present;
+5. when an existing deployment is present, stop Web/API write traffic and create/verify a backup labelled with the prior successful release;
 6. run ordered forward migrations;
 7. run full-access permission sync;
 8. replace/start API;
@@ -129,7 +131,7 @@ No running service is changed. Correct the environment/reference and retry.
 
 ### Migration failure
 
-Stop deployment. Preserve logs and the pre-migration backup. Do not start the new API and do not automatically run `migrate:down`. Determine whether the failed migration was transactional/no-op; if data changed, use an approved forward repair or PH-3 restore procedure.
+Stop deployment. Web/API remain quiesced; preserve logs and the pre-migration backup. Do not start the new API and do not automatically run `migrate:down`. Determine whether the failed migration was transactional/no-op; if data changed, use an approved forward repair or PH-3 restore procedure. Reopening the old release is an explicit compatibility/recovery decision, not an automatic step.
 
 ### API/Web startup or smoke failure
 
@@ -142,7 +144,7 @@ Application rollback and database rollback are different decisions. The automati
 
 ### Scheduler ownership
 
-The Scheduler overlap guard is process-local while outbox claims are database-safe. Nevertheless, designate one scheduler owner to avoid redundant work and duplicate Workflow sweep attempts. Additional API replicas set `SCHEDULER_DISABLED=true`. If ownership changes, stop/disable the old owner before enabling the new one.
+Scheduler execution is fenced by a renewable PostgreSQL lease, and durable Integration outbox claims have their own token-fenced leases. Still designate one timer owner to avoid redundant polling and conflict noise. Additional API replicas set `SCHEDULER_DISABLED=true`. If ownership changes, disable the old owner before enabling the new one; the database lease remains the cross-replica safety boundary.
 
 ## 7. Evidence checklist
 

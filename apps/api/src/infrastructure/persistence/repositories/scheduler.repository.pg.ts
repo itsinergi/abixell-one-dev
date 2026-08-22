@@ -20,24 +20,60 @@ export class PgSchedulerRepository implements SchedulerRepository {
     return result.rows[0] ? mapJob(result.rows[0]) : null;
   }
 
-  async setEnabled(jobCode: string, isEnabled: boolean): Promise<ScheduledJob | null> {
+  async claimExecution(
+    jobId: string,
+    staleBefore: Date,
+  ): Promise<string | null> {
     const result = await this.pool.query(
-      `UPDATE scheduled_jobs SET is_enabled = $2, updated_at = now() WHERE job_code = $1 RETURNING *`,
-      [jobCode, isEnabled],
+      `UPDATE scheduled_jobs
+          SET locked_at = now(),
+              lock_token = gen_random_uuid(),
+              updated_at = now()
+        WHERE id = $1
+          AND (locked_at IS NULL OR locked_at < $2)
+       RETURNING lock_token`,
+      [jobId, staleBefore],
     );
-    return result.rows[0] ? mapJob(result.rows[0]) : null;
+    return result.rows[0]?.lock_token ?? null;
+  }
+
+  async renewExecution(
+    jobId: string,
+    lockToken: string,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE scheduled_jobs
+          SET locked_at = now(), updated_at = now()
+        WHERE id = $1 AND lock_token = $2`,
+      [jobId, lockToken],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  async releaseExecution(
+    jobId: string,
+    lockToken: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE scheduled_jobs
+          SET locked_at = NULL, lock_token = NULL, updated_at = now()
+        WHERE id = $1 AND lock_token = $2`,
+      [jobId, lockToken],
+    );
   }
 
   async startRun(
     scheduledJobId: string,
     trigger: ScheduledJobRunTrigger,
     triggeredBy: string | null,
+    tenantId: string | null,
   ): Promise<ScheduledJobRun> {
     const result = await this.pool.query(
-      `INSERT INTO scheduled_job_runs (scheduled_job_id, trigger, triggered_by, status)
-       VALUES ($1, $2, $3, 'running')
+      `INSERT INTO scheduled_job_runs
+         (scheduled_job_id, trigger, triggered_by, tenant_id, status)
+       VALUES ($1, $2, $3, $4, 'running')
        RETURNING *`,
-      [scheduledJobId, trigger, triggeredBy],
+      [scheduledJobId, trigger, triggeredBy, tenantId],
     );
     return mapRun(result.rows[0]);
   }
@@ -68,10 +104,19 @@ export class PgSchedulerRepository implements SchedulerRepository {
     );
   }
 
-  async listRuns(scheduledJobId: string, limit: number): Promise<ScheduledJobRun[]> {
+  async listRuns(
+    scheduledJobId: string,
+    limit: number,
+    tenantId?: string,
+  ): Promise<ScheduledJobRun[]> {
     const result = await this.pool.query(
-      `SELECT * FROM scheduled_job_runs WHERE scheduled_job_id = $1 ORDER BY started_at DESC LIMIT $2`,
-      [scheduledJobId, limit],
+      `SELECT *
+         FROM scheduled_job_runs
+        WHERE scheduled_job_id = $1
+          AND ($3::uuid IS NULL OR tenant_id = $3)
+        ORDER BY started_at DESC
+        LIMIT $2`,
+      [scheduledJobId, limit, tenantId ?? null],
     );
     return result.rows.map(mapRun);
   }
@@ -101,6 +146,7 @@ function mapRun(row: QueryResultRow): ScheduledJobRun {
     scheduledJobId: row.scheduled_job_id,
     trigger: row.trigger,
     triggeredBy: row.triggered_by,
+    tenantId: row.tenant_id,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     status: row.status,

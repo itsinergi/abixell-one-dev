@@ -1,0 +1,137 @@
+name: ${COMPOSE_PROJECT_NAME:?Set the dedicated recovery project name}
+
+services:
+  restore:
+    image: ${RESTORE_OPERATIONS_IMAGE:?Set immutable recovery operations image digest}
+    pull_policy: always
+    restart: "no"
+    working_dir: /app
+    entrypoint: ["node"]
+    command: ["scripts/restore-postgres.mjs"]
+    environment:
+      RESTORE_BACKUP_DIR: /data/restore-source
+      RESTORE_DATABASE_URL: ${RESTORE_DATABASE_URL:?Set RESTORE_DATABASE_URL}
+      RESTORE_FILE_STORAGE_ROOT: /restore-output/documents
+      RESTORE_CONFIRM: ${RESTORE_CONFIRM:?Set RESTORE_CONFIRM}
+    volumes:
+      - type: bind
+        source: ${RESTORE_BACKUP_DIR:?Set RESTORE_BACKUP_DIR}
+        target: /data/restore-source
+        read_only: true
+      - type: bind
+        source: ${RESTORE_FILE_STORAGE_PARENT:?Set RESTORE_FILE_STORAGE_PARENT}
+        target: /restore-output
+    depends_on:
+      recovery-postgres:
+        condition: service_healthy
+    networks: [recovery-backend]
+    profiles: [operations]
+
+  recovery-postgres:
+    image: ${RESTORE_POSTGRES_IMAGE:?Set immutable PostgreSQL 16 recovery image digest}
+    pull_policy: always
+    restart: "no"
+    environment:
+      POSTGRES_USER: ${RESTORE_POSTGRES_USER:?Set RESTORE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${RESTORE_POSTGRES_PASSWORD:?Set RESTORE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${RESTORE_POSTGRES_DB:?Set RESTORE_POSTGRES_DB}
+    volumes:
+      - recovery-postgres-data:/var/lib/postgresql/data
+    networks: [recovery-backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  verify-restore:
+    image: ${RESTORE_OPERATIONS_IMAGE:?Set immutable recovery operations image digest}
+    pull_policy: always
+    restart: "no"
+    working_dir: /app
+    entrypoint: ["node"]
+    command: ["scripts/verify-restore.mjs"]
+    environment:
+      RESTORE_BACKUP_DIR: /data/restore-source
+      RESTORE_DATABASE_URL: ${RESTORE_DATABASE_URL:?Set RESTORE_DATABASE_URL}
+      RESTORE_FILE_STORAGE_ROOT: /restore-output/documents
+      RESTORE_HEALTH_URL: ${RESTORE_HEALTH_URL:?Set in-Compose RESTORE_HEALTH_URL}
+      RESTORE_DB_HEALTH_URL: ${RESTORE_DB_HEALTH_URL:?Set in-Compose RESTORE_DB_HEALTH_URL}
+    volumes:
+      - type: bind
+        source: ${RESTORE_BACKUP_DIR:?Set RESTORE_BACKUP_DIR}
+        target: /data/restore-source
+        read_only: true
+      - type: bind
+        source: ${RESTORE_FILE_STORAGE_PARENT:?Set RESTORE_FILE_STORAGE_PARENT}
+        target: /restore-output
+        read_only: true
+    depends_on:
+      recovery-web:
+        condition: service_healthy
+    networks: [recovery-backend]
+    profiles: [operations]
+
+  recovery-api:
+    image: ${RESTORE_API_IMAGE:?Set immutable recovery API image digest}
+    pull_policy: always
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: ${RESTORE_DATABASE_URL:?Set RESTORE_DATABASE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set recovery JWT_ACCESS_SECRET}
+      PLATFORM_BOOTSTRAP_KEY: ${PLATFORM_BOOTSTRAP_KEY:?Set recovery PLATFORM_BOOTSTRAP_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set recovery CORS_ORIGINS}
+      RATE_LIMIT_GLOBAL_MAX: ${RATE_LIMIT_GLOBAL_MAX:-1200}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      AUTH_RATE_LIMIT_WINDOW: ${AUTH_RATE_LIMIT_WINDOW:-1 minute}
+      FILE_STORAGE_ROOT: /restore-output/documents
+      TRUST_PROXY_HOPS: "1"
+      SCHEDULER_DISABLED: "true"
+      APPLICATION_RELEASE: ${RESTORE_APPLICATION_RELEASE:?Set RESTORE_APPLICATION_RELEASE from manifest}
+    volumes:
+      - type: bind
+        source: ${RESTORE_FILE_STORAGE_PARENT:?Set RESTORE_FILE_STORAGE_PARENT}
+        target: /restore-output
+        read_only: true
+    depends_on:
+      recovery-postgres:
+        condition: service_healthy
+    networks:
+      recovery-backend:
+        aliases: [recovery-api, api]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health/db').then(async r=>{const b=await r.json();if(!r.ok||b.database!=='connected')process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  recovery-web:
+    image: ${RESTORE_WEB_IMAGE:?Set immutable recovery Web image digest}
+    pull_policy: always
+    restart: "no"
+    depends_on:
+      recovery-api:
+        condition: service_healthy
+    ports:
+      - "${RESTORE_WEB_BIND_ADDRESS:-127.0.0.1}:${RESTORE_WEB_PORT:-18080}:8080"
+    networks: [recovery-backend, ingress]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+networks:
+  recovery-backend:
+    internal: true
+  ingress:
+
+volumes:
+  recovery-postgres-data:

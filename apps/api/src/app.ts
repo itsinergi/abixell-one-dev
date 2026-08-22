@@ -42,6 +42,13 @@ import { getAllowedCorsOrigins, getGlobalRateLimitConfig, isCorsOriginAllowed } 
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({
+    // Production requests pass through the approved TLS ingress and then the
+    // deployment-local Web proxy. The hop count is explicit so per-IP controls
+    // use the client address without accepting an unbounded forwarded chain.
+    trustProxy:
+      process.env.NODE_ENV === "production"
+        ? productionProxyHops()
+        : false,
     logger: {
       // Observability (Checkpoint 0F): `LOG_LEVEL` can override the
       // default per-environment level (e.g. temporarily set `debug` in
@@ -148,16 +155,21 @@ export function buildApp(): FastifyInstance {
     registerReportingInsightRoutes(scoped, container);
   });
 
-  // Scheduler / Background Jobs (Checkpoint 0E): start the in-process
-  // interval runner so the registered jobs (e.g. the Workflow Escalation
-  // Sweep) actually run automatically while this process is up, not only
-  // when manually triggered. Fire-and-forget (its own errors are caught
-  // internally and logged, see composition-root.ts) — `buildApp()` stays
-  // synchronous so nothing about the existing bootstrap/test setup needs
-  // to change to `await` it.
-  if (process.env.SCHEDULER_DISABLED !== "true") {
-    container.scheduler.start().catch((err) => app.log.error(err, "Scheduler failed to start"));
-  }
+  // Scheduler ownership is enforced by SchedulerService itself so a disabled
+  // replica cannot start timers later through the enable API. Starting here is
+  // therefore safe on every process; a disabled owner records no intervals.
+  container.scheduler.start().catch((err) =>
+    app.log.error(err, "Scheduler failed to start"),
+  );
 
   return app;
+}
+
+function productionProxyHops(): number {
+  const raw = process.env.TRUST_PROXY_HOPS ?? "2";
+  const hops = Number(raw);
+  if (!Number.isInteger(hops) || hops < 1 || hops > 2) {
+    throw new Error("TRUST_PROXY_HOPS must be 1 or 2");
+  }
+  return hops;
 }
