@@ -4,8 +4,8 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Governance Version** | v1.0 |
-| **Last Updated** | 2026-08-20 |
+| **Governance Version** | v1.1 |
+| **Last Updated** | 2026-08-23 |
 
 This document removes all ambiguity about which document is authoritative.
 
@@ -16,10 +16,13 @@ This document removes all ambiguity about which document is authoritative.
 ```text
 1. docs/canonical/          ← start here, always
 2. docs/prd/abixell-one/    ← what the product must do
-3. docs/decision-log.md + docs/adr/   ← why decisions were made
-4. docs/implementation-notes.md + docs/technical-debt-register.md
-5. docs/history/            ← only when historical context is genuinely required
+3. docs/architecture/       ← detailed normative contracts within approved scope
+4. docs/decision-log.md + docs/adr/   ← why decisions were made
+5. docs/implementation-notes.md + docs/technical-debt-register.md
+6. docs/history/            ← only when historical context is genuinely required
 ```
+
+Architecture documents elaborate approved PRD and Blueprint boundaries. They are normative within that scope, but cannot silently create product requirements, delivery claims, implementation phases, or roadmap weight. Approved ADRs record how those contracts are interpreted.
 
 **Rule:** never derive current architecture, scope, roadmap, or progress from `docs/history/`. It is preserved evidence, not instruction.
 
@@ -29,6 +32,7 @@ This document removes all ambiguity about which document is authoritative.
 |---|---|
 | What must the product do? | [`docs/prd/abixell-one/`](../prd/abixell-one/00-README.md) |
 | How is the product structured? | [`docs/canonical/product-blueprint.md`](product-blueprint.md) |
+| What are the detailed Platform Kernel, package, Builder, administration, and installation contracts? | [`docs/architecture/`](../architecture/platform-kernel.md), subordinate to the PRD/Blueprint and interpreted by approved ADRs |
 | When is it delivered, in what order? | [`docs/canonical/product-roadmap.md`](product-roadmap.md) |
 | How much is delivered? | [`docs/canonical/product-progress.md`](product-progress.md) |
 | Why was something decided? | [`docs/decision-log.md`](../decision-log.md), [`docs/adr/`](../adr/) |
@@ -47,8 +51,9 @@ This document removes all ambiguity about which document is authoritative.
 | `docs/canonical/product-progress.md` | CANONICAL | Measured progress |
 | `docs/canonical/documentation-map.md` | CANONICAL | This document |
 | `docs/prd/abixell-one/**` | CANONICAL | Requirements |
+| `docs/architecture/**` | NORMATIVE | Detailed architecture contracts subordinate to PRD/Blueprint; cannot add scope or weight |
 | `docs/decision-log.md` | CANONICAL | Decisions |
-| `docs/adr/**` | CANONICAL | Architecture decisions |
+| `docs/adr/**` | CANONICAL | Architecture decisions, including [ADR-0014](../adr/0014-platform-kernel-static-packages-and-governed-builder.md) |
 | `docs/technical-debt-register.md` | SUPPORTING | Debt & gates |
 | `docs/implementation-notes.md` | SUPPORTING | Build record |
 | `docs/performance-baseline.md` | SUPPORTING | Performance evidence |
@@ -65,18 +70,20 @@ The 2026-08-20 restructure moved only what was safe. `docs/decision-log.md` (10 
 
 | Artifact | Version |
 |---|---|
-| Product Blueprint | v1.1 |
+| Product Blueprint | v1.2 |
 | PRD | v1.0 |
-| Roadmap Baseline | v1.1 |
+| Architecture Foundation | Phase 11A (2026-08-23) |
+| Roadmap Baseline | v1.13 |
 | Progress Model | v1.0 |
-| Documentation Governance | v1.0 |
+| Documentation Governance | v1.1 |
 
 ## Change control
 
 | Change | Required path |
 |---|---|
 | New product requirement | PRD entry → classification → Founder approval → roadmap unit + weight → progress denominator update |
-| New architectural decision | ADR (technical) or decision log (product) |
+| New architectural decision | ADR (technical) or decision log (product), then reconcile PRD/Blueprint where it changes their interpretation |
+| New detailed architecture contract | Must remain within approved PRD/Blueprint scope; register here; no delivery or roadmap claim without separate governance |
 | Roadmap scope change | Roadmap version bump + explicit denominator delta note in progress |
 | New client extension | Extension register in PRD 08 — **never** the base denominator |
 | Historical document | Never edited to change meaning; annotate instead |

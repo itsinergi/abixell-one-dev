@@ -6,6 +6,8 @@
 
 Portals and dashboards are **experience surfaces**, not modules. IGSEP listed *Customer Portal, Supervisor Mobile, Employee Mobile, Executive Dashboard* as separate modules; in Abixell One they are audiences served by the shared shell plus each module's own screens.
 
+Responsive Web/PWA is the primary Abixell One experience on PC, laptop, Android, and iOS. Browser PWA installation is distinct from server/runtime installation. Any future Windows/Linux/macOS desktop wrapper remains an optional thin client to the same dedicated deployment; it does not create another business database, cache API data, queue offline writes, or bypass TLS and backend authorization.
+
 ```text
 One application shell + design system
    └── capability-gated navigation per audience
@@ -35,6 +37,14 @@ One application shell + design system
 | **UX-013** | **Field execution surface.** Field users shall execute assigned work and capture evidence on mobile. | DELIVERED |
 | **UX-014** | **Every Business Core module shall ship the operational UI needed for its Core to be genuinely usable.** | PARTIAL (Customer module has no UI) |
 | **UX-015** | **Client-facing vocabulary.** No internal product terminology shall appear in any user-facing string; labels come from tenant terminology configuration. | DELIVERED |
+
+## Administration trust surfaces
+
+- The **Business Admin Console** is the governed evolution of the current deployment-local Administration and Configuration surface. It uses tenant authentication, RBAC, Data Scope, and audit.
+- The future **Platform Architect / Builder Console** is a separate higher-risk artifact-design and publication context. It creates no ambient cross-client business-data superuser and is not delivered by Phase 11A.
+- A person with both duties must enter an explicit trust context; permissions are not silently combined.
+
+See the [Dual Admin Console architecture](../../architecture/dual-admin-console.md) and [Platform Builder risk model](../../architecture/platform-builder-risk-model.md). No existing UX requirement is marked newly delivered by this architectural clarification.
 
 ## Known gaps
 

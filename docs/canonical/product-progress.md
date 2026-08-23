@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.12 |
+| **Roadmap Baseline** | v1.13 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-23 |
 | **Measured at** | `master @ ebd56c2` · 294/294 tests · 85 tables · 24 migrations · head `1772000000000_phase-h2-outbox-safety-correction.cjs` |
@@ -14,16 +14,19 @@
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.11 |
+| Metric | Value | Δ since v1.12 |
 |---|---:|---:|
-| **Core Product Readiness** | **100.0 %** | ▲ 4.0 pts |
-| **Full Approved Roadmap Progress** | **51.0 %** | ▲ 2.0 pts |
+| **Core Product Readiness** | **100.0 %** | — 0.0 pts |
+| **Full Approved Roadmap Progress** | **51.0 %** | — 0.0 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
 - **Core Product Readiness** = Platform Core + Business Core + required Platform Hardening.
 - **Full Approved Roadmap Progress** = Core Product Readiness + all approved Advanced capabilities.
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
+- **Unweighted architecture/governance phases earn no points.** Phase 11A is recorded for governance traceability without moving either metric.
+
+The implementation measurement remains `master @ ebd56c2`: 294/294 tests, 85 tables, 24 migrations, and migration head `1772000000000_phase-h2-outbox-safety-correction.cjs`. Commit `3df1718` and the Phase 11A documentation commit are metadata/documentation descendants; they do not imply newer runtime, schema, or test evidence.
 
 ---
 
@@ -133,12 +136,13 @@ All Advanced units except the two delivered Survey-to-Action units. Customer & C
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), and Phase H2 (Production Hardening) are closed; all Core Product Readiness units are complete. Advanced capability waves remain planned / optional until explicitly authorized.
+**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), and unweighted Phase 11A (Platform Kernel & Builder Architecture Foundation) are closed; all Core Product Readiness units are complete. Phase 11A changed architecture/governance documentation only and delivered no weighted product unit. Advanced capability waves remain planned / optional until explicitly authorized.
 
 ## 8. Progress change log
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.13 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11A architecture/governance foundation completed (unweighted).** No product unit, numerator, or denominator change. Platform Kernel, module/package/extension contracts, Module Manifest v1, Dual Admin trust separation, governed Builder risk model, and installer direction documented. No runtime enforcement, Advanced wave, or Client Extension started. |
 | v1.12 | 2026-08-22 | 100.0 % | 51.0 % | **Phase H2 (Production Hardening) delivered.** Numerator +7 (PH-3, PH-4, PH-8); denominator unchanged at 174 / 353. Pure earned progress. 294/294 tests passing; 85 tables and 24 migrations. Core Product Readiness achieved. |
 | v1.11 | 2026-08-21 | 96.0 % | 49.0 % | **Phase H (Pilot Hardening) delivered.** Numerator +9 (PH-1, PH-2, PH-5, PH-6, PH-7); denominator unchanged at 174 / 353. Pure earned progress. 280/280 tests passing. Pilot readiness gate achieved. |
 | v1.0 | 2026-08-20 | 41.4 % | 22.1 % | First measured baseline. No prior figure existed — nothing to compare against. |

@@ -14,6 +14,17 @@ Requirements here are **platform**, never business capability. They gate pilot a
 | **OPS-004** | Database schema shall evolve through an ordered, rollback-safe migration stream. | DELIVERED |
 | **OPS-005** | Migrations shall be idempotent on re-run and shall never rewrite approved historical migrations. | DELIVERED |
 
+### Core-first installation and package lifecycle
+
+Deployment composition has ordered states:
+
+1. install and health-check the complete mandatory Platform Core/Kernel base;
+2. install compatible immutable package artifacts through explicit static composition and the single migration stream;
+3. activate eligible installed packages per tenant;
+4. validate tenant configuration and actor authorization separately.
+
+A future Windows/Linux/macOS “one-click” installer is a guided, resumable wrapper over the existing production-safe lifecycle—not a replacement for immutable releases, environment validation, backup/quiescing, ordered migrations, permission synchronization, health, smoke, bootstrap, and recovery gates. No cross-platform runtime installer or desktop wrapper is delivered by Phase 11A. See the [installation direction](../../architecture/one-click-platform-installation.md) and [package lifecycle contract](../../architecture/module-extension-contracts.md).
+
 ## Pilot readiness gate
 
 | ID | Requirement | Status |

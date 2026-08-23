@@ -4,10 +4,10 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Baseline Version** | Blueprint v1.1 |
-| **Last Updated** | 2026-08-20 |
+| **Baseline Version** | Blueprint v1.2 |
+| **Last Updated** | 2026-08-23 |
 | **Supersedes** | `docs/history/igsep/09-Module-Architecture.md` (module catalog, IGSEP-era) as the implementation-authoritative module map |
-| **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) · [technical-debt-register.md](../technical-debt-register.md) |
+| **Related** | [PRD](../prd/abixell-one/00-README.md) · [Platform Kernel](../architecture/platform-kernel.md) · [module contracts](../architecture/module-extension-contracts.md) · [product-roadmap.md](product-roadmap.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [ADR-0014](../adr/0014-platform-kernel-static-packages-and-governed-builder.md) · [decision-log.md](../decision-log.md) · [technical-debt-register.md](../technical-debt-register.md) |
 
 ---
 
@@ -73,6 +73,14 @@ Platform Core
 ## 4. Platform Core
 
 Client-agnostic technical foundation. **Not** commercial business modules. **Status: fully implemented.**
+
+### Platform Kernel
+
+The **Platform Kernel** is the stable, contract-bearing operating boundary **inside Platform Core**. It is not a sixth product layer, separately activated module, new microservice, or cross-deployment control plane. It protects tenant isolation, identity, RBAC, Data Scope, workflow, audit, events, documents, Scheduler, Integration, observability, application composition, and operational lifecycle guarantees while allowing internal implementation to evolve behind versioned contracts.
+
+The complete mandatory Platform Core base is installed first. Business Core, Advanced, industry-pack, orchestration, and Client Extension packages may be assembled afterward only through explicit, compatible contracts. Package publication, deployment installation, tenant activation, tenant configuration, and actor authorization remain distinct states.
+
+The normative foundation is defined by the [Platform Kernel contract](../architecture/platform-kernel.md), [module/package/extension contracts](../architecture/module-extension-contracts.md), [Dual Admin trust boundaries](../architecture/dual-admin-console.md), [Builder risk model](../architecture/platform-builder-risk-model.md), [installation direction](../architecture/one-click-platform-installation.md), and [ADR-0014](../adr/0014-platform-kernel-static-packages-and-governed-builder.md). Phase 11A defines these boundaries without adding runtime package loading, Builder/installer behavior, or a sixth layer.
 
 | ID | Capability | Evidence |
 |---|---|---|
@@ -276,7 +284,9 @@ Extensions are tracked **outside** the base product roadmap denominator, so cust
 
 ## 9. Module activation model
 
-A client deployment activates a subset. `modules` + `tenant_module_activations` + `feature_flags` + `tenant_feature_flags` (PC-4) already provide this; navigation is capability-gated in the frontend. No client ever sees modules they did not activate.
+`modules` + `tenant_module_activations` + `feature_flags` + `tenant_feature_flags` (PC-4) store the deployment catalog, tenant activation, and feature-policy inputs. Reporting performs an explicit activation check, and frontend navigation is capability-gated by permission and Data Scope as a UX convenience.
+
+The target contract is stricter: effective availability is the intersection of installed/compatible package, deployment catalog, tenant activation, user permission, Data Scope/audience, and applicable feature flags. Generalized enforcement of that intersection across every backend route and frontend route/navigation contribution is **not yet implemented** and is not claimed by Phase 11A; backend authorization remains authoritative.
 
 ---
 
@@ -293,6 +303,14 @@ Dedicated deployment per client; architecture multi-tenant-ready. PostgreSQL; mo
 ---
 
 ## 11A. Repository architecture (target — binding for new code)
+
+> **Numbering note:** Blueprint §11A is a document section created before and distinct from implementation **Phase 11A — Platform Kernel & Builder Architecture Foundation**.
+
+### Static package composition
+
+Module Manifest v1 declares package identity, compatibility, dependencies, published/consumed contracts, symbolic contributions, security profile, data ownership, lifecycle evidence, and provenance. It does not load code. Service wiring, API routes, frontend routes/navigation, event subscriptions, Scheduler handlers, document resolvers, and Integration adapters remain explicitly registered in reviewable composition code. See the [module/package/extension contract](../architecture/module-extension-contracts.md).
+
+Published package artifacts are immutable. Publication, deployment installation, tenant activation, tenant configuration, and actor authorization are separate states. Platform Kernel and the mandatory Platform Core base are not tenant-deactivatable modules.
 
 ### Module structure
 

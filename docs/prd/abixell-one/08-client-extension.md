@@ -25,6 +25,15 @@ If any condition fails, it is not an Extension — reclassify it.
 | **EXT-R5** | An Extension that proves broadly valuable shall be **promoted** — through Founder approval — into Advanced or Business Core, with a new requirement ID and roadmap weight. Promotion is deliberate, never automatic. |
 | **EXT-R6** | Fork of the product source per client is prohibited except where an architectural need genuinely cannot be met by configuration or extension. |
 
+### Phase 11A package-contract clarification
+
+Without adding a new delivered requirement or roadmap unit, the [Module Manifest and package lifecycle contract](../../architecture/module-extension-contracts.md) elaborates how these existing Extension rules must be applied:
+
+- every Extension package declares its identity, Platform Kernel compatibility, published contracts, symbolic contributions, permissions, Data Scope strategy, data/migration ownership, lifecycle evidence, and provenance;
+- Extensions consume only published application ports, versioned events, controlled Integration contracts, and approved UI/API contribution contracts—not Platform Kernel or business-module internals—and do not write another package's tables;
+- schema changes use the centrally reviewed global migration stream, with compatibility, upgrade, deactivation, removal, retained-history, recovery, digest/signature, and approval evidence;
+- a manifest is declaration and evidence, not authorization for arbitrary runtime plugin loading, SQL, scripts, commands, or direct schema mutation.
+
 ## Typical Extension categories
 
 | Category | Example |

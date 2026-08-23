@@ -4,6 +4,8 @@
 
 Configuration is **data**, changeable per client without touching Product Core. Configuration is *finite and structured* — it is not a programming surface (see non-goals in [03](03-product-scope.md)).
 
+Future Builder-produced tenant configuration remains typed, tenant-scoped, versioned, validated, permission-controlled, approved where required, append-only audited, and rollback-capable. Persistence-affecting structural metadata is not ordinary runtime configuration: it follows the release-bound B3 path in the [Platform Builder risk model](../../architecture/platform-builder-risk-model.md), including engineering/security/data review, central migration discipline, backup/recovery, and deployment approval.
+
 | ID | Requirement | Status |
 |---|---|---|
 | **CFG-001** | **Terminology.** Labels for business concepts shall be overridable per tenant so each client sees their own vocabulary. | DELIVERED |
@@ -28,6 +30,6 @@ Configuration is **data**, changeable per client without touching Product Core. 
 |---|---|
 | **CFG-R1** | Configuration shall never require a source change, redeploy of product code, or client-specific branch. |
 | **CFG-R2** | Configuration values shall be tenant-scoped and inaccessible across tenants. |
-| **CFG-R3** | Configuration shall be finite and structured. Arbitrary expressions, scripts, or DSLs are prohibited. |
+| **CFG-R3** | Configuration shall be finite and structured. Arbitrary expressions, scripts, or DSLs are prohibited. A Builder UI does not weaken this rule. |
 | **CFG-R4** | Configuring one client's data is **delivery work**, not product development, and shall not count toward product progress. |
 | **CFG-R5** | Where configuration cannot express a need, escalate through the three-question test (P-5/P-6) before considering Core or Extension. |

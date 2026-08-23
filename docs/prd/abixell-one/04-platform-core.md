@@ -4,6 +4,8 @@
 
 Platform Core is client-agnostic technical capability reused by every business module. It is never sold or activated as a business module.
 
+The **Platform Kernel** is the stable, contract-bearing operating boundary within this existing Platform Core. It is an architectural elaboration—not a sixth layer and not a newly delivered capability. It formalizes invariants and published seams while preserving static, reviewable composition. See the [Platform Kernel contract](../../architecture/platform-kernel.md) and [ADR-0014](../../adr/0014-platform-kernel-static-packages-and-governed-builder.md).
+
 | ID | Requirement | Status |
 |---|---|---|
 | **PLT-CORE-001** | **Tenancy & organisation hierarchy.** The system shall model Tenant → Legal Entity → Organization Unit → Project → Site/Location generically, supporting single-site through multi-company structures. | DELIVERED |
@@ -24,6 +26,10 @@ Platform Core is client-agnostic technical capability reused by every business m
 | **PLT-CORE-016** | **Observability.** The system shall correlate every request and record structured logs and health status. | DELIVERED |
 | **PLT-CORE-017** | **Application shell & design system.** The system shall provide a consistent, capability-gated, responsive application shell and reusable UI component set. | DELIVERED |
 | **PLT-CORE-018** | **Module activation.** A deployment shall present only the modules activated for that tenant. | DELIVERED |
+
+### Module-activation qualification
+
+The module catalog and tenant activation state are delivered configuration capabilities. The target availability contract additionally intersects package installation/compatibility, deployment catalog, tenant activation, permission, Data Scope/audience, and feature flags. Generalized enforcement of that full intersection at every backend and frontend contribution point is not delivered by Phase 11A; current backend authorization remains authoritative and Reporting performs an explicit activation check. This qualification prevents the architecture foundation from overstating current behavior or changing the existing requirement status.
 
 ## Platform Hardening (`PLT-OPS-*` — see [12-deployment-operations.md](12-deployment-operations.md))
 
