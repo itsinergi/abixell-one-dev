@@ -6,8 +6,8 @@
 | **Authority** | Founder (Insting Tekno Sinergi) |
 | **Roadmap Baseline** | v1.12 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-22 |
-| **Measured at** | `master @ 37f7343` · 294/294 tests · 85 tables · 24 migrations |
+| **Last Updated** | 2026-08-23 |
+| **Measured at** | `master @ ebd56c2` · 294/294 tests · 85 tables · 24 migrations · head `1772000000000_phase-h2-outbox-safety-correction.cjs` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---

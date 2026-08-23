@@ -6,7 +6,7 @@
 | **Authority** | Founder (Insting Tekno Sinergi) |
 | **Roadmap Baseline** | v1.12 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-22 |
+| **Last Updated** | 2026-08-23 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) |
 
@@ -63,8 +63,9 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 37f7343` (Phase H2 Production platform hardening) |
+| Branch / commit | `master @ ebd56c2` (Phase H2 Production platform hardening metadata baseline) |
 | Migrations | 24 |
+| Migration head | `1772000000000_phase-h2-outbox-safety-correction.cjs` |
 | Tables | 85 |
 | Permissions | 75 |
 | Tests | 294 PASS (24 files) |
