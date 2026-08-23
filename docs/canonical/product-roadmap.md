@@ -63,7 +63,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master`, Phase 11C Business Admin Console Foundation (descendant of `49afb6f`; exact hash pinned by the next metadata baseline commit) |
+| Branch / commit | `master @ 3145627`, Phase 11C Business Admin Console Foundation |
 | Migrations | 25 |
 | Migration head | `1773000000000_phase-11c-business-admin-console.cjs` |
 | Tables | 85 (Phase 11C adds no table) |

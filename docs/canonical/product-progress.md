@@ -7,7 +7,7 @@
 | **Roadmap Baseline** | v1.15 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-23 |
-| **Measured at** | `master`, Phase 11C · 313/313 tests across 25 files · 85 tables · 25 migrations · head `1773000000000_phase-11c-business-admin-console.cjs` |
+| **Measured at** | `master @ 3145627`, Phase 11C · 313/313 tests across 25 files · 85 tables · 25 migrations · head `1773000000000_phase-11c-business-admin-console.cjs` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
