@@ -988,6 +988,80 @@ export const api = {
     request<HseFollowUp>(`/hse/records/${recordId}/follow-ups`, { method: "POST", token, body }),
   completeHseFollowUp: (token: string, recordId: string, followUpId: string, body: CompleteHseFollowUpBody) =>
     request<HseFollowUp>(`/hse/records/${recordId}/follow-ups/${followUpId}/complete`, { method: "POST", token, body }),
+
+  // --- Business Admin Console (Phase 11C) — READ-ONLY -------------------
+  // No mutating counterparts exist by design: Phase 11C adds a consolidated
+  // administration VIEW, not an administration editor.
+  adminOverview: (token: string) => request<AdminOverview>("/admin/overview", { token }),
+  adminRoles: (token: string) => request<AdminRoleSummary[]>("/admin/roles", { token }),
+  adminPermissions: (token: string) => request<AdminPermission[]>("/admin/permissions", { token }),
+  adminModules: (token: string) => request<AdminModuleSummary[]>("/admin/modules", { token }),
+  adminWorkflows: (token: string) => request<AdminWorkflowSummary[]>("/admin/workflows", { token }),
+  adminRecentAudit: (token: string) => request<AdminAuditEntry[]>("/admin/audit/recent", { token }),
+};
+
+// --- Business Admin Console types (Phase 11C) ---------------------------
+
+export type AdminSectionAccess = {
+  visible: boolean;
+  /** Surfaced so the UI can name the permission a denied section needs. */
+  requiredPermission: string;
+};
+
+/** `count` is null — not zero — when the section is not visible, so the UI
+ * never renders a misleading "0". */
+export type AdminCountSection = AdminSectionAccess & { count: number | null };
+
+export type AdminOverview = {
+  tenantId: string;
+  sections: {
+    users: AdminCountSection;
+    roles: AdminCountSection;
+    permissions: AdminCountSection;
+    modules: AdminCountSection & { activeCount: number | null };
+    workflows: AdminCountSection;
+    audit: AdminCountSection;
+  };
+  capabilities: {
+    readOnly: true;
+    userManage: false;
+    roleManage: false;
+    permissionManage: false;
+    moduleActivationManage: false;
+    workflowManage: false;
+  };
+};
+
+export type AdminRoleSummary = {
+  code: string;
+  name: string;
+  isFullAccess: boolean;
+  permissionCount: number;
+  assignedUserCount: number;
+};
+
+export type AdminPermission = { code: string; description: string };
+
+export type AdminModuleSummary = {
+  moduleCode: string;
+  moduleName: string;
+  isActive: boolean;
+};
+
+export type AdminWorkflowSummary = {
+  code: string;
+  name: string;
+  entityType: string;
+  isActive: boolean;
+};
+
+/** Privacy-safe: carries no audit `metadata` and no `entityId`. */
+export type AdminAuditEntry = {
+  id: string;
+  action: string;
+  entityType: string;
+  actorUserId: string | null;
+  createdAt: string;
 };
 
 // --- Reporting & Operational Insight types (Phase 9) --------------------

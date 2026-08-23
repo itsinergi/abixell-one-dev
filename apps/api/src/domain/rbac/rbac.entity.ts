@@ -30,12 +30,42 @@ export interface AssignRoleInput {
   scopeCustomerId?: string | null;
 }
 
+/** A Role plus the counts an administrator needs to understand it at a
+ * glance. Phase 11C — summary only: the permission CODES a role grants are
+ * deliberately not projected here, so the console never becomes a covert
+ * permission-matrix export. */
+export interface RoleSummary {
+  id: string;
+  code: string;
+  name: string;
+  isFullAccess: boolean;
+  permissionCount: number;
+  assignedUserCount: number;
+}
+
 export interface RbacRepository {
   /** All permission codes granted to a user across every role assignment. */
   getEffectivePermissionCodes(userId: string): Promise<Set<string>>;
   getAssignments(userId: string): Promise<UserRoleAssignment[]>;
   findRoleByCode(tenantId: string, code: string): Promise<Role | null>;
   assignRole(input: AssignRoleInput, createdBy: string | null): Promise<UserRoleAssignment>;
+
+  /**
+   * Phase 11C — Business Admin Console. Every Role defined in `tenantId`
+   * with its granted-permission and assigned-user counts. Tenant-scoped by
+   * `roles.tenant_id`; `user_role_assignments` has no `tenant_id` of its own
+   * and inherits tenancy through `roles` (the same ownership path the
+   * platform boundary validator records for that table).
+   */
+  listRoleSummaries(tenantId: string): Promise<RoleSummary[]>;
+
+  /**
+   * Phase 11C — the global permission catalog. `permissions` is a global
+   * catalog table with no `tenant_id` (it is migration-owned and identical
+   * for every deployment), so this exposes only safe catalog metadata —
+   * code and description — and never which tenant or user holds them.
+   */
+  listPermissionCatalog(): Promise<Permission[]>;
 
   /**
    * Every user who currently holds `roleCode` with a Data Scope covering

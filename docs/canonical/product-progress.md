@@ -4,17 +4,17 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.14 |
+| **Roadmap Baseline** | v1.15 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-23 |
-| **Measured at** | `master @ ebd56c2` · 294/294 tests across 24 files · 85 tables · 24 migrations · head `1772000000000_phase-h2-outbox-safety-correction.cjs` |
+| **Measured at** | `master`, Phase 11C · 313/313 tests across 25 files · 85 tables · 25 migrations · head `1773000000000_phase-11c-business-admin-console.cjs` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.13 |
+| Metric | Value | Δ since v1.14 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
 | **Full Approved Roadmap Progress** | **51.0 %** | — 0.0 pts |
@@ -24,9 +24,11 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Core Product Readiness** = Platform Core + Business Core + required Platform Hardening.
 - **Full Approved Roadmap Progress** = Core Product Readiness + all approved Advanced capabilities.
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
-- **Unweighted architecture/governance phases earn no points.** Phases 11A and 11B are recorded for governance traceability without moving either metric.
+- **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, and 11C are recorded for governance traceability without moving either metric.
 
-The implementation measurement remains `master @ ebd56c2`: 294/294 tests across 24 files, 85 tables, 24 migrations, and migration head `1772000000000_phase-h2-outbox-safety-correction.cjs`. Commit `3df1718`, the Phase 11A documentation commit, and Phase 11B repository-governance changes are descendants that do not imply newer API runtime, schema, or API test evidence. Phase 11B separately validated 23/23 focused dependency-free boundary tests plus typecheck, lint, and production build.
+The implementation measurement is refreshed at Phase 11C, which is the first of the Phase 11 series to add runtime code: 313/313 tests across 25 files, 85 tables, 25 migrations, and migration head `1773000000000_phase-11c-business-admin-console.cjs`. The increase over the previous `master @ ebd56c2` baseline is fully accounted for by Phase 11C's own additions — 19 new admin-console API tests in one new file, one migration declaring one permission (75 → 76), and no new table. It earns no points because it delivers no new business capability: the console only re-presents data the actor was already permitted to read.
+
+Commit `3df1718` (Phase 11A documentation) and the Phase 11B repository-governance changes remain non-runtime and imply no schema or API test evidence of their own. Phase 11B's 23/23 focused dependency-free boundary tests continue to pass, alongside typecheck, lint, and production build.
 
 ---
 
@@ -136,12 +138,15 @@ All Advanced units except the two delivered Survey-to-Action units. Customer & C
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), and unweighted Phases 11A/11B are closed; all Core Product Readiness units are complete. Phase 11A established architecture/governance documentation, and Phase 11B added repository boundary enforcement; neither delivered a weighted product unit. Advanced capability waves, Client Extensions, Builder UI/API/runtime, Business Admin Console UI, executable manifests, dynamic packages, schema/query editors, scripting/DSL, and new business functionality remain not started until explicitly authorized.
+**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), and unweighted Phases 11A/11B/11C are closed; all Core Product Readiness units are complete. Phase 11A established architecture/governance documentation, Phase 11B added repository boundary enforcement, and Phase 11C delivered a read-only Business Admin Console; none delivered a weighted product unit.
+
+Phase 11C delivered only the READ side of the Business Admin Console: a consolidated view of users, roles, the permission catalogue, module activation, workflow definitions, and recent activity, each gated by the permission that already governs it. Administration EDITING from the console, the Platform Architect / Builder Console, Builder UI/API/runtime, executable manifests, dynamic packages, schema/query editors, scripting/DSL, Advanced capability waves, Client Extensions, and new business functionality remain not started until explicitly authorized.
 
 ## 8. Progress change log
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.15 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11C Business Admin Console Foundation completed (unweighted).** No product unit, numerator, or denominator change — the console re-presents data the actor could already read and grants no new capability. Strictly read-only and tenant-local: a new `admin.console.read` permission gates entry, and every section is additionally gated by the permission already governing that data, so the entry permission alone reveals nothing. Runtime evidence refreshed to 313/313 tests across 25 files, 85 tables (no new table), 25 migrations, 76 permissions. |
 | v1.14 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11B platform boundary enforcement completed (unweighted).** No product unit, numerator, or denominator change. Dependency-free guard and 23 focused tests enforce selected module imports, migration/tenant ownership, permission, hardcoded-role, and obvious runtime escape-hatch boundaries; Module Manifest readiness remains advisory. Runtime evidence remains `master @ ebd56c2`. |
 | v1.13 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11A architecture/governance foundation completed (unweighted).** No product unit, numerator, or denominator change. Platform Kernel, module/package/extension contracts, Module Manifest v1, Dual Admin trust separation, governed Builder risk model, and installer direction documented. No runtime enforcement, Advanced wave, or Client Extension started. |
 | v1.12 | 2026-08-22 | 100.0 % | 51.0 % | **Phase H2 (Production Hardening) delivered.** Numerator +7 (PH-3, PH-4, PH-8); denominator unchanged at 174 / 353. Pure earned progress. 294/294 tests passing; 85 tables and 24 migrations. Core Product Readiness achieved. |

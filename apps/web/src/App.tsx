@@ -39,6 +39,7 @@ import { HseDetailPage } from "./modules/hse/HseDetailPage";
 import { ProjectDeliveryPage } from "./modules/project-delivery/ProjectDeliveryPage";
 import { ProjectDeliveryDetailPage } from "./modules/project-delivery/ProjectDeliveryDetailPage";
 import { ReportingInsightPage } from "./modules/reporting-insight/ReportingInsightPage";
+import { AdminConsolePage } from "./pages/admin/console/AdminConsolePage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -120,6 +121,8 @@ export default function App() {
           <Route path="project-delivery/:projectId" element={<ProjectDeliveryDetailPage />} />
           {/* Phase 9 — Reporting & Operational Insight */}
           <Route path="reporting" element={<ReportingInsightPage />} />
+          {/* Phase 11C — Business Admin Console (read-only) */}
+          <Route path="admin" element={<AdminConsolePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

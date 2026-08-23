@@ -29,6 +29,7 @@ import { registerSiteRoutes } from "./interfaces/http/routes/sites.js";
 import { registerServiceRoutes } from "./interfaces/http/routes/services.js";
 import { registerComplaintRoutes } from "./interfaces/http/routes/complaints.js";
 import { registerSurveyRoutes } from "./interfaces/http/routes/surveys.js";
+import { registerAdminConsoleRoutes } from "./interfaces/http/routes/admin-console.js";
 import { registerServiceOperationsRoutes } from "./modules/service-operations/core/api/service-operations.routes.js";
 import { registerWorkforceRoutes } from "./modules/workforce/core/api/workforce.routes.js";
 import { registerSupplyChainRoutes } from "./modules/supply-chain/core/api/supply-chain.routes.js";
@@ -153,6 +154,8 @@ export function buildApp(): FastifyInstance {
     registerProjectDeliveryRoutes(scoped, container);
     // Phase 9 — Reporting & Operational Insight Core
     registerReportingInsightRoutes(scoped, container);
+    // Phase 11C — Business Admin Console Foundation (read-only)
+    registerAdminConsoleRoutes(scoped, container);
   });
 
   // Scheduler ownership is enforced by SchedulerService itself so a disabled

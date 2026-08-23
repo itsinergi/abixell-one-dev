@@ -70,6 +70,7 @@ export const PERMISSIONS = {
   projectDeliveryManage: "project_delivery.manage",
   reportingRead: "reporting.read",
   reportingExport: "reporting.export",
+  adminConsoleRead: "admin.console.read",
 } as const;
 
 export interface NavSection {
@@ -282,6 +283,18 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Administration",
     description: "Organization, users, configuration, and shared services.",
     requiresAnyOf: [PERMISSIONS.configManage],
+  },
+  {
+    key: "admin-console",
+    path: "/admin",
+    label: "Admin Console",
+    // Phase 11C: a consolidated READ-ONLY view of the administration areas.
+    // Internal-only — an external Customer User has no business here even if
+    // the permission were somehow granted. The backend enforces both the
+    // entry permission and a per-section permission regardless.
+    description: "A read-only overview of users, roles, access, modules, workflows, and activity.",
+    requiresAnyOf: [PERMISSIONS.adminConsoleRead],
+    requiresInternal: true,
   },
 ];
 

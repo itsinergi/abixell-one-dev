@@ -71,6 +71,7 @@ import { PgProjectDeliveryRepository } from "./modules/project-delivery/core/inf
 import { ProjectDeliveryService } from "./modules/project-delivery/core/application/project-delivery.service.js";
 import { PgReportingInsightRepository } from "./modules/reporting-insight/core/infrastructure/reporting-insight.repository.pg.js";
 import { ReportingInsightService } from "./modules/reporting-insight/core/application/reporting-insight.service.js";
+import { AdminConsoleService } from "./application/admin-console/admin-console.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
 /**
@@ -263,6 +264,19 @@ export function buildContainer() {
     rbac,
   );
 
+  // Phase 11C — Business Admin Console Foundation. Read-only tenant-local
+  // consolidation over existing services; no mutation surface, no Builder,
+  // no manifest runtime. Each section is gated by the permission that
+  // already governs that data, so the console grants no new reach.
+  const adminConsole = new AdminConsoleService(
+    rbac,
+    rbacRepo,
+    userRepo,
+    configuration,
+    workflow,
+    audit,
+  );
+
   const documentEntityResolvers: EntityAuthorizationResolverRegistry = new Map([
     [
       "customer",
@@ -437,6 +451,7 @@ export function buildContainer() {
     hse,
     projectDelivery,
     reportingInsight,
+    adminConsole,
   };
 }
 

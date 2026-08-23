@@ -1,13 +1,52 @@
 import type { Pool } from "pg";
 import type {
   AssignRoleInput,
+  Permission,
   RbacRepository,
   Role,
+  RoleSummary,
   UserRoleAssignment,
 } from "../../../domain/rbac/rbac.entity.js";
 
 export class PgRbacRepository implements RbacRepository {
   constructor(private readonly pool: Pool) {}
+
+  async listRoleSummaries(tenantId: string): Promise<RoleSummary[]> {
+    // Phase 11C — Business Admin Console. Counted with correlated subqueries
+    // rather than JOIN + GROUP BY so the two counts stay independent: a JOIN
+    // across both role_permissions and user_role_assignments would multiply
+    // the rows and inflate each count by the other's cardinality.
+    const result = await this.pool.query(
+      `SELECT r.id,
+              r.code,
+              r.name,
+              COALESCE(r.is_full_access, false) AS is_full_access,
+              (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id = r.id)::int
+                AS permission_count,
+              (SELECT COUNT(DISTINCT ura.user_id) FROM user_role_assignments ura
+                WHERE ura.role_id = r.id)::int
+                AS assigned_user_count
+         FROM roles r
+        WHERE r.tenant_id = $1
+        ORDER BY r.code`,
+      [tenantId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      isFullAccess: row.is_full_access,
+      permissionCount: row.permission_count,
+      assignedUserCount: row.assigned_user_count,
+    }));
+  }
+
+  async listPermissionCatalog(): Promise<Permission[]> {
+    const result = await this.pool.query(
+      `SELECT code, description FROM permissions ORDER BY code`,
+    );
+    return result.rows.map((row) => ({ code: row.code, description: row.description }));
+  }
 
   async listUserIdsWithPermissionInTenant(tenantId: string, permissionCode: string): Promise<string[]> {
     // Capability-based recipient resolution (Checkpoint 1E.2). Internal
