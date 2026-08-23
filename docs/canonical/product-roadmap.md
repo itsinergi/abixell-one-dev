@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.13 |
+| **Roadmap Baseline** | v1.14 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-23 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
@@ -55,7 +55,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 6** | Finance Core | BC-8 Finance |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED. Phase 11B (unweighted boundary enforcement) — COMPLETED.**
 
 ---
 
@@ -71,6 +71,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | Tests | 294 PASS (24 files) |
 | Core / Full progress | 174 / 174 (100.0%) / 180 / 353 (51.0%) |
 | typecheck / lint / build | PASS |
+| Phase 11B repository governance | 23/23 focused boundary tests; 0 blocking findings; 1 expected Manifest advisory |
 
 ---
 
@@ -248,8 +249,9 @@ These phases establish contracts or governance without delivering a weighted pro
 | Phase | Name | Product units | Weight | Status | Scope result |
 |---|---|---|---:|---|---|
 | ~~Phase 11A~~ | Platform Kernel & Builder Architecture Foundation | None | — | **COMPLETED** | Platform Kernel, package/extension boundaries and Manifest v1, Dual Admin trust planes, governed Builder risk/lifecycle, and cross-platform installer direction documented; no runtime enforcement or business capability |
+| ~~Phase 11B~~ | Platform Boundary Enforcement | None | — | **COMPLETED** | Dependency-free repository guard enforces selected API/Web imports, append-only migration and tenant ownership, permission ownership/consumption, hardcoded-role authorization, and obvious runtime escape-hatch boundaries; Manifest readiness remains advisory |
 
-Phase 11A starts no Advanced wave and registers no Client Extension. Builder UI/API/runtime, manifest/package runtime, universal module-activation enforcement, one-click installer code, or desktop wrapper requires separate Founder authorization, PRD requirements, and weighted roadmap units before implementation.
+Phases 11A and 11B start no Advanced wave and register no Client Extension. Builder UI/API/runtime, manifest/package runtime, universal module-activation enforcement, one-click installer code, desktop wrapper, dynamic package installation, direct schema/query editing, scripting/DSL, or new business functionality requires separate Founder authorization and applicable PRD/roadmap treatment.
 
 **Phase H may run in parallel** with any Business Core phase — it is infrastructure, not business capability.
 
@@ -268,6 +270,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.14 | 2026-08-23 | Phase 11B platform boundary enforcement completed with no roadmap units or points: dependency-free validator, 23 focused tests, CI/root validation integration, and module-neutral money formatter boundary cleanup. Module Manifest readiness remains advisory; no Builder/runtime manifest, Advanced wave, Client Extension, or new business functionality started. Numerator and denominator remain 174 / 174 and 180 / 353; API runtime evidence remains `master @ ebd56c2`. |
 | v1.13 | 2026-08-23 | Phase 11A architecture/governance foundation completed with no roadmap units or points: Platform Kernel, package/extension contracts and Manifest v1, Dual Admin trust separation, governed Builder risk model, and installer direction documented. No runtime implementation, Advanced wave, or Client Extension started. Numerator and denominator remain 174 / 174 and 180 / 353. |
 | v1.12 | 2026-08-22 | Phase H2 (Production Hardening) delivered: PH-3, PH-4, PH-8 COMPLETED (7 pts earned). Platform Hardening and Core Product Readiness reach 100%; backup/restore drill, repeatable deployment, migration roundtrip, and durable Integration outbox validated. Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |
 | v1.11 | 2026-08-21 | Phase H (Pilot Hardening) delivered: PH-1, PH-2, PH-5, PH-6, PH-7 COMPLETED (9 pts earned). Pilot readiness gate satisfied. Denominator unchanged at 174 / 353 — pure earned progress, no scope added. |

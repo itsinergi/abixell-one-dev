@@ -12,7 +12,7 @@
 
 This contract keeps module, industry, orchestration, and client-specific customization outside Platform Kernel internals. It defines what a package may own, depend on, publish, contribute, install, activate, upgrade, deactivate, and remove.
 
-The contract is initially documentary. Phase 11A does not add a manifest loader, dynamic plugin system, package manager, source move, architecture validator, or independent migration mechanism.
+The contract began as documentary architecture in Phase 11A. Phase 11B now enforces the highest-confidence repository boundaries described in §8. It still does not add a manifest loader, dynamic plugin system, package manager, source move, or independent migration mechanism.
 
 ## 2. Product classifications
 
@@ -331,6 +331,43 @@ Removal never deletes historical migrations or rewrites completed business histo
 
 ## 8. Current enforcement status
 
-These contracts are normative for new design, review, and future implementation. Phase 11A intentionally adds no code enforcement because existing transitional layout and coupling would require exceptions, while semantic tenant/RBAC/Data Scope/document checks cannot be inferred reliably from imports alone.
+Phase 11B adds a dependency-free repository guard at `scripts/validate-platform-boundaries.mjs`. Run it with:
 
-A later separately authorized phase may introduce zero-false-positive checks incrementally after public contract locations, executable manifests, transition rules, and approved remediation sequencing exist.
+```text
+npm run validate:platform-boundaries
+```
+
+The command is part of the root `npm run validate` gate used by CI. It prints every check in a fixed order, distinguishes blocking failures from advisories, reports repository-relative path, line, and reason where applicable, and exits nonzero only when a blocking finding exists.
+
+### 8.1 Blocking checks
+
+| Check | Enforced boundary |
+|---|---|
+| API imports | Rejects cross-module implementation imports, unapproved non-composition imports into module internals, spread from module-first code into classified legacy business internals, and widened/stale exact exceptions |
+| Web imports | Rejects one module importing another module's implementation and permits outside-module composition only in `apps/web/src/App.tsx` |
+| Migration discipline | Protects the LF-normalized SHA-256 snapshot of all 24 Phase 11A migrations, rejects unsupported new table declarations, and requires statically provable tenant ownership for every new table |
+| Permission discipline | Keeps the catalog migration-owned, enforces strict new declaration/idempotency/down rules, rejects migration-owned role grants, and verifies bounded literal consumers against the catalog |
+| Authorization hygiene | Rejects clear actor/user/session authorization based on literal role names; ambiguous role-like comparisons are advisory rather than guessed failures |
+| Runtime escape hatches | Rejects high-confidence runtime `eval`/`Function`/VM, nonliteral loading, runtime-loader/editor/script markers, and table/schema DDL in protected product source |
+
+Protected runtime roots are `apps/*/src` and `packages/*/src`, with tests and generated/build/coverage content excluded. Architecture scans never use `docs/`, `scripts/`, `infra/`, migrations, API tests, or Web e2e as evidence of prohibited runtime implementation.
+
+The one legacy Service Operations → `CustomerService` dependency and the eight current route → composition-root `Container` type imports are centralized, exact, type-only, symbol-checked, and usage-counted. They are transition evidence, not wildcard suppressions. A missing, duplicated, widened, aliased, value-level, or retargeted edge fails validation. The Reporting Insight money formatter is now module-neutral under `apps/web/src/shared/format.ts`; no Web exception exists.
+
+Historical migrations are append-only through an immutable Phase 11A filename/digest snapshot. New tables must have either:
+
+1. non-null `tenant_id` → `tenants(id)` ownership with cascading delete;
+2. an exact reviewed root/global/system classification added to the validator; or
+3. an adjacent `platform-boundary: tenant-owner-via <column> -> <parent>` annotation whose non-null cascading UUID foreign key is verified and whose parent chain resolves acyclically to direct tenant ownership.
+
+The exact historical inherited-owner classifications remain baseline evidence, not precedent for an unreviewed exemption. The canonical count remains 84 application-created tables plus framework-owned `pgmigrations` = 85.
+
+### 8.2 Advisory and future checks
+
+Module Manifest v1 readiness is deliberately advisory. The validator always states that manifests are not required, parsed, loaded, or evidence of runtime plugin/package support. The advisory does not affect exit status.
+
+The guard does not claim to prove semantic tenant predicates in queries, RBAC or Data Scope behavior, document parent authorization, workflow safety, event compatibility, package contribution collisions, or reporting-read-model correctness. It does not implement manifests, package installation, Builder ingestion, a safety compiler, runtime loading, or an independent schema mechanism. Those require separately authorized typed contracts and semantic validators.
+
+### 8.3 Low-noise policy
+
+Only statically provable, bounded patterns are blocking. Dynamic permission expressions remain valid; ambiguous role-like usage stays advisory; normal SQL queries are not scanned; comments and harmless descriptive strings do not trigger runtime findings. When a legitimate construct is not understood, narrow or extend the parser with focused tests rather than introducing a broad path or wildcard suppression.

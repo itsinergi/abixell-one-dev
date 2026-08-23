@@ -11,16 +11,9 @@
  * precisely the conversion this module exists to prevent.
  */
 
-/** Groups the integer part in threes without any arithmetic. */
-export function formatMoney(value: string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const negative = value.startsWith("-");
-  const unsigned = negative ? value.slice(1) : value;
-  const [whole, fraction = "00"] = unsigned.split(".");
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const cents = (fraction + "00").slice(0, 2);
-  return `${negative ? "−" : ""}${grouped},${cents}`;
-}
+import { formatMoney } from "../../shared/format";
+
+export { formatMoney } from "../../shared/format";
 
 /** Amount with its currency, e.g. `IDR 1.250,75`. */
 export function formatAmount(value: string | null | undefined, currency: string | null | undefined): string {

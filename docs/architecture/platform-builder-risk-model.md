@@ -14,7 +14,7 @@ The future Abixell One Platform Builder is a governed editor for a **finite, typ
 
 This risk model prevents convenience from bypassing tenant isolation, RBAC, Data Scope, document authorization, workflow governance, append-only audit, Integration boundaries, or migration and recovery discipline.
 
-Phase 11A defines the model only. It does not implement Builder storage, UI, APIs, compilers, simulation, publication, or rollback.
+Phase 11A defined the model. Phase 11B adds a repository source guard for obvious prohibited implementation primitives, but it does not implement Builder storage, UI, APIs, ingestion validation, safety compilers, simulation, publication, or rollback.
 
 ## 2. Risk classes
 
@@ -171,7 +171,13 @@ Before implementation, separately authorized requirements must define determinis
 - audit and metadata-sensitivity policy;
 - migration/deployment/recovery impact.
 
-These compilers fail closed. They are not implemented or represented as existing by Phase 11A.
+These compilers fail closed. They are not implemented or represented as existing by Phase 11B.
+
+### 6.1 Phase 11B repository guard boundary
+
+`scripts/validate-platform-boundaries.mjs` rejects high-confidence B4 implementation primitives in protected product source: executable `eval`/`Function`/VM use, nonliteral runtime loading, obvious unrestricted loader/editor/script-execution markers, and runtime table/schema DDL outside migrations. It also enforces selected import, migration-tenancy, permission-catalog, and hardcoded-role boundaries.
+
+This is a source guard, not a Builder input validator. It does not parse a metamodel artifact, classify a proposed Builder change B0–B4, simulate impact, prove tenant/RBAC/Data Scope/document/workflow semantics, validate package contributions, persist metadata, publish versions, load manifests, install packages, or execute any lifecycle in §3. Module Manifest v1 remains documentary and produces an advisory only. Builder API/UI/runtime, Business Admin Console UI, arbitrary query/schema tools, scripting/DSL, runtime code injection, and dynamic package installation remain unimplemented and prohibited.
 
 ## 7. Prohibited work
 

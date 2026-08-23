@@ -4,17 +4,17 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.13 |
+| **Roadmap Baseline** | v1.14 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-23 |
-| **Measured at** | `master @ ebd56c2` · 294/294 tests · 85 tables · 24 migrations · head `1772000000000_phase-h2-outbox-safety-correction.cjs` |
+| **Measured at** | `master @ ebd56c2` · 294/294 tests across 24 files · 85 tables · 24 migrations · head `1772000000000_phase-h2-outbox-safety-correction.cjs` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.12 |
+| Metric | Value | Δ since v1.13 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
 | **Full Approved Roadmap Progress** | **51.0 %** | — 0.0 pts |
@@ -24,9 +24,9 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Core Product Readiness** = Platform Core + Business Core + required Platform Hardening.
 - **Full Approved Roadmap Progress** = Core Product Readiness + all approved Advanced capabilities.
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
-- **Unweighted architecture/governance phases earn no points.** Phase 11A is recorded for governance traceability without moving either metric.
+- **Unweighted architecture/governance phases earn no points.** Phases 11A and 11B are recorded for governance traceability without moving either metric.
 
-The implementation measurement remains `master @ ebd56c2`: 294/294 tests, 85 tables, 24 migrations, and migration head `1772000000000_phase-h2-outbox-safety-correction.cjs`. Commit `3df1718` and the Phase 11A documentation commit are metadata/documentation descendants; they do not imply newer runtime, schema, or test evidence.
+The implementation measurement remains `master @ ebd56c2`: 294/294 tests across 24 files, 85 tables, 24 migrations, and migration head `1772000000000_phase-h2-outbox-safety-correction.cjs`. Commit `3df1718`, the Phase 11A documentation commit, and Phase 11B repository-governance changes are descendants that do not imply newer API runtime, schema, or API test evidence. Phase 11B separately validated 23/23 focused dependency-free boundary tests plus typecheck, lint, and production build.
 
 ---
 
@@ -136,12 +136,13 @@ All Advanced units except the two delivered Survey-to-Action units. Customer & C
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), and unweighted Phase 11A (Platform Kernel & Builder Architecture Foundation) are closed; all Core Product Readiness units are complete. Phase 11A changed architecture/governance documentation only and delivered no weighted product unit. Advanced capability waves remain planned / optional until explicitly authorized.
+**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), and unweighted Phases 11A/11B are closed; all Core Product Readiness units are complete. Phase 11A established architecture/governance documentation, and Phase 11B added repository boundary enforcement; neither delivered a weighted product unit. Advanced capability waves, Client Extensions, Builder UI/API/runtime, Business Admin Console UI, executable manifests, dynamic packages, schema/query editors, scripting/DSL, and new business functionality remain not started until explicitly authorized.
 
 ## 8. Progress change log
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.14 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11B platform boundary enforcement completed (unweighted).** No product unit, numerator, or denominator change. Dependency-free guard and 23 focused tests enforce selected module imports, migration/tenant ownership, permission, hardcoded-role, and obvious runtime escape-hatch boundaries; Module Manifest readiness remains advisory. Runtime evidence remains `master @ ebd56c2`. |
 | v1.13 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11A architecture/governance foundation completed (unweighted).** No product unit, numerator, or denominator change. Platform Kernel, module/package/extension contracts, Module Manifest v1, Dual Admin trust separation, governed Builder risk model, and installer direction documented. No runtime enforcement, Advanced wave, or Client Extension started. |
 | v1.12 | 2026-08-22 | 100.0 % | 51.0 % | **Phase H2 (Production Hardening) delivered.** Numerator +7 (PH-3, PH-4, PH-8); denominator unchanged at 174 / 353. Pure earned progress. 294/294 tests passing; 85 tables and 24 migrations. Core Product Readiness achieved. |
 | v1.11 | 2026-08-21 | 96.0 % | 49.0 % | **Phase H (Pilot Hardening) delivered.** Numerator +9 (PH-1, PH-2, PH-5, PH-6, PH-7); denominator unchanged at 174 / 353. Pure earned progress. 280/280 tests passing. Pilot readiness gate achieved. |

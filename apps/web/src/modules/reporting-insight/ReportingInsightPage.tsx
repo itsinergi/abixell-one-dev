@@ -21,7 +21,7 @@ import {
   StatusPill,
   type Column,
 } from "../../shell/components/ui";
-import { formatMoney } from "../finance/money";
+import { formatMoney } from "../../shared/format";
 
 export function ReportingInsightPage() {
   const { session } = useAuth();

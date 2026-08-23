@@ -38,6 +38,17 @@ export function formatDateShort(value: string | null | undefined): string {
   return new Date(value).toLocaleDateString();
 }
 
+/** Groups a decimal string for display without converting it to a number. */
+export function formatMoney(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole, fraction = "00"] = unsigned.split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const cents = (fraction + "00").slice(0, 2);
+  return `${negative ? "−" : ""}${grouped},${cents}`;
+}
+
 /** Display-only due-date indicator derived solely from a backend-provided
  * timestamp — never an independent SLA computation. */
 export function dueIndicator(dueAt: string | null | undefined): { label: string; tone: Tone } | null {
