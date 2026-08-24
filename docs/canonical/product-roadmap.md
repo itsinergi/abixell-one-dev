@@ -4,9 +4,9 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.16 |
+| **Roadmap Baseline** | v1.17 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-23 |
+| **Last Updated** | 2026-08-24 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) |
 
@@ -55,7 +55,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 6** | Finance Core | BC-8 Finance |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED. Phase 11B (unweighted boundary enforcement) — COMPLETED. Phase 11C (unweighted read-only admin console) — COMPLETED. Phase 11D (unweighted platform experience system & UX direction) — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED. Phase 11B (unweighted boundary enforcement) — COMPLETED. Phase 11C (unweighted read-only admin console) — COMPLETED. Phase 11D (unweighted platform experience system & UX direction) — COMPLETED. Phase 11E (unweighted platform shell & admin console UX foundation) — COMPLETED.**
 
 ---
 
@@ -63,12 +63,13 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 3145627`, Phase 11C Business Admin Console Foundation |
+| Branch / commit | `master @ 26fc99f`, Phase 11E Platform Shell & Admin Console UX Implementation Foundation |
 | Migrations | 25 |
 | Migration head | `1773000000000_phase-11c-business-admin-console.cjs` |
-| Tables | 85 (Phase 11C adds no table) |
+| Tables | 85 (Phase 11E adds no table) |
 | Permissions | 76 |
-| Tests | 313 PASS (25 files) |
+| API tests | 313 PASS (25 files) |
+| Browser smoke | PASS — grouped shell, durable Admin sections, desktop/tablet/mobile drawer and focus behavior, deterministic denied/session-expired/error/empty states, PWA metadata, logout protection |
 | Core / Full progress | 174 / 174 (100.0%) / 180 / 353 (51.0%) |
 | typecheck / lint / build | PASS |
 | Phase 11B repository governance | 23/23 focused boundary tests; 0 blocking findings; 1 expected Manifest advisory |
@@ -252,8 +253,9 @@ These phases establish contracts or governance without delivering a weighted pro
 | ~~Phase 11B~~ | Platform Boundary Enforcement | None | — | **COMPLETED** | Dependency-free repository guard enforces selected API/Web imports, append-only migration and tenant ownership, permission ownership/consumption, hardcoded-role authorization, and obvious runtime escape-hatch boundaries; Manifest readiness remains advisory |
 | ~~Phase 11C~~ | Business Admin Console Foundation | None | — | **COMPLETED** | Tenant-local, strictly read-only consolidation of existing administration areas (users, roles, permission catalogue, module activation, workflow definitions, recent activity) behind a new `admin.console.read` entry permission plus the per-area permission that already governs each dataset; no mutation surface, no Builder/metadata authoring, no schema or query editing, no new business capability |
 | ~~Phase 11D~~ | Platform Experience System & Admin Console UX Direction | None | — | **COMPLETED** | Platform experience system, responsive multi-device layouts (desktop/tablet/mobile), modular capability-aware navigation, Business Admin Console UX direction, and governed Platform Architect/Builder UX principles (B0–B4 risk tiers); no runtime Builder, no manifest loading, no dynamic packages, no business capability |
+| ~~Phase 11E~~ | Platform Shell & Admin Console UX Implementation Foundation | None | — | **COMPLETED** | First conservative Web implementation of the Phase 11D experience system: static three-group capability navigation, accessible responsive shell, shared UI-state refinements, and durable read-only Admin Console sections; backend permissions and Data Scope remain authoritative, with no API, migration, permission, runtime Builder/manifest/package, or business-capability change |
 
-Phases 11A, 11B, 11C, and 11D start no Advanced wave and register no Client Extension. Builder UI/API/runtime, manifest/package runtime, universal module-activation enforcement, one-click installer code, desktop wrapper, dynamic package installation, direct schema/query editing, scripting/DSL, or new business functionality requires separate Founder authorization and applicable PRD/roadmap treatment. Phase 11C's read-only console and Phase 11D's UX specifications are explicitly **not** the Platform Architect / Builder Console and confer no administration capability the actor did not already hold.
+Phases 11A, 11B, 11C, 11D, and 11E start no Advanced wave and register no Client Extension. Builder UI/API/runtime, manifest/package runtime, universal module-activation enforcement, one-click installer code, desktop wrapper, dynamic package installation, direct schema/query editing, scripting/DSL, or new business functionality requires separate Founder authorization and applicable PRD/roadmap treatment. Phase 11C's read-only console, Phase 11D's UX specifications, and Phase 11E's visual/layout implementation foundation are explicitly **not** the Platform Architect / Builder Console and confer no administration capability the actor did not already hold.
 
 **Phase H may run in parallel** with any Business Core phase — it is infrastructure, not business capability.
 
@@ -272,6 +274,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.17 | 2026-08-24 | Phase 11E Platform Shell & Admin Console UX Implementation Foundation completed with no roadmap units or points. Runtime baseline `master @ 26fc99f` implements static three-group capability navigation, responsive accessible shell/drawer behavior, reusable UI states, URL-durable read-only Admin Console sections, and strengthened real-browser smoke. No API, migration, permission, Builder/manifest/package runtime, Advanced wave, Client Extension, or business-capability change. API evidence remains 313/313 tests across 25 files; browser smoke is recorded separately. Numerator and denominator remain 174 / 174 and 180 / 353. |
 | v1.16 | 2026-08-23 | Phase 11D Platform Experience System & Admin Console UX Direction completed with no roadmap units or points: defines unified visual direction, modular capability-aware navigation, multi-device responsive adaptations, Business Admin Console UX, and governed Platform Architect/Builder UX principles (B0–B4 risk matrix). Strictly documentation-driven; no runtime code modified, no Builder/manifest runtime, no Advanced wave, no Client Extension started. Numerator and denominator remain 174 / 174 and 180 / 353; implementation baseline remains `master @ 3145627`. |
 | v1.15 | 2026-08-23 | Phase 11C Business Admin Console Foundation completed with no roadmap units or points: a tenant-local, strictly read-only consolidation of existing administration areas behind a new `admin.console.read` entry permission, with every section additionally gated by the permission already governing that data. Adds 1 permission (75 → 76), 1 migration (24 → 25), and 19 API tests (294 → 313 across 25 files); no new table. No mutation surface, Builder/metadata runtime, Advanced wave, Client Extension, or new business functionality started. Numerator and denominator remain 174 / 174 and 180 / 353. |
 | v1.14 | 2026-08-23 | Phase 11B platform boundary enforcement completed with no roadmap units or points: dependency-free validator, 23 focused tests, CI/root validation integration, and module-neutral money formatter boundary cleanup. Module Manifest readiness remains advisory; no Builder/runtime manifest, Advanced wave, Client Extension, or new business functionality started. Numerator and denominator remain 174 / 174 and 180 / 353; API runtime evidence remains `master @ ebd56c2`. |
