@@ -4,17 +4,17 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.17 |
+| **Roadmap Baseline** | v1.18 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-08-24 |
-| **Measured at** | `master @ 26fc99f`, Phase 11E · 313/313 API tests across 25 files · browser smoke PASS · 85 tables · 25 migrations · head `1773000000000_phase-11c-business-admin-console.cjs` |
+| **Measured at** | `master @ fc01876`, Phase 11F · 336/336 API tests across 26 files · browser smoke PASS · 85 tables · 26 migrations · head `1774000000000_phase-11f-governed-access-management.cjs` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.16 |
+| Metric | Value | Δ since v1.17 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
 | **Full Approved Roadmap Progress** | **51.0 %** | — 0.0 pts |
@@ -24,9 +24,9 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Core Product Readiness** = Platform Core + Business Core + required Platform Hardening.
 - **Full Approved Roadmap Progress** = Core Product Readiness + all approved Advanced capabilities.
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
-- **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, 11C, 11D, and 11E are recorded for governance traceability without moving either metric.
+- **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, 11C, 11D, 11E, and 11F are recorded for governance traceability without moving either metric.
 
-The implementation measurement is pinned at `master @ 26fc99f` (Phase 11E): 313/313 API tests across 25 files, 85 tables, 25 migrations, 76 permissions, and migration head `1773000000000_phase-11c-business-admin-console.cjs`. Phase 11E changes only the Web shell and read-only Admin Console experience; it adds no API behavior, schema, migration, permission, or business capability. Its practical browser smoke passes and is reported separately from the API test count.
+The implementation measurement is pinned at `master @ fc01876` (Phase 11F): 336/336 API tests across 26 files, 85 tables, 26 migrations, 77 permissions, and migration head `1774000000000_phase-11f-governed-access-management.cjs`. Phase 11F adds 23 API tests and one migration, but no table; the migration adds exact-assignment uniqueness and the narrowly governed `user.role.manage` permission. The API and Web now permit only tenant-local review and separately authorized assignment/removal of existing roles with explicit Data Scope. This is an unweighted platform-administration capability, not a weighted business or Advanced capability. Its real-browser smoke passes and is reported separately from the API test count.
 
 Commit `3df1718` (Phase 11A documentation) and the Phase 11B repository-governance changes remain non-runtime and imply no schema or API test evidence of their own. Phase 11B's 23/23 focused dependency-free boundary tests continue to pass with 0 blocking findings and the expected documentary Manifest advisory, alongside typecheck, lint, production build, and PWA validation.
 
@@ -138,14 +138,15 @@ All Advanced units except the two delivered Survey-to-Action units. Customer & C
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), and unweighted Phases 11A/11B/11C/11D/11E are closed; all Core Product Readiness units are complete. Phase 11A established architecture/governance documentation, Phase 11B added repository boundary enforcement, Phase 11C delivered a read-only Business Admin Console, Phase 11D established the Platform Experience System & UX direction, and Phase 11E implemented its first conservative Web shell/Admin UX slice; none delivered a weighted product unit.
+**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), and unweighted Phases 11A/11B/11C/11D/11E/11F are closed; all Core Product Readiness units are complete. Phase 11A established architecture/governance documentation, Phase 11B added repository boundary enforcement, Phase 11C delivered a read-only Business Admin Console, Phase 11D established the Platform Experience System & UX direction, Phase 11E implemented its first conservative Web shell/Admin UX slice, and Phase 11F delivered a bounded governed access-management slice; none delivered a weighted product unit.
 
-Phase 11C delivered only the READ side of the Business Admin Console: a consolidated view of users, roles, the permission catalogue, module activation, workflow definitions, and recent activity, each gated by the permission that already governs it. Phase 11D documented the UX specification and multi-device presentation rules. Phase 11E implements static grouped navigation, responsive accessible shell behavior, deterministic presentation states, and durable read-only Admin sections without changing backend authority or behavior. Administration EDITING from the console, the Platform Architect / Builder Console, Builder UI/API/runtime, executable manifests, dynamic packages, schema/query editors, scripting/DSL, Advanced capability waves, Client Extensions, and new business functionality remain not started until explicitly authorized.
+Phase 11C delivered the READ foundation of the Business Admin Console: a consolidated view of users, roles, the permission catalogue, module activation, workflow definitions, and recent activity, each gated by the permission that already governs it. Phase 11D documented the UX specification and multi-device presentation rules. Phase 11E implemented static grouped navigation, responsive accessible shell behavior, deterministic presentation states, and durable read-only Admin sections without changing backend authority. Phase 11F enables only permission-governed assignment and removal of existing tenant roles with explicit tenant, organization-unit, or customer Data Scope, plus privacy-minimized access review and one-role permission summaries. User lifecycle/profile/status management, role definitions, role-permission composition, permission-catalog mutation, bulk permission matrices, and all other console editing remain not started. The Platform Architect / Builder Console, Builder UI/API/runtime, executable manifests, dynamic packages, schema/query editors, scripting/DSL, Advanced capability waves, Client Extensions, and new business functionality also remain not started until explicitly authorized.
 
 ## 8. Progress change log
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.18 | 2026-08-24 | 100.0 % | 51.0 % | **Phase 11F Business Admin Console Governed Access Management completed (unweighted).** No product unit, numerator, or denominator change. Runtime baseline `master @ fc01876` adds tenant-local privacy-minimized access review, on-demand one-role permission summaries, and separately authorized assignment/removal of existing roles with explicit Data Scope, exact-assignment uniqueness, atomic privacy-safe audit, and manager-lockout safeguards. Adds one migration and one permission with no table; evidence is 336/336 API tests across 26 files, 85 tables, 26 migrations, and 77 permissions, with real-browser governed add/remove and responsive dialog smoke passing separately. No Builder/manifest/package runtime, broad administration editing, Advanced wave, Client Extension, or weighted business capability. |
 | v1.17 | 2026-08-24 | 100.0 % | 51.0 % | **Phase 11E Platform Shell & Admin Console UX Implementation Foundation completed (unweighted).** No product unit, numerator, or denominator change. Runtime baseline `master @ 26fc99f` adds static three-group capability navigation, an accessible responsive shell, reusable UI-state refinements, and URL-durable read-only Admin Console sections. No API, migration, permission, Builder/manifest/package runtime, Advanced wave, Client Extension, or business-capability change. Evidence remains 313/313 API tests across 25 files, 85 tables, 25 migrations, and 76 permissions; practical browser smoke passes and is reported separately. |
 | v1.16 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11D Platform Experience System & Admin Console UX Direction completed (unweighted).** No product unit, numerator, or denominator change. Defines unified visual direction, modular capability-aware navigation, multi-device responsive adaptations, Business Admin Console UX, and governed Platform Architect/Builder UX principles (B0–B4 risk matrix). Implementation baseline remains `master @ 3145627` with 313/313 tests across 25 files, 85 tables, 25 migrations, 76 permissions. |
 | v1.15 | 2026-08-23 | 100.0 % | 51.0 % | **Phase 11C Business Admin Console Foundation completed (unweighted).** No product unit, numerator, or denominator change — the console re-presents data the actor could already read and grants no new capability. Strictly read-only and tenant-local: a new `admin.console.read` permission gates entry, and every section is additionally gated by the permission already governing that data, so the entry permission alone reveals nothing. Runtime evidence refreshed to 313/313 tests across 25 files, 85 tables (no new table), 25 migrations, 76 permissions. |
