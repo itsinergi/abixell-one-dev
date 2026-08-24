@@ -10,19 +10,31 @@
  * Responsibilities:
  *  - Fetch the signed-in user's context once (`/me` + `/tenants/me`) and
  *    expose it via ShellContext so nested pages don't each re-fetch it.
- *  - Render a responsive, capability-gated navigation (persistent sidebar
- *    on desktop, a collapsible drawer on mobile).
- *  - Own the workspace header (title + signed-in user + sign out).
+ *  - Render responsive, grouped, capability-gated navigation (persistent
+ *    sidebar on desktop, an accessible overlay drawer below 1024px).
+ *  - Own the workspace header, scope summary, and sign-out affordances.
  *  - Render the active section through <Outlet/>.
  *
  * Navigation is capability-gated for UX only — see capabilities.ts. All
  * authorization remains backend-enforced.
  */
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError } from "../../lib/api";
-import { visibleSections } from "../../lib/capabilities";
+import {
+  visibleSectionGroups,
+  type VisibleNavGroup,
+} from "../../lib/capabilities";
 import { Alert, Button, Spinner } from "../components/ui";
 import { useOnlineStatus } from "../useOnlineStatus";
 
@@ -44,9 +56,207 @@ export function useShell(): ShellContextValue {
   return ctx;
 }
 
+function scopeSummary(scopeTypes: string[]): string {
+  const labels = [
+    scopeTypes.includes("tenant") ? "Tenant-wide scope" : null,
+    scopeTypes.includes("organization_unit") ? "Organization unit scope" : null,
+    scopeTypes.includes("customer") ? "Customer scope" : null,
+  ].filter((label): label is string => label !== null);
+
+  return labels.length > 0 ? labels.join(" · ") : "No data scope reported";
+}
+
+function NavigationContent({
+  groups,
+  query,
+  onQueryChange,
+  onNavigate,
+  filterId,
+}: {
+  groups: VisibleNavGroup[];
+  query: string;
+  onQueryChange: (query: string) => void;
+  onNavigate?: () => void;
+  filterId: string;
+}) {
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredGroups = useMemo(
+    () =>
+      groups
+        .map((group) => ({
+          ...group,
+          sections: group.sections.filter((section) => {
+            if (!normalizedQuery) return true;
+            return `${section.label} ${section.description}`
+              .toLocaleLowerCase()
+              .includes(normalizedQuery);
+          }),
+        }))
+        .filter((group) => group.sections.length > 0),
+    [groups, normalizedQuery],
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="px-3 pb-3">
+        <label htmlFor={filterId} className="sr-only">
+          Filter navigation
+        </label>
+        <div className="relative">
+          <input
+            ref={filterInputRef}
+            id={filterId}
+            type="search"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Filter navigation"
+            autoComplete="off"
+            className="min-h-[44px] w-full rounded-md border border-slate-300 bg-white px-3 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 lg:min-h-[36px]"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                onQueryChange("");
+                filterInputRef.current?.focus();
+              }}
+              aria-label="Clear navigation filter"
+              className="absolute inset-y-0 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r-md text-lg leading-none text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-400 lg:min-h-[36px] lg:min-w-[36px]"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      </div>
+
+      <nav aria-label="Primary navigation" className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        {filteredGroups.length > 0 ? (
+          <div className="space-y-5">
+            {filteredGroups.map((group) => (
+              <section key={group.key} aria-labelledby={`${filterId}-${group.key}`}>
+                <h2
+                  id={`${filterId}-${group.key}`}
+                  className="px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400"
+                  title={group.description}
+                >
+                  {group.label}
+                </h2>
+                <div className="mt-1 space-y-0.5">
+                  {group.sections.map((section) => (
+                    <NavLink
+                      key={section.key}
+                      to={section.path}
+                      end={section.path === "/"}
+                      onClick={onNavigate}
+                      className={({ isActive }) =>
+                        `flex min-h-[44px] items-center rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 lg:min-h-[36px] ${
+                          isActive
+                            ? "bg-slate-900 font-medium text-white shadow-sm"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`
+                      }
+                    >
+                      {section.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="mx-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-500" role="status">
+            No visible areas match “{query.trim()}”.
+            <button
+              type="button"
+              onClick={() => {
+                onQueryChange("");
+                filterInputRef.current?.focus();
+              }}
+              className="mt-2 flex min-h-[44px] items-center font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 lg:min-h-[36px]"
+            >
+              Clear filter
+            </button>
+          </div>
+        )}
+      </nav>
+    </div>
+  );
+}
+
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => !element.hasAttribute("hidden"));
+}
+
+function useNavigationDrawer(
+  open: boolean,
+  setOpen: (open: boolean) => void,
+  drawerRef: RefObject<HTMLElement>,
+  triggerRef: RefObject<HTMLButtonElement>,
+) {
+  const wasOpen = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      if (wasOpen.current && triggerRef.current?.getClientRects().length) {
+        triggerRef.current.focus();
+      }
+      wasOpen.current = false;
+      return;
+    }
+
+    wasOpen.current = true;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      focusableElements(drawerRef.current ?? document.body)[0]?.focus();
+    });
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !drawerRef.current) return;
+
+      const focusable = focusableElements(drawerRef.current);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        drawerRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!drawerRef.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [drawerRef, open, setOpen, triggerRef]);
+}
+
 export function AppShell() {
   const { session, logout } = useAuth();
   const token = session!.accessToken;
+  const location = useLocation();
 
   const [permissions, setPermissions] = useState<string[]>([]);
   const [scopeTypes, setScopeTypes] = useState<string[]>([]);
@@ -54,7 +264,18 @@ export function AppShell() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [navigationQuery, setNavigationQuery] = useState("");
+  const drawerRef = useRef<HTMLElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const online = useOnlineStatus();
+
+  const closeMobileNavigation = useCallback(() => setMobileNavOpen(false), []);
+  useNavigationDrawer(
+    mobileNavOpen,
+    setMobileNavOpen,
+    drawerRef,
+    menuTriggerRef,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,100 +306,180 @@ export function AppShell() {
     load();
   }, [load]);
 
-  const sections = visibleSections(permissions, scopeTypes);
+  useEffect(() => {
+    closeMobileNavigation();
+  }, [closeMobileNavigation, location.pathname, location.search]);
+
+  useEffect(() => {
+    const desktopBreakpoint = window.matchMedia("(min-width: 1024px)");
+    const closeAtDesktopBreakpoint = (event: MediaQueryListEvent) => {
+      if (event.matches) closeMobileNavigation();
+    };
+
+    if (desktopBreakpoint.matches) closeMobileNavigation();
+    desktopBreakpoint.addEventListener("change", closeAtDesktopBreakpoint);
+    return () => {
+      desktopBreakpoint.removeEventListener("change", closeAtDesktopBreakpoint);
+    };
+  }, [closeMobileNavigation]);
+
+  const groups = visibleSectionGroups(permissions, scopeTypes);
   // Client-neutral fallback while the Tenant name loads (ADR-0003).
   const workspaceTitle = tenantName || "Enterprise Management System";
-
-  const navLinks = (
-    <nav className="flex flex-col gap-0.5 text-sm">
-      {sections.map((s) => (
-        <NavLink
-          key={s.key}
-          to={s.path}
-          end={s.path === "/"}
-          onClick={() => setMobileNavOpen(false)}
-          className={({ isActive }) =>
-            `rounded px-3 py-2 transition-colors ${
-              isActive
-                ? "bg-slate-900 font-medium text-white"
-                : "text-slate-600 hover:bg-slate-100"
-            }`
-          }
-        >
-          {s.label}
-        </NavLink>
-      ))}
-    </nav>
-  );
+  const currentScopeSummary = scopeSummary(scopeTypes);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 md:flex-row">
-      {/* Mobile top bar */}
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:hidden">
-        <span className="truncate text-sm font-semibold text-slate-700">{workspaceTitle}</span>
-        <Button
-          variant="secondary"
-          aria-expanded={mobileNavOpen}
-          aria-label="Toggle navigation"
-          onClick={() => setMobileNavOpen((v) => !v)}
-        >
-          Menu
-        </Button>
-      </header>
-
-      {/* Sidebar (desktop) / drawer (mobile) */}
-      <aside
-        className={`w-full shrink-0 border-slate-200 bg-white md:block md:w-60 md:border-r ${
-          mobileNavOpen ? "block border-b" : "hidden"
-        }`}
+    <div className="min-h-screen bg-slate-50 text-slate-900 lg:flex">
+      <a
+        href="#main-content"
+        className="fixed left-3 top-3 z-[60] -translate-y-20 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
       >
-        <div className="hidden px-4 py-4 md:block">
-          <div className="truncate text-sm font-semibold text-slate-700">{workspaceTitle}</div>
-          <div className="mt-0.5 truncate text-xs text-slate-400">Signed in as {session!.userId}</div>
-        </div>
-        <div className="px-2 pb-3 md:pb-4">{navLinks}</div>
-      </aside>
+        Skip to main content
+      </a>
 
-      {/* Main content region */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {!online && (
-          <div
-            className="bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-white"
-            role="status"
-            aria-live="polite"
-          >
-            You are offline — changes can&apos;t be saved until the connection returns.
+      {/* Persistent desktop navigation. */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
+        <div className="border-b border-slate-100 px-4 py-4">
+          <div className="truncate text-sm font-semibold text-slate-800" title={workspaceTitle}>
+            {workspaceTitle}
           </div>
-        )}
-        <div className="hidden items-center justify-end border-b border-slate-200 bg-white px-6 py-2 md:flex">
-          <span className="mr-3 text-xs text-slate-400">{session!.userId}</span>
-          <Button variant="secondary" onClick={logout}>
+          <div className="mt-1 text-xs text-slate-500">{currentScopeSummary}</div>
+        </div>
+        <NavigationContent
+          groups={groups}
+          query={navigationQuery}
+          onQueryChange={setNavigationQuery}
+          filterId="desktop-navigation-filter"
+        />
+        <div className="border-t border-slate-200 p-3">
+          <div className="truncate px-1 text-xs text-slate-500" title={session!.userId}>
+            Signed in as {session!.userId}
+          </div>
+          <Button variant="secondary" className="mt-2 w-full" onClick={logout}>
             Sign out
           </Button>
         </div>
-        <main className="min-w-0 flex-1 p-4 sm:p-6">
-          {loading ? (
-            <Spinner label="Loading your workspace…" />
-          ) : error ? (
-            <div className="space-y-3">
-              <Alert tone="error">{error}</Alert>
-              <Button variant="secondary" onClick={load}>
-                Retry
+      </aside>
+
+      {/* Tablet/mobile overlay navigation. */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 h-full w-full cursor-default bg-slate-950/40"
+            onClick={closeMobileNavigation}
+            aria-label="Close navigation"
+            tabIndex={-1}
+          />
+          <aside
+            id="mobile-navigation"
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-navigation-title"
+            tabIndex={-1}
+            className="relative flex h-full w-full flex-col bg-white shadow-2xl focus:outline-none sm:max-w-sm"
+          >
+            <div className="flex min-h-[64px] items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <h2 id="mobile-navigation-title" className="truncate text-sm font-semibold text-slate-800">
+                  {workspaceTitle}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">{currentScopeSummary}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeMobileNavigation}
+                aria-label="Close navigation"
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              >
+                ×
+              </button>
+            </div>
+            <div className="min-h-0 flex flex-1 flex-col pt-3">
+              <NavigationContent
+                groups={groups}
+                query={navigationQuery}
+                onQueryChange={setNavigationQuery}
+                onNavigate={closeMobileNavigation}
+                filterId="drawer-navigation-filter"
+              />
+            </div>
+            <div className="border-t border-slate-200 p-3">
+              <div className="truncate px-1 text-xs text-slate-500" title={session!.userId}>
+                Signed in as {session!.userId}
+              </div>
+              <Button variant="secondary" className="mt-2 min-h-[44px] w-full" onClick={logout}>
+                Sign out
               </Button>
             </div>
-          ) : (
-            <ShellContext.Provider
-              value={{ permissions, scopeTypes, userId: session!.userId, tenantName }}
+          </aside>
+        </div>
+      )}
+
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <div className="sticky top-0 z-20">
+          <header className="flex min-h-[60px] items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                ref={menuTriggerRef}
+                type="button"
+                aria-expanded={mobileNavOpen}
+                aria-controls="mobile-navigation"
+                aria-label="Open navigation"
+                onClick={() => setMobileNavOpen(true)}
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 lg:hidden"
+              >
+                Menu
+              </button>
+              <div className="min-w-0 lg:hidden">
+                <div className="truncate text-sm font-semibold text-slate-800">{workspaceTitle}</div>
+                <div className="truncate text-xs text-slate-500">{currentScopeSummary}</div>
+              </div>
+              <div className="hidden min-w-0 lg:block">
+                <div className="text-sm font-medium text-slate-700">Workspace</div>
+                <div className="text-xs text-slate-500">{currentScopeSummary}</div>
+              </div>
+            </div>
+            <div className="hidden min-w-0 items-center gap-3 lg:flex">
+              <span className="max-w-xs truncate text-xs text-slate-500" title={session!.userId}>
+                {session!.userId}
+              </span>
+              <Button variant="secondary" onClick={logout}>
+                Sign out
+              </Button>
+            </div>
+          </header>
+          {!online && (
+            <div
+              className="border-b border-amber-300 bg-amber-100 px-4 py-2 text-center text-xs font-medium text-amber-900"
+              role="status"
+              aria-live="polite"
             >
-              <Outlet />
-              {/* Sign out is also reachable on mobile from the bottom of content. */}
-              <div className="mt-8 md:hidden">
-                <Button variant="secondary" onClick={logout}>
-                  Sign out
+              You are offline — some actions may be unavailable until the connection returns.
+            </div>
+          )}
+        </div>
+
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 p-4 focus:outline-none sm:p-6">
+          <div className="mx-auto w-full max-w-[1600px]">
+            {loading ? (
+              <Spinner label="Loading your workspace…" />
+            ) : error ? (
+              <div className="space-y-3">
+                <Alert tone="error">{error}</Alert>
+                <Button variant="secondary" onClick={load}>
+                  Retry
                 </Button>
               </div>
-            </ShellContext.Provider>
-          )}
+            ) : (
+              <ShellContext.Provider
+                value={{ permissions, scopeTypes, userId: session!.userId, tenantName }}
+              >
+                <Outlet />
+              </ShellContext.Provider>
+            )}
+          </div>
         </main>
       </div>
     </div>

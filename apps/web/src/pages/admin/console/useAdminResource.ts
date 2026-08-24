@@ -1,22 +1,29 @@
 /**
- * Phase 11C — Business Admin Console.
+ * Phase 11C/11E — Business Admin Console resource state.
  *
- * The one loading pattern every read-only console view shares: fetch once
- * against the actor's token, expose loading/error/data. Extracted so the
- * five views stay declarative and cannot drift apart in how they report a
- * failure or a denial.
+ * Every read-only console view uses the same deterministic state model. A
+ * request generation ensures a stale, retried, or unmounted request cannot
+ * overwrite a newer result; 401 and 403 remain distinct because an expired
+ * session is not a permission decision.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../auth/AuthContext";
 import { ApiError } from "../../../lib/api";
 
+export type AdminResourceStatus =
+  | "loading"
+  | "ready"
+  | "denied"
+  | "session-expired"
+  | "error";
+
 export interface AdminResourceState<T> {
   data: T | null;
+  status: AdminResourceStatus;
   loading: boolean;
   error: string | null;
-  /** Set when the backend refused the read, so the view can render a
-   * permission-denial state rather than a generic failure. */
   denied: boolean;
+  sessionExpired: boolean;
   reload: () => void;
 }
 
@@ -26,37 +33,57 @@ export function useAdminResource<T>(
 ): AdminResourceState<T> {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const latestLoader = useRef(load);
+  const generation = useRef(0);
 
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<AdminResourceStatus>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [denied, setDenied] = useState(false);
+
+  latestLoader.current = load;
 
   const run = useCallback(async () => {
-    setLoading(true);
+    const requestGeneration = ++generation.current;
+    setStatus("loading");
     setError(null);
-    setDenied(false);
+
     try {
-      setData(await load(token));
+      const nextData = await latestLoader.current(token);
+      if (requestGeneration !== generation.current) return;
+      setData(nextData);
+      setStatus("ready");
     } catch (err) {
-      // 403 is an expected outcome here, not a fault: the console is
-      // reachable by anyone holding admin.console.read, while each area
-      // carries its own permission.
-      if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
-        setDenied(true);
+      if (requestGeneration !== generation.current) return;
+      setData(null);
+
+      if (err instanceof ApiError && err.status === 403) {
+        setStatus("denied");
+        return;
       }
+      if (err instanceof ApiError && err.status === 401) {
+        setStatus("session-expired");
+        return;
+      }
+
       setError(err instanceof ApiError ? err.message : fallbackMessage);
-    } finally {
-      setLoading(false);
+      setStatus("error");
     }
-    // `load` is deliberately NOT a dependency: call sites pass an inline
-    // arrow (`(t) => api.adminRoles(t)`), which is a fresh reference on every
-    // render and would otherwise drive an endless refetch loop.
-  }, [token, fallbackMessage]);
+  }, [fallbackMessage, token]);
 
   useEffect(() => {
     run();
+    return () => {
+      generation.current += 1;
+    };
   }, [run]);
 
-  return { data, loading, error, denied, reload: run };
+  return {
+    data,
+    status,
+    loading: status === "loading",
+    error,
+    denied: status === "denied",
+    sessionExpired: status === "session-expired",
+    reload: run,
+  };
 }

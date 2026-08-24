@@ -1,9 +1,8 @@
 /**
  * Phase 11C — Module activation, read-only.
  *
- * Shows which product areas are switched on for this tenant. Activation is
- * NOT toggled here: Phase 11C adds no mutation surface, and changing module
- * activation remains a deliberate act in the Administration area.
+ * Shows the configuration records returned for this tenant. Activation is
+ * NOT toggled here: Phase 11C adds no mutation surface.
  */
 import { api, type AdminModuleSummary } from "../../../lib/api";
 import { DataTable, StatusPill, type Column } from "../../../shell/components/ui";
@@ -13,43 +12,57 @@ import { useAdminResource } from "./useAdminResource";
 const COLUMNS: Column<AdminModuleSummary>[] = [
   {
     header: "Module",
-    cell: (m) => <span className="font-medium text-slate-800">{m.moduleName}</span>,
+    cell: (module) => <span className="font-medium text-slate-800">{module.moduleName}</span>,
+    mobileRole: "title",
   },
-  { header: "Code", cell: (m) => m.moduleCode },
+  {
+    header: "Code",
+    cell: (module) => <code className="break-all font-mono text-xs">{module.moduleCode}</code>,
+  },
   {
     header: "Status",
-    cell: (m) =>
-      m.isActive ? (
+    cell: (module) =>
+      module.isActive ? (
         <StatusPill tone="success">Active</StatusPill>
       ) : (
         <StatusPill tone="neutral">Inactive</StatusPill>
       ),
+    mobileRole: "status",
   },
 ];
 
 export function AdminModulesView() {
-  const { data, loading, error, denied, reload } = useAdminResource<AdminModuleSummary[]>(
-    (token) => api.adminModules(token),
-    "Failed to load modules",
-  );
+  const { data, loading, error, denied, sessionExpired, reload } =
+    useAdminResource<AdminModuleSummary[]>(
+      (token) => api.adminModules(token),
+      "Failed to load modules",
+    );
 
   return (
     <AdminSectionState
       loading={loading}
+      loadingLabel="Loading module configuration…"
       denied={denied}
+      sessionExpired={sessionExpired}
       error={error}
       requiredPermission="config.read"
       onRetry={reload}
     >
       <AdminPanel
         title="Modules"
-        description="Which product areas are switched on for this tenant. Activation is changed in Administration, not here."
+        description="Module activation records configured for this tenant. This view provides no activation control."
       >
         <DataTable
           columns={COLUMNS}
           rows={data ?? []}
-          keyOf={(m) => m.moduleCode}
-          empty={<AdminEmpty what="modules" />}
+          keyOf={(module) => module.moduleCode}
+          mobileBreakpoint="md"
+          empty={
+            <AdminEmpty
+              title="No module configuration returned"
+              description="No tenant module activation records are available to display."
+            />
+          }
         />
       </AdminPanel>
     </AdminSectionState>

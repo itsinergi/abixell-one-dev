@@ -68,14 +68,43 @@ export const PERMISSIONS = {
   financeConfigure: "finance.configure",
   projectDeliveryRead: "project_delivery.read",
   projectDeliveryManage: "project_delivery.manage",
+  hseRead: "hse.read",
   reportingRead: "reporting.read",
   reportingExport: "reporting.export",
   adminConsoleRead: "admin.console.read",
 } as const;
 
+export type NavGroupKey = "operations" | "enterprise-core" | "governance";
+
+export interface NavGroup {
+  key: NavGroupKey;
+  label: string;
+  description: string;
+}
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    key: "operations",
+    label: "Operations",
+    description: "Day-to-day work, queues, services, and surveys.",
+  },
+  {
+    key: "enterprise-core",
+    label: "Enterprise Core",
+    description: "Customers, people, resources, finance, safety, and delivery.",
+  },
+  {
+    key: "governance",
+    label: "Governance & Platform",
+    description: "Reporting, administration, and tenant governance.",
+  },
+];
+
 export interface NavSection {
   /** Stable key, also used for testing hooks. */
   key: string;
+  /** Static information-architecture group. */
+  group: NavGroupKey;
   /** Route path relative to the shell root. */
   path: string;
   /** Client-neutral, user-facing label. */
@@ -94,9 +123,9 @@ export interface NavSection {
   requiresCustomerScope?: boolean;
 }
 
-/** Internal = holds any non-customer Data Scope (organization_unit/tenant). */
+/** Internal = explicitly holds an organization_unit or tenant Data Scope. */
 export function isInternalScope(scopeTypes: string[]): boolean {
-  return scopeTypes.some((s) => s !== "customer");
+  return scopeTypes.some((scope) => scope === "tenant" || scope === "organization_unit");
 }
 
 export function hasCustomerScope(scopeTypes: string[]): boolean {
@@ -112,12 +141,14 @@ export function hasCustomerScope(scopeTypes: string[]): boolean {
 export const NAV_SECTIONS: NavSection[] = [
   {
     key: "overview",
+    group: "operations",
     path: "/",
     label: "Overview",
     description: "Your workspace at a glance.",
   },
   {
     key: "complaints",
+    group: "operations",
     path: "/complaints",
     label: "Complaints",
     description: "Raise and track the complaints you have submitted.",
@@ -126,6 +157,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "queue",
+    group: "operations",
     path: "/queue",
     label: "Queue",
     description: "Work the complaints assigned to you and your team.",
@@ -134,6 +166,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "verification",
+    group: "operations",
     path: "/verification",
     label: "Verification",
     description: "Independently verify corrective actions awaiting sign-off.",
@@ -143,18 +176,22 @@ export const NAV_SECTIONS: NavSection[] = [
     // (COMPLAINT_MANAGER); it will be replaced by a dedicated permission
     // when 1C.4 / FD-1C-02 land. Backend still enforces all authorization.
     requiresAnyOf: [PERMISSIONS.workflowManage],
+    requiresInternal: true,
   },
   {
     key: "management",
+    group: "operations",
     path: "/management",
     label: "Management",
     description: "Complaint performance, SLA, and escalation visibility.",
     // FD-1C-02: gated on the real management permission now (replacing the
     // 1C.1 workflow.instance.manage proxy). Backend enforces it too.
     requiresAnyOf: [PERMISSIONS.complaintDashboardRead],
+    requiresInternal: true,
   },
   {
     key: "my-surveys",
+    group: "operations",
     path: "/my-surveys",
     label: "My Surveys",
     description: "Surveys assigned to you — respond and submit.",
@@ -162,20 +199,25 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "surveys",
+    group: "operations",
     path: "/surveys",
     label: "Surveys",
     description: "Author survey definitions, publish versions, and assign them.",
     requiresAnyOf: [PERMISSIONS.surveyManage],
+    requiresInternal: true,
   },
   {
     key: "my-work",
+    group: "operations",
     path: "/my-work",
     label: "My Work",
     description: "The jobs assigned to you — record what you did in the field.",
     requiresAnyOf: [PERMISSIONS.serviceOperationsExecute],
+    requiresInternal: true,
   },
   {
     key: "work-orders",
+    group: "operations",
     path: "/work-orders",
     label: "Work Orders",
     description: "Plan, assign, and follow the work your teams are delivering.",
@@ -184,13 +226,16 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "service-types",
+    group: "operations",
     path: "/service-types",
     label: "Service Types",
     description: "Define the reusable services your teams deliver.",
     requiresAnyOf: [PERMISSIONS.serviceOperationsConfigure],
+    requiresInternal: true,
   },
   {
     key: "customer-commercial",
+    group: "enterprise-core",
     path: "/customer-commercial",
     label: "Customers",
     description: "Manage customers, contacts, contracts, projects, sites, and service links.",
@@ -199,6 +244,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "employees",
+    group: "enterprise-core",
     path: "/employees",
     label: "Employees",
     description: "Who works here, and where they belong in the organisation.",
@@ -207,6 +253,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "items",
+    group: "enterprise-core",
     path: "/items",
     label: "Items & Stock",
     description: "What exists, how much of it, and what moved.",
@@ -215,6 +262,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "suppliers",
+    group: "enterprise-core",
     path: "/suppliers",
     label: "Suppliers",
     description: "Who you buy from.",
@@ -223,6 +271,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "purchasing",
+    group: "enterprise-core",
     path: "/purchasing",
     label: "Purchasing",
     description: "Request, order, and receive what your teams need.",
@@ -231,6 +280,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "assets",
+    group: "enterprise-core",
     path: "/assets",
     label: "Assets",
     description: "What you own, where it is, and who holds it.",
@@ -239,6 +289,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "finance-transactions",
+    group: "enterprise-core",
     path: "/finance/transactions",
     label: "Transactions",
     description: "What came in, what went out, and what it was for.",
@@ -247,6 +298,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "finance-cashflow",
+    group: "enterprise-core",
     path: "/finance/cashflow",
     label: "Cashflow",
     description: "What moved this period, and where you stand now.",
@@ -255,6 +307,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "finance-accounts",
+    group: "enterprise-core",
     path: "/finance/accounts",
     label: "Cash & Bank",
     description: "Where the money actually sits.",
@@ -262,7 +315,17 @@ export const NAV_SECTIONS: NavSection[] = [
     requiresInternal: true,
   },
   {
+    key: "hse",
+    group: "enterprise-core",
+    path: "/hse",
+    label: "HSE",
+    description: "Record and review health, safety, and environmental activity.",
+    requiresAnyOf: [PERMISSIONS.hseRead],
+    requiresInternal: true,
+  },
+  {
     key: "project-delivery",
+    group: "enterprise-core",
     path: "/project-delivery",
     label: "Project Delivery",
     description: "Track project activities, milestones, and delivery progress.",
@@ -271,6 +334,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "reporting-insight",
+    group: "governance",
     path: "/reporting",
     label: "Reporting",
     description: "Scope-safe operational reports, exports, and executive dashboard.",
@@ -279,13 +343,16 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "administration",
+    group: "governance",
     path: "/administration",
     label: "Administration",
     description: "Organization, users, configuration, and shared services.",
     requiresAnyOf: [PERMISSIONS.configManage],
+    requiresInternal: true,
   },
   {
     key: "admin-console",
+    group: "governance",
     path: "/admin",
     label: "Admin Console",
     // Phase 11C: a consolidated READ-ONLY view of the administration areas.
@@ -314,5 +381,21 @@ export function canSeeSection(
 
 /** The sections a user may see, in nav order. */
 export function visibleSections(permissions: string[], scopeTypes: string[]): NavSection[] {
-  return NAV_SECTIONS.filter((s) => canSeeSection(s, permissions, scopeTypes));
+  return NAV_SECTIONS.filter((section) => canSeeSection(section, permissions, scopeTypes));
+}
+
+export interface VisibleNavGroup extends NavGroup {
+  sections: NavSection[];
+}
+
+/** Visible sections grouped by the approved Platform Experience information architecture. */
+export function visibleSectionGroups(
+  permissions: string[],
+  scopeTypes: string[],
+): VisibleNavGroup[] {
+  const sections = visibleSections(permissions, scopeTypes);
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    sections: sections.filter((section) => section.group === group.key),
+  })).filter((group) => group.sections.length > 0);
 }

@@ -36,7 +36,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   return (
     <button
-      className={`inline-flex min-h-[36px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-[44px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 sm:min-h-[36px] ${BUTTON_VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {children}
@@ -51,7 +51,7 @@ export function Card({
   children,
 }: PropsWithChildren<{ className?: string }>) {
   return (
-    <section className={`rounded-lg border border-slate-200 bg-white p-4 ${className}`}>
+    <section className={`rounded-lg border border-slate-200 bg-white p-3 sm:p-4 lg:p-6 ${className}`}>
       {children}
     </section>
   );
@@ -74,7 +74,7 @@ export function PageHeader({
         <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">{actions}</div>}
     </div>
   );
 }
@@ -161,12 +161,13 @@ export function Spinner({ label = "Loading…" }: { label?: string }) {
 
 /* ------------------------------------------------------------------- Alert */
 
-type AlertTone = "error" | "success" | "info";
+type AlertTone = "error" | "success" | "info" | "warning";
 
 const ALERT_TONES: Record<AlertTone, string> = {
-  error: "bg-red-50 text-red-700",
-  success: "bg-green-50 text-green-700",
-  info: "bg-blue-50 text-blue-700",
+  error: "border border-red-200 bg-red-50 text-red-800",
+  success: "border border-green-200 bg-green-50 text-green-800",
+  info: "border border-blue-200 bg-blue-50 text-blue-800",
+  warning: "border border-amber-200 bg-amber-50 text-amber-900",
 };
 
 /** Inline feedback primitive — the foundation's feedback mechanism for
@@ -186,7 +187,7 @@ export function Alert({
 /* ------------------------------------------------- Form primitives (1C.2) */
 
 const CONTROL_CLASS =
-  "mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-50";
+  "mt-1 min-h-[44px] w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50 sm:min-h-[36px]";
 
 /** Labelled field wrapper — pairs a label with a control and optional hint. */
 export function Field({
@@ -234,6 +235,8 @@ export interface Column<T> {
   cell: (row: T) => ReactNode;
   /** Optional extra classes for the cell (e.g. alignment, width). */
   className?: string;
+  /** Optional role used to create a stronger stacked-card hierarchy. */
+  mobileRole?: "title" | "status" | "detail";
 }
 
 /** Generic, responsive table. Horizontal-scrolls inside its own container so
@@ -244,46 +247,83 @@ export function DataTable<T>({
   keyOf,
   onRowClick,
   empty,
+  mobileBreakpoint = "sm",
 }: {
   columns: Column<T>[];
   rows: T[];
   keyOf: (row: T) => string;
   onRowClick?: (row: T) => void;
   empty?: ReactNode;
+  /** `md` keeps cards through 767px for dense admin views. Default preserves
+   * every existing caller's original 640px transition. */
+  mobileBreakpoint?: "sm" | "md";
 }) {
   if (rows.length === 0 && empty) return <>{empty}</>;
+  const cardVisibility = mobileBreakpoint === "md" ? "md:hidden" : "sm:hidden";
+  const tableVisibility = mobileBreakpoint === "md" ? "hidden md:block" : "hidden sm:block";
+
   return (
     <>
       {/* Mobile (Checkpoint 1C.7): stacked cards instead of a sideways-scrolling
           table, so dense operational/management tables stay usable on a phone. */}
-      <ul className="space-y-3 sm:hidden">
-        {rows.map((row) => (
-          <li
-            key={keyOf(row)}
-            onClick={onRowClick ? () => onRowClick(row) : undefined}
-            className={`rounded-lg border border-slate-200 bg-white p-3 ${onRowClick ? "cursor-pointer active:bg-slate-50" : ""}`}
-          >
-            {columns.map((c, i) => (
-              <div key={i} className="flex items-start justify-between gap-3 py-0.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{c.header}</span>
-                <span className="text-right text-sm text-slate-700">{c.cell(row)}</span>
-              </div>
-            ))}
-          </li>
-        ))}
+      <ul className={`space-y-3 ${cardVisibility}`}>
+        {rows.map((row) => {
+          const titleColumns = columns.filter((column) => column.mobileRole === "title");
+          const statusColumns = columns.filter((column) => column.mobileRole === "status");
+          const detailColumns = columns.filter(
+            (column) => column.mobileRole !== "title" && column.mobileRole !== "status",
+          );
+          const hasHierarchy = titleColumns.length > 0 || statusColumns.length > 0;
+
+          return (
+            <li
+              key={keyOf(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={`rounded-lg border border-slate-200 bg-white p-3 ${onRowClick ? "cursor-pointer active:bg-slate-50" : ""}`}
+            >
+              {hasHierarchy && (
+                <div className="mb-2 flex items-start justify-between gap-3 border-b border-slate-100 pb-2">
+                  <div className="min-w-0 space-y-0.5">
+                    {titleColumns.map((column, index) => (
+                      <div key={index} className="break-words text-sm font-semibold text-slate-900">
+                        {column.cell(row)}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="shrink-0 space-y-1 text-right">
+                    {statusColumns.map((column, index) => (
+                      <div key={index}>{column.cell(row)}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(hasHierarchy ? detailColumns : columns).map((column, index) => (
+                <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] items-start gap-3 py-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    {column.header}
+                  </span>
+                  <span className="min-w-0 break-words text-right text-sm text-slate-700">
+                    {column.cell(row)}
+                  </span>
+                </div>
+              ))}
+            </li>
+          );
+        })}
       </ul>
 
       {/* Desktop/tablet: the full table (still scrolls inside its own box). */}
-      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 sm:block">
+      <div className={`${tableVisibility} overflow-x-auto rounded-lg border border-slate-200`}>
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              {columns.map((c, i) => (
+              {columns.map((column, index) => (
                 <th
-                  key={i}
-                  className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${c.className ?? ""}`}
+                  key={index}
+                  scope="col"
+                  className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${column.className ?? ""}`}
                 >
-                  {c.header}
+                  {column.header}
                 </th>
               ))}
             </tr>
@@ -295,9 +335,9 @@ export function DataTable<T>({
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={onRowClick ? "cursor-pointer hover:bg-slate-50" : ""}
               >
-                {columns.map((c, i) => (
-                  <td key={i} className={`px-3 py-2 align-middle text-slate-700 ${c.className ?? ""}`}>
-                    {c.cell(row)}
+                {columns.map((column, index) => (
+                  <td key={index} className={`px-3 py-2 align-middle text-slate-700 ${column.className ?? ""}`}>
+                    {column.cell(row)}
                   </td>
                 ))}
               </tr>
@@ -306,6 +346,39 @@ export function DataTable<T>({
         </table>
       </div>
     </>
+  );
+}
+
+/* ------------------------------------------------------ Permission denied */
+
+export function PermissionDeniedState({
+  permission,
+  action,
+}: {
+  permission?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <EmptyState
+      title="You do not have access to this area"
+      description={
+        <>
+          {permission ? (
+            <>
+              Viewing this area requires permission{" "}
+              <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs text-slate-700">
+                {permission}
+              </code>
+              .
+            </>
+          ) : (
+            "Your roles do not grant permission to view this area."
+          )}{" "}
+          Ask an administrator if you expect access.
+        </>
+      }
+      action={action}
+    />
   );
 }
 

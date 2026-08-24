@@ -7,13 +7,17 @@
  */
 import { Link } from "react-router-dom";
 import { useShell } from "../shell/layout/AppShell";
-import { visibleSections } from "../lib/capabilities";
-import { Card, PageHeader, StatusPill } from "../shell/components/ui";
+import { visibleSectionGroups } from "../lib/capabilities";
+import { EmptyState, PageHeader } from "../shell/components/ui";
 
 export function OverviewPage() {
   const { permissions, scopeTypes, tenantName } = useShell();
-  // Everything except Overview itself, in nav order.
-  const sections = visibleSections(permissions, scopeTypes).filter((s) => s.key !== "overview");
+  const groups = visibleSectionGroups(permissions, scopeTypes)
+    .map((group) => ({
+      ...group,
+      sections: group.sections.filter((section) => section.key !== "overview"),
+    }))
+    .filter((group) => group.sections.length > 0);
 
   return (
     <div>
@@ -22,27 +26,42 @@ export function OverviewPage() {
         subtitle="Choose an area to continue. You only see the sections your access allows."
       />
 
-      {sections.length === 0 ? (
-        <Card>
-          <p className="text-sm text-slate-600">
-            You are signed in, but no work areas are currently available to your account.
-            Please contact your administrator if you expect access to more.
-          </p>
-        </Card>
+      {groups.length === 0 ? (
+        <EmptyState
+          title="No work areas available"
+          description="You are signed in, but no destination is currently available to your account. Contact your administrator if you expect additional access."
+        />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sections.map((s) => (
-            <Link
-              key={s.key}
-              to={s.path}
-              className="block rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-900">{s.label}</h2>
-                <StatusPill tone="info">Available</StatusPill>
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <section key={group.key} aria-labelledby={`overview-${group.key}`}>
+              <div className="mb-3">
+                <h2 id={`overview-${group.key}`} className="text-sm font-semibold text-slate-900">
+                  {group.label}
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-500">{group.description}</p>
               </div>
-              <p className="mt-1 text-sm text-slate-500">{s.description}</p>
-            </Link>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {group.sections.map((section) => (
+                  <Link
+                    key={section.key}
+                    to={section.path}
+                    className="group flex min-h-[112px] flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-slate-900">{section.label}</h3>
+                      <span
+                        aria-hidden="true"
+                        className="text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500"
+                      >
+                        →
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm leading-5 text-slate-500">{section.description}</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}

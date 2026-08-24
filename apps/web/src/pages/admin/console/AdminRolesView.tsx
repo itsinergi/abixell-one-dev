@@ -9,44 +9,66 @@ import { AdminEmpty, AdminPanel, AdminSectionState } from "./AdminSection";
 import { useAdminResource } from "./useAdminResource";
 
 const COLUMNS: Column<AdminRoleSummary>[] = [
-  { header: "Code", cell: (r) => <span className="font-medium text-slate-800">{r.code}</span> },
-  { header: "Name", cell: (r) => r.name },
+  {
+    header: "Code",
+    cell: (role) => <code className="font-mono text-xs font-medium text-slate-800">{role.code}</code>,
+    mobileRole: "title",
+  },
+  { header: "Name", cell: (role) => role.name },
   {
     header: "Access",
-    cell: (r) =>
-      r.isFullAccess ? (
+    cell: (role) =>
+      role.isFullAccess ? (
         <StatusPill tone="warning">Full access</StatusPill>
       ) : (
         <StatusPill tone="neutral">Scoped</StatusPill>
       ),
+    mobileRole: "status",
   },
-  { header: "Permissions", cell: (r) => r.permissionCount, className: "text-right" },
-  { header: "Users", cell: (r) => r.assignedUserCount, className: "text-right" },
+  {
+    header: "Permissions",
+    cell: (role) => <span className="tabular-nums">{role.permissionCount}</span>,
+    className: "text-right tabular-nums",
+  },
+  {
+    header: "Users",
+    cell: (role) => <span className="tabular-nums">{role.assignedUserCount}</span>,
+    className: "text-right tabular-nums",
+  },
 ];
 
 export function AdminRolesView() {
-  const { data, loading, error, denied, reload } = useAdminResource<AdminRoleSummary[]>(
-    (token) => api.adminRoles(token),
-    "Failed to load roles",
-  );
+  const { data, loading, error, denied, sessionExpired, reload } =
+    useAdminResource<AdminRoleSummary[]>(
+      (token) => api.adminRoles(token),
+      "Failed to load roles",
+    );
 
   return (
     <AdminSectionState
       loading={loading}
+      loadingLabel="Loading tenant roles…"
       denied={denied}
+      sessionExpired={sessionExpired}
       error={error}
       requiredPermission="config.read"
       onRetry={reload}
     >
       <AdminPanel
         title="Roles"
-        description="The roles defined in this tenant, with how much each one grants and how many people hold it."
+        description="Tenant-local roles, access breadth, permission totals, and assignment totals. Permission membership is not exposed here."
       >
         <DataTable
           columns={COLUMNS}
           rows={data ?? []}
-          keyOf={(r) => r.code}
-          empty={<AdminEmpty what="roles" />}
+          keyOf={(role) => role.code}
+          mobileBreakpoint="md"
+          empty={
+            <AdminEmpty
+              title="No roles configured"
+              description="No tenant-local role definitions were returned for this tenant."
+            />
+          }
         />
       </AdminPanel>
     </AdminSectionState>

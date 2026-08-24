@@ -2,8 +2,8 @@
  * Phase 11C — Workflow definitions, read-only.
  *
  * Lists WHICH lifecycle/approval definitions exist and what they govern.
- * Their internal steps, transitions, and conditions are not projected here:
- * that is authoring territory, and Phase 11C introduces no workflow editor.
+ * Internal steps, transitions, and conditions are authoring territory and
+ * are intentionally not projected here.
  */
 import { api, type AdminWorkflowSummary } from "../../../lib/api";
 import { DataTable, StatusPill, type Column } from "../../../shell/components/ui";
@@ -11,43 +11,62 @@ import { AdminEmpty, AdminPanel, AdminSectionState } from "./AdminSection";
 import { useAdminResource } from "./useAdminResource";
 
 const COLUMNS: Column<AdminWorkflowSummary>[] = [
-  { header: "Code", cell: (w) => <span className="font-medium text-slate-800">{w.code}</span> },
-  { header: "Name", cell: (w) => w.name },
-  { header: "Applies to", cell: (w) => w.entityType },
+  {
+    header: "Code",
+    cell: (workflow) => (
+      <code className="break-all font-mono text-xs font-medium text-slate-800">{workflow.code}</code>
+    ),
+    mobileRole: "title",
+  },
+  { header: "Name", cell: (workflow) => workflow.name },
+  {
+    header: "Applies to",
+    cell: (workflow) => <code className="break-all font-mono text-xs">{workflow.entityType}</code>,
+  },
   {
     header: "Status",
-    cell: (w) =>
-      w.isActive ? (
+    cell: (workflow) =>
+      workflow.isActive ? (
         <StatusPill tone="success">Active</StatusPill>
       ) : (
         <StatusPill tone="neutral">Inactive</StatusPill>
       ),
+    mobileRole: "status",
   },
 ];
 
 export function AdminWorkflowsView() {
-  const { data, loading, error, denied, reload } = useAdminResource<AdminWorkflowSummary[]>(
-    (token) => api.adminWorkflows(token),
-    "Failed to load workflow definitions",
-  );
+  const { data, loading, error, denied, sessionExpired, reload } =
+    useAdminResource<AdminWorkflowSummary[]>(
+      (token) => api.adminWorkflows(token),
+      "Failed to load workflow definitions",
+    );
 
   return (
     <AdminSectionState
       loading={loading}
+      loadingLabel="Loading workflow definitions…"
       denied={denied}
+      sessionExpired={sessionExpired}
       error={error}
       requiredPermission="workflow.definition.read"
       onRetry={reload}
     >
       <AdminPanel
         title="Workflow definitions"
-        description="The approval and lifecycle definitions configured for this tenant, and what each one governs."
+        description="Configured approval and lifecycle definitions and the entity type each governs. This view does not expose authoring controls or rule internals."
       >
         <DataTable
           columns={COLUMNS}
           rows={data ?? []}
-          keyOf={(w) => w.code}
-          empty={<AdminEmpty what="workflow definitions" />}
+          keyOf={(workflow) => workflow.code}
+          mobileBreakpoint="md"
+          empty={
+            <AdminEmpty
+              title="No workflow definitions configured"
+              description="No configured workflow definitions were returned for this tenant."
+            />
+          }
         />
       </AdminPanel>
     </AdminSectionState>

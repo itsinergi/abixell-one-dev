@@ -1,41 +1,71 @@
 /**
- * Phase 11C — Business Admin Console shared presentation.
+ * Phase 11C/11E — Business Admin Console shared presentation.
  *
- * Renders the four states every read-only admin view can be in — loading,
- * permission-denied, failed, and empty — so each view declares only its
- * content. Denial is treated as a first-class, explained state rather than
- * an error, because reaching the console never implies the right to read
- * every area within it.
+ * Renders deterministic loading, permission-denied, expired-session, error,
+ * and ready states so each read-only view declares only its content. Reaching
+ * the console never implies the right to read every area within it.
  */
 import type { ReactNode } from "react";
-import { Alert, Button, Card, EmptyState, Spinner } from "../../../shell/components/ui";
+import { Link } from "react-router-dom";
+import { useAuth } from "../../../auth/AuthContext";
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  PermissionDeniedState,
+  Spinner,
+} from "../../../shell/components/ui";
 
 export function AdminSectionState({
   loading,
+  loadingLabel = "Loading administration data…",
   denied,
+  sessionExpired = false,
   error,
   requiredPermission,
   onRetry,
   children,
 }: {
   loading: boolean;
+  loadingLabel?: string;
   denied: boolean;
+  sessionExpired?: boolean;
   error: string | null;
-  /** Named in the denial message so an administrator knows what to grant. */
+  /** Named in the denial state so an administrator knows what to grant. */
   requiredPermission?: string;
   onRetry?: () => void;
   children: ReactNode;
 }) {
-  if (loading) return <Spinner />;
+  const { logout } = useAuth();
+
+  if (loading) return <Spinner label={loadingLabel} />;
 
   if (denied) {
     return (
+      <PermissionDeniedState
+        permission={requiredPermission}
+        action={
+          <Link
+            to="/admin"
+            className="inline-flex min-h-[44px] items-center justify-center rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 sm:min-h-[36px]"
+          >
+            Back to overview
+          </Link>
+        }
+      />
+    );
+  }
+
+  if (sessionExpired) {
+    return (
       <EmptyState
-        title="You do not have access to this area"
-        description={
-          requiredPermission
-            ? `Viewing this section requires the "${requiredPermission}" permission. Ask an administrator to grant it to one of your roles.`
-            : "Your roles do not grant permission to view this section."
+        title="Your session has expired"
+        description="Sign in again to continue. No permission decision was made for this section."
+        action={
+          <Button onClick={logout}>
+            Sign in again
+          </Button>
         }
       />
     );
@@ -48,7 +78,7 @@ export function AdminSectionState({
           <span>{error}</span>
           {onRetry && (
             <Button variant="secondary" onClick={onRetry}>
-              Try again
+              Retry
             </Button>
           )}
         </div>
@@ -78,6 +108,12 @@ export function AdminPanel({
   );
 }
 
-export function AdminEmpty({ what }: { what: string }) {
-  return <EmptyState title={`No ${what} yet`} description={`Nothing has been defined for this tenant.`} />;
+export function AdminEmpty({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return <EmptyState title={title} description={description} />;
 }
