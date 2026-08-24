@@ -3,18 +3,27 @@ import type { ConfigurationService } from "../configuration/configuration.servic
 import type { RbacService } from "../rbac/rbac.service.js";
 import type { WorkflowService } from "../workflow/workflow.service.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
-import type { Permission, RbacRepository, RoleSummary } from "../../domain/rbac/rbac.entity.js";
+import type {
+  AdminRoleAssignmentSummary,
+  AdminUserAccessSummary,
+  GovernedRoleAssignmentInput,
+  Permission,
+  RbacRepository,
+  RolePermissionDetail,
+  RoleSummary,
+} from "../../domain/rbac/rbac.entity.js";
 import type { UserRepository } from "../../domain/identity/user.entity.js";
+import { NotFoundError } from "../../domain/shared-kernel/errors.js";
 
 /**
- * Phase 11C — Business Admin Console Foundation.
+ * Phase 11C Business Admin Console foundation, extended in Phase 11F by a
+ * bounded governed User Role assignment slice.
  *
- * A tenant-local, strictly READ-ONLY consolidation surface for business
- * (tenant) administrators. It is NOT the Platform Architect / Builder
- * Console: it introduces no metadata authoring, no schema mutation, no
- * manifest runtime, no package installation, and no query editor. It
- * composes data that existing services already expose, for the actor's own
- * tenant only.
+ * The console remains tenant-local and is NOT the Platform Architect / Builder
+ * Console: it introduces no metadata authoring, schema mutation, manifest
+ * runtime, package installation, query editor, or generic role/permission
+ * editor. Phase 11F permits only assigning/removing existing tenant Roles with
+ * an explicit Data Scope, under transactional authorization and audit.
  *
  * Authorization model — two independent axes, both enforced:
  *
@@ -58,10 +67,14 @@ export interface AdminOverview {
     workflows: AdminCountSection;
     audit: AdminCountSection;
   };
-  /** Phase 11C is read-only by construction; declared so the UI never
-   * renders a control the backend would refuse. */
   capabilities: {
-    readOnly: true;
+    /** Phase 11F enables only governed User Role assignment management. */
+    readOnly: boolean;
+    userRoleManage: boolean;
+    /** Read prerequisites surfaced separately so the Web editor never implies
+     * that mutation authority alone can load its mandatory review context. */
+    userAccessRead: boolean;
+    rolePermissionRead: boolean;
     userManage: false;
     roleManage: false;
     permissionManage: false;
@@ -143,6 +156,15 @@ export class AdminConsoleService {
 
   async getOverview(actor: ActorContext): Promise<AdminOverview> {
     const held = await this.requireConsoleAccess(actor);
+    const [userRoleManage, userAccessRead, rolePermissionRead] = await Promise.all([
+      this.rbacRepo.hasTenantScopedPermission(
+        actor.tenantId,
+        actor.userId,
+        "user.role.manage",
+      ),
+      this.rbacRepo.hasTenantScopedPermission(actor.tenantId, actor.userId, "user.read"),
+      this.rbacRepo.hasTenantScopedPermission(actor.tenantId, actor.userId, "config.read"),
+    ]);
 
     const [users, roles, permissions, modules, workflows, auditEntries] = await Promise.all([
       this.section(held, "user.read", () => this.userRepo.listByTenant(actor.tenantId)),
@@ -170,7 +192,10 @@ export class AdminConsoleService {
         audit: { ...auditEntries.access, count: auditEntries.value?.length ?? null },
       },
       capabilities: {
-        readOnly: true,
+        readOnly: !userRoleManage,
+        userRoleManage,
+        userAccessRead,
+        rolePermissionRead,
         userManage: false,
         roleManage: false,
         permissionManage: false,
@@ -242,5 +267,42 @@ export class AdminConsoleService {
       actorUserId: entry.actorUserId,
       createdAt: entry.createdAt,
     }));
+  }
+
+  async listUserAccess(actor: ActorContext): Promise<AdminUserAccessSummary[]> {
+    await this.requireConsoleAccess(actor);
+    await this.rbac.requireTenantScopedPermission(actor.tenantId, actor.userId, "user.read");
+    return this.rbacRepo.listAdminUserAccess(actor.tenantId);
+  }
+
+  async getRolePermissions(
+    actor: ActorContext,
+    roleCode: string,
+  ): Promise<RolePermissionDetail> {
+    await this.requireConsoleAccess(actor);
+    await this.rbac.requireTenantScopedPermission(actor.tenantId, actor.userId, "config.read");
+    const role = await this.rbacRepo.getRolePermissionDetail(actor.tenantId, roleCode);
+    if (!role) throw new NotFoundError("Role", roleCode);
+    return role;
+  }
+
+  async assignUserRole(
+    actor: ActorContext,
+    targetUserId: string,
+    input: GovernedRoleAssignmentInput,
+  ): Promise<AdminRoleAssignmentSummary> {
+    await this.requireConsoleAccess(actor);
+    await this.rbac.requireTenantScopedPermission(actor.tenantId, actor.userId, "user.role.manage");
+    return this.rbacRepo.createGovernedRoleAssignment(actor, targetUserId, input);
+  }
+
+  async removeUserRole(
+    actor: ActorContext,
+    targetUserId: string,
+    assignmentId: string,
+  ): Promise<void> {
+    await this.requireConsoleAccess(actor);
+    await this.rbac.requireTenantScopedPermission(actor.tenantId, actor.userId, "user.role.manage");
+    await this.rbacRepo.removeGovernedRoleAssignment(actor, targetUserId, assignmentId);
   }
 }

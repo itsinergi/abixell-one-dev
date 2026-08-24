@@ -29,6 +29,25 @@ export class RbacService {
   }
 
   /**
+   * Canonical tenant-scoped authorization check for tenant-wide resources.
+   * The requested permission and tenant Data Scope must come from the SAME
+   * assignment; checking effective permissions and scope independently would
+   * incorrectly combine authority from unrelated assignments.
+   */
+  async requireTenantScopedPermission(
+    tenantId: string,
+    userId: string,
+    permissionCode: string,
+  ): Promise<void> {
+    const allowed = await this.repo.hasTenantScopedPermission(tenantId, userId, permissionCode);
+    if (!allowed) {
+      throw new ForbiddenError(
+        `Missing tenant-scoped permission '${permissionCode}'`,
+      );
+    }
+  }
+
+  /**
    * Throws ForbiddenError unless the user has an assignment whose Data
    * Scope covers `targetOrganizationUnitId` — either a tenant-wide
    * assignment, or an organization_unit assignment on

@@ -1,5 +1,5 @@
 /**
- * Phase 11E browser smoke for the real local development topology.
+ * Phase 11F browser smoke for the real local development topology.
  *
  * Prerequisites: PostgreSQL running, migrated, seeded, permissions synced,
  * API on :4000, and Web on :5173. This remains manual/CI-optional and is not
@@ -81,12 +81,50 @@ async function assertNoHorizontalOverflow(label) {
   assert.equal(noOverflow, true, `${label} has page-level horizontal overflow`);
 }
 
-async function assertMinimumTouchTarget(locator, label) {
+async function assertMinimumTouchTarget(locator, label, minimum = 44) {
   const box = await locator.boundingBox();
   assert.ok(box, `${label} has no bounding box`);
-  assert.ok(box.width >= 44, `${label} is only ${box.width}px wide`);
-  assert.ok(box.height >= 44, `${label} is only ${box.height}px high`);
+  assert.ok(box.width >= minimum, `${label} is only ${box.width}px wide`);
+  assert.ok(box.height >= minimum, `${label} is only ${box.height}px high`);
 }
+
+async function assertDialogFocusContained(dialog, label) {
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await dialog.evaluate((element) => element.contains(document.activeElement)),
+    true,
+    `${label} allowed focus to escape`,
+  );
+}
+
+async function closeDialogWithBackdrop(dialog) {
+  const backdrop = dialog.locator("xpath=..");
+  const box = await backdrop.boundingBox();
+  assert.ok(box, "Dialog backdrop has no bounding box");
+  await page.mouse.click(box.x + 2, box.y + 2);
+  await dialog.waitFor({ state: "detached" });
+}
+
+async function currentAccessToken() {
+  return page.evaluate(() => {
+    const raw = window.localStorage.getItem("abixell.session");
+    return raw ? JSON.parse(raw).accessToken : null;
+  });
+}
+
+async function restoreTemporaryAssignment(userId, assignmentId) {
+  const token = await currentAccessToken();
+  if (!token) return;
+  const response = await page.request.delete(
+    `${BASE}/api/admin/users/${encodeURIComponent(userId)}/role-assignments/${encodeURIComponent(assignmentId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (response.status() !== 204 && response.status() !== 404) {
+    throw new Error(`Temporary role assignment cleanup failed (${response.status()})`);
+  }
+}
+
+let temporaryAssignment = null;
 
 try {
   console.log("1. Authentication and persisted session");
@@ -143,18 +181,59 @@ try {
   await desktopNav.getByRole("link", { name: "Admin Console", exact: true }).click();
   await page.waitForURL(`${BASE}/admin`, { timeout: 8000 });
   await assertVisible(page.getByRole("heading", { name: "Admin Console", exact: true }), "Admin Console missing");
-  await assertVisible(page.getByText("Read only", { exact: true }), "Server-declared read-only badge missing");
-  await assertVisible(page.getByRole("link", { name: "Open Roles" }), "Roles summary card is not navigable");
   assert.equal(
-    await page.getByRole("link", { name: "Open Users" }).count(),
+    await page.getByText("Read only", { exact: true }).count(),
     0,
-    "Users summary must remain non-navigable without a privacy-minimized list endpoint",
+    "Governed access manager was incorrectly reported as read only",
   );
+  await assertVisible(
+    page.getByRole("heading", { name: "Governed user access management", exact: true }),
+    "Governed access capability summary missing",
+  );
+  await assertVisible(page.getByRole("link", { name: "Open Users" }), "Users summary card is not navigable");
+  await assertVisible(page.getByRole("link", { name: "Open Roles" }), "Roles summary card is not navigable");
   await shot("admin-overview");
 
   await page.getByRole("link", { name: "Open Roles" }).click();
   await page.waitForURL(`${BASE}/admin?section=roles`);
   await assertVisible(page.getByRole("heading", { name: "Roles", exact: true }), "Roles section missing");
+
+  const adminRoleCardOrRow = page.locator("tr", { has: page.getByText("ADMIN", { exact: true }) });
+  const roleDetailTrigger = adminRoleCardOrRow.getByRole("button", { name: "View permissions" });
+  await roleDetailTrigger.click();
+  const roleDetailDialog = page.getByRole("dialog", { name: "Administrator permissions" });
+  await assertVisible(roleDetailDialog, "On-demand role permission dialog missing");
+  await assertVisible(
+    roleDetailDialog.getByText("user.role.manage", { exact: true }),
+    "On-demand role permission detail omitted user.role.manage",
+  );
+  assert.equal(
+    await roleDetailDialog.getByText("admin@demo.local", { exact: true }).count(),
+    0,
+    "Role permission detail leaked user identity data",
+  );
+  await assertDialogFocusContained(roleDetailDialog, "Role permission dialog");
+  await assertMinimumTouchTarget(
+    roleDetailDialog.getByRole("button", { name: "Close dialog" }),
+    "Role permission close",
+  );
+  await page.keyboard.press("Escape");
+  await roleDetailDialog.waitFor({ state: "detached" });
+  assert.equal(
+    await roleDetailTrigger.evaluate((element) => element === document.activeElement),
+    true,
+    "Role permission dialog did not restore focus after Escape",
+  );
+
+  await roleDetailTrigger.click();
+  const backdropRoleDialog = page.getByRole("dialog", { name: "Administrator permissions" });
+  await assertVisible(backdropRoleDialog, "Role permission dialog did not reopen");
+  await closeDialogWithBackdrop(backdropRoleDialog);
+  assert.equal(
+    await roleDetailTrigger.evaluate((element) => element === document.activeElement),
+    true,
+    "Role permission dialog did not restore focus after backdrop close",
+  );
 
   const sectionNav = page.getByRole("navigation", { name: "Admin Console sections" });
   await sectionNav.getByRole("link", { name: "Permissions", exact: true }).click();
@@ -190,14 +269,191 @@ try {
   await assertVisible(page.getByRole("heading", { name: "Recent activity", exact: true }), "Reload lost active section");
 
   await page.goto(`${BASE}/admin?section=unknown`, { waitUntil: "networkidle" });
-  await assertVisible(page.getByText("Read-only foundation", { exact: true }), "Unknown section did not fall back to Overview");
+  await assertVisible(
+    page.getByRole("heading", { name: "Governed user access management", exact: true }),
+    "Unknown section did not fall back to Overview",
+  );
   assert.equal(
     await sectionNav.getByRole("link", { name: "Overview", exact: true }).getAttribute("aria-current"),
     "page",
     "Unknown section did not mark Overview current",
   );
 
-  console.log("4. Responsive drawer, focus behavior, touch targets, and overflow");
+  console.log("4. Governed Users access inspection and reversible role assignment");
+  await sectionNav.getByRole("link", { name: "Users", exact: true }).click();
+  await page.waitForURL(`${BASE}/admin?section=users`);
+  await assertVisible(page.getByRole("heading", { name: "Users and access", exact: true }), "Users section missing");
+  await assertVisible(
+    page.locator("table").getByText("reviewer@demo.local", { exact: true }),
+    "Privacy-minimized user summary missing",
+  );
+  await assertVisible(page.getByText(/Showing \d+ of \d+/), "User result count missing");
+  const userSearch = page.getByLabel("Search users by name, email, or role");
+  await userSearch.fill("reviewer@demo.local");
+  await assertVisible(page.getByText("Showing 1 of", { exact: false }), "User search did not narrow the result");
+
+  const reviewerRow = page.locator("tr", { has: page.getByText("reviewer@demo.local", { exact: true }) });
+  const manageAccess = reviewerRow.getByRole("button", { name: "Manage access" });
+  await assertMinimumTouchTarget(manageAccess, "Desktop Manage access", 36);
+
+  let assignmentPostCount = 0;
+  let observedAssignmentRequest;
+  const assignmentRequestObserved = new Promise((resolve) => {
+    observedAssignmentRequest = resolve;
+  });
+  const delayAssignment = async (route) => {
+    assignmentPostCount += 1;
+    observedAssignmentRequest();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue();
+  };
+
+  await manageAccess.click();
+  let accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
+  await assertVisible(accessDialog, "Governed access dialog missing");
+  await page.waitForFunction(
+    () => document.activeElement?.getAttribute("aria-label") === "Close dialog",
+  );
+  await assertDialogFocusContained(accessDialog, "Governed access dialog");
+  await assertMinimumTouchTarget(accessDialog.getByRole("button", { name: "Close dialog" }), "Access dialog close");
+  await page.keyboard.press("Escape");
+  await accessDialog.waitFor({ state: "detached" });
+  assert.equal(
+    await manageAccess.evaluate((element) => element === document.activeElement),
+    true,
+    "Access dialog did not restore focus after Escape",
+  );
+
+  await manageAccess.click();
+  accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
+  await assertVisible(accessDialog, "Access dialog did not reopen");
+  await closeDialogWithBackdrop(accessDialog);
+  assert.equal(
+    await manageAccess.evaluate((element) => element === document.activeElement),
+    true,
+    "Access dialog did not restore focus after backdrop close",
+  );
+
+  await manageAccess.click();
+  accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
+  await assertVisible(accessDialog, "Access dialog did not reopen for assignment");
+  const roleSelect = accessDialog.getByLabel("Role");
+  const scopeSelect = accessDialog.getByLabel("Scope");
+  await roleSelect.selectOption("SUPERVISOR");
+  await scopeSelect.selectOption("tenant");
+  await accessDialog.getByRole("button", { name: "Review assignment" }).click();
+  await assertVisible(accessDialog.getByRole("heading", { name: "What will change" }), "Change review is not mandatory");
+  await assertVisible(accessDialog.getByText("Add role assignment", { exact: true }), "Add operation summary missing");
+  await assertVisible(
+    accessDialog.getByText("Demo Workflow Reviewer · reviewer@demo.local", { exact: true }),
+    "Target user summary missing",
+  );
+  await assertVisible(accessDialog.getByText("Site Supervisor ·", { exact: false }), "Target role summary missing");
+  const addChangeSummary = accessDialog.getByRole("heading", { name: "What will change" }).locator("xpath=..");
+  await assertVisible(
+    addChangeSummary.getByText("SUPERVISOR", { exact: true }),
+    "Target role code missing",
+  );
+  await assertVisible(accessDialog.getByText("tenant", { exact: true }), "Tenant scope type missing");
+  await assertVisible(accessDialog.getByText("Tenant-wide", { exact: true }), "Tenant scope label missing");
+  await assertVisible(
+    accessDialog.getByText("Tenant (no scope ID)", { exact: true }),
+    "Tenant scope ID summary missing",
+  );
+  await assertVisible(
+    accessDialog.getByRole("heading", { name: "Actual role permission summary" }),
+    "Permission review summary missing",
+  );
+  await assertVisible(accessDialog.getByText("user.read", { exact: true }), "Selected role permission summary missing");
+
+  const addPath = /\/api\/admin\/users\/([^/]+)\/role-assignments$/;
+  await page.route(addPath, delayAssignment);
+  let assignmentTargetUserId = null;
+  const addResponsePromise = page.waitForResponse((response) => {
+    if (response.request().method() !== "POST") return false;
+    const match = new URL(response.url()).pathname.match(addPath);
+    if (!match) return false;
+    assignmentTargetUserId = decodeURIComponent(match[1]);
+    return true;
+  });
+  const confirmAdd = accessDialog.getByRole("button", { name: "Confirm add" });
+  await confirmAdd.click();
+  await assignmentRequestObserved;
+  await assertVisible(accessDialog.getByText("Saving change…", { exact: true }), "Pending mutation state missing");
+  assert.equal(await confirmAdd.count(), 0, "Pending state retained a second enabled confirm control");
+  assert.equal(
+    await accessDialog.getAttribute("aria-busy"),
+    "true",
+    "Pending access dialog did not expose aria-busy",
+  );
+  assert.equal(
+    await accessDialog.getByRole("button", { name: "Close dialog" }).isDisabled(),
+    true,
+    "Pending access dialog close control stayed enabled",
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(await accessDialog.isVisible(), true, "Escape dismissed a pending access mutation");
+  const pendingBackdrop = accessDialog.locator("xpath=..");
+  const pendingBackdropBox = await pendingBackdrop.boundingBox();
+  assert.ok(pendingBackdropBox, "Pending dialog backdrop has no bounding box");
+  await page.mouse.click(pendingBackdropBox.x + 2, pendingBackdropBox.y + 2);
+  assert.equal(await accessDialog.isVisible(), true, "Backdrop dismissed a pending access mutation");
+  await page.keyboard.press("Enter");
+  assert.equal(assignmentPostCount, 1, "Pending interaction submitted the mutation more than once");
+  const addResponse = await addResponsePromise;
+  assert.equal(addResponse.status(), 201, "Governed assignment POST did not return 201");
+  const createdAssignment = await addResponse.json();
+  temporaryAssignment = {
+    userId: assignmentTargetUserId,
+    assignmentId: createdAssignment.id,
+  };
+  assert.ok(temporaryAssignment.userId, "Temporary assignment cleanup could not resolve target user");
+  await accessDialog.waitFor({ state: "detached", timeout: 8000 });
+  await page.unroute(addPath, delayAssignment);
+  await assertVisible(
+    page.getByText("Added Site Supervisor access for Demo Workflow Reviewer.", { exact: true }),
+    "Authoritative add success feedback missing",
+  );
+  const updatedReviewerRow = page.locator("tr", { has: page.getByText("reviewer@demo.local", { exact: true }) });
+  await assertVisible(updatedReviewerRow.getByText("SUPERVISOR", { exact: true }), "Authoritative reload omitted new assignment");
+
+  const updatedManageAccess = updatedReviewerRow.getByRole("button", { name: "Manage access" });
+  await updatedManageAccess.click();
+  accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
+  const supervisorAssignment = accessDialog
+    .getByText("SUPERVISOR", { exact: true })
+    .locator("xpath=ancestor::li[1]");
+  await supervisorAssignment.getByRole("button", { name: "Review removal" }).click();
+  await assertVisible(accessDialog.getByText("Remove role assignment", { exact: true }), "Remove operation summary missing");
+  const removeChangeSummary = accessDialog.getByRole("heading", { name: "What will change" }).locator("xpath=..");
+  await assertVisible(
+    removeChangeSummary.getByText("SUPERVISOR", { exact: true }),
+    "Remove role code summary missing",
+  );
+  await assertVisible(accessDialog.getByText("tenant", { exact: true }), "Remove scope type summary missing");
+  await assertVisible(accessDialog.getByText("Tenant-wide", { exact: true }), "Remove scope label missing");
+  const assignmentIdValue = accessDialog
+    .locator("dt", { hasText: "Assignment ID" })
+    .locator("xpath=following-sibling::dd[1]");
+  await assertVisible(assignmentIdValue, "Exact assignment ID missing from removal review");
+  assert.match(await assignmentIdValue.innerText(), /^[0-9a-f-]{36}$/i, "Removal review has invalid assignment ID");
+  await assertVisible(accessDialog.getByText("user.read", { exact: true }), "Removal permission summary missing");
+  await accessDialog.getByRole("button", { name: "Confirm remove" }).click();
+  await accessDialog.waitFor({ state: "detached", timeout: 8000 });
+  temporaryAssignment = null;
+  await assertVisible(
+    page.getByText("Removed Site Supervisor access from Demo Workflow Reviewer.", { exact: true }),
+    "Authoritative removal success feedback missing",
+  );
+  const restoredReviewerRow = page.locator("tr", { has: page.getByText("reviewer@demo.local", { exact: true }) });
+  assert.equal(
+    await restoredReviewerRow.getByText("SUPERVISOR", { exact: true }).count(),
+    0,
+    "Reversible smoke left the temporary assignment behind",
+  );
+  await shot("admin-users-governed-access");
+
+  console.log("5. Responsive drawer, Users layouts, touch targets, and overflow");
   for (const viewport of [
     { name: "desktop", width: 1280, height: 800 },
     { name: "tablet", width: 768, height: 1024 },
@@ -205,6 +461,26 @@ try {
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await assertNoHorizontalOverflow(viewport.name);
+    await assertVisible(page.getByRole("heading", { name: "Users and access", exact: true }), `${viewport.name} Users view missing`);
+    const responsiveManage = page.getByRole("button", { name: "Manage access" }).first();
+    await assertVisible(responsiveManage, `${viewport.name} Manage access missing`);
+    await assertMinimumTouchTarget(
+      responsiveManage,
+      `${viewport.name} Manage access`,
+      viewport.width < 1024 ? 44 : 36,
+    );
+    if (viewport.width < 768) {
+      assert.equal(
+        await page.locator("table").filter({ hasText: "reviewer@demo.local" }).isVisible(),
+        false,
+        `${viewport.name} should use user cards instead of the desktop table`,
+      );
+    } else {
+      await assertVisible(
+        page.locator("table").filter({ hasText: "reviewer@demo.local" }),
+        `${viewport.name} desktop user table missing`,
+      );
+    }
     if (viewport.width < 1024) {
       const menu = page.getByRole("button", { name: "Open navigation" });
       await assertVisible(menu, `${viewport.name} menu trigger missing`);
@@ -269,7 +545,7 @@ try {
   await shot("admin-mobile");
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  console.log("5. Intercepted deterministic Admin Console states");
+  console.log("6. Intercepted deterministic Admin Console states");
   const rolesDenied = async (route) => {
     expectHttpFailure("/api/admin/roles", 403);
     await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "Forbidden" }) });
@@ -342,7 +618,7 @@ try {
   await assertVisible(page.getByText("No workflow definitions configured"), "Empty workflow state missing");
   await page.unroute("**/api/admin/workflows", workflowsEmpty);
 
-  console.log("6. PWA metadata");
+  console.log("7. PWA metadata");
   const manifestHref = await page.getAttribute('link[rel="manifest"]', "href");
   assert.ok(manifestHref, "Manifest link is missing");
   const manifest = await page.evaluate(async (href) => {
@@ -353,7 +629,7 @@ try {
   assert.equal(manifest.name, "Enterprise Management System", "Unexpected PWA manifest name");
   assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 2, "PWA icons are incomplete");
 
-  console.log("7. Logout and post-logout protection");
+  console.log("8. Logout and post-logout protection");
   await page.getByRole("button", { name: "Sign out" }).first().click();
   await page.waitForURL(/\/login/, { timeout: 5000 });
   assert.equal(
@@ -374,6 +650,16 @@ try {
 
   console.log(`\nE2E smoke passed. Temporary screenshots: ${SCREENSHOT_DIR}`);
 } finally {
+  if (temporaryAssignment) {
+    try {
+      await restoreTemporaryAssignment(
+        temporaryAssignment.userId,
+        temporaryAssignment.assignmentId,
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }
   await context.close();
   await browser.close();
 }

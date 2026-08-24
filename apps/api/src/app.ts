@@ -154,7 +154,7 @@ export function buildApp(): FastifyInstance {
     registerProjectDeliveryRoutes(scoped, container);
     // Phase 9 — Reporting & Operational Insight Core
     registerReportingInsightRoutes(scoped, container);
-    // Phase 11C — Business Admin Console Foundation (read-only)
+    // Phase 11F — Business Admin Console with governed User Role assignments
     registerAdminConsoleRoutes(scoped, container);
   });
 

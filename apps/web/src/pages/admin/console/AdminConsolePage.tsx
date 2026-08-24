@@ -1,11 +1,11 @@
 /**
- * Phase 11C/11E — Business Admin Console Foundation.
+ * Phase 11C/11E/11F — Business Admin Console Foundation.
  *
- * A tenant-local, strictly READ-ONLY consolidation of platform administration:
- * who exists, what access is defined, which modules and workflows are
- * configured, and what happened recently. It renders no create/edit/delete
- * control because the backend offers none. This is not the Platform Architect
- * or Builder Console and provides no metadata, schema, query, or package tools.
+ * A tenant-local consolidation of platform administration: who exists, what
+ * access is defined, which modules and workflows are configured, and what
+ * happened recently. Phase 11F adds only governed user-role assignment changes;
+ * every other section remains read only. This is not the Platform Architect or
+ * Builder Console and provides no metadata, schema, query, or package tools.
  */
 import { Link, useSearchParams } from "react-router-dom";
 import { useShell } from "../../../shell/layout/AppShell";
@@ -26,11 +26,13 @@ import { AdminPermissionsView } from "./AdminPermissionsView";
 import { AdminModulesView } from "./AdminModulesView";
 import { AdminWorkflowsView } from "./AdminWorkflowsView";
 import { AdminAuditView } from "./AdminAuditView";
+import { AdminUsersView } from "./AdminUsersView";
 
-type SectionKey = "overview" | "roles" | "permissions" | "modules" | "workflows" | "audit";
+type SectionKey = "overview" | "users" | "roles" | "permissions" | "modules" | "workflows" | "audit";
 
 const SECTIONS: { key: SectionKey; label: string }[] = [
   { key: "overview", label: "Overview" },
+  { key: "users", label: "Users" },
   { key: "roles", label: "Roles" },
   { key: "permissions", label: "Permissions" },
   { key: "modules", label: "Modules" },
@@ -115,6 +117,15 @@ function AdminConsoleContent() {
       </nav>
 
       {activeSection === "overview" && <AdminOverviewView resource={overview} />}
+      {activeSection === "users" && (
+        <AdminUsersView
+          canManageAccess={Boolean(
+            overview.data?.capabilities.userRoleManage &&
+              overview.data.capabilities.userAccessRead &&
+              overview.data.capabilities.rolePermissionRead,
+          )}
+        />
+      )}
       {activeSection === "roles" && <AdminRolesView />}
       {activeSection === "permissions" && <AdminPermissionsView />}
       {activeSection === "modules" && <AdminModulesView />}
@@ -148,8 +159,9 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <OverviewCard
               title="Users"
-              description="User accounts registered in this tenant."
+              description="User accounts and their governed role assignments."
               section={data.sections.users}
+              destination="users"
             />
             <OverviewCard
               title="Roles"
@@ -209,20 +221,21 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
             </p>
           </Card>
 
-          {data.capabilities.readOnly && (
-            <Card className="mt-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Read-only foundation</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    This console exposes summaries only. It does not create or change users, roles,
-                    module activation, permissions, or workflow definitions.
-                  </p>
-                </div>
-                <Badge>API declared</Badge>
+          <Card className="mt-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {data.capabilities.readOnly ? "Read-only access" : "Governed user access management"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {data.capabilities.userRoleManage
+                    ? "You can add or remove user role assignments through mandatory review and server-authoritative reload. Roles, permission definitions, modules, and workflows remain read only."
+                    : "You can inspect administration summaries and access assignments, but cannot change them."}
+                </p>
               </div>
-            </Card>
-          )}
+              <Badge>{data.capabilities.userRoleManage ? "User access manager" : "API declared"}</Badge>
+            </div>
+          </Card>
         </>
       )}
     </AdminSectionState>

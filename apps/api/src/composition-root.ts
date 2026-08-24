@@ -264,10 +264,10 @@ export function buildContainer() {
     rbac,
   );
 
-  // Phase 11C — Business Admin Console Foundation. Read-only tenant-local
-  // consolidation over existing services; no mutation surface, no Builder,
-  // no manifest runtime. Each section is gated by the permission that
-  // already governs that data, so the console grants no new reach.
+  // Phase 11F — Business Admin Console plus governed User Role assignments.
+  // Existing consolidation reads stay permission-gated; the narrow write
+  // surface is owned transactionally by the RBAC repository using this same
+  // shared Pool. No Builder or generic configuration mutation is introduced.
   const adminConsole = new AdminConsoleService(
     rbac,
     rbacRepo,

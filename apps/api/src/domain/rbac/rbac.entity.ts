@@ -30,6 +30,45 @@ export interface AssignRoleInput {
   scopeCustomerId?: string | null;
 }
 
+/** Strict application input for the governed Admin assignment surface. */
+export type GovernedRoleAssignmentInput =
+  | { roleCode: string; scopeType: "tenant" }
+  | {
+      roleCode: string;
+      scopeType: "organization_unit";
+      scopeOrganizationUnitId: string;
+    }
+  | { roleCode: string; scopeType: "customer"; scopeCustomerId: string };
+
+/** Privacy-minimized access projection: enough to govern access, no credentials
+ * or user lifecycle/audit internals. */
+export interface AdminUserAccessSummary {
+  id: string;
+  fullName: string;
+  email: string;
+  status: string;
+  roleAssignments: AdminRoleAssignmentSummary[];
+}
+
+export interface AdminRoleAssignmentSummary {
+  id: string;
+  roleCode: string;
+  roleName: string;
+  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeOrganizationUnitId: string | null;
+  scopeOrganizationUnitName: string | null;
+  scopeCustomerId: string | null;
+  scopeCustomerName: string | null;
+}
+
+/** One tenant-owned Role and only the global catalog entries granted to it. */
+export interface RolePermissionDetail {
+  roleCode: string;
+  roleName: string;
+  isFullAccess: boolean;
+  permissions: Permission[];
+}
+
 /** A Role plus the counts an administrator needs to understand it at a
  * glance. Phase 11C — summary only: the permission CODES a role grants are
  * deliberately not projected here, so the console never becomes a covert
@@ -66,6 +105,37 @@ export interface RbacRepository {
    * code and description — and never which tenant or user holds them.
    */
   listPermissionCatalog(): Promise<Permission[]>;
+
+  /** Canonical tenant-scope permission predicate. Permission and tenant Data
+   * Scope must be carried by the same assignment; capabilities from separate
+   * assignments are never combined. */
+  hasTenantScopedPermission(
+    tenantId: string,
+    userId: string,
+    permissionCode: string,
+  ): Promise<boolean>;
+
+  /** Phase 11F governed access reads. Both methods are tenant-qualified at
+   * every ownership edge, including User -> Assignment -> Role and optional
+   * scope references. */
+  listAdminUserAccess(tenantId: string): Promise<AdminUserAccessSummary[]>;
+  getRolePermissionDetail(
+    tenantId: string,
+    roleCode: string,
+  ): Promise<RolePermissionDetail | null>;
+
+  /** Phase 11F writes own their complete transaction, tenant lock, authority
+   * revalidation, resource validation, mutation, and append-only audit row. */
+  createGovernedRoleAssignment(
+    actor: { tenantId: string; userId: string },
+    targetUserId: string,
+    input: GovernedRoleAssignmentInput,
+  ): Promise<AdminRoleAssignmentSummary>;
+  removeGovernedRoleAssignment(
+    actor: { tenantId: string; userId: string },
+    targetUserId: string,
+    assignmentId: string,
+  ): Promise<void>;
 
   /**
    * Every user who currently holds `roleCode` with a Data Scope covering

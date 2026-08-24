@@ -4,13 +4,12 @@ import { pool } from "../../src/infrastructure/persistence/db.js";
 import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
- * Phase 11C — Business Admin Console Foundation.
+ * Phase 11C — Business Admin Console read-side regression coverage.
  *
- * The console is a READ-ONLY consolidation surface, so these tests are
- * weighted toward the properties that make that claim true rather than
- * toward data shape: the entry permission is explicit and required, holding
- * it alone reveals nothing, one tenant can never observe another, no
- * sensitive payload is projected, and no mutation verb exists.
+ * Phase 11F adds a separately governed role-assignment write slice. These
+ * tests keep proving the original read contract: the entry permission is
+ * explicit and required, holding it alone reveals nothing, one tenant can
+ * never observe another, and no sensitive payload is projected.
  */
 
 const stamp = Date.now();
@@ -263,10 +262,13 @@ describe("Phase 11C — Business Admin Console", () => {
     });
   });
 
-  describe("read-only surface", () => {
-    it("declares itself read-only with every management capability disabled", async () => {
+  describe("bounded management surface", () => {
+    it("keeps every Phase 11C area read-only while declaring only the narrow Phase 11F capability", async () => {
       const capabilities = (await get("/admin/overview", consoleToken)).json().capabilities;
       expect(capabilities.readOnly).toBe(true);
+      expect(capabilities.userRoleManage).toBe(false);
+      expect(capabilities.userAccessRead).toBe(true);
+      expect(capabilities.rolePermissionRead).toBe(true);
       expect(capabilities.userManage).toBe(false);
       expect(capabilities.roleManage).toBe(false);
       expect(capabilities.permissionManage).toBe(false);
@@ -274,9 +276,9 @@ describe("Phase 11C — Business Admin Console", () => {
       expect(capabilities.workflowManage).toBe(false);
     });
 
-    it("exposes no mutation verb on any admin console route", async () => {
-      // Even a full-access administrator gets nothing but a routing failure:
-      // the mutation surface does not exist, rather than being permission-gated.
+    it("keeps the original Phase 11C routes free of mutation verbs", async () => {
+      // Phase 11F adds writes only below the dedicated per-user assignment
+      // resource. None of the original summary/catalog routes becomes mutable.
       for (const url of ENDPOINTS) {
         for (const method of ["POST", "PATCH", "PUT", "DELETE"] as const) {
           const response = await app.inject({ method, url, headers: authHeader(adminToken), payload: {} });

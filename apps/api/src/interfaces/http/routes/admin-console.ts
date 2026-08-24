@@ -1,15 +1,33 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import type { Container } from "../../../composition-root.js";
 
-/**
- * Phase 11C — Business Admin Console Foundation.
- *
- * Strictly read-only. Every handler is a passthrough: authorization,
- * tenant scoping, and field selection all live in AdminConsoleService, so
- * this file never hand-rolls a permission check (RbacService convention).
- * No POST/PATCH/PUT/DELETE is declared here by design — Phase 11C adds no
- * mutation surface.
- */
+const roleCodeParamsSchema = z.object({ roleCode: z.string().min(1) }).strict();
+const userParamsSchema = z.object({ userId: z.string().uuid() }).strict();
+const assignmentParamsSchema = z
+  .object({ userId: z.string().uuid(), assignmentId: z.string().uuid() })
+  .strict();
+
+const assignRoleSchema = z.discriminatedUnion("scopeType", [
+  z.object({ roleCode: z.string().min(1), scopeType: z.literal("tenant") }).strict(),
+  z
+    .object({
+      roleCode: z.string().min(1),
+      scopeType: z.literal("organization_unit"),
+      scopeOrganizationUnitId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      roleCode: z.string().min(1),
+      scopeType: z.literal("customer"),
+      scopeCustomerId: z.string().uuid(),
+    })
+    .strict(),
+]);
+
+/** Business Admin Console routes. Phase 11F adds only governed User Role
+ * assignment access; all pre-existing Phase 11C reads remain unchanged. */
 export function registerAdminConsoleRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.adminConsole;
 
@@ -36,4 +54,39 @@ export function registerAdminConsoleRoutes(app: FastifyInstance, container: Cont
   app.get("/admin/audit/recent", { preHandler: app.authenticate }, async (request, reply) => {
     return reply.send(await svc().listRecentAudit(request.actor!));
   });
+
+  // Phase 11F governed access surface: exactly two reads and two writes.
+  app.get("/admin/users", { preHandler: app.authenticate }, async (request, reply) => {
+    return reply.send(await svc().listUserAccess(request.actor!));
+  });
+
+  app.get(
+    "/admin/roles/:roleCode/permissions",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { roleCode } = roleCodeParamsSchema.parse(request.params);
+      return reply.send(await svc().getRolePermissions(request.actor!, roleCode));
+    },
+  );
+
+  app.post(
+    "/admin/users/:userId/role-assignments",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { userId } = userParamsSchema.parse(request.params);
+      const body = assignRoleSchema.parse(request.body);
+      const assignment = await svc().assignUserRole(request.actor!, userId, body);
+      return reply.status(201).send(assignment);
+    },
+  );
+
+  app.delete(
+    "/admin/users/:userId/role-assignments/:assignmentId",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { userId, assignmentId } = assignmentParamsSchema.parse(request.params);
+      await svc().removeUserRole(request.actor!, userId, assignmentId);
+      return reply.status(204).send();
+    },
+  );
 }

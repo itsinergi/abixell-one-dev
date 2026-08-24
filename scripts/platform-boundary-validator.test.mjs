@@ -408,9 +408,10 @@ test("current repository has no blocking platform-boundary findings", async () =
   const repositoryFiles = await collectPlatformBoundaryFiles(repositoryRoot);
   const result = validatePlatformBoundaries(repositoryFiles);
   assert.equal(result.blockerCount, 0, `\n${formatValidationReport(result)}`);
-  // 75 through Phase 11B; Phase 11C adds exactly one — `admin.console.read`.
-  // Pinned deliberately: an unexplained change here means a permission was
-  // introduced or removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 76);
+  // 75 through Phase 11B; Phase 11C adds `admin.console.read`, and Phase 11F
+  // adds exactly the governed `user.role.manage` capability. Pinned
+  // deliberately: an unexplained change means a permission was introduced or
+  // removed without the accompanying governance step.
+  assert.equal(result.permissionCount, 77);
   assert.equal(result.advisoryCount, 1);
 });

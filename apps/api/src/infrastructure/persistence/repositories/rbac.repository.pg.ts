@@ -1,12 +1,33 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type {
+  AdminRoleAssignmentSummary,
+  AdminUserAccessSummary,
   AssignRoleInput,
+  GovernedRoleAssignmentInput,
   Permission,
   RbacRepository,
   Role,
+  RolePermissionDetail,
   RoleSummary,
   UserRoleAssignment,
 } from "../../../domain/rbac/rbac.entity.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../../domain/shared-kernel/errors.js";
+
+const USER_ROLE_MANAGE = "user.role.manage";
+const UNIQUE_VIOLATION = "23505";
+
+function mapAdminAssignment(row: Record<string, unknown>): AdminRoleAssignmentSummary {
+  return {
+    id: row.id as string,
+    roleCode: row.role_code as string,
+    roleName: row.role_name as string,
+    scopeType: row.scope_type as AdminRoleAssignmentSummary["scopeType"],
+    scopeOrganizationUnitId: (row.scope_organization_unit_id as string | null) ?? null,
+    scopeOrganizationUnitName: (row.scope_organization_unit_name as string | null) ?? null,
+    scopeCustomerId: (row.scope_customer_id as string | null) ?? null,
+    scopeCustomerName: (row.scope_customer_name as string | null) ?? null,
+  };
+}
 
 export class PgRbacRepository implements RbacRepository {
   constructor(private readonly pool: Pool) {}
@@ -23,8 +44,12 @@ export class PgRbacRepository implements RbacRepository {
               COALESCE(r.is_full_access, false) AS is_full_access,
               (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id = r.id)::int
                 AS permission_count,
-              (SELECT COUNT(DISTINCT ura.user_id) FROM user_role_assignments ura
-                WHERE ura.role_id = r.id)::int
+              (SELECT COUNT(DISTINCT ura.user_id)
+                 FROM user_role_assignments ura
+                 JOIN users u ON u.id = ura.user_id
+                WHERE ura.role_id = r.id
+                  AND u.tenant_id = r.tenant_id
+                  AND u.deleted_at IS NULL)::int
                 AS assigned_user_count
          FROM roles r
         WHERE r.tenant_id = $1
@@ -46,6 +71,490 @@ export class PgRbacRepository implements RbacRepository {
       `SELECT code, description FROM permissions ORDER BY code`,
     );
     return result.rows.map((row) => ({ code: row.code, description: row.description }));
+  }
+
+  async hasTenantScopedPermission(
+    tenantId: string,
+    userId: string,
+    permissionCode: string,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM users u
+           JOIN user_role_assignments ura ON ura.user_id = u.id
+           JOIN roles r
+             ON r.id = ura.role_id
+            AND r.tenant_id = u.tenant_id
+           JOIN role_permissions rp ON rp.role_id = r.id
+           JOIN permissions p ON p.id = rp.permission_id
+          WHERE u.id = $2
+            AND u.tenant_id = $1
+            AND u.deleted_at IS NULL
+            AND u.status = 'active'
+            AND ura.scope_type = 'tenant'
+            AND ura.scope_organization_unit_id IS NULL
+            AND ura.scope_customer_id IS NULL
+            AND p.code = $3
+       ) AS allowed`,
+      [tenantId, userId, permissionCode],
+    );
+    return result.rows[0]?.allowed === true;
+  }
+
+  async listAdminUserAccess(tenantId: string): Promise<AdminUserAccessSummary[]> {
+    const result = await this.pool.query(
+      `SELECT u.id AS user_id,
+              u.full_name,
+              u.email,
+              u.status,
+              access.id AS assignment_id,
+              access.role_code,
+              access.role_name,
+              access.scope_type,
+              access.scope_organization_unit_id,
+              access.scope_organization_unit_name,
+              access.scope_customer_id,
+              access.scope_customer_name
+         FROM users u
+         LEFT JOIN LATERAL (
+           SELECT ura.id,
+                  ura.created_at,
+                  r.code AS role_code,
+                  r.name AS role_name,
+                  ura.scope_type,
+                  ou.id AS scope_organization_unit_id,
+                  ou.name AS scope_organization_unit_name,
+                  c.id AS scope_customer_id,
+                  c.name AS scope_customer_name
+             FROM user_role_assignments ura
+             JOIN roles r
+               ON r.id = ura.role_id
+              AND r.tenant_id = u.tenant_id
+             LEFT JOIN organization_units ou
+               ON ou.id = ura.scope_organization_unit_id
+              AND ou.tenant_id = u.tenant_id
+              AND ou.deleted_at IS NULL
+             LEFT JOIN customers c
+               ON c.id = ura.scope_customer_id
+              AND c.tenant_id = u.tenant_id
+              AND c.deleted_at IS NULL
+            WHERE ura.user_id = u.id
+              AND (
+                (
+                  ura.scope_type = 'tenant'
+                  AND ura.scope_organization_unit_id IS NULL
+                  AND ura.scope_customer_id IS NULL
+                )
+                OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
+                OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
+              )
+         ) access ON true
+        WHERE u.tenant_id = $1
+          AND u.deleted_at IS NULL
+          AND u.status = 'active'
+        ORDER BY u.full_name,
+                 u.id,
+                 access.role_code,
+                 access.created_at,
+                 access.id`,
+      [tenantId],
+    );
+
+    const users = new Map<string, AdminUserAccessSummary>();
+    for (const row of result.rows) {
+      let user = users.get(row.user_id);
+      if (!user) {
+        user = {
+          id: row.user_id,
+          fullName: row.full_name,
+          email: row.email,
+          status: row.status,
+          roleAssignments: [],
+        };
+        users.set(row.user_id, user);
+      }
+      if (row.assignment_id) {
+        user.roleAssignments.push(
+          mapAdminAssignment({
+            id: row.assignment_id,
+            role_code: row.role_code,
+            role_name: row.role_name,
+            scope_type: row.scope_type,
+            scope_organization_unit_id: row.scope_organization_unit_id,
+            scope_organization_unit_name: row.scope_organization_unit_name,
+            scope_customer_id: row.scope_customer_id,
+            scope_customer_name: row.scope_customer_name,
+          }),
+        );
+      }
+    }
+    return [...users.values()];
+  }
+
+  async getRolePermissionDetail(
+    tenantId: string,
+    roleCode: string,
+  ): Promise<RolePermissionDetail | null> {
+    const result = await this.pool.query(
+      `SELECT r.code AS role_code,
+              r.name AS role_name,
+              COALESCE(r.is_full_access, false) AS is_full_access,
+              p.code AS permission_code,
+              p.description AS permission_description
+         FROM roles r
+         LEFT JOIN role_permissions rp ON rp.role_id = r.id
+         LEFT JOIN permissions p ON p.id = rp.permission_id
+        WHERE r.tenant_id = $1
+          AND r.code = $2
+        ORDER BY p.code`,
+      [tenantId, roleCode],
+    );
+    if (!result.rows[0]) return null;
+    return {
+      roleCode: result.rows[0].role_code,
+      roleName: result.rows[0].role_name,
+      isFullAccess: result.rows[0].is_full_access,
+      permissions: result.rows
+        .filter((row) => row.permission_code !== null)
+        .map((row) => ({ code: row.permission_code, description: row.permission_description })),
+    };
+  }
+
+  async createGovernedRoleAssignment(
+    actor: { tenantId: string; userId: string },
+    targetUserId: string,
+    input: GovernedRoleAssignmentInput,
+  ): Promise<AdminRoleAssignmentSummary> {
+    return this.inGovernedTransaction(actor.tenantId, async (client) => {
+      await this.requireTransactionActorAuthority(client, actor);
+
+      const target = await client.query(
+        `SELECT id
+           FROM users
+          WHERE id = $1
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+            AND status = 'active'`,
+        [targetUserId, actor.tenantId],
+      );
+      if (!target.rows[0]) throw new NotFoundError("User", targetUserId);
+
+      const roleResult = await client.query(
+        `SELECT id, code, name
+           FROM roles
+          WHERE tenant_id = $1
+            AND code = $2`,
+        [actor.tenantId, input.roleCode],
+      );
+      const role = roleResult.rows[0];
+      if (!role) throw new NotFoundError("Role", input.roleCode);
+
+      let organizationUnitName: string | null = null;
+      let customerName: string | null = null;
+      const organizationUnitId =
+        input.scopeType === "organization_unit" ? input.scopeOrganizationUnitId : null;
+      const customerId = input.scopeType === "customer" ? input.scopeCustomerId : null;
+
+      if (organizationUnitId) {
+        const organizationUnit = await client.query(
+          `SELECT name
+             FROM organization_units
+            WHERE id = $1
+              AND tenant_id = $2
+              AND deleted_at IS NULL`,
+          [organizationUnitId, actor.tenantId],
+        );
+        if (!organizationUnit.rows[0]) {
+          throw new NotFoundError("Organization Unit", organizationUnitId);
+        }
+        organizationUnitName = organizationUnit.rows[0].name;
+      }
+
+      if (customerId) {
+        const customer = await client.query(
+          `SELECT name
+             FROM customers
+            WHERE id = $1
+              AND tenant_id = $2
+              AND deleted_at IS NULL`,
+          [customerId, actor.tenantId],
+        );
+        if (!customer.rows[0]) throw new NotFoundError("Customer", customerId);
+        customerName = customer.rows[0].name;
+      }
+
+      let inserted;
+      try {
+        inserted = await client.query(
+          `INSERT INTO user_role_assignments
+             (user_id, role_id, scope_type, scope_organization_unit_id,
+              scope_customer_id, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, scope_type, scope_organization_unit_id, scope_customer_id`,
+          [
+            targetUserId,
+            role.id,
+            input.scopeType,
+            organizationUnitId,
+            customerId,
+            actor.userId,
+          ],
+        );
+      } catch (error) {
+        const databaseError = error as { code?: string; constraint?: string };
+        if (
+          databaseError.code === UNIQUE_VIOLATION &&
+          databaseError.constraint === "user_role_assignments_exact_assignment_unique"
+        ) {
+          throw new ConflictError("This exact Role assignment already exists");
+        }
+        throw error;
+      }
+
+      const row = inserted.rows[0];
+      const assignment = mapAdminAssignment({
+        id: row.id,
+        role_code: role.code,
+        role_name: role.name,
+        scope_type: row.scope_type,
+        scope_organization_unit_id: row.scope_organization_unit_id,
+        scope_organization_unit_name: organizationUnitName,
+        scope_customer_id: row.scope_customer_id,
+        scope_customer_name: customerName,
+      });
+
+      await this.recordGovernedAudit(client, {
+        tenantId: actor.tenantId,
+        actorUserId: actor.userId,
+        targetUserId,
+        assignment,
+        action: "user.role_assigned",
+      });
+      return assignment;
+    });
+  }
+
+  async removeGovernedRoleAssignment(
+    actor: { tenantId: string; userId: string },
+    targetUserId: string,
+    assignmentId: string,
+  ): Promise<void> {
+    await this.inGovernedTransaction(actor.tenantId, async (client) => {
+      await this.requireTransactionActorAuthority(client, actor);
+
+      const target = await client.query(
+        `SELECT id
+           FROM users
+          WHERE id = $1
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+            AND status = 'active'`,
+        [targetUserId, actor.tenantId],
+      );
+      if (!target.rows[0]) throw new NotFoundError("User", targetUserId);
+
+      const assignmentResult = await client.query(
+        `SELECT ura.id,
+                ura.scope_type,
+                ura.scope_organization_unit_id,
+                ou.name AS scope_organization_unit_name,
+                ura.scope_customer_id,
+                c.name AS scope_customer_name,
+                r.code AS role_code,
+                r.name AS role_name,
+                EXISTS (
+                  SELECT 1
+                    FROM role_permissions manager_rp
+                    JOIN permissions manager_p ON manager_p.id = manager_rp.permission_id
+                   WHERE manager_rp.role_id = r.id
+                     AND manager_p.code = $4
+                ) AS grants_user_role_manage
+           FROM user_role_assignments ura
+           JOIN users u
+             ON u.id = ura.user_id
+            AND u.tenant_id = $2
+            AND u.deleted_at IS NULL
+           JOIN roles r
+             ON r.id = ura.role_id
+            AND r.tenant_id = u.tenant_id
+           LEFT JOIN organization_units ou
+             ON ou.id = ura.scope_organization_unit_id
+            AND ou.tenant_id = u.tenant_id
+            AND ou.deleted_at IS NULL
+           LEFT JOIN customers c
+             ON c.id = ura.scope_customer_id
+            AND c.tenant_id = u.tenant_id
+            AND c.deleted_at IS NULL
+          WHERE ura.id = $1
+            AND ura.user_id = $3
+            AND (
+              (
+                ura.scope_type = 'tenant'
+                AND ura.scope_organization_unit_id IS NULL
+                AND ura.scope_customer_id IS NULL
+              )
+              OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
+              OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
+            )`,
+        [assignmentId, actor.tenantId, targetUserId, USER_ROLE_MANAGE],
+      );
+      const row = assignmentResult.rows[0];
+      if (!row) throw new NotFoundError("Role assignment", assignmentId);
+
+      const removesTenantManager =
+        row.grants_user_role_manage === true &&
+        row.scope_type === "tenant" &&
+        row.scope_organization_unit_id === null &&
+        row.scope_customer_id === null;
+      if (removesTenantManager && targetUserId === actor.userId) {
+        throw new ConflictError("You cannot remove your own tenant manager assignment");
+      }
+
+      if (removesTenantManager) {
+        const remainingManagers = await client.query(
+          `SELECT COUNT(DISTINCT manager_ura.user_id)::int AS count
+             FROM user_role_assignments manager_ura
+             JOIN users manager_u
+               ON manager_u.id = manager_ura.user_id
+              AND manager_u.tenant_id = $1
+              AND manager_u.deleted_at IS NULL
+              AND manager_u.status = 'active'
+             JOIN roles manager_r
+               ON manager_r.id = manager_ura.role_id
+              AND manager_r.tenant_id = manager_u.tenant_id
+             JOIN role_permissions manager_rp ON manager_rp.role_id = manager_r.id
+             JOIN permissions manager_p ON manager_p.id = manager_rp.permission_id
+            WHERE manager_ura.scope_type = 'tenant'
+              AND manager_ura.scope_organization_unit_id IS NULL
+              AND manager_ura.scope_customer_id IS NULL
+              AND manager_p.code = $2
+              AND manager_ura.user_id <> $3`,
+          [actor.tenantId, USER_ROLE_MANAGE, targetUserId],
+        );
+        if (remainingManagers.rows[0].count === 0) {
+          throw new ConflictError("Cannot remove the final active tenant manager assignment");
+        }
+      }
+
+      const assignment = mapAdminAssignment(row);
+      await client.query(
+        `DELETE FROM user_role_assignments
+          WHERE id = $1
+            AND user_id = $2`,
+        [assignmentId, targetUserId],
+      );
+      await this.recordGovernedAudit(client, {
+        tenantId: actor.tenantId,
+        actorUserId: actor.userId,
+        targetUserId,
+        assignment,
+        action: "user.role_removed",
+      });
+    });
+  }
+
+  private async inGovernedTransaction<T>(
+    tenantId: string,
+    operation: (client: PoolClient) => Promise<T>,
+  ): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const lockedTenant = await client.query(
+        `SELECT id
+           FROM tenants
+          WHERE id = $1
+            AND deleted_at IS NULL
+          FOR UPDATE`,
+        [tenantId],
+      );
+      if (!lockedTenant.rows[0]) throw new NotFoundError("Tenant", tenantId);
+      const result = await operation(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async requireTransactionActorAuthority(
+    client: PoolClient,
+    actor: { tenantId: string; userId: string },
+  ): Promise<void> {
+    const result = await client.query(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM users u
+          WHERE u.id = $2
+            AND u.tenant_id = $1
+            AND u.deleted_at IS NULL
+            AND u.status = 'active'
+            AND EXISTS (
+              SELECT 1
+                FROM user_role_assignments entry_ura
+                JOIN roles entry_r
+                  ON entry_r.id = entry_ura.role_id
+                 AND entry_r.tenant_id = u.tenant_id
+                JOIN role_permissions entry_rp ON entry_rp.role_id = entry_r.id
+                JOIN permissions entry_p ON entry_p.id = entry_rp.permission_id
+               WHERE entry_ura.user_id = u.id
+                 AND entry_p.code = $3
+            )
+            AND EXISTS (
+              SELECT 1
+                FROM user_role_assignments manager_ura
+                JOIN roles manager_r
+                  ON manager_r.id = manager_ura.role_id
+                 AND manager_r.tenant_id = u.tenant_id
+                JOIN role_permissions manager_rp ON manager_rp.role_id = manager_r.id
+                JOIN permissions manager_p ON manager_p.id = manager_rp.permission_id
+               WHERE manager_ura.user_id = u.id
+                 AND manager_ura.scope_type = 'tenant'
+                 AND manager_ura.scope_organization_unit_id IS NULL
+                 AND manager_ura.scope_customer_id IS NULL
+                 AND manager_p.code = $4
+            )
+       ) AS allowed`,
+      [actor.tenantId, actor.userId, "admin.console.read", USER_ROLE_MANAGE],
+    );
+    if (result.rows[0]?.allowed !== true) {
+      throw new ForbiddenError("Admin Console access or tenant-scoped User access management authority is missing");
+    }
+  }
+
+  private async recordGovernedAudit(
+    client: PoolClient,
+    input: {
+      tenantId: string;
+      actorUserId: string;
+      targetUserId: string;
+      assignment: AdminRoleAssignmentSummary;
+      action: "user.role_assigned" | "user.role_removed";
+    },
+  ): Promise<void> {
+    const metadata = {
+      targetUserId: input.targetUserId,
+      roleCode: input.assignment.roleCode,
+      scopeType: input.assignment.scopeType,
+      scopeOrganizationUnitId: input.assignment.scopeOrganizationUnitId,
+      scopeCustomerId: input.assignment.scopeCustomerId,
+    };
+    await client.query(
+      `INSERT INTO audit_log
+         (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, $3, 'user', $4, $5::jsonb)`,
+      [
+        input.tenantId,
+        input.actorUserId,
+        input.action,
+        input.targetUserId,
+        JSON.stringify(metadata),
+      ],
+    );
   }
 
   async listUserIdsWithPermissionInTenant(tenantId: string, permissionCode: string): Promise<string[]> {

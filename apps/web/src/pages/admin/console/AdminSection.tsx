@@ -2,8 +2,8 @@
  * Phase 11C/11E — Business Admin Console shared presentation.
  *
  * Renders deterministic loading, permission-denied, expired-session, error,
- * and ready states so each read-only view declares only its content. Reaching
- * the console never implies the right to read every area within it.
+ * and ready states so each view declares only its content. Reaching the console
+ * never implies the right to read or change every area within it.
  */
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";

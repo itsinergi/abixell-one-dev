@@ -24,7 +24,7 @@ export interface AdminResourceState<T> {
   error: string | null;
   denied: boolean;
   sessionExpired: boolean;
-  reload: () => void;
+  reload: () => Promise<void>;
 }
 
 export function useAdminResource<T>(

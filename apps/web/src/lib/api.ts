@@ -30,6 +30,9 @@ async function request<T>(
   if (!response.ok) {
     throw new ApiError(response.status, data.error ?? `Request failed (${response.status})`);
   }
+  // A successful 204 deliberately has no representation. Returning `undefined`
+  // keeps `request<void>` truthful instead of leaking the JSON fallback object.
+  if (response.status === 204) return undefined as T;
   return data as T;
 }
 
@@ -989,11 +992,34 @@ export const api = {
   completeHseFollowUp: (token: string, recordId: string, followUpId: string, body: CompleteHseFollowUpBody) =>
     request<HseFollowUp>(`/hse/records/${recordId}/follow-ups/${followUpId}/complete`, { method: "POST", token, body }),
 
-  // --- Business Admin Console (Phase 11C) — READ-ONLY -------------------
-  // No mutating counterparts exist by design: Phase 11C adds a consolidated
-  // administration VIEW, not an administration editor.
+  // --- Business Admin Console (Phase 11C/11F) ---------------------------
   adminOverview: (token: string) => request<AdminOverview>("/admin/overview", { token }),
+  adminUsers: (token: string) => request<AdminUserAccessSummary[]>("/admin/users", { token }),
   adminRoles: (token: string) => request<AdminRoleSummary[]>("/admin/roles", { token }),
+  adminRolePermissions: (token: string, roleCode: string) =>
+    request<AdminRolePermissions>(`/admin/roles/${encodeURIComponent(roleCode)}/permissions`, { token }),
+  addAdminUserRoleAssignment: (
+    token: string,
+    userId: string,
+    body: AdminRoleAssignmentInput,
+  ) =>
+    request<AdminRoleAssignmentSummary>(`/admin/users/${encodeURIComponent(userId)}/role-assignments`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  deleteAdminUserRoleAssignment: (
+    token: string,
+    userId: string,
+    assignmentId: string,
+  ) =>
+    request<void>(
+      `/admin/users/${encodeURIComponent(userId)}/role-assignments/${encodeURIComponent(assignmentId)}`,
+      {
+        method: "DELETE",
+        token,
+      },
+    ),
   adminPermissions: (token: string) => request<AdminPermission[]>("/admin/permissions", { token }),
   adminModules: (token: string) => request<AdminModuleSummary[]>("/admin/modules", { token }),
   adminWorkflows: (token: string) => request<AdminWorkflowSummary[]>("/admin/workflows", { token }),
@@ -1023,7 +1049,10 @@ export type AdminOverview = {
     audit: AdminCountSection;
   };
   capabilities: {
-    readOnly: true;
+    userRoleManage: boolean;
+    userAccessRead: boolean;
+    rolePermissionRead: boolean;
+    readOnly: boolean;
     userManage: false;
     roleManage: false;
     permissionManage: false;
@@ -1032,12 +1061,52 @@ export type AdminOverview = {
   };
 };
 
+export type AdminRoleAssignmentScopeType =
+  | "tenant"
+  | "organization_unit"
+  | "customer";
+
+export type AdminRoleAssignmentSummary = {
+  id: string;
+  roleCode: string;
+  roleName: string;
+  scopeType: AdminRoleAssignmentScopeType;
+  scopeOrganizationUnitId: string | null;
+  scopeOrganizationUnitName: string | null;
+  scopeCustomerId: string | null;
+  scopeCustomerName: string | null;
+};
+
+export type AdminUserAccessSummary = {
+  id: string;
+  fullName: string;
+  email: string;
+  status: string;
+  roleAssignments: AdminRoleAssignmentSummary[];
+};
+
+export type AdminRoleAssignmentInput =
+  | { roleCode: string; scopeType: "tenant" }
+  | {
+      roleCode: string;
+      scopeType: "organization_unit";
+      scopeOrganizationUnitId: string;
+    }
+  | { roleCode: string; scopeType: "customer"; scopeCustomerId: string };
+
 export type AdminRoleSummary = {
   code: string;
   name: string;
   isFullAccess: boolean;
   permissionCount: number;
   assignedUserCount: number;
+};
+
+export type AdminRolePermissions = {
+  roleCode: string;
+  roleName: string;
+  isFullAccess: boolean;
+  permissions: AdminPermission[];
 };
 
 export type AdminPermission = { code: string; description: string };
