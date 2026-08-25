@@ -3,12 +3,14 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.12 and `docs/canonical/product-progress.md` v1.12 |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.19 and `docs/canonical/product-progress.md` v1.19 |
+| Measured at | `master @ 63e43d1` |
 | Current point | Full Approved Roadmap Progress: 51.0% (180 / 353 pts) |
+| Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2 is COMPLETED; all Advanced waves remain PLANNED / OPTIONAL and this document starts no implementation |
+| Current authorization state | Phase H2 and Phase 11F are COMPLETED; Wave A1 is the active authorized wave; Waves A2–A8 remain PLANNED / OPTIONAL and this document starts no implementation |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -39,6 +41,9 @@ Remaining to 100%:
 | Advanced Capabilities | 173 pts | All Advanced backlog not yet delivered |
 | Total remaining | 173 pts | 353 - 180 |
 
+Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
+traceability and move neither metric; the numbers above already reflect their closure.
+
 ## 2. Recommended Phase Sequence
 
 The recommended route is:
@@ -50,7 +55,7 @@ The recommended route is:
 
 | Seq | Phase | Scope | Pts | Cumulative pts | Full progress | Core readiness |
 |---:|---|---|---:|---:|---:|---:|
-| 0 | Current baseline | Completed work through Phase H2 Production Gate | 0 | 180 / 353 | 51.0% | 100.0% |
+| 0 | Current baseline | Completed work through Phase H2 Production Gate and unweighted Phase 11F closure | 0 | 180 / 353 | 51.0% | 100.0% |
 | 1 | Wave A1 | Customer & Commercial Advanced + Service Quality Advanced | 19 | 199 / 353 | 56.4% | 100.0% |
 | 2 | Wave A2 | Survey Advanced completion + Reporting Advanced | 23 | 222 / 353 | 62.9% | 100.0% |
 | 3 | Wave A3 | Service Operations Advanced + Asset Advanced | 24 | 246 / 353 | 69.7% | 100.0% |
@@ -60,7 +65,7 @@ The recommended route is:
 | 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 340 / 353 | 96.3% | 100.0% |
 | 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 353 / 353 | 100.0% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2 is earned and complete; Wave A1–A8 remain planned / optional and are not started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2 is earned and complete; Wave A1 is the currently authorized wave and Waves A2–A8 remain planned / optional. No wave is started by this document.
 
 ## 3. Phase H2 - Production Gate
 
@@ -90,7 +95,9 @@ Validated acceptance:
 
 ## 4. Wave A1 - Customer and Service Quality Advanced
 
-Wave A1 deepens commercial operation and complaint/service-quality intelligence.
+Wave A1 deepens commercial operation and complaint/service-quality intelligence. It is the
+currently authorized wave; the points below are planned, not earned, until validation
+evidence is complete and the canonical documents are updated.
 
 | Area | Unit | Capability | Pts |
 |---|---|---|---:|
