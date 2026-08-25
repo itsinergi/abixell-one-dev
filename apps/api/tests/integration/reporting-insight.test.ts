@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
+import { PgReportingInsightRepository } from "../../src/modules/reporting-insight/core/infrastructure/reporting-insight.repository.pg.js";
 import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 const stamp = Date.now();
@@ -20,6 +21,7 @@ async function get(url: string, token: string) {
 }
 
 const app = buildApp();
+const reportingRepository = new PgReportingInsightRepository(pool);
 
 describe("Phase 9 — Reporting & Operational Insight Core", () => {
   let tenantId: string;
@@ -29,6 +31,7 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
   let exportToken: string;
   let noReportingToken: string;
   let scopedToken: string;
+  let splitExportToken: string;
   let otherAdminToken: string;
   let legalEntityId: string;
   let unitNorthId: string;
@@ -76,6 +79,7 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
 
     await createReadOnlyRole(tenantId, "RPT_VIEW_P9", ["reporting.read"]);
     await createReadOnlyRole(tenantId, "RPT_EXPORT_P9", ["reporting.read", "reporting.export"]);
+    await createReadOnlyRole(tenantId, "RPT_EXPORT_ONLY_P9", ["reporting.export"]);
     await createReadOnlyRole(tenantId, "NO_RPT_P9", ["finance.read"]);
 
     await post("/users", adminToken, {
@@ -107,12 +111,44 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
       scopeType: "organization_unit",
       scopeOrganizationUnitId: unitNorthId,
     });
+    await post("/users", adminToken, {
+      email: "split-export@p9.local",
+      fullName: "Split Reporting Export P9",
+      password: "Passw0rd12345!",
+      roleCode: "RPT_VIEW_P9",
+      scopeType: "organization_unit",
+      scopeOrganizationUnitId: unitNorthId,
+    });
+    const splitUser = await pool.query(
+      `SELECT id FROM users WHERE tenant_id = $1 AND email = 'split-export@p9.local'`,
+      [tenantId],
+    );
+    const splitRoles = await pool.query(
+      `SELECT id, code
+         FROM roles
+        WHERE tenant_id = $1
+          AND code = ANY($2::text[])`,
+      [tenantId, ["NO_RPT_P9", "RPT_EXPORT_ONLY_P9"]],
+    );
+    const splitRoleIds = new Map(
+      splitRoles.rows.map((row) => [row.code as string, row.id as string]),
+    );
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
+       VALUES ($1, $2, 'tenant'), ($1, $3, 'tenant')`,
+      [
+        splitUser.rows[0].id,
+        splitRoleIds.get("NO_RPT_P9"),
+        splitRoleIds.get("RPT_EXPORT_ONLY_P9"),
+      ],
+    );
 
     const tok = async (email: string) => (await login(app, TENANT, email, "Passw0rd12345!")).body.accessToken;
     reportingToken = await tok("reporting@p9.local");
     exportToken = await tok("export@p9.local");
     noReportingToken = await tok("norpt@p9.local");
     scopedToken = await tok("north@p9.local");
+    splitExportToken = await tok("split-export@p9.local");
 
     const modules = [
       "customer_commercial",
@@ -287,6 +323,28 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
     expect(enabled.statusCode).toBe(200);
   });
 
+  it("binds reporting scope and multi-permission export authority to the same assignment", async () => {
+    const detail = await get(
+      "/reporting/reports/finance_cashflow_summary",
+      splitExportToken,
+    );
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().summary).toMatchObject({
+      income: "100.25",
+      expense: "0.00",
+      net: "100.25",
+    });
+    expect(detail.json().rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ amount: "200.75" })]),
+    );
+
+    const exported = await get(
+      "/reporting/reports/finance_cashflow_summary/export",
+      splitExportToken,
+    );
+    expect(exported.statusCode).toBe(403);
+  });
+
   it("enforces Data Scope on report detail rows and aggregate summaries", async () => {
     const scopedFinance = await get("/reporting/reports/finance_cashflow_summary", scopedToken);
     expect(scopedFinance.statusCode).toBe(200);
@@ -324,5 +382,78 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
     expect(exported.payload).not.toContain("200.75");
     expect(exported.payload).not.toContain("9999.00");
     expect(detail.json().summary.income).toBe("100.25");
+  });
+
+  it("never widens reporting scope through an invalidated assignment, including after restore", async () => {
+    const scopedUser = await pool.query(
+      `SELECT id FROM users WHERE tenant_id = $1 AND email = 'north@p9.local'`,
+      [tenantId],
+    );
+    const role = await pool.query(
+      `SELECT id FROM roles WHERE tenant_id = $1 AND code = 'RPT_EXPORT_P9'`,
+      [tenantId],
+    );
+    const broadAssignment = await pool.query(
+      `INSERT INTO user_role_assignments
+         (user_id, role_id, scope_type, scope_organization_unit_id)
+       VALUES ($1, $2, 'organization_unit', $3)
+       RETURNING id`,
+      [scopedUser.rows[0].id, role.rows[0].id, unitSouthId],
+    );
+    const assignmentId = broadAssignment.rows[0].id as string;
+
+    const widened = await reportingRepository.financeCashflowSummary(
+      tenantId,
+      scopedUser.rows[0].id,
+      ["reporting.read"],
+    );
+    expect(widened.summary.income).toBe("301.00");
+
+    await pool.query(
+      `UPDATE organization_units SET deleted_at = now() WHERE id = $1`,
+      [unitSouthId],
+    );
+    const invalidated = await pool.query(
+      `SELECT scope_invalidated_at
+         FROM user_role_assignments
+        WHERE id = $1`,
+      [assignmentId],
+    );
+    expect(invalidated.rows[0].scope_invalidated_at).toBeInstanceOf(Date);
+    const invalidatedAt = invalidated.rows[0].scope_invalidated_at as Date;
+
+    const narrowed = await reportingRepository.financeCashflowSummary(
+      tenantId,
+      scopedUser.rows[0].id,
+      ["reporting.read"],
+    );
+    expect(narrowed.summary.income).toBe("100.25");
+    expect(narrowed.rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ amount: "200.75" })]),
+    );
+
+    await pool.query(
+      `UPDATE organization_units SET deleted_at = NULL WHERE id = $1`,
+      [unitSouthId],
+    );
+    const restored = await reportingRepository.financeCashflowSummary(
+      tenantId,
+      scopedUser.rows[0].id,
+      ["reporting.read"],
+    );
+    expect(restored.summary.income).toBe("100.25");
+    const persisted = await pool.query(
+      `SELECT scope_invalidated_at
+         FROM user_role_assignments
+        WHERE id = $1`,
+      [assignmentId],
+    );
+    expect(
+      (persisted.rows[0].scope_invalidated_at as Date).getTime(),
+    ).toBe(invalidatedAt.getTime());
+
+    await pool.query(`DELETE FROM user_role_assignments WHERE id = $1`, [
+      assignmentId,
+    ]);
   });
 });

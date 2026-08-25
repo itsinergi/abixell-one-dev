@@ -50,3 +50,15 @@ export async function revokeRefreshToken(pool: Pool, token: string): Promise<voi
     [hashToken(token)],
   );
 }
+
+/** Inactive-user lifecycle hardening (Phase 11F): revoke every still-active
+ * refresh token belonging to a User in one statement. Called the moment an
+ * inactive/deleted account is discovered at refresh time, so a refresh
+ * token minted before deactivation cannot mint further access tokens once
+ * the deactivation is observed — no per-token replay window survives it. */
+export async function revokeAllRefreshTokensForUser(pool: Pool, userId: string): Promise<void> {
+  await pool.query(
+    `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId],
+  );
+}

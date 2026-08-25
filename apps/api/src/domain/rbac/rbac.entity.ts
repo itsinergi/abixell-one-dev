@@ -52,9 +52,15 @@ export interface AdminUserAccessSummary {
 
 export interface AdminRoleAssignmentSummary {
   id: string;
-  roleCode: string;
-  roleName: string;
+  /** Role metadata is null when the stored role no longer resolves in the
+   * assigned User's tenant; foreign role identity is never projected. */
+  roleState: "available" | "unavailable";
+  roleCode: string | null;
+  roleName: string | null;
   scopeType: "tenant" | "organization_unit" | "customer";
+  /** Availability is intentionally generic: deleted, missing, foreign, and
+   * permanently invalidated scopes are indistinguishable to callers. */
+  scopeState: "available" | "unavailable";
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;
@@ -83,8 +89,11 @@ export interface RoleSummary {
 }
 
 export interface RbacRepository {
-  /** All permission codes granted to a user across every role assignment. */
+  /** All permission codes from actual role_permissions rows carried by an
+   * authorization-effective assignment. Unavailable scopes grant nothing. */
   getEffectivePermissionCodes(userId: string): Promise<Set<string>>;
+  /** Only authorization-effective assignments. Administrative reconciliation
+   * uses listAdminUserAccess so retained unavailable rows remain visible. */
   getAssignments(userId: string): Promise<UserRoleAssignment[]>;
   findRoleByCode(tenantId: string, code: string): Promise<Role | null>;
   assignRole(input: AssignRoleInput, createdBy: string | null): Promise<UserRoleAssignment>;
@@ -106,6 +115,14 @@ export interface RbacRepository {
    */
   listPermissionCatalog(): Promise<Permission[]>;
 
+  /** True only when one authorization-effective assignment carries every
+   * requested actual permission row. Capabilities from separate assignments
+   * are never combined. */
+  hasPermissionSetOnSameAssignment(
+    userId: string,
+    permissionCodes: readonly string[],
+  ): Promise<boolean>;
+
   /** Canonical tenant-scope permission predicate. Permission and tenant Data
    * Scope must be carried by the same assignment; capabilities from separate
    * assignments are never combined. */
@@ -115,9 +132,10 @@ export interface RbacRepository {
     permissionCode: string,
   ): Promise<boolean>;
 
-  /** Phase 11F governed access reads. Both methods are tenant-qualified at
-   * every ownership edge, including User -> Assignment -> Role and optional
-   * scope references. */
+  /** Phase 11F governed access reads. Administrative assignment inventory is
+   * anchored through the assigned User's tenant. Role/scope display metadata
+   * resolves only through same-tenant targets; unresolved metadata is redacted
+   * while the retained assignment ID and stored scope UUID remain removable. */
   listAdminUserAccess(tenantId: string): Promise<AdminUserAccessSummary[]>;
   getRolePermissionDetail(
     tenantId: string,

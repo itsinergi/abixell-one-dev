@@ -8,6 +8,7 @@ import { signAccessToken, verifyAccessToken } from "../../infrastructure/securit
 import {
   consumeRefreshToken,
   issueRefreshToken,
+  revokeAllRefreshTokensForUser,
   revokeRefreshToken,
 } from "../../infrastructure/security/refresh-token.js";
 
@@ -64,6 +65,23 @@ export class AuthService {
       throw new UnauthorizedError("Invalid tenant, email, or password");
     }
 
+    // Inactive-user lifecycle hardening (Phase 11F): an inactive account must
+    // never mint a new access/refresh token pair, even with the correct
+    // password. Reported identically to a bad password so a caller cannot
+    // distinguish "wrong password" from "account deactivated" — only the
+    // privacy-safe audit trail records the real reason.
+    if (user.status !== "active") {
+      await this.audit.record({
+        tenantId: tenant.id,
+        actorUserId: null,
+        action: "auth.login.failed",
+        entityType: "auth",
+        entityId: null,
+        metadata: { reason: "inactive_user", ip: input.ip },
+      });
+      throw new UnauthorizedError("Invalid tenant, email, or password");
+    }
+
     const accessToken = signAccessToken({ sub: user.id, tenantId: tenant.id });
     const refreshToken = await issueRefreshToken(this.pool, user.id);
 
@@ -84,7 +102,17 @@ export class AuthService {
     if (!consumed) throw new UnauthorizedError("Invalid or expired refresh token");
 
     const user = await this.users.findById(consumed.userId);
-    if (!user) throw new UnauthorizedError("Invalid or expired refresh token");
+
+    // Inactive-user lifecycle hardening (Phase 11F): a refresh token minted
+    // before deactivation or soft deletion must not survive it. Revoke every
+    // other still-active refresh token for this User the moment unavailability
+    // is observed, so restoring a soft-deleted account cannot revive a sibling
+    // pre-deletion token. The same generic denial covers missing and inactive
+    // users without exposing which lifecycle state was encountered.
+    if (!user || user.status !== "active") {
+      await revokeAllRefreshTokensForUser(this.pool, consumed.userId);
+      throw new UnauthorizedError("Invalid or expired refresh token");
+    }
 
     const accessToken = signAccessToken({ sub: user.id, tenantId: user.tenantId });
     const newRefreshToken = await issueRefreshToken(this.pool, user.id);

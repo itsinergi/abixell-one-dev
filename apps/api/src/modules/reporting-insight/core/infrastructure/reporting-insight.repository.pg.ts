@@ -57,8 +57,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     }));
   }
 
-  async customerServiceOverview(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async customerServiceOverview(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`c.tenant_id = $1`, `c.deleted_at IS NULL`, this.customerScopeSql(scope, params, "c")].filter(Boolean);
     const r = await this.pool.query(
@@ -88,8 +92,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { customers: rows.length, projects: sum(rows, "projects"), sites: sum(rows, "sites") }, rows);
   }
 
-  async complaintSummary(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async complaintSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`co.tenant_id = $1`, `co.deleted_at IS NULL`, this.customerScopeSql(scope, params, "c")].filter(Boolean);
     const r = await this.pool.query(
@@ -110,8 +118,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { total: sum(rows, "total"), open: sum(rows, "open"), closed: sum(rows, "closed") }, rows);
   }
 
-  async surveySummary(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async surveySummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`sa.tenant_id = $1`];
     const surveyScope = this.surveyScopeSql(scope, params);
@@ -142,8 +154,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { assignments: sum(rows, "total"), submitted: rows.find((r0) => r0.label === "submitted")?.total ?? 0 }, rows);
   }
 
-  async serviceOperationsSummary(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async serviceOperationsSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`wo.tenant_id = $1`, `wo.deleted_at IS NULL`, this.customerScopeSql(scope, params, "c")].filter(Boolean);
     const r = await this.pool.query(
@@ -164,8 +180,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { workOrders: sum(rows, "total"), open: sum(rows, "open"), completed: sum(rows, "completed") }, rows);
   }
 
-  async workforceHeadcount(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async workforceHeadcount(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`e.tenant_id = $1`, `e.deleted_at IS NULL`, this.orgScopeSql(scope, params, "e.organization_unit_id", false)].filter(Boolean);
     const r = await this.pool.query(
@@ -183,8 +203,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { headcount: sum(rows, "headcount"), active: rows.filter((r0) => r0.status === "active").reduce((n, r0) => n + toNumber(r0.headcount), 0) }, rows);
   }
 
-  async supplyChainSummary(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async supplyChainSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const stockScope = this.customerScopeSql(scope, params, "c");
     const where = [`sb.tenant_id = $1`, stockScope ? `(sb.site_id IS NULL OR ${stockScope})` : ""].filter(Boolean);
@@ -201,7 +225,15 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
         ORDER BY i.name`,
       params,
     );
-    const prCount = await this.orgScopedCount(tenantId, userId, "purchase_requests", "organization_unit_id", false, "deleted_at IS NULL");
+    const prCount = await this.orgScopedCount(
+      tenantId,
+      userId,
+      requiredPermissionCodes,
+      "purchase_requests",
+      "organization_unit_id",
+      false,
+      "deleted_at IS NULL",
+    );
     const poCount = await this.customerScopedPurchaseOrderCount(tenantId, scope);
     const rows: ReportRow[] = r.rows.map((row) => ({ label: `${row.code} · ${row.name}`, quantity: row.quantity, sites: row.site_count }));
     return this.result("supply_chain_stock_purchasing_summary", "Supply chain stock/purchasing summary", "supply_chain", [
@@ -209,8 +241,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { itemsWithStock: rows.length, purchaseRequests: prCount, purchaseOrders: poCount }, rows);
   }
 
-  async assetStatusSummary(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async assetStatusSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`tenant_id = $1`, this.orgScopeSql(scope, params, "organization_unit_id", true)].filter(Boolean);
     const r = await this.pool.query(
@@ -227,8 +263,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { assets: sum(rows, "total"), inUse: rows.find((r0) => r0.label === "in_use")?.total ?? 0 }, rows);
   }
 
-  async financeCashflowSummary(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async financeCashflowSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`tenant_id = $1`, `applied_at IS NOT NULL`, this.orgScopeSql(scope, params, "organization_unit_id", true)].filter(Boolean);
     const r = await this.pool.query(
@@ -248,8 +288,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { income: formatCents(incomeCents), expense: formatCents(expenseCents), net: formatCents(incomeCents - expenseCents) }, rows);
   }
 
-  async hseSummary(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async hseSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`tenant_id = $1`, this.orgScopeSql(scope, params, "organization_unit_id", false)].filter(Boolean);
     const r = await this.pool.query(
@@ -268,8 +312,12 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { records: sum(rows, "total"), incidents: rows.find((r0) => r0.label === "incident")?.total ?? 0, observations: rows.find((r0) => r0.label === "observation")?.total ?? 0 }, rows);
   }
 
-  async projectDeliveryProgress(tenantId: string, userId: string): Promise<StandardReportResult> {
-    const scope = await this.scopeProjection(tenantId, userId);
+  async projectDeliveryProgress(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`p.tenant_id = $1`, `p.deleted_at IS NULL`, this.customerScopeSql(scope, params, "c")].filter(Boolean);
     const r = await this.pool.query(
@@ -313,33 +361,56 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
     ], { projects: rows.length, averageProgressPercent: avgProgress, activities: sum(rows, "activities") }, rows);
   }
 
-  private async scopeProjection(tenantId: string, userId: string): Promise<ScopeProjection> {
+  private async scopeProjection(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<ScopeProjection> {
+    const requiredCodes = [...new Set(requiredPermissionCodes)];
     const r = await this.pool.query(
-      `WITH RECURSIVE assigned_orgs(id) AS (
-          SELECT ura.scope_organization_unit_id
-            FROM user_role_assignments ura
-            JOIN roles ro ON ro.id = ura.role_id
-           WHERE ura.user_id = $2 AND ro.tenant_id = $1 AND ura.scope_type = 'organization_unit'
-             AND ura.scope_organization_unit_id IS NOT NULL
+      `WITH RECURSIVE reporting_assignments AS (
+          SELECT aura.id,
+                 aura.scope_type,
+                 aura.scope_organization_unit_id,
+                 aura.scope_customer_id
+            FROM authorization_effective_user_role_assignments aura
+            JOIN role_permissions rp ON rp.role_id = aura.role_id
+            JOIN permissions p ON p.id = rp.permission_id
+           WHERE aura.user_id = $2
+             AND aura.tenant_id = $1
+             AND p.code = ANY($3::text[])
+           GROUP BY aura.id,
+                    aura.scope_type,
+                    aura.scope_organization_unit_id,
+                    aura.scope_customer_id
+          HAVING COUNT(DISTINCT p.code) = $4
+        ),
+        assigned_orgs(id) AS (
+          SELECT ra.scope_organization_unit_id
+            FROM reporting_assignments ra
+           WHERE ra.scope_type = 'organization_unit'
+             AND ra.scope_organization_unit_id IS NOT NULL
           UNION
           SELECT ou.id
             FROM organization_units ou
             JOIN assigned_orgs ao ON ou.parent_id = ao.id
            WHERE ou.tenant_id = $1
+             AND ou.deleted_at IS NULL
         )
         SELECT
           EXISTS (
-            SELECT 1 FROM user_role_assignments ura JOIN roles ro ON ro.id = ura.role_id
-             WHERE ura.user_id = $2 AND ro.tenant_id = $1 AND ura.scope_type = 'tenant'
+            SELECT 1
+              FROM reporting_assignments ra
+             WHERE ra.scope_type = 'tenant'
           ) AS tenant_wide,
           COALESCE(ARRAY(
-            SELECT DISTINCT ura.scope_customer_id
-              FROM user_role_assignments ura JOIN roles ro ON ro.id = ura.role_id
-             WHERE ura.user_id = $2 AND ro.tenant_id = $1 AND ura.scope_type = 'customer'
-               AND ura.scope_customer_id IS NOT NULL
+            SELECT DISTINCT ra.scope_customer_id
+              FROM reporting_assignments ra
+             WHERE ra.scope_type = 'customer'
+               AND ra.scope_customer_id IS NOT NULL
           ), '{}'::uuid[]) AS customer_ids,
           COALESCE(ARRAY(SELECT DISTINCT id FROM assigned_orgs WHERE id IS NOT NULL), '{}'::uuid[]) AS org_unit_ids`,
-      [tenantId, userId],
+      [tenantId, userId, requiredCodes, requiredCodes.length],
     );
     const row = r.rows[0];
     return { tenantWide: row.tenant_wide, customerIds: row.customer_ids ?? [], orgUnitIds: row.org_unit_ids ?? [] };
@@ -382,12 +453,13 @@ export class PgReportingInsightRepository implements ReportingInsightRepository 
   private async orgScopedCount(
     tenantId: string,
     userId: string,
+    requiredPermissionCodes: readonly string[],
     table: string,
     orgColumn: string,
     includeNull: boolean,
     extraCondition: string,
   ): Promise<number> {
-    const scope = await this.scopeProjection(tenantId, userId);
+    const scope = await this.scopeProjection(tenantId, userId, requiredPermissionCodes);
     const params: ParamBag = [tenantId];
     const where = [`tenant_id = $1`, extraCondition, this.orgScopeSql(scope, params, orgColumn, includeNull)].filter(Boolean);
     const r = await this.pool.query(`SELECT COUNT(*)::int AS total FROM ${table} WHERE ${where.join(" AND ")}`, params);

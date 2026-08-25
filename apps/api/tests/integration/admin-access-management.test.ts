@@ -6,6 +6,7 @@ import type {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
+import { PgRbacRepository } from "../../src/infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
 import {
@@ -38,6 +39,7 @@ const MANAGER_PERMISSIONS = [
 ];
 const READ_PERMISSIONS = ["admin.console.read", "user.read", "config.read"];
 const app = buildApp();
+const rbacRepository = new PgRbacRepository(pool);
 
 interface UserFixture {
   id: string;
@@ -229,6 +231,20 @@ function removalUrl(userId: string, assignmentId: string) {
 
 function tenantPayload(roleCode: string) {
   return { roleCode, scopeType: "tenant" as const };
+}
+
+function projectedAssignment(
+  response: LightMyRequestResponse,
+  userId: string,
+  assignmentId: string,
+): Record<string, unknown> | undefined {
+  const users = response.json() as Array<{
+    id: string;
+    roleAssignments: Array<Record<string, unknown>>;
+  }>;
+  return users
+    .find((user) => user.id === userId)
+    ?.roleAssignments.find((assignment) => assignment.id === assignmentId);
 }
 
 describe("Phase 11F — governed Admin access management", () => {
@@ -722,9 +738,11 @@ describe("Phase 11F — governed Admin access management", () => {
       );
       expect(base).toEqual({
         id: targetBaseAssignmentId,
+        roleState: "available",
         roleCode: assignableRole.code,
         roleName: assignableRole.name,
         scopeType: "customer",
+        scopeState: "available",
         scopeOrganizationUnitId: null,
         scopeOrganizationUnitName: null,
         scopeCustomerId: customerId,
@@ -778,9 +796,11 @@ describe("Phase 11F — governed Admin access management", () => {
       expect(created).toEqual([
         {
           id: expect.any(String),
+          roleState: "available",
           roleCode: assignableRole.code,
           roleName: assignableRole.name,
           scopeType: "tenant",
+          scopeState: "available",
           scopeOrganizationUnitId: null,
           scopeOrganizationUnitName: null,
           scopeCustomerId: null,
@@ -788,9 +808,11 @@ describe("Phase 11F — governed Admin access management", () => {
         },
         {
           id: expect.any(String),
+          roleState: "available",
           roleCode: assignableRole.code,
           roleName: assignableRole.name,
           scopeType: "organization_unit",
+          scopeState: "available",
           scopeOrganizationUnitId: organizationUnitId,
           scopeOrganizationUnitName: "P11F Organization Unit Primary",
           scopeCustomerId: null,
@@ -798,9 +820,11 @@ describe("Phase 11F — governed Admin access management", () => {
         },
         {
           id: expect.any(String),
+          roleState: "available",
           roleCode: assignableRole.code,
           roleName: assignableRole.name,
           scopeType: "customer",
+          scopeState: "available",
           scopeOrganizationUnitId: null,
           scopeOrganizationUnitName: null,
           scopeCustomerId: customerId,
@@ -856,6 +880,984 @@ describe("Phase 11F — governed Admin access management", () => {
           )
         ).statusCode,
       ).toBe(200);
+    });
+  });
+
+  describe("unavailable scope lifecycle and authorization reconciliation", () => {
+    it("keeps an Organization Unit assignment visible but permanently inert through delete and restore", async () => {
+      const scopedTarget = await createUser(
+        tenantId,
+        "ou-lifecycle",
+        passwordHash,
+      );
+      const lifecycleOrganizationUnitId = await createOrganizationUnit(
+        tenantId,
+        "Lifecycle",
+      );
+      const created = await post(
+        assignmentUrl(scopedTarget.id),
+        managerToken,
+        {
+          roleCode: assignableRole.code,
+          scopeType: "organization_unit",
+          scopeOrganizationUnitId: lifecycleOrganizationUnitId,
+        },
+      );
+      expect(created.statusCode).toBe(201);
+      const assignmentId = created.json().id as string;
+      expect(created.json()).toMatchObject({
+        id: assignmentId,
+        scopeState: "available",
+        scopeOrganizationUnitId: lifecycleOrganizationUnitId,
+        scopeOrganizationUnitName: "P11F Organization Unit Lifecycle",
+      });
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+      expect(
+        (await rbacRepository.getAssignments(scopedTarget.id)).map(
+          (assignment) => assignment.id,
+        ),
+      ).toContain(assignmentId);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).toContain(scopedTarget.id);
+      expect(
+        await rbacRepository.listUserIdsWithRoleInScope(
+          tenantId,
+          assignableRole.code,
+          lifecycleOrganizationUnitId,
+        ),
+      ).toContain(scopedTarget.id);
+
+      await pool.query(
+        `UPDATE organization_units SET deleted_at = now() WHERE id = $1`,
+        [lifecycleOrganizationUnitId],
+      );
+      const invalidated = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(invalidated.rows[0].scope_invalidated_at).toBeInstanceOf(Date);
+      const invalidatedAt = invalidated.rows[0].scope_invalidated_at as Date;
+
+      const deletedProjectionResponse = await get("/admin/users", managerToken);
+      expect(deletedProjectionResponse.statusCode).toBe(200);
+      expect(
+        projectedAssignment(
+          deletedProjectionResponse,
+          scopedTarget.id,
+          assignmentId,
+        ),
+      ).toEqual({
+        id: assignmentId,
+        roleState: "available",
+        roleCode: assignableRole.code,
+        roleName: assignableRole.name,
+        scopeType: "organization_unit",
+        scopeState: "unavailable",
+        scopeOrganizationUnitId: lifecycleOrganizationUnitId,
+        scopeOrganizationUnitName: null,
+        scopeCustomerId: null,
+        scopeCustomerName: null,
+      });
+      expect(deletedProjectionResponse.body).not.toContain(
+        "P11F Organization Unit Lifecycle",
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+      expect(await rbacRepository.getAssignments(scopedTarget.id)).toEqual([]);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).not.toContain(scopedTarget.id);
+      expect(
+        await rbacRepository.listUserIdsWithRoleInScope(
+          tenantId,
+          assignableRole.code,
+          lifecycleOrganizationUnitId,
+        ),
+      ).not.toContain(scopedTarget.id);
+
+      await pool.query(
+        `UPDATE organization_units SET deleted_at = NULL WHERE id = $1`,
+        [lifecycleOrganizationUnitId],
+      );
+      await pool.query(
+        `UPDATE user_role_assignments
+            SET scope_invalidated_at = NULL
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      const restored = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(
+        (restored.rows[0].scope_invalidated_at as Date).getTime(),
+      ).toBe(invalidatedAt.getTime());
+      const restoredProjectionResponse = await get("/admin/users", managerToken);
+      expect(
+        projectedAssignment(
+          restoredProjectionResponse,
+          scopedTarget.id,
+          assignmentId,
+        ),
+      ).toMatchObject({
+        id: assignmentId,
+        scopeState: "unavailable",
+        scopeOrganizationUnitId: lifecycleOrganizationUnitId,
+        scopeOrganizationUnitName: null,
+      });
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, assignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+      const reassigned = await post(
+        assignmentUrl(scopedTarget.id),
+        managerToken,
+        {
+          roleCode: assignableRole.code,
+          scopeType: "organization_unit",
+          scopeOrganizationUnitId: lifecycleOrganizationUnitId,
+        },
+      );
+      expect(reassigned.statusCode).toBe(201);
+      expect(reassigned.json()).toMatchObject({
+        scopeState: "available",
+        scopeOrganizationUnitName: "P11F Organization Unit Lifecycle",
+      });
+      expect(reassigned.json().id).not.toBe(assignmentId);
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, reassigned.json().id),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+    });
+
+    it("removes an unavailable Customer assignment before restore without reviving it", async () => {
+      const scopedTarget = await createUser(
+        tenantId,
+        "customer-lifecycle",
+        passwordHash,
+      );
+      const lifecycleCustomerId = await createCustomer(
+        tenantId,
+        "LIFECYCLE",
+      );
+      const created = await post(
+        assignmentUrl(scopedTarget.id),
+        managerToken,
+        {
+          roleCode: assignableRole.code,
+          scopeType: "customer",
+          scopeCustomerId: lifecycleCustomerId,
+        },
+      );
+      expect(created.statusCode).toBe(201);
+      const assignmentId = created.json().id as string;
+      expect(created.json()).toMatchObject({
+        scopeState: "available",
+        scopeCustomerId: lifecycleCustomerId,
+        scopeCustomerName: "P11F Customer LIFECYCLE",
+      });
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+
+      await pool.query(
+        `UPDATE customers SET deleted_at = now() WHERE id = $1`,
+        [lifecycleCustomerId],
+      );
+      const invalidated = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(invalidated.rows[0].scope_invalidated_at).toBeInstanceOf(Date);
+      const projectionResponse = await get("/admin/users", managerToken);
+      expect(
+        projectedAssignment(projectionResponse, scopedTarget.id, assignmentId),
+      ).toEqual({
+        id: assignmentId,
+        roleState: "available",
+        roleCode: assignableRole.code,
+        roleName: assignableRole.name,
+        scopeType: "customer",
+        scopeState: "unavailable",
+        scopeOrganizationUnitId: null,
+        scopeOrganizationUnitName: null,
+        scopeCustomerId: lifecycleCustomerId,
+        scopeCustomerName: null,
+      });
+      expect(projectionResponse.body).not.toContain(
+        "P11F Customer LIFECYCLE",
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+      expect(await rbacRepository.getAssignments(scopedTarget.id)).toEqual([]);
+
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, assignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+      await pool.query(`UPDATE customers SET deleted_at = NULL WHERE id = $1`, [
+        lifecycleCustomerId,
+      ]);
+      expect(
+        (
+          await pool.query(
+            `SELECT 1 FROM user_role_assignments WHERE id = $1`,
+            [assignmentId],
+          )
+        ).rows,
+      ).toHaveLength(0);
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+
+      const reassigned = await post(
+        assignmentUrl(scopedTarget.id),
+        managerToken,
+        {
+          roleCode: assignableRole.code,
+          scopeType: "customer",
+          scopeCustomerId: lifecycleCustomerId,
+        },
+      );
+      expect(reassigned.statusCode).toBe(201);
+      expect(reassigned.json()).toMatchObject({
+        scopeState: "available",
+        scopeCustomerId: lifecycleCustomerId,
+        scopeCustomerName: "P11F Customer LIFECYCLE",
+      });
+      expect(reassigned.json().id).not.toBe(assignmentId);
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, reassigned.json().id),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+    });
+
+    it("does not let a stale assignment grant beside or after a parallel valid assignment", async () => {
+      const scopedTarget = await createUser(
+        tenantId,
+        "parallel-valid-stale",
+        passwordHash,
+      );
+      const staleOrganizationUnitId = await createOrganizationUnit(
+        tenantId,
+        "Parallel stale",
+      );
+      const validOrganizationUnitId = await createOrganizationUnit(
+        tenantId,
+        "Parallel valid",
+      );
+      const staleAssignmentId = await createAssignment(
+        scopedTarget.id,
+        assignableRole.id,
+        {
+          scopeType: "organization_unit",
+          scopeOrganizationUnitId: staleOrganizationUnitId,
+        },
+      );
+      const validAssignmentId = await createAssignment(
+        scopedTarget.id,
+        assignableRole.id,
+        {
+          scopeType: "organization_unit",
+          scopeOrganizationUnitId: validOrganizationUnitId,
+        },
+      );
+
+      await pool.query(
+        `UPDATE organization_units SET deleted_at = now() WHERE id = $1`,
+        [staleOrganizationUnitId],
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+      expect(
+        (await rbacRepository.getAssignments(scopedTarget.id)).map(
+          (assignment) => assignment.id,
+        ),
+      ).toEqual([validAssignmentId]);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).toContain(scopedTarget.id);
+
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, validAssignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+      expect(await rbacRepository.getAssignments(scopedTarget.id)).toEqual([]);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).not.toContain(scopedTarget.id);
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, staleAssignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+    });
+
+    it("redacts and locally removes poisoned foreign OU and Customer references", async () => {
+      for (const poisoned of [
+        {
+          suffix: "poisoned-ou",
+          scope: {
+            scopeType: "organization_unit" as const,
+            scopeOrganizationUnitId: otherOrganizationUnitId,
+          },
+          storedKey: "scopeOrganizationUnitId",
+          storedId: otherOrganizationUnitId,
+          foreignName: "P11F Organization Unit Other",
+        },
+        {
+          suffix: "poisoned-customer",
+          scope: {
+            scopeType: "customer" as const,
+            scopeCustomerId: otherCustomerId,
+          },
+          storedKey: "scopeCustomerId",
+          storedId: otherCustomerId,
+          foreignName: "P11F Customer OTHER",
+        },
+      ]) {
+        const poisonedTarget = await createUser(
+          tenantId,
+          poisoned.suffix,
+          passwordHash,
+        );
+        const assignmentId = await createAssignment(
+          poisonedTarget.id,
+          assignableRole.id,
+          poisoned.scope,
+        );
+        const persisted = await pool.query(
+          `SELECT scope_invalidated_at
+             FROM user_role_assignments
+            WHERE id = $1`,
+          [assignmentId],
+        );
+        expect(persisted.rows[0].scope_invalidated_at).toBeInstanceOf(Date);
+
+        const localProjection = await get("/admin/users", managerToken);
+        const assignment = projectedAssignment(
+          localProjection,
+          poisonedTarget.id,
+          assignmentId,
+        );
+        expect(assignment).toMatchObject({
+          id: assignmentId,
+          scopeType: poisoned.scope.scopeType,
+          scopeState: "unavailable",
+          scopeOrganizationUnitName: null,
+          scopeCustomerName: null,
+          [poisoned.storedKey]: poisoned.storedId,
+        });
+        expect(localProjection.body).not.toContain(poisoned.foreignName);
+        expect(
+          (
+            await rbacRepository.getEffectivePermissionCodes(poisonedTarget.id)
+          ).has("user.read"),
+        ).toBe(false);
+        expect(await rbacRepository.getAssignments(poisonedTarget.id)).toEqual(
+          [],
+        );
+        expect(
+          await rbacRepository.listUserIdsWithPermissionInTenant(
+            tenantId,
+            "user.read",
+          ),
+        ).not.toContain(poisonedTarget.id);
+        expect(
+          await rbacRepository.listUserIdsWithRoleInScope(
+            tenantId,
+            assignableRole.code,
+            otherOrganizationUnitId,
+          ),
+        ).not.toContain(poisonedTarget.id);
+
+        const foreignProjection = await get(
+          "/admin/users",
+          otherManagerToken,
+        );
+        expect(foreignProjection.body).not.toContain(poisonedTarget.id);
+        expect(foreignProjection.body).not.toContain(assignmentId);
+        expect(
+          (
+            await remove(
+              removalUrl(poisonedTarget.id, assignmentId),
+              otherManagerToken,
+            )
+          ).statusCode,
+        ).toBe(404);
+        expect(
+          (
+            await remove(
+              removalUrl(poisonedTarget.id, assignmentId),
+              managerToken,
+            )
+          ).statusCode,
+        ).toBe(204);
+      }
+    });
+
+    it("permanently revokes assignments when their User moves between tenants", async () => {
+      const movedTarget = await createUser(
+        tenantId,
+        "user-tenant-move",
+        passwordHash,
+      );
+      const assignmentId = await createAssignment(
+        movedTarget.id,
+        assignableRole.id,
+        { scopeType: "tenant" },
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(movedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+
+      await pool.query(`UPDATE users SET tenant_id = $1 WHERE id = $2`, [
+        otherTenantId,
+        movedTarget.id,
+      ]);
+      const movedAwayProjection = await get("/admin/users", otherManagerToken);
+      expect(
+        projectedAssignment(
+          movedAwayProjection,
+          movedTarget.id,
+          assignmentId,
+        ),
+      ).toEqual({
+        id: assignmentId,
+        roleState: "unavailable",
+        roleCode: null,
+        roleName: null,
+        scopeType: "tenant",
+        scopeState: "unavailable",
+        scopeOrganizationUnitId: null,
+        scopeOrganizationUnitName: null,
+        scopeCustomerId: null,
+        scopeCustomerName: null,
+      });
+      expect(movedAwayProjection.body).not.toContain(assignableRole.code);
+      expect(movedAwayProjection.body).not.toContain(assignableRole.name);
+      expect((await get("/admin/users", managerToken)).body).not.toContain(
+        assignmentId,
+      );
+
+      await pool.query(`UPDATE users SET tenant_id = $1 WHERE id = $2`, [
+        tenantId,
+        movedTarget.id,
+      ]);
+      const invalidated = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(invalidated.rows[0].scope_invalidated_at).toBeInstanceOf(Date);
+      const invalidatedAt = invalidated.rows[0].scope_invalidated_at as Date;
+      await pool.query(
+        `UPDATE user_role_assignments
+            SET scope_invalidated_at = NULL
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      const retained = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(
+        (retained.rows[0].scope_invalidated_at as Date).getTime(),
+      ).toBe(invalidatedAt.getTime());
+      expect(
+        projectedAssignment(
+          await get("/admin/users", managerToken),
+          movedTarget.id,
+          assignmentId,
+        ),
+      ).toMatchObject({
+        id: assignmentId,
+        roleState: "available",
+        roleCode: assignableRole.code,
+        roleName: assignableRole.name,
+        scopeState: "unavailable",
+      });
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(movedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+      expect(await rbacRepository.getAssignments(movedTarget.id)).toEqual([]);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).not.toContain(movedTarget.id);
+
+      expect(
+        (
+          await remove(
+            removalUrl(movedTarget.id, assignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+      const reassigned = await post(
+        assignmentUrl(movedTarget.id),
+        managerToken,
+        tenantPayload(assignableRole.code),
+      );
+      expect(reassigned.statusCode).toBe(201);
+      expect(reassigned.json()).toMatchObject({
+        roleState: "available",
+        roleCode: assignableRole.code,
+        scopeState: "available",
+      });
+      expect(reassigned.json().id).not.toBe(assignmentId);
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(movedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+      expect(
+        (
+          await remove(
+            removalUrl(movedTarget.id, reassigned.json().id),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+    });
+
+    it("permanently revokes assignments when their Role moves between tenants", async () => {
+      const movedTarget = await createUser(
+        tenantId,
+        "role-tenant-move",
+        passwordHash,
+      );
+      const movedRole = await createRole(
+        tenantId,
+        `MOVED_ROLE_${codeStamp}`,
+        "Role tenant move sentinel",
+        ["user.read"],
+      );
+      const assignmentId = await createAssignment(movedTarget.id, movedRole.id, {
+        scopeType: "organization_unit",
+        scopeOrganizationUnitId: organizationUnitId,
+      });
+      expect(
+        await rbacRepository.listUserIdsWithRoleInScope(
+          tenantId,
+          movedRole.code,
+          organizationUnitId,
+        ),
+      ).toContain(movedTarget.id);
+
+      await pool.query(`UPDATE roles SET tenant_id = $1 WHERE id = $2`, [
+        otherTenantId,
+        movedRole.id,
+      ]);
+      const movedAwayProjection = await get("/admin/users", managerToken);
+      expect(
+        projectedAssignment(
+          movedAwayProjection,
+          movedTarget.id,
+          assignmentId,
+        ),
+      ).toEqual({
+        id: assignmentId,
+        roleState: "unavailable",
+        roleCode: null,
+        roleName: null,
+        scopeType: "organization_unit",
+        scopeState: "unavailable",
+        scopeOrganizationUnitId: organizationUnitId,
+        scopeOrganizationUnitName: null,
+        scopeCustomerId: null,
+        scopeCustomerName: null,
+      });
+      expect(movedAwayProjection.body).not.toContain(movedRole.code);
+      expect(movedAwayProjection.body).not.toContain(movedRole.name);
+      expect((await get("/admin/users", otherManagerToken)).body).not.toContain(
+        assignmentId,
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(movedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+      expect(await rbacRepository.getAssignments(movedTarget.id)).toEqual([]);
+      expect(
+        await rbacRepository.listUserIdsWithRoleInScope(
+          tenantId,
+          movedRole.code,
+          organizationUnitId,
+        ),
+      ).not.toContain(movedTarget.id);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).not.toContain(movedTarget.id);
+
+      await pool.query(`UPDATE roles SET tenant_id = $1 WHERE id = $2`, [
+        tenantId,
+        movedRole.id,
+      ]);
+      const invalidated = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(invalidated.rows[0].scope_invalidated_at).toBeInstanceOf(Date);
+      const invalidatedAt = invalidated.rows[0].scope_invalidated_at as Date;
+      await pool.query(
+        `UPDATE user_role_assignments
+            SET scope_invalidated_at = NULL
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      const retained = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(
+        (retained.rows[0].scope_invalidated_at as Date).getTime(),
+      ).toBe(invalidatedAt.getTime());
+      expect(
+        projectedAssignment(
+          await get("/admin/users", managerToken),
+          movedTarget.id,
+          assignmentId,
+        ),
+      ).toMatchObject({
+        id: assignmentId,
+        roleState: "available",
+        roleCode: movedRole.code,
+        roleName: movedRole.name,
+        scopeState: "unavailable",
+        scopeOrganizationUnitId: organizationUnitId,
+        scopeOrganizationUnitName: null,
+      });
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(movedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+
+      expect(
+        (
+          await remove(
+            removalUrl(movedTarget.id, assignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+      const reassigned = await post(
+        assignmentUrl(movedTarget.id),
+        managerToken,
+        {
+          roleCode: movedRole.code,
+          scopeType: "organization_unit",
+          scopeOrganizationUnitId: organizationUnitId,
+        },
+      );
+      expect(reassigned.statusCode).toBe(201);
+      expect(reassigned.json()).toMatchObject({
+        roleState: "available",
+        roleCode: movedRole.code,
+        scopeState: "available",
+        scopeOrganizationUnitId: organizationUnitId,
+      });
+      expect(reassigned.json().id).not.toBe(assignmentId);
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(movedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+      expect(
+        (
+          await remove(
+            removalUrl(movedTarget.id, reassigned.json().id),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+    });
+
+    it("redacts and locally removes a poisoned foreign Role assignment", async () => {
+      const poisonedTarget = await createUser(
+        tenantId,
+        "poisoned-role",
+        passwordHash,
+      );
+      const foreignRole = await createRole(
+        otherTenantId,
+        `POISONED_FOREIGN_ROLE_${codeStamp}`,
+        "Foreign Role Identity Must Stay Hidden",
+        ["user.read"],
+      );
+      const rolePermissionsBefore = await pool.query(
+        `SELECT permission_id
+           FROM role_permissions
+          WHERE role_id = $1
+          ORDER BY permission_id`,
+        [foreignRole.id],
+      );
+      const assignmentId = await createAssignment(
+        poisonedTarget.id,
+        foreignRole.id,
+        {
+          scopeType: "organization_unit",
+          scopeOrganizationUnitId: organizationUnitId,
+        },
+      );
+      const persisted = await pool.query(
+        `SELECT scope_invalidated_at
+           FROM user_role_assignments
+          WHERE id = $1`,
+        [assignmentId],
+      );
+      expect(persisted.rows[0].scope_invalidated_at).toBeInstanceOf(Date);
+
+      const localProjection = await get("/admin/users", managerToken);
+      expect(
+        projectedAssignment(
+          localProjection,
+          poisonedTarget.id,
+          assignmentId,
+        ),
+      ).toEqual({
+        id: assignmentId,
+        roleState: "unavailable",
+        roleCode: null,
+        roleName: null,
+        scopeType: "organization_unit",
+        scopeState: "unavailable",
+        scopeOrganizationUnitId: organizationUnitId,
+        scopeOrganizationUnitName: null,
+        scopeCustomerId: null,
+        scopeCustomerName: null,
+      });
+      expect(localProjection.body).not.toContain(foreignRole.code);
+      expect(localProjection.body).not.toContain(foreignRole.name);
+      expect((await get("/admin/users", otherManagerToken)).body).not.toContain(
+        poisonedTarget.id,
+      );
+      expect((await get("/admin/users", otherManagerToken)).body).not.toContain(
+        assignmentId,
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(poisonedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+      expect(await rbacRepository.getAssignments(poisonedTarget.id)).toEqual([]);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).not.toContain(poisonedTarget.id);
+      expect(
+        await rbacRepository.listUserIdsWithRoleInScope(
+          tenantId,
+          foreignRole.code,
+          organizationUnitId,
+        ),
+      ).not.toContain(poisonedTarget.id);
+      expect(
+        (
+          await remove(
+            removalUrl(poisonedTarget.id, assignmentId),
+            otherManagerToken,
+          )
+        ).statusCode,
+      ).toBe(404);
+      expect(
+        (
+          await remove(
+            removalUrl(poisonedTarget.id, assignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+
+      const removedAudit = await pool.query(
+        `SELECT metadata
+           FROM audit_log
+          WHERE tenant_id = $1
+            AND action = 'user.role_removed'
+            AND entity_id = $2`,
+        [tenantId, poisonedTarget.id],
+      );
+      expect(removedAudit.rows).toHaveLength(1);
+      expect(removedAudit.rows[0].metadata).toEqual({
+        targetUserId: poisonedTarget.id,
+        roleCode: null,
+        scopeType: "organization_unit",
+        scopeOrganizationUnitId: organizationUnitId,
+        scopeCustomerId: null,
+      });
+      expect(JSON.stringify(removedAudit.rows[0].metadata)).not.toContain(
+        foreignRole.code,
+      );
+      expect(JSON.stringify(removedAudit.rows[0].metadata)).not.toContain(
+        foreignRole.name,
+      );
+      const rolePermissionsAfter = await pool.query(
+        `SELECT permission_id
+           FROM role_permissions
+          WHERE role_id = $1
+          ORDER BY permission_id`,
+        [foreignRole.id],
+      );
+      expect(rolePermissionsAfter.rows).toEqual(rolePermissionsBefore.rows);
+    });
+
+    it("never synthesizes permissions from is_full_access after an actual grant is removed", async () => {
+      const scopedTarget = await createUser(
+        tenantId,
+        "actual-grants-only",
+        passwordHash,
+      );
+      const fullAccessRole = await createRole(
+        tenantId,
+        `FULL_ACCESS_WITH_GRANT_${codeStamp}`,
+        "Full access marker with one actual grant",
+        ["user.read"],
+        true,
+      );
+      const assignmentId = await createAssignment(
+        scopedTarget.id,
+        fullAccessRole.id,
+        { scopeType: "tenant" },
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(true);
+
+      await pool.query(
+        `DELETE FROM role_permissions rp
+          USING permissions p
+          WHERE rp.permission_id = p.id
+            AND rp.role_id = $1
+            AND p.code = 'user.read'`,
+        [fullAccessRole.id],
+      );
+      expect(
+        (
+          await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
+        ).has("user.read"),
+      ).toBe(false);
+      expect(
+        await rbacRepository.hasTenantScopedPermission(
+          tenantId,
+          scopedTarget.id,
+          "user.read",
+        ),
+      ).toBe(false);
+      expect(
+        await rbacRepository.listUserIdsWithPermissionInTenant(
+          tenantId,
+          "user.read",
+        ),
+      ).not.toContain(scopedTarget.id);
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, assignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
     });
   });
 

@@ -104,15 +104,27 @@ export class ReportingInsightService {
   }
 
   async getReport(actor: ActorContext, code: string): Promise<StandardReportResult> {
-    await this.rbac.requirePermission(actor.userId, "reporting.read");
+    const requiredPermissionCodes = ["reporting.read"];
+    await this.rbac.requirePermissionsOnSameAssignment(
+      actor.userId,
+      requiredPermissionCodes,
+    );
     const definition = await this.requireActiveReport(actor.tenantId, code);
-    return this.runReport(definition, actor);
+    return this.runReport(definition, actor, requiredPermissionCodes);
   }
 
   async dashboard(actor: ActorContext): Promise<ExecutiveDashboard> {
-    await this.rbac.requirePermission(actor.userId, "reporting.read");
+    const requiredPermissionCodes = ["reporting.read"];
+    await this.rbac.requirePermissionsOnSameAssignment(
+      actor.userId,
+      requiredPermissionCodes,
+    );
     const definitions = await this.listReports(actor);
-    const reports = await Promise.all(definitions.map((definition) => this.runReport(definition, actor)));
+    const reports = await Promise.all(
+      definitions.map((definition) =>
+        this.runReport(definition, actor, requiredPermissionCodes),
+      ),
+    );
     return {
       generatedAt: new Date(),
       modules: reports.map((report) => ({
@@ -124,9 +136,17 @@ export class ReportingInsightService {
   }
 
   async exportCsv(actor: ActorContext, code: string): Promise<{ filename: string; content: string }> {
-    await this.rbac.requirePermission(actor.userId, "reporting.read");
-    await this.rbac.requirePermission(actor.userId, "reporting.export");
-    const report = await this.getReport(actor, code);
+    const requiredPermissionCodes = ["reporting.read", "reporting.export"];
+    await this.rbac.requirePermissionsOnSameAssignment(
+      actor.userId,
+      requiredPermissionCodes,
+    );
+    const definition = await this.requireActiveReport(actor.tenantId, code);
+    const report = await this.runReport(
+      definition,
+      actor,
+      requiredPermissionCodes,
+    );
     return {
       filename: `${report.code}.csv`,
       content: toCsv(report),
@@ -148,28 +168,72 @@ export class ReportingInsightService {
     return new Set(activations.filter((activation) => activation.isActive).map((activation) => activation.moduleCode));
   }
 
-  private runReport(definition: ReportDefinition, actor: ActorContext): Promise<StandardReportResult> {
+  private runReport(
+    definition: ReportDefinition,
+    actor: ActorContext,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult> {
     switch (definition.code) {
       case "customer_operational_overview":
-        return this.repo.customerServiceOverview(actor.tenantId, actor.userId);
+        return this.repo.customerServiceOverview(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "complaint_quality_summary":
-        return this.repo.complaintSummary(actor.tenantId, actor.userId);
+        return this.repo.complaintSummary(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "survey_result_summary":
-        return this.repo.surveySummary(actor.tenantId, actor.userId);
+        return this.repo.surveySummary(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "work_order_summary":
-        return this.repo.serviceOperationsSummary(actor.tenantId, actor.userId);
+        return this.repo.serviceOperationsSummary(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "workforce_headcount_summary":
-        return this.repo.workforceHeadcount(actor.tenantId, actor.userId);
+        return this.repo.workforceHeadcount(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "supply_chain_stock_purchasing_summary":
-        return this.repo.supplyChainSummary(actor.tenantId, actor.userId);
+        return this.repo.supplyChainSummary(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "asset_register_status_summary":
-        return this.repo.assetStatusSummary(actor.tenantId, actor.userId);
+        return this.repo.assetStatusSummary(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "finance_cashflow_summary":
-        return this.repo.financeCashflowSummary(actor.tenantId, actor.userId);
+        return this.repo.financeCashflowSummary(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "hse_incident_observation_summary":
-        return this.repo.hseSummary(actor.tenantId, actor.userId);
+        return this.repo.hseSummary(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       case "project_delivery_progress_summary":
-        return this.repo.projectDeliveryProgress(actor.tenantId, actor.userId);
+        return this.repo.projectDeliveryProgress(
+          actor.tenantId,
+          actor.userId,
+          requiredPermissionCodes,
+        );
       default:
         throw new NotFoundError("Report", definition.code);
     }

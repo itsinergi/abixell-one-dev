@@ -1068,9 +1068,11 @@ export type AdminRoleAssignmentScopeType =
 
 export type AdminRoleAssignmentSummary = {
   id: string;
-  roleCode: string;
-  roleName: string;
+  roleState: "available" | "unavailable";
+  roleCode: string | null;
+  roleName: string | null;
   scopeType: AdminRoleAssignmentScopeType;
+  scopeState: "available" | "unavailable";
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;

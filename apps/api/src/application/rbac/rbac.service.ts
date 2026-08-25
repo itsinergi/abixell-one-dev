@@ -28,6 +28,23 @@ export class RbacService {
     }
   }
 
+  /** Requires one authorization-effective assignment to carry every listed
+   * actual permission grant. Permissions from separate roles are not combined. */
+  async requirePermissionsOnSameAssignment(
+    userId: string,
+    permissionCodes: readonly string[],
+  ): Promise<void> {
+    const allowed = await this.repo.hasPermissionSetOnSameAssignment(
+      userId,
+      permissionCodes,
+    );
+    if (!allowed) {
+      throw new ForbiddenError(
+        `Missing same-assignment permissions '${permissionCodes.join("', '")}'`,
+      );
+    }
+  }
+
   /**
    * Canonical tenant-scoped authorization check for tenant-wide resources.
    * The requested permission and tenant Data Scope must come from the SAME

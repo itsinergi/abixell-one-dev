@@ -75,14 +75,54 @@ export interface ExecutiveDashboard {
 export interface ReportingInsightRepository {
   listModuleActivations(tenantId: string): Promise<ReportingModuleActivation[]>;
 
-  customerServiceOverview(tenantId: string, userId: string): Promise<StandardReportResult>;
-  complaintSummary(tenantId: string, userId: string): Promise<StandardReportResult>;
-  surveySummary(tenantId: string, userId: string): Promise<StandardReportResult>;
-  serviceOperationsSummary(tenantId: string, userId: string): Promise<StandardReportResult>;
-  workforceHeadcount(tenantId: string, userId: string): Promise<StandardReportResult>;
-  supplyChainSummary(tenantId: string, userId: string): Promise<StandardReportResult>;
-  assetStatusSummary(tenantId: string, userId: string): Promise<StandardReportResult>;
-  financeCashflowSummary(tenantId: string, userId: string): Promise<StandardReportResult>;
-  hseSummary(tenantId: string, userId: string): Promise<StandardReportResult>;
-  projectDeliveryProgress(tenantId: string, userId: string): Promise<StandardReportResult>;
+  customerServiceOverview(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  complaintSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  surveySummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  serviceOperationsSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  workforceHeadcount(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  supplyChainSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  assetStatusSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  financeCashflowSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  hseSummary(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
+  projectDeliveryProgress(
+    tenantId: string,
+    userId: string,
+    requiredPermissionCodes: readonly string[],
+  ): Promise<StandardReportResult>;
 }

@@ -19,9 +19,11 @@ const UNIQUE_VIOLATION = "23505";
 function mapAdminAssignment(row: Record<string, unknown>): AdminRoleAssignmentSummary {
   return {
     id: row.id as string,
-    roleCode: row.role_code as string,
-    roleName: row.role_name as string,
+    roleState: row.role_state as AdminRoleAssignmentSummary["roleState"],
+    roleCode: (row.role_code as string | null) ?? null,
+    roleName: (row.role_name as string | null) ?? null,
     scopeType: row.scope_type as AdminRoleAssignmentSummary["scopeType"],
+    scopeState: row.scope_state as AdminRoleAssignmentSummary["scopeState"],
     scopeOrganizationUnitId: (row.scope_organization_unit_id as string | null) ?? null,
     scopeOrganizationUnitName: (row.scope_organization_unit_name as string | null) ?? null,
     scopeCustomerId: (row.scope_customer_id as string | null) ?? null,
@@ -36,7 +38,9 @@ export class PgRbacRepository implements RbacRepository {
     // Phase 11C — Business Admin Console. Counted with correlated subqueries
     // rather than JOIN + GROUP BY so the two counts stay independent: a JOIN
     // across both role_permissions and user_role_assignments would multiply
-    // the rows and inflate each count by the other's cardinality.
+    // the rows and inflate each count by the other's cardinality. The assigned
+    // user count is retained administrative inventory, not effective access;
+    // authorization decisions use the effective-assignment view instead.
     const result = await this.pool.query(
       `SELECT r.id,
               r.code,
@@ -73,6 +77,29 @@ export class PgRbacRepository implements RbacRepository {
     return result.rows.map((row) => ({ code: row.code, description: row.description }));
   }
 
+  async hasPermissionSetOnSameAssignment(
+    userId: string,
+    permissionCodes: readonly string[],
+  ): Promise<boolean> {
+    const requiredCodes = [...new Set(permissionCodes)];
+    if (requiredCodes.length === 0) return true;
+
+    const result = await this.pool.query(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM authorization_effective_user_role_assignments aura
+           JOIN role_permissions rp ON rp.role_id = aura.role_id
+           JOIN permissions p ON p.id = rp.permission_id
+          WHERE aura.user_id = $1
+            AND p.code = ANY($2::text[])
+          GROUP BY aura.id
+         HAVING COUNT(DISTINCT p.code) = $3
+       ) AS allowed`,
+      [userId, requiredCodes, requiredCodes.length],
+    );
+    return result.rows[0]?.allowed === true;
+  }
+
   async hasTenantScopedPermission(
     tenantId: string,
     userId: string,
@@ -81,20 +108,14 @@ export class PgRbacRepository implements RbacRepository {
     const result = await this.pool.query(
       `SELECT EXISTS (
          SELECT 1
-           FROM users u
-           JOIN user_role_assignments ura ON ura.user_id = u.id
-           JOIN roles r
-             ON r.id = ura.role_id
-            AND r.tenant_id = u.tenant_id
-           JOIN role_permissions rp ON rp.role_id = r.id
+           FROM authorization_effective_user_role_assignments aura
+           JOIN role_permissions rp ON rp.role_id = aura.role_id
            JOIN permissions p ON p.id = rp.permission_id
-          WHERE u.id = $2
-            AND u.tenant_id = $1
-            AND u.deleted_at IS NULL
-            AND u.status = 'active'
-            AND ura.scope_type = 'tenant'
-            AND ura.scope_organization_unit_id IS NULL
-            AND ura.scope_customer_id IS NULL
+          WHERE aura.user_id = $2
+            AND aura.tenant_id = $1
+            AND aura.scope_type = 'tenant'
+            AND aura.scope_organization_unit_id IS NULL
+            AND aura.scope_customer_id IS NULL
             AND p.code = $3
        ) AS allowed`,
       [tenantId, userId, permissionCode],
@@ -109,9 +130,11 @@ export class PgRbacRepository implements RbacRepository {
               u.email,
               u.status,
               access.id AS assignment_id,
+              access.role_state,
               access.role_code,
               access.role_name,
               access.scope_type,
+              access.scope_state,
               access.scope_organization_unit_id,
               access.scope_organization_unit_name,
               access.scope_customer_id,
@@ -120,15 +143,40 @@ export class PgRbacRepository implements RbacRepository {
          LEFT JOIN LATERAL (
            SELECT ura.id,
                   ura.created_at,
+                  CASE WHEN r.id IS NOT NULL THEN 'available' ELSE 'unavailable' END
+                    AS role_state,
                   r.code AS role_code,
                   r.name AS role_name,
                   ura.scope_type,
-                  ou.id AS scope_organization_unit_id,
-                  ou.name AS scope_organization_unit_name,
-                  c.id AS scope_customer_id,
-                  c.name AS scope_customer_name
+                  CASE
+                    WHEN ura.scope_invalidated_at IS NULL
+                     AND r.id IS NOT NULL
+                     AND (
+                       (
+                         ura.scope_type = 'tenant'
+                         AND ura.scope_organization_unit_id IS NULL
+                         AND ura.scope_customer_id IS NULL
+                       )
+                       OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
+                       OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
+                     )
+                    THEN 'available'
+                    ELSE 'unavailable'
+                  END AS scope_state,
+                  ura.scope_organization_unit_id,
+                  CASE
+                    WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                      THEN ou.name
+                    ELSE NULL
+                  END AS scope_organization_unit_name,
+                  ura.scope_customer_id,
+                  CASE
+                    WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                      THEN c.name
+                    ELSE NULL
+                  END AS scope_customer_name
              FROM user_role_assignments ura
-             JOIN roles r
+             LEFT JOIN roles r
                ON r.id = ura.role_id
               AND r.tenant_id = u.tenant_id
              LEFT JOIN organization_units ou
@@ -140,15 +188,6 @@ export class PgRbacRepository implements RbacRepository {
               AND c.tenant_id = u.tenant_id
               AND c.deleted_at IS NULL
             WHERE ura.user_id = u.id
-              AND (
-                (
-                  ura.scope_type = 'tenant'
-                  AND ura.scope_organization_unit_id IS NULL
-                  AND ura.scope_customer_id IS NULL
-                )
-                OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
-                OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
-              )
          ) access ON true
         WHERE u.tenant_id = $1
           AND u.deleted_at IS NULL
@@ -178,9 +217,11 @@ export class PgRbacRepository implements RbacRepository {
         user.roleAssignments.push(
           mapAdminAssignment({
             id: row.assignment_id,
+            role_state: row.role_state,
             role_code: row.role_code,
             role_name: row.role_name,
             scope_type: row.scope_type,
+            scope_state: row.scope_state,
             scope_organization_unit_id: row.scope_organization_unit_id,
             scope_organization_unit_name: row.scope_organization_unit_name,
             scope_customer_id: row.scope_customer_id,
@@ -315,9 +356,11 @@ export class PgRbacRepository implements RbacRepository {
       const row = inserted.rows[0];
       const assignment = mapAdminAssignment({
         id: row.id,
+        role_state: "available",
         role_code: role.code,
         role_name: role.name,
         scope_type: row.scope_type,
+        scope_state: "available",
         scope_organization_unit_id: row.scope_organization_unit_id,
         scope_organization_unit_name: organizationUnitName,
         scope_customer_id: row.scope_customer_id,
@@ -356,11 +399,36 @@ export class PgRbacRepository implements RbacRepository {
 
       const assignmentResult = await client.query(
         `SELECT ura.id,
+                CASE WHEN r.id IS NOT NULL THEN 'available' ELSE 'unavailable' END
+                  AS role_state,
                 ura.scope_type,
+                CASE
+                  WHEN ura.scope_invalidated_at IS NULL
+                   AND r.id IS NOT NULL
+                   AND (
+                     (
+                       ura.scope_type = 'tenant'
+                       AND ura.scope_organization_unit_id IS NULL
+                       AND ura.scope_customer_id IS NULL
+                     )
+                     OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
+                     OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
+                   )
+                  THEN 'available'
+                  ELSE 'unavailable'
+                END AS scope_state,
                 ura.scope_organization_unit_id,
-                ou.name AS scope_organization_unit_name,
+                CASE
+                  WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                    THEN ou.name
+                  ELSE NULL
+                END AS scope_organization_unit_name,
                 ura.scope_customer_id,
-                c.name AS scope_customer_name,
+                CASE
+                  WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                    THEN c.name
+                  ELSE NULL
+                END AS scope_customer_name,
                 r.code AS role_code,
                 r.name AS role_name,
                 EXISTS (
@@ -375,7 +443,8 @@ export class PgRbacRepository implements RbacRepository {
              ON u.id = ura.user_id
             AND u.tenant_id = $2
             AND u.deleted_at IS NULL
-           JOIN roles r
+            AND u.status = 'active'
+           LEFT JOIN roles r
              ON r.id = ura.role_id
             AND r.tenant_id = u.tenant_id
            LEFT JOIN organization_units ou
@@ -387,22 +456,14 @@ export class PgRbacRepository implements RbacRepository {
             AND c.tenant_id = u.tenant_id
             AND c.deleted_at IS NULL
           WHERE ura.id = $1
-            AND ura.user_id = $3
-            AND (
-              (
-                ura.scope_type = 'tenant'
-                AND ura.scope_organization_unit_id IS NULL
-                AND ura.scope_customer_id IS NULL
-              )
-              OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
-              OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
-            )`,
+            AND ura.user_id = $3`,
         [assignmentId, actor.tenantId, targetUserId, USER_ROLE_MANAGE],
       );
       const row = assignmentResult.rows[0];
       if (!row) throw new NotFoundError("Role assignment", assignmentId);
 
       const removesTenantManager =
+        row.scope_state === "available" &&
         row.grants_user_role_manage === true &&
         row.scope_type === "tenant" &&
         row.scope_organization_unit_id === null &&
@@ -413,23 +474,16 @@ export class PgRbacRepository implements RbacRepository {
 
       if (removesTenantManager) {
         const remainingManagers = await client.query(
-          `SELECT COUNT(DISTINCT manager_ura.user_id)::int AS count
-             FROM user_role_assignments manager_ura
-             JOIN users manager_u
-               ON manager_u.id = manager_ura.user_id
-              AND manager_u.tenant_id = $1
-              AND manager_u.deleted_at IS NULL
-              AND manager_u.status = 'active'
-             JOIN roles manager_r
-               ON manager_r.id = manager_ura.role_id
-              AND manager_r.tenant_id = manager_u.tenant_id
-             JOIN role_permissions manager_rp ON manager_rp.role_id = manager_r.id
+          `SELECT COUNT(DISTINCT manager_aura.user_id)::int AS count
+             FROM authorization_effective_user_role_assignments manager_aura
+             JOIN role_permissions manager_rp ON manager_rp.role_id = manager_aura.role_id
              JOIN permissions manager_p ON manager_p.id = manager_rp.permission_id
-            WHERE manager_ura.scope_type = 'tenant'
-              AND manager_ura.scope_organization_unit_id IS NULL
-              AND manager_ura.scope_customer_id IS NULL
+            WHERE manager_aura.tenant_id = $1
+              AND manager_aura.scope_type = 'tenant'
+              AND manager_aura.scope_organization_unit_id IS NULL
+              AND manager_aura.scope_customer_id IS NULL
               AND manager_p.code = $2
-              AND manager_ura.user_id <> $3`,
+              AND manager_aura.user_id <> $3`,
           [actor.tenantId, USER_ROLE_MANAGE, targetUserId],
         );
         if (remainingManagers.rows[0].count === 0) {
@@ -495,27 +549,23 @@ export class PgRbacRepository implements RbacRepository {
             AND u.status = 'active'
             AND EXISTS (
               SELECT 1
-                FROM user_role_assignments entry_ura
-                JOIN roles entry_r
-                  ON entry_r.id = entry_ura.role_id
-                 AND entry_r.tenant_id = u.tenant_id
-                JOIN role_permissions entry_rp ON entry_rp.role_id = entry_r.id
+                FROM authorization_effective_user_role_assignments entry_aura
+                JOIN role_permissions entry_rp ON entry_rp.role_id = entry_aura.role_id
                 JOIN permissions entry_p ON entry_p.id = entry_rp.permission_id
-               WHERE entry_ura.user_id = u.id
+               WHERE entry_aura.user_id = u.id
+                 AND entry_aura.tenant_id = u.tenant_id
                  AND entry_p.code = $3
             )
             AND EXISTS (
               SELECT 1
-                FROM user_role_assignments manager_ura
-                JOIN roles manager_r
-                  ON manager_r.id = manager_ura.role_id
-                 AND manager_r.tenant_id = u.tenant_id
-                JOIN role_permissions manager_rp ON manager_rp.role_id = manager_r.id
+                FROM authorization_effective_user_role_assignments manager_aura
+                JOIN role_permissions manager_rp ON manager_rp.role_id = manager_aura.role_id
                 JOIN permissions manager_p ON manager_p.id = manager_rp.permission_id
-               WHERE manager_ura.user_id = u.id
-                 AND manager_ura.scope_type = 'tenant'
-                 AND manager_ura.scope_organization_unit_id IS NULL
-                 AND manager_ura.scope_customer_id IS NULL
+               WHERE manager_aura.user_id = u.id
+                 AND manager_aura.tenant_id = u.tenant_id
+                 AND manager_aura.scope_type = 'tenant'
+                 AND manager_aura.scope_organization_unit_id IS NULL
+                 AND manager_aura.scope_customer_id IS NULL
                  AND manager_p.code = $4
             )
        ) AS allowed`,
@@ -562,17 +612,13 @@ export class PgRbacRepository implements RbacRepository {
     // scopes only — `customer`-scoped assignments are deliberately excluded
     // so a Customer User can never be an internal management recipient.
     const result = await this.pool.query(
-      `SELECT DISTINCT ura.user_id
-         FROM user_role_assignments ura
-         JOIN roles r ON r.id = ura.role_id
-         JOIN role_permissions rp ON rp.role_id = ura.role_id
+      `SELECT DISTINCT aura.user_id
+         FROM authorization_effective_user_role_assignments aura
+         JOIN role_permissions rp ON rp.role_id = aura.role_id
          JOIN permissions p ON p.id = rp.permission_id
-         JOIN users u ON u.id = ura.user_id
-        WHERE r.tenant_id = $1
-          AND u.tenant_id = $1
-          AND u.deleted_at IS NULL
+        WHERE aura.tenant_id = $1
           AND p.code = $2
-          AND ura.scope_type IN ('tenant', 'organization_unit')`,
+          AND aura.scope_type IN ('tenant', 'organization_unit')`,
       [tenantId, permissionCode],
     );
     return result.rows.map((r) => r.user_id);
@@ -581,10 +627,10 @@ export class PgRbacRepository implements RbacRepository {
   async getEffectivePermissionCodes(userId: string): Promise<Set<string>> {
     const result = await this.pool.query(
       `SELECT DISTINCT p.code
-         FROM user_role_assignments ura
-         JOIN role_permissions rp ON rp.role_id = ura.role_id
+         FROM authorization_effective_user_role_assignments aura
+         JOIN role_permissions rp ON rp.role_id = aura.role_id
          JOIN permissions p ON p.id = rp.permission_id
-        WHERE ura.user_id = $1`,
+        WHERE aura.user_id = $1`,
       [userId],
     );
     return new Set(result.rows.map((r) => r.code));
@@ -592,11 +638,11 @@ export class PgRbacRepository implements RbacRepository {
 
   async getAssignments(userId: string): Promise<UserRoleAssignment[]> {
     const result = await this.pool.query(
-      `SELECT ura.id, ura.user_id, ura.role_id, r.code AS role_code,
-              ura.scope_type, ura.scope_organization_unit_id, ura.scope_customer_id
-         FROM user_role_assignments ura
-         JOIN roles r ON r.id = ura.role_id
-        WHERE ura.user_id = $1`,
+      `SELECT aura.id, aura.user_id, aura.role_id, r.code AS role_code,
+              aura.scope_type, aura.scope_organization_unit_id, aura.scope_customer_id
+         FROM authorization_effective_user_role_assignments aura
+         JOIN roles r ON r.id = aura.role_id
+        WHERE aura.user_id = $1`,
       [userId],
     );
     return result.rows.map((row) => ({
@@ -671,25 +717,29 @@ export class PgRbacRepository implements RbacRepository {
     // scoped SQL.
     const result = await this.pool.query(
       `WITH RECURSIVE ancestors AS (
-         SELECT id, parent_id FROM organization_units WHERE id = $3
+         SELECT id, parent_id
+           FROM organization_units
+          WHERE id = $3
+            AND tenant_id = $1
+            AND deleted_at IS NULL
          UNION ALL
          SELECT ou.id, ou.parent_id
            FROM organization_units ou
            JOIN ancestors a ON ou.id = a.parent_id
+          WHERE ou.tenant_id = $1
+            AND ou.deleted_at IS NULL
        )
-       SELECT DISTINCT ura.user_id
-         FROM user_role_assignments ura
-         JOIN roles r ON r.id = ura.role_id
-         JOIN users u ON u.id = ura.user_id
-        WHERE r.tenant_id = $1
+       SELECT DISTINCT aura.user_id
+         FROM authorization_effective_user_role_assignments aura
+         JOIN roles r ON r.id = aura.role_id
+        WHERE aura.tenant_id = $1
           AND r.code = $2
-          AND u.tenant_id = $1
           AND (
-            ura.scope_type = 'tenant'
+            aura.scope_type = 'tenant'
             OR (
               $3::uuid IS NOT NULL
-              AND ura.scope_type = 'organization_unit'
-              AND ura.scope_organization_unit_id IN (SELECT id FROM ancestors)
+              AND aura.scope_type = 'organization_unit'
+              AND aura.scope_organization_unit_id IN (SELECT id FROM ancestors)
             )
           )`,
       [tenantId, roleCode, organizationUnitId],

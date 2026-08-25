@@ -65,9 +65,68 @@ type ScopeChoice = {
 function assignmentScopeName(assignment: AdminRoleAssignmentSummary): string {
   if (assignment.scopeType === "tenant") return "Tenant-wide";
   if (assignment.scopeType === "organization_unit") {
-    return assignment.scopeOrganizationUnitName ?? "Unavailable organization unit";
+    return assignment.scopeState === "available"
+      ? assignment.scopeOrganizationUnitName ?? "Unavailable organization unit"
+      : "Unavailable organization unit";
   }
-  return assignment.scopeCustomerName ?? "Unavailable customer";
+  return assignment.scopeState === "available"
+    ? assignment.scopeCustomerName ?? "Unavailable customer"
+    : "Unavailable customer";
+}
+
+function UnavailableScopeState() {
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+      <StatusPill tone="warning">Unavailable scope</StatusPill>
+      <span className="text-xs text-amber-800">This assignment currently grants no access.</span>
+    </div>
+  );
+}
+
+function UnavailableRoleState() {
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+      <StatusPill tone="warning">Unavailable role</StatusPill>
+      <span className="text-xs text-amber-800">Role details are not available.</span>
+    </div>
+  );
+}
+
+function assignmentHasAvailableRole(
+  assignment: AdminRoleAssignmentSummary,
+): assignment is AdminRoleAssignmentSummary & {
+  roleState: "available";
+  roleCode: string;
+  roleName: string;
+} {
+  return (
+    assignment.roleState === "available" &&
+    assignment.roleCode !== null &&
+    assignment.roleName !== null
+  );
+}
+
+function AssignmentRole({
+  assignment,
+}: {
+  assignment: AdminRoleAssignmentSummary;
+}) {
+  if (!assignmentHasAvailableRole(assignment)) {
+    return (
+      <>
+        <div className="text-sm font-medium text-slate-800">Unavailable role</div>
+        <UnavailableRoleState />
+      </>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-sm font-medium text-slate-800">{assignment.roleName}</span>
+      <code className="break-all font-mono text-xs text-slate-500">
+        {assignment.roleCode}
+      </code>
+    </div>
+  );
 }
 
 function assignmentScopeId(assignment: AdminRoleAssignmentSummary): string | null {
@@ -80,7 +139,12 @@ function scopeLabel(assignment: AdminRoleAssignmentSummary): string {
 }
 
 function roleSearchText(user: AdminUserAccessSummary): string {
-  return user.roleAssignments.map((assignment) => `${assignment.roleCode} ${assignment.roleName}`).join(" ");
+  return user.roleAssignments
+    .map((assignment) => {
+      if (!assignmentHasAvailableRole(assignment)) return "Unavailable role";
+      return `${assignment.roleCode} ${assignment.roleName}`;
+    })
+    .join(" ");
 }
 
 function catalogFailureKind(reason: unknown): CatalogFailureKind {
@@ -265,11 +329,9 @@ function UserResults({
               ) : (
                 user.roleAssignments.map((assignment) => (
                   <div key={assignment.id} className="rounded-md bg-slate-50 px-2.5 py-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-medium text-slate-800">{assignment.roleName}</span>
-                      <code className="break-all font-mono text-xs text-slate-500">{assignment.roleCode}</code>
-                    </div>
+                    <AssignmentRole assignment={assignment} />
                     <div className="mt-0.5 text-xs text-slate-500">{scopeLabel(assignment)}</div>
+                    {assignment.scopeState === "unavailable" && <UnavailableScopeState />}
                   </div>
                 ))
               )}
@@ -314,13 +376,11 @@ function UserResults({
                       <span className="text-slate-500">No role assignments</span>
                     ) : (
                       user.roleAssignments.map((assignment) => (
-                        <span key={assignment.id} className="inline-flex flex-col rounded-md bg-slate-50 px-2 py-1.5">
-                          <span>
-                            <span className="font-medium text-slate-800">{assignment.roleName}</span>{" "}
-                            <code className="font-mono text-xs text-slate-500">{assignment.roleCode}</code>
-                          </span>
+                        <div key={assignment.id} className="inline-flex flex-col rounded-md bg-slate-50 px-2 py-1.5">
+                          <AssignmentRole assignment={assignment} />
                           <span className="text-xs text-slate-500">{scopeLabel(assignment)}</span>
-                        </span>
+                          {assignment.scopeState === "unavailable" && <UnavailableScopeState />}
+                        </div>
                       ))
                     )}
                   </div>
@@ -388,16 +448,23 @@ function AccessDialog({
   const selectedRole = roles.find((role) => role.code === selectedRoleCode) ?? null;
   const selectedScope = scopeChoices.find((scope) => scope.key === selectedScopeKey) ?? scopeChoices[0];
   const targetRole = operation.kind === "remove"
-    ? {
-        code: operation.assignment.roleCode,
-        name: operation.assignment.roleName,
-      }
+    ? assignmentHasAvailableRole(operation.assignment)
+      ? {
+          code: operation.assignment.roleCode,
+          name: operation.assignment.roleName,
+        }
+      : null
     : selectedRole;
+  const unavailableRoleRemoval =
+    operation.kind === "remove" &&
+    operation.assignment.roleState === "unavailable";
   const permissionMatchesTarget =
     permissionState === "ready" &&
     permissions !== null &&
     targetRole !== null &&
     permissions.roleCode === targetRole.code;
+  const permissionReviewSatisfied =
+    unavailableRoleRemoval || permissionMatchesTarget;
 
   const loadCatalogs = useCallback(async () => {
     if (!canManageAccess) return;
@@ -508,7 +575,11 @@ function AccessDialog({
   function startRemoveReview(assignment: AdminRoleAssignmentSummary) {
     setOperation({ kind: "remove", assignment });
     setStep("review");
-    void loadPermissions(assignment.roleCode);
+    if (assignmentHasAvailableRole(assignment)) {
+      void loadPermissions(assignment.roleCode);
+    } else {
+      invalidatePermissionRequest();
+    }
   }
 
   function assignmentInput(): AdminRoleAssignmentInput | null {
@@ -597,7 +668,7 @@ function AccessDialog({
   }
 
   async function confirmMutation() {
-    if (submitGuard.current || pending || !permissionMatchesTarget) return;
+    if (submitGuard.current || pending || !permissionReviewSatisfied) return;
     const addInput = operation.kind === "add" ? assignmentInput() : null;
     if (operation.kind === "add" && !addInput) return;
 
@@ -607,7 +678,9 @@ function AccessDialog({
       successMessage:
         operation.kind === "add"
           ? `Added ${targetRole?.name ?? "role"} access for ${user.fullName}.`
-          : `Removed ${operation.assignment.roleName} access from ${user.fullName}.`,
+          : assignmentHasAvailableRole(operation.assignment)
+            ? `Removed ${operation.assignment.roleName} access from ${user.fullName}.`
+            : `Removed unavailable role assignment from ${user.fullName}.`,
     };
     submitGuard.current = true;
     setStep("pending");
@@ -677,7 +750,7 @@ function AccessDialog({
             </Button>
             <Button
               className="min-h-[44px]"
-              disabled={!permissionMatchesTarget || submitGuard.current}
+              disabled={!permissionReviewSatisfied || submitGuard.current}
               onClick={() => void confirmMutation()}
             >
               Confirm {operation.kind === "add" ? "add" : "remove"}
@@ -724,9 +797,9 @@ function AccessDialog({
                 {user.roleAssignments.map((assignment) => (
                   <li key={assignment.id} className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <div className="font-medium text-slate-900">{assignment.roleName}</div>
-                      <code className="break-all font-mono text-xs text-slate-600">{assignment.roleCode}</code>
+                      <AssignmentRole assignment={assignment} />
                       <div className="mt-1 break-words text-sm text-slate-500">{scopeLabel(assignment)}</div>
+                      {assignment.scopeState === "unavailable" && <UnavailableScopeState />}
                     </div>
                     {canManageAccess && (
                       <Button
@@ -825,10 +898,14 @@ function AccessDialog({
             user={user}
             role={
               acceptedMutation.operation.kind === "remove"
-                ? {
-                    code: acceptedMutation.operation.assignment.roleCode,
-                    name: acceptedMutation.operation.assignment.roleName,
-                  }
+                ? assignmentHasAvailableRole(
+                    acceptedMutation.operation.assignment,
+                  )
+                  ? {
+                      code: acceptedMutation.operation.assignment.roleCode,
+                      name: acceptedMutation.operation.assignment.roleName,
+                    }
+                  : null
                 : targetRole
             }
             scope={selectedScope}
@@ -846,13 +923,26 @@ function AccessDialog({
             role={targetRole}
             scope={selectedScope}
           />
-          <PermissionSummary
-            state={permissionState}
-            details={permissions}
-            error={permissionError}
-            onRetry={() => targetRole && void loadPermissions(targetRole.code)}
-            onSessionExpired={logout}
-          />
+          {unavailableRoleRemoval ? (
+            <Alert tone="warning">
+              <div className="space-y-1">
+                <p className="font-medium">Role permission review is unavailable.</p>
+                <p>
+                  No role identity or permission metadata is resolved for this
+                  authorization-inert assignment. Removal targets only the exact
+                  assignment ID shown above.
+                </p>
+              </div>
+            </Alert>
+          ) : (
+            <PermissionSummary
+              state={permissionState}
+              details={permissions}
+              error={permissionError}
+              onRetry={() => targetRole && void loadPermissions(targetRole.code)}
+              onSessionExpired={logout}
+            />
+          )}
           {pending && (
             <Alert tone="info">
               {acceptedMutation
@@ -889,11 +979,43 @@ function ChangeSummary({
       <h3 id="change-summary-title" className="text-sm font-semibold text-slate-900">
         {applied ? "Change accepted by the server" : "What will change"}
       </h3>
+      {assignment &&
+        (assignment.roleState === "unavailable" ||
+          assignment.scopeState === "unavailable") && (
+          <Alert tone="warning">
+            <div className="space-y-1">
+              <p className="font-medium">This assignment is already authorization-inert.</p>
+              <p>
+                Removing it clears the retained record and prevents future reuse. Restoring or
+                moving a target back will not reactivate this assignment; access must be assigned
+                again explicitly.
+              </p>
+            </div>
+          </Alert>
+        )}
       <dl className="mt-3 grid gap-x-5 gap-y-3 text-sm sm:grid-cols-2">
         <SummaryItem label="Operation">{operation.kind === "add" ? "Add role assignment" : "Remove role assignment"}</SummaryItem>
         <SummaryItem label="User">{user.fullName} · {user.email}</SummaryItem>
-        <SummaryItem label="Role">{role?.name ?? "Unavailable"} · <code className="font-mono text-xs">{role?.code ?? "—"}</code></SummaryItem>
+        <SummaryItem label="Role">
+          {role ? (
+            <>
+              {role.name} · <code className="font-mono text-xs">{role.code}</code>
+            </>
+          ) : (
+            "Unavailable role"
+          )}
+        </SummaryItem>
+        {assignment && (
+          <SummaryItem label="Role state">
+            {assignment.roleState === "available" ? "Available" : "Unavailable"}
+          </SummaryItem>
+        )}
         <SummaryItem label="Scope type"><code className="font-mono text-xs">{scopeType}</code></SummaryItem>
+        {assignment && (
+          <SummaryItem label="Scope state">
+            {assignment.scopeState === "available" ? "Available" : "Unavailable — grants no access"}
+          </SummaryItem>
+        )}
         <SummaryItem label="Scope label">{scopeName}</SummaryItem>
         <SummaryItem label="Scope ID">{scopeId ?? "Tenant (no scope ID)"}</SummaryItem>
         {assignment && <SummaryItem label="Assignment ID"><code className="break-all font-mono text-xs">{assignment.id}</code></SummaryItem>}

@@ -62,11 +62,17 @@ export class PgOrganizationUnitRepository implements OrganizationUnitRepository 
   async listAncestorIds(id: string): Promise<string[]> {
     const result = await this.pool.query(
       `WITH RECURSIVE ancestors AS (
-         SELECT id, parent_id FROM organization_units WHERE id = $1
+         SELECT id, parent_id, tenant_id
+           FROM organization_units
+          WHERE id = $1
+            AND deleted_at IS NULL
          UNION ALL
-         SELECT ou.id, ou.parent_id
+         SELECT ou.id, ou.parent_id, ou.tenant_id
            FROM organization_units ou
-           JOIN ancestors a ON ou.id = a.parent_id
+           JOIN ancestors a
+             ON ou.id = a.parent_id
+            AND ou.tenant_id = a.tenant_id
+          WHERE ou.deleted_at IS NULL
        )
        SELECT id FROM ancestors`,
       [id],

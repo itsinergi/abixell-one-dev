@@ -103,6 +103,9 @@ async function closeDialogWithBackdrop(dialog) {
   assert.ok(box, "Dialog backdrop has no bounding box");
   await page.mouse.click(box.x + 2, box.y + 2);
   await dialog.waitFor({ state: "detached" });
+  // OverlayDialog restores focus from its effect cleanup after the portal
+  // detaches; yield one frame before asserting the destination.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
 }
 
 async function currentAccessToken() {
@@ -545,7 +548,270 @@ try {
   await shot("admin-mobile");
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  console.log("6. Intercepted deterministic Admin Console states");
+  console.log("6. Tenant-safe unavailable assignment projection");
+  const unavailableAssignmentId = "00000000-0000-4000-8000-00000000011f";
+  const unavailableScopeId = "00000000-0000-4000-8000-000000000120";
+  const forbiddenScopeName = "Foreign Tenant Executive Office";
+  const unavailableUsers = async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "00000000-0000-4000-8000-000000000121",
+          fullName: "Unavailable Scope Reviewer",
+          email: "unavailable.scope@example.invalid",
+          status: "active",
+          roleAssignments: [
+            {
+              id: unavailableAssignmentId,
+              roleState: "available",
+              roleCode: "SUPERVISOR",
+              roleName: "Site Supervisor",
+              scopeType: "organization_unit",
+              scopeState: "unavailable",
+              scopeOrganizationUnitId: unavailableScopeId,
+              scopeOrganizationUnitName: forbiddenScopeName,
+              scopeCustomerId: null,
+              scopeCustomerName: null,
+            },
+          ],
+        },
+      ]),
+    });
+  };
+  await page.route("**/api/admin/users", unavailableUsers);
+  await page.goto(`${BASE}/admin?section=users`, { waitUntil: "networkidle" });
+  const unavailableRow = page.locator("tr", {
+    has: page.getByText("unavailable.scope@example.invalid", { exact: true }),
+  });
+  await assertVisible(
+    unavailableRow.getByText("Unavailable scope", { exact: true }),
+    "Desktop unavailable scope status missing",
+  );
+  await assertVisible(
+    unavailableRow.getByText("Unavailable organization unit", { exact: false }),
+    "Desktop unavailable Organization Unit label missing",
+  );
+  assert.equal(
+    await page.getByText(forbiddenScopeName, { exact: true }).count(),
+    0,
+    "Unavailable assignment rendered server-supplied scope metadata",
+  );
+  await unavailableRow.getByRole("button", { name: "Manage access" }).click();
+  let unavailableDialog = page.getByRole("dialog", {
+    name: "Manage access · Unavailable Scope Reviewer",
+  });
+  await assertVisible(
+    unavailableDialog.getByText("Unavailable scope", { exact: true }),
+    "Unavailable status missing from current-access dialog",
+  );
+  await unavailableDialog.getByRole("button", { name: "Review removal" }).click();
+  await assertVisible(
+    unavailableDialog.getByText("Unavailable — grants no access", { exact: true }),
+    "Removal review omitted the generic unavailable state",
+  );
+  const unavailableAssignmentIdValue = unavailableDialog
+    .locator("dt", { hasText: "Assignment ID" })
+    .locator("xpath=following-sibling::dd[1]");
+  await assertVisible(
+    unavailableAssignmentIdValue,
+    "Unavailable removal review omitted the assignment ID",
+  );
+  assert.equal(
+    await unavailableAssignmentIdValue.innerText(),
+    unavailableAssignmentId,
+    "Unavailable removal review displayed the wrong assignment ID",
+  );
+  assert.equal(
+    await unavailableDialog.getByText(forbiddenScopeName, { exact: true }).count(),
+    0,
+    "Unavailable removal review leaked server-supplied scope metadata",
+  );
+  await page.keyboard.press("Escape");
+  await unavailableDialog.waitFor({ state: "detached" });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const unavailableCard = page.locator("li", {
+    has: page.getByText("unavailable.scope@example.invalid", { exact: true }),
+  });
+  await assertVisible(
+    unavailableCard.getByText("unavailable.scope@example.invalid", { exact: true }),
+    "Mobile unavailable assignment card missing",
+  );
+  await assertVisible(
+    unavailableCard.getByText("Unavailable scope", { exact: true }),
+    "Mobile unavailable scope status missing",
+  );
+  assert.equal(
+    await unavailableCard.getByText(forbiddenScopeName, { exact: true }).count(),
+    0,
+    "Mobile unavailable assignment leaked server-supplied scope metadata",
+  );
+  await assertNoHorizontalOverflow("mobile unavailable assignment");
+  await page.unroute("**/api/admin/users", unavailableUsers);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  console.log("7. Tenant-safe unavailable Role removal");
+  const unavailableRoleAssignmentId = "00000000-0000-4000-8000-000000000122";
+  const unavailableRoleUserId = "00000000-0000-4000-8000-000000000123";
+  const forbiddenRoleCode = "FOREIGN_EXECUTIVE_ADMIN";
+  const forbiddenRoleName = "Foreign Executive Administrator";
+  let unavailableRoleRemoved = false;
+  let unavailableRolePermissionRequests = 0;
+  let unavailableRoleDeleteRequests = 0;
+  const unavailableRoleUsers = async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: unavailableRoleUserId,
+          fullName: "Unavailable Role Reviewer",
+          email: "unavailable.role@example.invalid",
+          status: "active",
+          roleAssignments: unavailableRoleRemoved
+            ? []
+            : [
+                {
+                  id: unavailableRoleAssignmentId,
+                  roleState: "unavailable",
+                  roleCode: null,
+                  roleName: null,
+                  scopeType: "organization_unit",
+                  scopeState: "unavailable",
+                  scopeOrganizationUnitId: unavailableScopeId,
+                  scopeOrganizationUnitName: null,
+                  scopeCustomerId: null,
+                  scopeCustomerName: null,
+                },
+              ],
+        },
+      ]),
+    });
+  };
+  const unavailableRolePermissions = async (route) => {
+    unavailableRolePermissionRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        roleCode: forbiddenRoleCode,
+        roleName: forbiddenRoleName,
+        isFullAccess: false,
+        permissions: [],
+      }),
+    });
+  };
+  const unavailableRoleDeletePath =
+    `/api/admin/users/${unavailableRoleUserId}/role-assignments/${unavailableRoleAssignmentId}`;
+  const unavailableRoleDelete = async (route) => {
+    assert.equal(route.request().method(), "DELETE", "Unavailable Role mutation used the wrong method");
+    assert.equal(
+      new URL(route.request().url()).pathname,
+      unavailableRoleDeletePath,
+      "Unavailable Role mutation targeted the wrong assignment",
+    );
+    unavailableRoleDeleteRequests += 1;
+    unavailableRoleRemoved = true;
+    await route.fulfill({ status: 204, body: "" });
+  };
+  await page.route("**/api/admin/users", unavailableRoleUsers);
+  await page.route("**/api/admin/roles/*/permissions", unavailableRolePermissions);
+  await page.route(`**${unavailableRoleDeletePath}`, unavailableRoleDelete);
+  await page.goto(`${BASE}/admin?section=users`, { waitUntil: "networkidle" });
+  const unavailableRoleRow = page.locator("tr", {
+    has: page.getByText("unavailable.role@example.invalid", { exact: true }),
+  });
+  await assertVisible(
+    unavailableRoleRow.getByText("Unavailable role", { exact: true }).first(),
+    "Desktop unavailable Role label missing",
+  );
+  assert.equal(
+    await page.getByText(forbiddenRoleCode, { exact: true }).count(),
+    0,
+    "Unavailable Role projection leaked a foreign role code",
+  );
+  assert.equal(
+    await page.getByText(forbiddenRoleName, { exact: true }).count(),
+    0,
+    "Unavailable Role projection leaked a foreign role name",
+  );
+  await unavailableRoleRow.getByRole("button", { name: "Manage access" }).click();
+  const unavailableRoleDialog = page.getByRole("dialog", {
+    name: "Manage access · Unavailable Role Reviewer",
+  });
+  const unavailableRoleItem = unavailableRoleDialog
+    .getByText("Unavailable role", { exact: true })
+    .first()
+    .locator("xpath=ancestor::li[1]");
+  await unavailableRoleItem.getByRole("button", { name: "Review removal" }).click();
+  await assertVisible(
+    unavailableRoleDialog.getByText("Role permission review is unavailable.", { exact: true }),
+    "Unavailable Role review did not use the generic removal path",
+  );
+  const unavailableRoleAssignmentIdValue = unavailableRoleDialog
+    .locator("dt", { hasText: "Assignment ID" })
+    .locator("xpath=following-sibling::dd[1]");
+  await assertVisible(
+    unavailableRoleAssignmentIdValue,
+    "Unavailable Role review omitted the assignment ID",
+  );
+  assert.equal(
+    await unavailableRoleAssignmentIdValue.innerText(),
+    unavailableRoleAssignmentId,
+    "Unavailable Role review displayed the wrong assignment ID",
+  );
+  await page.waitForTimeout(50);
+  assert.equal(
+    unavailableRolePermissionRequests,
+    0,
+    "Unavailable Role removal requested role permission metadata",
+  );
+  assert.equal(
+    await unavailableRoleDialog.getByText(forbiddenRoleCode, { exact: true }).count(),
+    0,
+    "Unavailable Role removal leaked a foreign role code",
+  );
+  assert.equal(
+    await unavailableRoleDialog.getByText(forbiddenRoleName, { exact: true }).count(),
+    0,
+    "Unavailable Role removal leaked a foreign role name",
+  );
+  await unavailableRoleDialog.getByRole("button", { name: "Confirm remove" }).click();
+  await unavailableRoleDialog.waitFor({ state: "detached", timeout: 8000 });
+  assert.equal(
+    unavailableRoleDeleteRequests,
+    1,
+    "Unavailable Role removal did not issue exactly one exact DELETE",
+  );
+  await assertVisible(
+    page.getByText(
+      "Removed unavailable role assignment from Unavailable Role Reviewer.",
+      { exact: true },
+    ),
+    "Unavailable Role removal success feedback was not generic",
+  );
+  assert.equal(
+    await page.getByText(unavailableRoleAssignmentId, { exact: true }).count(),
+    0,
+    "Authoritative reload retained the removed unavailable Role assignment",
+  );
+  assert.equal(
+    await page.getByText(forbiddenRoleCode, { exact: true }).count(),
+    0,
+    "Unavailable Role flow exposed a foreign role code",
+  );
+  assert.equal(
+    await page.getByText(forbiddenRoleName, { exact: true }).count(),
+    0,
+    "Unavailable Role flow exposed a foreign role name",
+  );
+  await page.unroute(`**${unavailableRoleDeletePath}`, unavailableRoleDelete);
+  await page.unroute("**/api/admin/roles/*/permissions", unavailableRolePermissions);
+  await page.unroute("**/api/admin/users", unavailableRoleUsers);
+
+  console.log("8. Intercepted deterministic Admin Console states");
   const rolesDenied = async (route) => {
     expectHttpFailure("/api/admin/roles", 403);
     await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "Forbidden" }) });
@@ -618,7 +884,7 @@ try {
   await assertVisible(page.getByText("No workflow definitions configured"), "Empty workflow state missing");
   await page.unroute("**/api/admin/workflows", workflowsEmpty);
 
-  console.log("7. PWA metadata");
+  console.log("9. PWA metadata");
   const manifestHref = await page.getAttribute('link[rel="manifest"]', "href");
   assert.ok(manifestHref, "Manifest link is missing");
   const manifest = await page.evaluate(async (href) => {
@@ -629,7 +895,7 @@ try {
   assert.equal(manifest.name, "Enterprise Management System", "Unexpected PWA manifest name");
   assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 2, "PWA icons are incomplete");
 
-  console.log("8. Logout and post-logout protection");
+  console.log("10. Logout and post-logout protection");
   await page.getByRole("button", { name: "Sign out" }).first().click();
   await page.waitForURL(/\/login/, { timeout: 5000 });
   assert.equal(
