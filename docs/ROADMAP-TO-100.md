@@ -4,7 +4,7 @@
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
 | Source baseline | `docs/canonical/product-roadmap.md` v1.20 and `docs/canonical/product-progress.md` v1.20 |
-| Measured at | `master @ 5eba91a` |
+| Measured at | `master @ e7ab06a` |
 | Current point | Full Approved Roadmap Progress: 56.4% (199 / 353 pts) |
 | Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
@@ -20,7 +20,7 @@ This document explains the remaining path from the current approved baseline to 
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed   6
+Advanced Capabilities  total 179   completed  25
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174
@@ -38,8 +38,8 @@ Remaining to 100%:
 | Layer | Remaining | Meaning |
 |---|---:|---|
 | Platform Hardening | 0 pts | Phase H2 production gate completed |
-| Advanced Capabilities | 173 pts | All Advanced backlog not yet delivered |
-| Total remaining | 173 pts | 353 - 180 |
+| Advanced Capabilities | 154 pts | All Advanced backlog not yet delivered |
+| Total remaining | 154 pts | 353 - 199 |
 
 Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
 traceability and move neither metric; the numbers above already reflect their closure.
@@ -96,7 +96,7 @@ Validated acceptance:
 ## 4. Wave A1 - Customer and Service Quality Advanced
 
 Wave A1 deepens commercial operation and complaint/service-quality intelligence. It is
-**COMPLETED** at baseline v1.20 (`master @ 5eba91a`); all 19 points below are earned, and
+**COMPLETED** at baseline v1.20 (`master @ e7ab06a` after post-closure stabilization); all 19 points below are earned, and
 the canonical documents carry the validation evidence.
 
 | Area | Unit | Capability | Pts |
@@ -328,9 +328,8 @@ Recommended boundaries:
 | Category | Remaining pts | Completion condition |
 |---|---:|---|
 | Phase H2 Production Gate | 0 | Completed; Platform Hardening is 16 / 16 |
-| Advanced business-domain waves | 160 | Customer, Service Quality, Survey, Reporting, Service Operations, Asset, Workforce, Supply Chain, Finance, Project Delivery, and HSE Advanced complete |
-| Platform cross-cutting Advanced | 13 | Partner API, AI readiness, and marketplace ecosystem complete |
-| Total | 173 | Full Approved Roadmap reaches 353 / 353 |
+| Advanced business-domain waves | 154 | Wave A2-A7 business-domain subtotal is 141; Wave A8 platform cross-cutting Advanced adds 13; Customer & Commercial and Service Quality Advanced were already delivered in Wave A1 |
+| Total | 154 | Full Approved Roadmap reaches 353 / 353 |
 
 After all phases:
 
