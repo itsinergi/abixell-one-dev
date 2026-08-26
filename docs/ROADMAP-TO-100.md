@@ -328,8 +328,9 @@ Recommended boundaries:
 | Category | Remaining pts | Completion condition |
 |---|---:|---|
 | Phase H2 Production Gate | 0 | Completed; Platform Hardening is 16 / 16 |
-| Advanced business-domain waves | 154 | Wave A2-A7 business-domain subtotal is 141; Wave A8 platform cross-cutting Advanced adds 13; Customer & Commercial and Service Quality Advanced were already delivered in Wave A1 |
-| Total | 154 | Full Approved Roadmap reaches 353 / 353 |
+| Advanced business-domain waves (A2-A7) | 141 | Survey completion + Reporting (23), Service Operations + Asset (24), Workforce (24), Supply Chain (22), Finance (21), and Project Delivery + HSE (27) Advanced complete; Customer & Commercial and Service Quality Advanced were already delivered in Wave A1 |
+| Platform cross-cutting Advanced (A8) | 13 | Partner API, AI readiness, and marketplace ecosystem complete |
+| Total remaining Advanced | 154 | 141 (A2-A7) + 13 (A8); Full Approved Roadmap reaches 353 / 353 |
 
 After all phases:
 
