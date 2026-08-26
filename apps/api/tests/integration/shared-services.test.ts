@@ -3,7 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import {
+  authHeader,
+  bootstrapTenant,
+  createReadOnlyRole,
+  createScheduledJobFixture,
+  deleteScheduledJobFixture,
+  login,
+  provisionFirstAdmin,
+} from "./helpers.js";
 
 /**
  * Checkpoint 0E integration test — proves the Enterprise Shared Services
@@ -23,7 +31,10 @@ import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstA
  * handler code the timer would.
  */
 
-const TENANT_CODE = `test-0e-${Date.now()}`;
+const FIXTURE_ID = `${Date.now()}-${process.pid}`;
+const TENANT_CODE = `test-0e-${FIXTURE_ID}`;
+const WORKFLOW_JOB_CODE = `test-0e-workflow-sweep-${FIXTURE_ID}`;
+const OUTBOX_JOB_CODE = `test-0e-outbox-reconciliation-${FIXTURE_ID}`;
 
 function buildMultipart(fields: Record<string, string>, file: { name: string; content: string; mimeType: string }) {
   const boundary = `----vitest${Date.now()}`;
@@ -51,6 +62,17 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
   let firstInstanceId: string;
 
   beforeAll(async () => {
+    await createScheduledJobFixture({
+      jobCode: WORKFLOW_JOB_CODE,
+      handlerKey: "workflow-escalation-sweep",
+      name: "Test 0E Workflow Escalation Sweep",
+    });
+    await createScheduledJobFixture({
+      jobCode: OUTBOX_JOB_CODE,
+      handlerKey: "integration-outbox-reconciliation",
+      name: "Test 0E Integration Outbox Reconciliation",
+    });
+
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 0E");
     tenantId = tenant.id;
     await provisionFirstAdmin({ tenantId, email: "admin@test0e.local", password: "Admin12345!" });
@@ -190,6 +212,9 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+    await deleteScheduledJobFixture(WORKFLOW_JOB_CODE);
+    await deleteScheduledJobFixture(OUTBOX_JOB_CODE);
+    await app.close();
     await pool.end();
   });
 
@@ -404,12 +429,12 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
 
     const jobs = await app.inject({ method: "GET", url: "/scheduler/jobs", headers: authHeader(adminToken) });
     expect(jobs.statusCode).toBe(200);
-    const job = jobs.json().find((j: { jobCode: string }) => j.jobCode === "workflow-escalation-sweep");
+    const job = jobs.json().find((j: { jobCode: string }) => j.jobCode === WORKFLOW_JOB_CODE);
     expect(job).toBeTruthy();
 
     const trigger = await app.inject({
       method: "POST",
-      url: "/scheduler/jobs/workflow-escalation-sweep/trigger",
+      url: `/scheduler/jobs/${WORKFLOW_JOB_CODE}/trigger`,
       headers: authHeader(adminToken),
     });
     expect(trigger.statusCode).toBe(200);
@@ -418,7 +443,7 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
 
     const runs = await app.inject({
       method: "GET",
-      url: "/scheduler/jobs/workflow-escalation-sweep/runs",
+      url: `/scheduler/jobs/${WORKFLOW_JOB_CODE}/runs`,
       headers: authHeader(adminToken),
     });
     expect(runs.statusCode).toBe(200);
@@ -463,7 +488,7 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
 
     const trigger = await app.inject({
       method: "POST",
-      url: "/scheduler/jobs/workflow-escalation-sweep/trigger",
+      url: `/scheduler/jobs/${WORKFLOW_JOB_CODE}/trigger`,
       headers: authHeader(adminToken),
     });
     expect(trigger.statusCode).toBe(200);
@@ -512,7 +537,7 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
     // executes the same handler as the timer without test races.
     const outboxRun = await app.inject({
       method: "POST",
-      url: "/scheduler/jobs/integration-outbox-reconciliation/trigger",
+      url: `/scheduler/jobs/${OUTBOX_JOB_CODE}/trigger`,
       headers: authHeader(adminToken),
     });
     expect(outboxRun.statusCode).toBe(200);

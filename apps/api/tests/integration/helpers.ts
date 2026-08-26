@@ -87,6 +87,25 @@ export async function login(app: FastifyInstance, tenantCode: string, email: str
   return { statusCode: response.statusCode, body: response.json() };
 }
 
+export async function createScheduledJobFixture(params: {
+  jobCode: string;
+  handlerKey: string;
+  name: string;
+}) {
+  const result = await pool.query(
+    `INSERT INTO scheduled_jobs
+       (job_code, name, description, interval_seconds, handler_key, is_enabled)
+     VALUES ($1, $2, 'Integration-test Scheduler fixture', 60, $3, true)
+     RETURNING id`,
+    [params.jobCode, params.name, params.handlerKey],
+  );
+  return result.rows[0].id as string;
+}
+
+export async function deleteScheduledJobFixture(jobCode: string) {
+  await pool.query(`DELETE FROM scheduled_jobs WHERE job_code = $1`, [jobCode]);
+}
+
 export function authHeader(token: string) {
   return { authorization: `Bearer ${token}` };
 }

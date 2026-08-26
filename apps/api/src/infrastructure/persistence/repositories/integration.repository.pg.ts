@@ -61,14 +61,13 @@ export class PgIntegrationRepository implements IntegrationRepository {
         await client.query("COMMIT");
         return mapEndpoint(endpoint);
       }
-      const changedAt = new Date();
       if (!isActive) {
         const result = await client.query(
           `UPDATE integration_endpoints
-              SET is_active = false, deactivated_at = $2
+              SET is_active = false, deactivated_at = now()
             WHERE id = $1
            RETURNING *`,
-          [id, changedAt],
+          [id],
         );
         await client.query("COMMIT");
         return mapEndpoint(result.rows[0]);
@@ -77,8 +76,10 @@ export class PgIntegrationRepository implements IntegrationRepository {
         await client.query(
           `INSERT INTO integration_endpoint_inactive_windows
              (integration_endpoint_id, inactive_from, inactive_to)
-           VALUES ($1, $2, $3)`,
-          [id, endpoint.deactivated_at, changedAt],
+           SELECT id, deactivated_at, now()
+             FROM integration_endpoints
+            WHERE id = $1`,
+          [id],
         );
       }
       const result = await client.query(

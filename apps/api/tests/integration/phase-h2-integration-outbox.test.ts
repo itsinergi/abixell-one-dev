@@ -10,10 +10,19 @@ import { PgIntegrationRepository } from "../../src/infrastructure/persistence/re
 import { PgSchedulerRepository } from "../../src/infrastructure/persistence/repositories/scheduler.repository.pg.js";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, login, provisionFirstAdmin } from "./helpers.js";
+import {
+  authHeader,
+  bootstrapTenant,
+  createScheduledJobFixture,
+  deleteScheduledJobFixture,
+  login,
+  provisionFirstAdmin,
+} from "./helpers.js";
 
-const TENANT_A_CODE = `test-h2-outbox-a-${Date.now()}`;
-const TENANT_B_CODE = `test-h2-outbox-b-${Date.now()}`;
+const FIXTURE_ID = `${Date.now()}-${process.pid}`;
+const TENANT_A_CODE = `test-h2-a-${FIXTURE_ID}`;
+const TENANT_B_CODE = `test-h2-b-${FIXTURE_ID}`;
+const OUTBOX_JOB_CODE = `test-h2-outbox-reconciliation-${FIXTURE_ID}`;
 
 class TestableIntegrationService extends IntegrationService {
   failureMode: "none" | "transient" | "terminal" = "none";
@@ -47,6 +56,11 @@ describe("Phase H2 — durable Integration outbox", () => {
   let endpointBId: string;
 
   beforeAll(async () => {
+    await createScheduledJobFixture({
+      jobCode: OUTBOX_JOB_CODE,
+      handlerKey: "integration-outbox-reconciliation",
+      name: "Test PH-8 Integration Outbox Reconciliation",
+    });
     const tenantA = await bootstrapTenant(app, TENANT_A_CODE, "PH-8 Tenant A");
     const tenantB = await bootstrapTenant(app, TENANT_B_CODE, "PH-8 Tenant B");
     tenantAId = tenantA.id;
@@ -88,11 +102,6 @@ describe("Phase H2 — durable Integration outbox", () => {
       [tenantAId, tenantBId],
     ]);
     await pool.query(
-      `UPDATE scheduled_jobs
-          SET locked_at = NULL, lock_token = NULL
-        WHERE job_code = 'integration-outbox-reconciliation'`,
-    );
-    await pool.query(
       `DELETE FROM integration_endpoint_inactive_windows
         WHERE integration_endpoint_id = ANY($1::uuid[])`,
       [[endpointAId, endpointBId]],
@@ -109,6 +118,7 @@ describe("Phase H2 — durable Integration outbox", () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM tenants WHERE id = ANY($1::uuid[])`, [[tenantAId, tenantBId]]);
+    await deleteScheduledJobFixture(OUTBOX_JOB_CODE);
     await app.close();
     await pool.end();
   });
@@ -267,7 +277,7 @@ describe("Phase H2 — durable Integration outbox", () => {
 
     const first = await app.inject({
       method: "POST",
-      url: "/scheduler/jobs/integration-outbox-reconciliation/trigger",
+      url: `/scheduler/jobs/${OUTBOX_JOB_CODE}/trigger`,
       headers: authHeader(adminToken),
     });
     expect(first.statusCode).toBe(200);
@@ -298,7 +308,7 @@ describe("Phase H2 — durable Integration outbox", () => {
         .json()
         .find(
           (job: { jobCode: string }) =>
-            job.jobCode === "integration-outbox-reconciliation",
+            job.jobCode === OUTBOX_JOB_CODE,
         ),
     ).toMatchObject({
       lastRunAt: first.json().startedAt,
@@ -308,7 +318,7 @@ describe("Phase H2 — durable Integration outbox", () => {
 
     const runs = await app.inject({
       method: "GET",
-      url: "/scheduler/jobs/integration-outbox-reconciliation/runs",
+      url: `/scheduler/jobs/${OUTBOX_JOB_CODE}/runs`,
       headers: authHeader(adminToken),
     });
     expect(runs.statusCode).toBe(200);
@@ -414,23 +424,9 @@ describe("Phase H2 — durable Integration outbox", () => {
       "phase-h2.before-disable-missed",
     );
     await repo.setEndpointActive(endpointAId, false);
-    const deactivatedAt = (
-      await pool.query(
-        `SELECT deactivated_at
-           FROM integration_endpoints
-          WHERE id = $1`,
-        [endpointAId],
-      )
-    ).rows[0].deactivated_at as Date;
-    const inactiveEventId = await recordEvent(tenantAId, "phase-h2.inactive-event");
-    await pool.query(
-      `UPDATE domain_events
-          SET occurred_at = $2
-        WHERE id = $1`,
-      [
-        inactiveEventId,
-        new Date(deactivatedAt.getTime() + 1),
-      ],
+    const inactiveEventId = await recordEvent(
+      tenantAId,
+      "phase-h2.inactive-event",
     );
     await repo.setEndpointActive(endpointAId, true);
     await service.reconcileAndProcessTenant(tenantAId);
@@ -583,30 +579,47 @@ describe("Phase H2 — durable Integration outbox", () => {
     ).toMatchObject({ status: "terminal_failed", last_log_status: "failed" });
   });
 
-  it("fences Scheduler execution across service replicas", async () => {
+  it("fences Scheduler execution per registered fixture across service replicas", async () => {
     const schedulerRepo = new PgSchedulerRepository(pool);
-    const job = await schedulerRepo.findJobByCode(
-      "integration-outbox-reconciliation",
-    );
+    const job = await schedulerRepo.findJobByCode(OUTBOX_JOB_CODE);
     expect(job).not.toBeNull();
-    const firstToken = await schedulerRepo.claimExecution(
-      job!.id,
-      new Date(),
-    );
-    expect(firstToken).toBeTruthy();
-    expect(
-      await schedulerRepo.claimExecution(job!.id, new Date(0)),
-    ).toBeNull();
-    expect(
-      await schedulerRepo.renewExecution(job!.id, firstToken!),
-    ).toBe(true);
-    await schedulerRepo.releaseExecution(job!.id, firstToken!);
-    const secondToken = await schedulerRepo.claimExecution(
-      job!.id,
-      new Date(),
-    );
-    expect(secondToken).toBeTruthy();
-    await schedulerRepo.releaseExecution(job!.id, secondToken!);
+    const independentJobCode = `${OUTBOX_JOB_CODE}-independent`;
+    const independentJobId = await createScheduledJobFixture({
+      jobCode: independentJobCode,
+      handlerKey: "integration-outbox-reconciliation",
+      name: "Test PH-8 Independent Outbox Lock",
+    });
+
+    try {
+      const firstToken = await schedulerRepo.claimExecution(
+        job!.id,
+        new Date(),
+      );
+      expect(firstToken).toBeTruthy();
+      expect(
+        await schedulerRepo.claimExecution(job!.id, new Date(0)),
+      ).toBeNull();
+
+      const independentToken = await schedulerRepo.claimExecution(
+        independentJobId,
+        new Date(),
+      );
+      expect(independentToken).toBeTruthy();
+      expect(
+        await schedulerRepo.renewExecution(job!.id, firstToken!),
+      ).toBe(true);
+      await schedulerRepo.releaseExecution(independentJobId, independentToken!);
+      await schedulerRepo.releaseExecution(job!.id, firstToken!);
+
+      const secondToken = await schedulerRepo.claimExecution(
+        job!.id,
+        new Date(),
+      );
+      expect(secondToken).toBeTruthy();
+      await schedulerRepo.releaseExecution(job!.id, secondToken!);
+    } finally {
+      await deleteScheduledJobFixture(independentJobCode);
+    }
   });
 
   it("partitions concurrent worker claims without duplicate side effects", async () => {

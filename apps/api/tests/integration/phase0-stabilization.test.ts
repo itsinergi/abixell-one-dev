@@ -3,7 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import {
+  authHeader,
+  bootstrapTenant,
+  createReadOnlyRole,
+  createScheduledJobFixture,
+  deleteScheduledJobFixture,
+  login,
+  provisionFirstAdmin,
+} from "./helpers.js";
 
 /**
  * Checkpoint 0F integration test — proves the Phase 0 Stabilization
@@ -22,7 +30,9 @@ import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstA
  *    refresh token server-side
  */
 
-const TENANT_CODE = `test-0f-${Date.now()}`;
+const FIXTURE_ID = `${Date.now()}-${process.pid}`;
+const TENANT_CODE = `test-0f-${FIXTURE_ID}`;
+const WORKFLOW_JOB_CODE = `test-0f-workflow-sweep-${FIXTURE_ID}`;
 
 describe("Checkpoint 0F — Phase 0 Stabilization", () => {
   const app = buildApp();
@@ -30,6 +40,11 @@ describe("Checkpoint 0F — Phase 0 Stabilization", () => {
   let adminToken: string;
 
   beforeAll(async () => {
+    await createScheduledJobFixture({
+      jobCode: WORKFLOW_JOB_CODE,
+      handlerKey: "workflow-escalation-sweep",
+      name: "Test 0F Workflow Escalation Sweep",
+    });
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 0F");
     tenantId = tenant.id;
     await provisionFirstAdmin({ tenantId, email: "admin@test0f.local", password: "Admin12345!" });
@@ -39,6 +54,8 @@ describe("Checkpoint 0F — Phase 0 Stabilization", () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+    await deleteScheduledJobFixture(WORKFLOW_JOB_CODE);
+    await app.close();
     await pool.end();
   });
 
@@ -213,12 +230,12 @@ describe("Checkpoint 0F — Phase 0 Stabilization", () => {
     const [first, second] = await Promise.all([
       app.inject({
         method: "POST",
-        url: "/scheduler/jobs/workflow-escalation-sweep/trigger",
+        url: `/scheduler/jobs/${WORKFLOW_JOB_CODE}/trigger`,
         headers: authHeader(adminToken),
       }),
       app.inject({
         method: "POST",
-        url: "/scheduler/jobs/workflow-escalation-sweep/trigger",
+        url: `/scheduler/jobs/${WORKFLOW_JOB_CODE}/trigger`,
         headers: authHeader(adminToken),
       }),
     ]);
