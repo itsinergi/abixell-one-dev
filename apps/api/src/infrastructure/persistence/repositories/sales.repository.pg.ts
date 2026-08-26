@@ -567,12 +567,19 @@ export class PgSalesRepository implements SalesRepository {
     input: CreateQuotationLineInput,
     createdBy: string | null,
   ): Promise<QuotationLine> {
+    // `line_total` is derived by PostgreSQL in exact numeric arithmetic, using
+    // the same `quantity * unit_price - discount_amount` expression that
+    // `recalculateQuotationTotals` sums for the header. Computing it in
+    // JavaScript would put a money value through binary floating point and let
+    // a line disagree with its own header at the cent level.
     const result = await this.pool.query(
       `INSERT INTO sales_quotation_lines
          (tenant_id, quotation_id, line_number, service_id, service_code_snapshot,
           service_name_snapshot, description, unit_code, quantity, unit_price,
           discount_amount, line_total, price_source, price_book_entry_id, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+               GREATEST($9::numeric * $10::numeric - $11::numeric, 0),
+               $12, $13, $14)
        RETURNING *`,
       [
         input.tenantId,
@@ -586,7 +593,6 @@ export class PgSalesRepository implements SalesRepository {
         input.quantity,
         input.unitPrice,
         input.discountAmount,
-        input.lineTotal,
         input.priceSource,
         input.priceBookEntryId,
         createdBy,

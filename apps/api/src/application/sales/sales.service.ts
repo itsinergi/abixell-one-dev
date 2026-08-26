@@ -513,7 +513,13 @@ export class SalesService {
       }
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    // Local calendar date, not `toISOString()` — a UTC "today" resolves
+    // effective-dated Price Books against the previous day for any tenant east
+    // of UTC, silently missing a Price Book that became effective today.
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate(),
+    ).padStart(2, "0")}`;
     const { number } = await this.configuration.generateNumberForTenant(
       actor.tenantId,
       QUOTATION_NUMBERING_CODE,
@@ -594,7 +600,8 @@ export class SalesService {
     let lineNumber = 1;
     for (const line of resolved) {
       const discount = line.discountAmount ?? 0;
-      const lineTotal = Math.max(line.quantity * line.resolution.unitPrice - discount, 0);
+      // `lineTotal` is deliberately NOT computed here — the repository derives
+      // it in exact PostgreSQL numeric arithmetic. See createQuotationLine.
       await this.repo.createQuotationLine(
         {
           tenantId: actor.tenantId,
@@ -608,7 +615,6 @@ export class SalesService {
           quantity: line.quantity,
           unitPrice: line.resolution.unitPrice,
           discountAmount: discount,
-          lineTotal,
           priceSource: line.resolution.priceSource,
           priceBookEntryId: line.resolution.priceBookEntryId,
         },

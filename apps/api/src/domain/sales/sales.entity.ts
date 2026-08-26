@@ -204,7 +204,8 @@ export interface CreateQuotationLineInput {
   quantity: number;
   unitPrice: number;
   discountAmount: number;
-  lineTotal: number;
+  /** No `lineTotal` — PostgreSQL derives it in exact numeric arithmetic so a
+   *  money value never passes through binary floating point. */
   priceSource: "price_book" | "manual";
   priceBookEntryId: string | null;
 }

@@ -13,18 +13,11 @@ import {
   type WorkweekWindow,
 } from "../../domain/service-quality/business-calendar.js";
 import type {
-  AutomationAction,
   AutomationProposal,
-  AutomationRule,
   AutomationTriggerEvent,
-  BusinessCalendar,
-  CalendarHoliday,
-  CapaAction,
   CapaActionType,
-  CapaEffectivenessRow,
   CapaStatus,
   CapaVerdict,
-  CreateAutomationProposalInput,
   CreateAutomationRuleInput,
   CreateBusinessCalendarInput,
   CreateCapaActionInput,
@@ -34,18 +27,10 @@ import type {
   CreateSlaPolicyInput,
   CreateSlaRuleInput,
   ProposalStatus,
-  RcaFinding,
-  RecurrenceCluster,
   RecurrenceDetection,
-  RecurrenceGroupBy,
-  RecurrenceRule,
-  RootCauseCategory,
   ServiceQualityReconciliationResult,
   ServiceQualityRepository,
   SlaMatchContext,
-  SlaPerformanceRow,
-  SlaPolicy,
-  SlaRule,
   SlaTarget,
 } from "../../domain/service-quality/service-quality.entity.js";
 import {
@@ -1253,25 +1238,19 @@ export class ServiceQualityService {
         (proposal.actionParameters.title as string) ??
         `Automated CAPA for ${proposal.targetEntityId}`;
       const actionType = (proposal.actionParameters.actionType as CapaActionType) ?? "corrective";
-      const { number: actionNumber } = await this.configuration.generateNumberForTenant(
-        proposal.tenantId,
-        CAPA_NUMBERING_CODE,
-        decidedBy,
-      );
-      await this.repo.createCapaAction(
-        {
-          tenantId: proposal.tenantId,
-          complaintId: proposal.targetEntityId,
-          rcaFindingId: null,
-          actionNumber,
-          actionType,
-          title,
-          description: proposal.rationale,
-          ownerUserId: decidedBy,
-          dueDate: null,
-        },
-        decidedBy,
-      );
+      // Routed through the permission-checked service method — like the two
+      // branches above — so approving a proposal can never grant more reach
+      // than the approver already holds. Calling the repository directly here
+      // would skip `service_quality.capa.manage` and the Customer Data Scope.
+      await this.createCapaAction(actor, {
+        complaintId: proposal.targetEntityId,
+        rcaFindingId: null,
+        actionType,
+        title,
+        description: proposal.rationale,
+        ownerUserId: decidedBy,
+        dueDate: null,
+      });
     }
   }
 

@@ -310,6 +310,51 @@ describe.sequential("Wave A1 — Advanced Commercial & Service Quality Integrati
       expect(acceptRes.statusCode).toBe(200);
       expect(acceptRes.json().status).toBe("accepted");
     });
+
+    // Regression: money must never pass through binary floating point.
+    //
+    // Picking the operands is subtle. Most float products serialise back to the
+    // exact decimal string (0.1 * 1.45 prints as "0.145"), so node-postgres
+    // hands PostgreSQL the right decimal anyway and a JS-computed total would
+    // pass. 0.011 * 5 is one of the cases that does NOT round-trip: it prints
+    // as "0.05499999999999999", which numeric(18,2) truncates to 0.05, while
+    // the exact decimal 0.055 rounds to 0.06 — a real one-cent error on a
+    // customer-facing figure. Both operands fit their columns exactly
+    // (quantity numeric(18,4), unit_price numeric(18,2)), so the ONLY thing
+    // under test is where the arithmetic happens. Deriving line_total in SQL is
+    // what makes this come out right, and it is also what keeps each line
+    // consistent with the header, which recalculateQuotationTotals sums
+    // independently.
+    it("derives quotation money in exact decimal arithmetic, not floating point", async () => {
+      // Guard the premise: if a future V8 changes this, the test below stops
+      // discriminating and we want to know that loudly rather than silently.
+      expect((0.011 * 5).toString()).toBe("0.05499999999999999");
+
+      const res = await post("/sales/quotations", adminToken, {
+        opportunityId,
+        title: "Precision regression",
+        lines: [
+          {
+            serviceId,
+            description: "Cent-level float divergence",
+            unitCode: "port",
+            quantity: 0.011,
+            unitPrice: 5,
+            discountAmount: 0,
+          },
+        ],
+      });
+      expect(res.statusCode).toBe(201);
+
+      const lines = res.json().lines;
+      expect(lines).toHaveLength(1);
+      // Exact decimal: 0.055 -> 0.06. Float would have given 0.05.
+      expect(Number(lines[0].lineTotal)).toBe(0.06);
+
+      // The header is summed independently in SQL; it must agree with the line.
+      expect(Number(res.json().quotation.subtotalAmount)).toBe(0.06);
+      expect(Number(res.json().quotation.totalAmount)).toBe(0.06);
+    });
   });
 
   // ==========================================================================

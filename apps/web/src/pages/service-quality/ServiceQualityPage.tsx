@@ -836,6 +836,37 @@ export function ServiceQualityPage() {
                     </p>
                   </Card>
                 )}
+
+                {/* Configured rules — read-only. Rules only ever create
+                    proposals; they never mutate operational state directly. */}
+                <Card className="p-4 space-y-3">
+                  <div className="font-semibold text-slate-900 text-sm">
+                    Configured Automation Rules
+                  </div>
+                  {automationRules.length === 0 ? (
+                    <p className="text-xs text-slate-500">No automation rules configured.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {automationRules.map((rule) => (
+                        <li
+                          key={rule.id}
+                          className="border-b border-slate-100 pb-2 last:border-b-0 last:pb-0"
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-sm font-medium text-slate-800">{rule.name}</span>
+                            <StatusPill tone={rule.isActive ? "success" : "neutral"}>
+                              {rule.isActive ? "active" : "inactive"}
+                            </StatusPill>
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono">{rule.code}</div>
+                          <div className="text-xs text-slate-600">
+                            {rule.triggerEvent} → {rule.proposedAction}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
               </div>
             </div>
           )}

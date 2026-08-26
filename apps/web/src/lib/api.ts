@@ -2984,4 +2984,3 @@ export type CreateSqAutomationRuleBody = {
   proposedAction: string;
   actionParameters?: Record<string, unknown>;
 };
-
