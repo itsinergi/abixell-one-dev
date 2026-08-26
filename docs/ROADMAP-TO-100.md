@@ -3,14 +3,14 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.19 and `docs/canonical/product-progress.md` v1.19 |
-| Measured at | `master @ 63e43d1` |
-| Current point | Full Approved Roadmap Progress: 51.0% (180 / 353 pts) |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.20 and `docs/canonical/product-progress.md` v1.20 |
+| Measured at | `master @ 5eba91a` |
+| Current point | Full Approved Roadmap Progress: 56.4% (199 / 353 pts) |
 | Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2 and Phase 11F are COMPLETED; Wave A1 is the active authorized wave; Waves A2–A8 remain PLANNED / OPTIONAL and this document starts no implementation |
+| Current authorization state | Phase H2, Phase 11F, and **Wave A1 are COMPLETED**; no wave is currently active. Waves A2–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. This document starts no implementation |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -29,8 +29,8 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353
-  completed   = 174 +   6 = 180
-  180 / 353 = 51.0%
+  completed   = 174 +  25 = 199   (Advanced 6 + Wave A1 19)
+  199 / 353 = 56.4%
 ```
 
 Remaining to 100%:
@@ -55,8 +55,8 @@ The recommended route is:
 
 | Seq | Phase | Scope | Pts | Cumulative pts | Full progress | Core readiness |
 |---:|---|---|---:|---:|---:|---:|
-| 0 | Current baseline | Completed work through Phase H2 Production Gate and unweighted Phase 11F closure | 0 | 180 / 353 | 51.0% | 100.0% |
-| 1 | Wave A1 | Customer & Commercial Advanced + Service Quality Advanced | 19 | 199 / 353 | 56.4% | 100.0% |
+| 0 | ~~Prior baseline~~ | Completed work through Phase H2 Production Gate and unweighted Phase 11F closure | 0 | 180 / 353 | 51.0% | 100.0% |
+| 1 | ~~Wave A1~~ **(COMPLETED — current baseline)** | Customer & Commercial Advanced + Service Quality Advanced | 19 | **199 / 353** | **56.4%** | 100.0% |
 | 2 | Wave A2 | Survey Advanced completion + Reporting Advanced | 23 | 222 / 353 | 62.9% | 100.0% |
 | 3 | Wave A3 | Service Operations Advanced + Asset Advanced | 24 | 246 / 353 | 69.7% | 100.0% |
 | 4 | Wave A4 | Workforce Advanced | 24 | 270 / 353 | 76.5% | 100.0% |
@@ -65,7 +65,7 @@ The recommended route is:
 | 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 340 / 353 | 96.3% | 100.0% |
 | 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 353 / 353 | 100.0% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2 is earned and complete; Wave A1 is the currently authorized wave and Waves A2–A8 remain planned / optional. No wave is started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2 and Wave A1 are earned and complete; the current baseline is now row 1. Waves A2–A8 remain planned / optional and none is authorized. No wave is started by this document.
 
 ## 3. Phase H2 - Production Gate
 
@@ -95,9 +95,9 @@ Validated acceptance:
 
 ## 4. Wave A1 - Customer and Service Quality Advanced
 
-Wave A1 deepens commercial operation and complaint/service-quality intelligence. It is the
-currently authorized wave; the points below are planned, not earned, until validation
-evidence is complete and the canonical documents are updated.
+Wave A1 deepens commercial operation and complaint/service-quality intelligence. It is
+**COMPLETED** at baseline v1.20 (`master @ 5eba91a`); all 19 points below are earned, and
+the canonical documents carry the validation evidence.
 
 | Area | Unit | Capability | Pts |
 |---|---|---|---:|
@@ -109,17 +109,37 @@ evidence is complete and the canonical documents are updated.
 | Service Quality | SQ-ADV-004 | Automatic domain mutation from feedback, Founder-gated | 2 |
 | Total | Wave A1 |  | 19 |
 
-Expected result:
+Result (earned):
 
-| Metric | After Phase H2 | After Wave A1 |
+| Metric | Before Wave A1 | After Wave A1 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 180 / 353 (51.0%) | 199 / 353 (56.4%) |
+| Full Approved Roadmap Progress | 180 / 353 (51.0%) | **199 / 353 (56.4%)** |
 
 Recommended boundaries:
 
 - Sales/opportunity/quotation must not rewrite Customer Core master data rules.
 - Advanced SLA must remain configurable and not hardcoded per client.
 - Auto-mutation from feedback should require explicit Founder approval because it changes another domain's state.
+
+All three boundaries held. Auto-mutation is stronger than required: `requires_approval` is
+pinned true by a tautological database CHECK, so an autonomous rule cannot be represented
+at all, and approving a proposal is routed through the same permission-checked service
+methods a human operator would use.
+
+### Deferred findings from the Wave A1 closure audit
+
+Surfaced during the closure audit, deliberately **not** fixed in Wave A1 because none
+blocks a delivered unit and fixing them would expand scope. Recorded here so they are not
+lost; each needs a separate Founder directive.
+
+| # | Finding | Why deferred |
+|---:|---|---|
+| 1 | CAPA has no transition-history table and no transition-legality check, unlike the Complaint Engine which has both. | Audit/traceability depth, not a correctness failure of the delivered CAPA unit. |
+| 2 | Quotation and CAPA workflow integration uses `catch {}` swallow-and-continue, so a Workflow Engine failure leaves the commercial record without its workflow instance and no signal. | Changing it alters failure semantics of an already-shipped surface. |
+| 3 | Free-text notes and raw exception text are persisted into audit metadata (`service-quality.service.ts` ≈ `:854`, `:1147`, `:1112`), which can carry operator-entered or internal detail into an audit trail read under a different permission. | Needs a privacy/redaction decision, not a local patch. |
+| 4 | In-tenant 403-vs-404 divergence is an existence oracle: a caller without scope can distinguish "exists but not yours" from "does not exist". | Repository-wide convention; changing it in one module only would be inconsistent. |
+| 5 | No unique index on `(opportunity_id, revision)`, so concurrent quotation creation can produce duplicate revision numbers. | Requires a migration and a concurrency decision; not reachable through the delivered UI flow. |
+| 6 | Advanced Service Quality reads do not additionally require Core `complaint.read`. | Intentional in the delivered design (trusted-caller composition), but worth an explicit Founder ruling. |
 
 ## 5. Wave A2 - Survey and Reporting Advanced
 

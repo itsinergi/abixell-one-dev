@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.19 |
+| **Roadmap Baseline** | v1.20 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-25 |
-| **Measured at** | `master @ 63e43d1`, Phase 11F closure · 354/354 API tests across 27 files · browser smoke PASS · 85 tables · 27 migrations · head `1775000000000_phase-11f-stale-scope-invalidation.cjs` |
+| **Last Updated** | 2026-08-26 |
+| **Measured at** | `master @ 5eba91a`, Wave A1 closure · 390/390 API tests across 30 files · browser smoke PASS · 103 tables (104 incl. `pgmigrations`) · 29 migrations · 88 permissions · head `1777000000000_wave-a1-service-quality-advanced` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.18 |
+| Metric | Value | Δ since v1.19 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
-| **Full Approved Roadmap Progress** | **51.0 %** | — 0.0 pts |
+| **Full Approved Roadmap Progress** | **56.4 %** | ▲ +5.4 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -26,9 +26,22 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
 - **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, 11C, 11D, 11E, and 11F are recorded for governance traceability without moving either metric.
 
-The implementation measurement is pinned at `master @ 63e43d1` (final Phase 11F runtime closure): 354/354 API tests across 27 files, 85 tables, 27 migrations, 77 permissions, and migration head `1775000000000_phase-11f-stale-scope-invalidation.cjs`. Relative to the v1.18 runtime baseline, the closure adds 18 API tests and one migration with no table or permission. Authentication now denies inactive/deleted actors at login, refresh, and every protected request; refresh discovery revokes sibling tokens; Data Scope assignments become monotonically authorization-inert when their role or scope is unavailable; reporting uses effective permission-coupled scope; and the Admin Console can safely identify and remove retained unavailable assignments without exposing foreign labels. The bounded governed assignment/removal surface remains the only write surface. This is unweighted access-lifecycle hardening, not a weighted business or Advanced capability. Both the complete 10-step Phase 11F browser smoke and the real DB-backed inactive-user/stale-JWT smoke pass separately from the API count.
+The implementation measurement is pinned at `master @ 5eba91a` (Wave A1 delivery `95b346a` plus its correction commit): 390/390 API tests across 30 files, 103 tables (104 including `pgmigrations`), 29 migrations, 88 permissions, and migration head `1777000000000_wave-a1-service-quality-advanced`. Relative to the v1.19 runtime baseline this adds 36 API tests, 3 files, 18 tables, 2 migrations, and 11 permissions. Every figure here was read from the live database and from a complete test run on the measured tree, not carried forward from a delivery report.
+
+Wave A1 is the first **weighted Advanced** delivery since Phase 1E, so unlike Phases 11A–11F it moves the Full Approved Roadmap metric. It completes all six units of Customer & Commercial Advanced (8 pts) and Service Quality Advanced (11 pts): sales pipeline with versioned quotations and effective-dated Price Books, the scoped self-service portal, multidimensional SLA with business calendars, RCA taxonomy with advanced CAPA, recurring-problem detection, and Founder-gated automation proposals. The automation surface only ever *proposes*; `requires_approval` is pinned true by a database CHECK, so an autonomous rule is not representable, and approving a proposal is routed through the same permission-checked service methods a human would use.
+
+The correction commit `5eba91a` closes four defects found while validating `95b346a` — a permission bypass on automation-proposal approval, quotation money computed in binary floating point, Price Books resolved against a UTC rather than local date, and an automation-rules panel that was fetched but never rendered — plus the trailing-whitespace blocker. A regression test now pins exact-decimal quotation arithmetic and was verified against a deliberately reverted implementation.
+
+Browser smoke passes separately from the API count: the existing 10-scenario Phase 11F suite, plus an 8-scenario Wave A1 smoke (both new surfaces, tab navigation, Founder gating, three viewports, and expired-session protection) with zero console, page, or network diagnostics.
 
 Commit `3df1718` (Phase 11A documentation) and the Phase 11B repository-governance changes remain non-runtime and imply no schema or API test evidence of their own. Phase 11B's 23/23 focused dependency-free boundary tests continue to pass with 0 blocking findings and the expected documentary Manifest advisory, alongside typecheck, lint, production build, and PWA validation.
+
+### Known issues recorded at this baseline
+
+Two findings are recorded rather than hidden. Neither is caused by Wave A1 and neither is fixed here; both are candidates for a future stabilization phase.
+
+1. **Pre-existing scheduler/outbox test flakiness (not a Wave A1 regression).** Across 20+ full runs, roughly one in eight fails 1–3 tests in `phase-h2-integration-outbox.test.ts` and `shared-services.test.ts` — either `expected 409 to be 200` on a manual scheduler trigger, or `expected undefined to be 'succeeded'` on an outbox delivery. The scheduler's job lock is global (`scheduled_jobs` has no tenant column and `findJobByCode` is not tenant-scoped), while four test files trigger the shared `workflow-escalation-sweep` and `integration-outbox-reconciliation` job codes. It reproduces with `--no-file-parallelism` and, decisively, **with all three Wave A1 test files excluded** — 354-test pre-Wave-A1 baseline, same signature. Wave A1 touches neither `scheduler.service.ts` nor those test files; its only scheduler change is a new job code triggered by one file. The 390/390 figure above is from a clean run, and the flaky runs are recorded here so that number is not read as unconditional.
+2. **Launcher (`RUN-ABIXELL-ONE.bat`) is environment-blocked, not verified PASS.** Its `npm run db:up` step cannot be exercised on this machine: the Docker daemon is not reachable (`dockerDesktopLinuxEngine` pipe absent) *and* native Windows `postgres.exe` (PID 6176) already owns `127.0.0.1:5432`, the exact binding `infra/postgres/docker-compose.yml` requests. Per Founder constraint the native service was not stopped and the launcher was not modified to mask the conflict. Steps downstream of `db:up` were verified independently against the live database (`migrate` → "No migrations to run!", `sync-permissions` → 0 new grants, both idempotent), as were `npm install`, typecheck, lint, build, and the running API/Web surfaces via browser smoke. The launcher is therefore **partially verified**; a full end-to-end launcher PASS is not claimed.
 
 ---
 
@@ -39,7 +52,7 @@ Commit `3df1718` (Phase 11A documentation) and the Phase 11B repository-governan
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 16 / 16 | **100.0 %** |
 | Business Core | 117 / 117 | **100 %** |
-| Advanced Capabilities | 6 / 179 | **3.4 %** |
+| Advanced Capabilities | 25 / 179 | **14.0 %** |
 
 ## 3. Per-module progress
 
@@ -61,8 +74,8 @@ Commit `3df1718` (Phase 11A documentation) and the Phase 11B repository-governan
 ### Module including its Advanced capabilities
 | Module | Completed / Total | % |
 |---|---:|---:|
-| Customer & Commercial | 9 / 17 | 52.9 % |
-| Service Quality (Complaint) | 15 / 26 | 57.7 % |
+| Customer & Commercial | 17 / 17 | **100 %** |
+| Service Quality (Complaint) | 26 / 26 | **100 %** |
 | Survey & Assessment | 15 / 28 | 53.6 % |
 | Asset Core | 8 / 19 | 42.1 % |
 | Project Delivery Core | 8 / 21 | 38.1 % |
@@ -85,7 +98,7 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16   (+7 — Phase H2 Production Hardening)
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed   6
+Advanced Capabilities  total 179   completed  25   (+19 — Wave A1)
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
@@ -95,8 +108,18 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 174 +   6 = 180
-  (180 + 0) / 353 × 100 = 51.0 %
+  completed   = 174 +  25 = 199
+  (199 + 0) / 353 × 100 = 56.4 %
+
+Wave A1 earned weight (all six units COMPLETED, full weight each):
+  Customer & Commercial Advanced   sales/opportunity/quotation      5
+                                   self-service portal expansion    3
+  Service Quality Advanced         multidimensional SLA + calendar  3
+                                   RCA taxonomy + advanced CAPA     3
+                                   recurring-problem detection      3
+                                   automatic mutation from feedback 2
+                                                                 = 19
+  Advanced completed 6 + 19 = 25 · Full completed 180 + 19 = 199
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
@@ -146,6 +169,7 @@ Phase 11C delivered the READ foundation of the Business Admin Console: a consoli
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.20 | 2026-08-26 | 100.0 % | 56.4 % | **Wave A1 (Advanced Commercial & Service Quality) delivered — weighted.** Numerator +19 across all six units: Customer & Commercial Advanced (sales/opportunity/quotation 5, self-service portal 3) and Service Quality Advanced (multidimensional SLA + calendar 3, RCA taxonomy + advanced CAPA 3, recurring-problem detection 3, automatic mutation from feedback 2). Advanced 6 → 25; Full 180 → 199. Denominator unchanged at 174 / 353 — pure earned progress, no scope added or reclassified. Core Readiness unchanged at 100.0 %. Runtime baseline `master @ 5eba91a` = delivery `95b346a` plus its correction commit, which closes an automation-proposal permission bypass, quotation money computed in binary floating point, UTC-dated Price Book resolution, and an unrendered automation-rules panel, and adds a verified exact-decimal money regression test. Evidence read from the live database and one complete test run on the measured tree: 390/390 API tests across 30 files, 103 tables (104 incl. `pgmigrations`), 29 migrations, 88 permissions (0 duplicate codes, 11 added by Wave A1), head `1777000000000_wave-a1-service-quality-advanced`; typecheck, lint, build, PWA validation, 23/23 platform-boundary tests, and `npm audit --omit=dev` (0 vulnerabilities) all clean. Real-browser smoke passes separately (10-scenario Phase 11F + 8-scenario Wave A1, zero diagnostics). Automation only ever proposes: `requires_approval` is pinned true by a database CHECK and approval is routed through permission-checked service methods. Waves A2–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.19 | 2026-08-25 | 100.0 % | 51.0 % | **Phase 11F final access-lifecycle hardening and closure completed (unweighted).** No product unit, numerator, or denominator change. Runtime baseline `master @ 63e43d1`, directly descended from the v1.18 metadata commit, closes inactive/deleted-user authentication, refresh-token revocation, live actor/tenant JWT revalidation, monotonic stale-scope assignment invalidation and correction, and effective permission-coupled Reporting scope. Adds one migration and 18 API tests with no table or permission; evidence is 354/354 tests across 27 files, 85 tables, 27 migrations, and 77 permissions, with complete governed-access and lifecycle real-browser smoke passing separately. Governed user provisioning is absent; Builder/Module Manifest runtime, Advanced waves, and Client Extensions remain unstarted. |
 | v1.18 | 2026-08-24 | 100.0 % | 51.0 % | **Phase 11F Business Admin Console Governed Access Management completed (unweighted).** No product unit, numerator, or denominator change. Runtime baseline `master @ fc01876` adds tenant-local privacy-minimized access review, on-demand one-role permission summaries, and separately authorized assignment/removal of existing roles with explicit Data Scope, exact-assignment uniqueness, atomic privacy-safe audit, and manager-lockout safeguards. Adds one migration and one permission with no table; evidence is 336/336 API tests across 26 files, 85 tables, 26 migrations, and 77 permissions, with real-browser governed add/remove and responsive dialog smoke passing separately. No Builder/manifest/package runtime, broad administration editing, Advanced wave, Client Extension, or weighted business capability. |
 | v1.17 | 2026-08-24 | 100.0 % | 51.0 % | **Phase 11E Platform Shell & Admin Console UX Implementation Foundation completed (unweighted).** No product unit, numerator, or denominator change. Runtime baseline `master @ 26fc99f` adds static three-group capability navigation, an accessible responsive shell, reusable UI-state refinements, and URL-durable read-only Admin Console sections. No API, migration, permission, Builder/manifest/package runtime, Advanced wave, Client Extension, or business-capability change. Evidence remains 313/313 API tests across 25 files, 85 tables, 25 migrations, and 76 permissions; practical browser smoke passes and is reported separately. |

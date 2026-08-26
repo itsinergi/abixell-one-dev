@@ -4,9 +4,9 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.19 |
+| **Roadmap Baseline** | v1.20 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-25 |
+| **Last Updated** | 2026-08-26 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) |
 
@@ -63,16 +63,18 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master @ 63e43d1`, Phase 11F final access-lifecycle hardening and closure |
-| Migrations | 27 |
-| Migration head | `1775000000000_phase-11f-stale-scope-invalidation.cjs` |
-| Tables | 85 (Phase 11F closure adds no table) |
-| Permissions | 77 (Phase 11F closure adds no permission) |
-| API tests | 354 PASS (27 files) |
-| Browser smoke | PASS — complete 10-step governed-access suite plus separate real DB-backed inactive-login and stale-JWT lifecycle smoke; grouped shell and durable Admin sections; privacy-minimized user access; unavailable-assignment correction; on-demand one-role permission review; mandatory, reversible exact assignment add/remove; pending-state protection; desktop/tablet/mobile layouts and dialog focus behavior; deterministic denied/session-expired/error/empty states; PWA metadata; logout protection |
-| Core / Full progress | 174 / 174 (100.0%) / 180 / 353 (51.0%) |
-| typecheck / lint / build | PASS |
-| Phase 11B repository governance | 23/23 focused boundary tests; 0 blocking findings; 1 expected Manifest advisory; 77 migration-owned permissions |
+| Branch / commit | `master @ 5eba91a`, Wave A1 delivery `95b346a` plus its closure correction |
+| Migrations | 29 (Wave A1 adds 2) |
+| Migration head | `1777000000000_wave-a1-service-quality-advanced` |
+| Tables | 103 excluding `pgmigrations` (104 including it); Wave A1 adds 18 |
+| Permissions | 88 (Wave A1 adds 11; 0 duplicate codes) |
+| API tests | 390 PASS (30 files) — see the pre-existing scheduler/outbox flakiness recorded in `product-progress.md` §1 |
+| Browser smoke | PASS — 10-step Phase 11F governed-access suite, plus a separate 8-scenario Wave A1 smoke covering both new surfaces, tab navigation, Founder-gated automation and the rules panel, three viewports (375×812 / 768×1024 / 1280×800), and expired-session protection, with zero console, page-error, or failed-request diagnostics |
+| Core / Full progress | 174 / 174 (100.0%) / 199 / 353 (56.4%) |
+| typecheck / lint / build | PASS (0 errors, 0 warnings) |
+| Security | `npm audit --omit=dev` — 0 vulnerabilities |
+| Launcher | PARTIAL — `db:up` environment-blocked (Docker daemon unreachable; native `postgres.exe` owns 5432). Downstream steps verified independently. Not a full PASS. |
+| Phase 11B repository governance | 23/23 focused boundary tests; 0 blocking findings; 1 expected Manifest advisory; 88 migration-owned permissions |
 
 ---
 
@@ -207,12 +209,12 @@ Pilot/production readiness. **Not** business capability.
 | RPT.3 | Executive dashboard (cross-module) | 3 | COMPLETED |
 | RPT.4 | Stabilization | 1 | COMPLETED |
 
-## 9. Roadmap units — Advanced Capabilities (weight 179, 6 completed)
+## 9. Roadmap units — Advanced Capabilities (weight 179, 25 completed)
 
 | Module | Units (weight) | W | Done |
 |---|---|---:|---:|
-| Customer & Commercial | Sales/opportunity/quotation (5) · Self-service portal expansion (3) | 8 | 0 |
-| Service Quality | Multidimensional SLA + calendar (3) · RCA taxonomy + advanced CAPA (3) · Recurring-problem detection & service analytics (3) · Automatic domain mutation from feedback (2) | 11 | 0 |
+| Customer & Commercial | **Sales/opportunity/quotation (5) ✅** · **Self-service portal expansion (3) ✅** | 8 | **8** |
+| Service Quality | **Multidimensional SLA + calendar (3) ✅** · **RCA taxonomy + advanced CAPA (3) ✅** · **Recurring-problem detection & service analytics (3) ✅** · **Automatic domain mutation from feedback (2) ✅** | 11 | **11** |
 | Survey & Assessment | **Survey-to-Action trigger→assignment (3) ✅** · **Outcome→management attention (3) ✅** · Conditional/matrix (3) · Weighted/section/NPS (2) · Anonymous/public token (3) · Multi-language (2) · Analytics & benchmarking (3) | 19 | **6** |
 | Service Operations | Vertical service packs (5) · Offline field PWA (5) · Route/roster optimization (3) | 13 | 0 |
 | Workforce (HR) | Attendance/shift/roster (5) · Leave & overtime (3) · Payroll+BPJS+PPh21 (5) · Recruitment (3) · Performance/competency/training/career (5) · Manpower planning (3) | 24 | 0 |
@@ -241,7 +243,8 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Phase 10~~ | Customer & Commercial completion | CUS.4 | 2 | BC-1 | **COMPLETED** |
 | ~~Phase H~~ | Platform Hardening (Pilot gate) | PH-1, PH-2, PH-5, PH-6, PH-7 | 9 | — | **COMPLETED** |
 | ~~Phase H2~~ | Platform Hardening (Production gate) | PH-3, PH-4, PH-8 | 7 | Phase H | **COMPLETED** |
-| **Wave A+** | Advanced capability waves | per module | 179 | respective Core | PLANNED / OPTIONAL |
+| ~~Wave A1~~ | Advanced Commercial & Service Quality | CUS-ADV-001, CUS-ADV-002, SQ-ADV-001…004 | 19 | BC-1, BC-2 | **COMPLETED** |
+| **Wave A2+** | Remaining Advanced capability waves | per module | 154 | respective Core | PLANNED / OPTIONAL |
 
 ### Unweighted architecture / governance phases
 
@@ -275,6 +278,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.20 | 2026-08-26 | **Wave A1 (Advanced Commercial & Service Quality) delivered — the first weighted Advanced wave since Phase 1E.** All six units COMPLETED at full weight: `CUS-ADV-001` sales/opportunity/quotation (5), `CUS-ADV-002` self-service portal expansion (3), `SQ-ADV-001` multidimensional SLA + business calendar (3), `SQ-ADV-002` RCA taxonomy + advanced CAPA (3), `SQ-ADV-003` recurring-problem detection & service analytics (3), `SQ-ADV-004` automatic domain mutation from feedback (2). Advanced completed 6 → 25; Full numerator 180 → 199 (51.0 % → 56.4 %). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Runtime baseline `master @ 5eba91a` = delivery `95b346a` plus its correction commit (automation-proposal permission bypass, quotation money in binary floating point, UTC-dated Price Book resolution, unrendered automation-rules panel, trailing whitespace), with a money regression test verified against a deliberately reverted implementation. Adds 2 migrations (27 → 29), 18 tables (85 → 103 excl. `pgmigrations`), 11 permissions (77 → 88), and 36 API tests (354 → 390 across 30 files), head `1777000000000_wave-a1-service-quality-advanced`; all figures read from the live database and one complete test run. Automation proposes only — `requires_approval` is pinned true by a database CHECK and approval routes through permission-checked service methods. Recorded honestly and not fixed here: pre-existing scheduler/outbox test flakiness that reproduces on the pre-Wave-A1 baseline, and a launcher `db:up` step that is environment-blocked rather than verified. Waves A2–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.19 | 2026-08-25 | Phase 11F final access-lifecycle hardening and closure completed as an unweighted governance/administration phase with no roadmap units or points. Runtime baseline `master @ 63e43d1`, directly descended from the v1.18 metadata commit, closes inactive/deleted-user authentication, sibling refresh-token revocation, live actor/tenant JWT revalidation, monotonic stale-scope assignment invalidation and correction, and effective permission-coupled Reporting scope. Adds 1 migration (26 → 27) and 18 API tests (336 → 354 across 27 files), with no table or permission; complete governed-access and lifecycle real-browser smoke pass separately. Builder/Module Manifest runtime, Advanced waves, Client Extensions, broader user lifecycle/profile/status administration, and governed user provisioning remain unstarted. Numerator and denominator remain 174 / 174 and 180 / 353. |
 | v1.18 | 2026-08-24 | Phase 11F Business Admin Console Governed Access Management completed as an unweighted governance/administration phase with no roadmap units or points. Runtime baseline `master @ fc01876` adds tenant-local privacy-minimized access review, on-demand one-role permission summaries, and separately authorized assignment/removal of existing roles with explicit Data Scope, exact-assignment uniqueness, atomic privacy-safe audit, and manager-lockout safeguards. Adds 1 migration (25 → 26), 1 permission (76 → 77), 23 API tests (313 → 336 across 26 files), and no table; real-browser governed add/remove and responsive dialog smoke passes separately. No Builder/manifest/package runtime, broad administration editing, Advanced wave, Client Extension, or weighted business capability. Numerator and denominator remain 174 / 174 and 180 / 353. |
 | v1.17 | 2026-08-24 | Phase 11E Platform Shell & Admin Console UX Implementation Foundation completed with no roadmap units or points. Runtime baseline `master @ 26fc99f` implements static three-group capability navigation, responsive accessible shell/drawer behavior, reusable UI states, URL-durable read-only Admin Console sections, and strengthened real-browser smoke. No API, migration, permission, Builder/manifest/package runtime, Advanced wave, Client Extension, or business-capability change. API evidence remains 313/313 tests across 25 files; browser smoke is recorded separately. Numerator and denominator remain 174 / 174 and 180 / 353. |
@@ -307,7 +311,7 @@ Every roadmap unit traces to canonical PRD requirement IDs:
 | CUS.1–CUS.4 | `CUS-CORE-001`…`CUS-CORE-009` |
 | CMP.1–CMP.7 | `SQ-CORE-001`…`SQ-CORE-016` |
 | SRV.1–SRV.3 | `SUR-CORE-001`…`SUR-CORE-016` |
-| Advanced (delivered) | `SUR-ADV-001`, `SUR-ADV-002` |
+| Advanced (delivered) | `SUR-ADV-001`, `SUR-ADV-002`, `CUS-ADV-001`, `CUS-ADV-002`, `SQ-ADV-001`…`SQ-ADV-004` |
 | OPS.1–OPS.5 | `SO-CORE-001`…`SO-CORE-015` |
 | HR.1–HR.5 | `HR-CORE-001`…`HR-CORE-010` |
 | SCM.1–SCM.6 | `SCM-CORE-001`…`SCM-CORE-013` |
