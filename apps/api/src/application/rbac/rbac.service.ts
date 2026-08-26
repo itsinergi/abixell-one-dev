@@ -232,4 +232,15 @@ export class RbacService {
   async getAssignments(userId: string): Promise<UserRoleAssignment[]> {
     return this.repo.getAssignments(userId);
   }
+
+  /** Returns only assignments where the SAME role grants `permissionCode`.
+   * This is the authorization input for Customer-context modules that must not
+   * combine a permission carried by one assignment with Data Scope from an
+   * unrelated assignment. */
+  async getAssignmentsWithPermission(
+    userId: string,
+    permissionCode: string,
+  ): Promise<UserRoleAssignment[]> {
+    return this.repo.getAssignmentsWithPermission(userId, permissionCode);
+  }
 }

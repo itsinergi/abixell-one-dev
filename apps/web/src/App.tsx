@@ -22,6 +22,8 @@ import { MyWorkPage } from "./modules/service-operations/MyWorkPage";
 import { MyWorkDetailPage } from "./modules/service-operations/MyWorkDetailPage";
 import { ServiceDefinitionsPage } from "./modules/service-operations/ServiceDefinitionsPage";
 import { CustomerCommercialPage } from "./modules/customer-commercial/CustomerCommercialPage";
+import { SalesPipelinePage } from "./pages/sales/SalesPipelinePage";
+import { ServiceQualityPage } from "./pages/service-quality/ServiceQualityPage";
 import { EmployeesPage } from "./modules/workforce/EmployeesPage";
 import { EmployeeDetailPage } from "./modules/workforce/EmployeeDetailPage";
 import { ItemsPage } from "./modules/supply-chain/ItemsPage";
@@ -97,6 +99,10 @@ export default function App() {
           <Route path="service-types" element={<ServiceDefinitionsPage />} />
           {/* Phase 10 — Customer & Commercial completion */}
           <Route path="customer-commercial" element={<CustomerCommercialPage />} />
+          {/* Wave A1 — Sales & Pipeline */}
+          <Route path="sales" element={<SalesPipelinePage />} />
+          {/* Wave A1 — Service Quality Advanced */}
+          <Route path="service-quality" element={<ServiceQualityPage />} />
           {/* Phase 3 — Workforce / HR */}
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="employees/:employeeId" element={<EmployeeDetailPage />} />

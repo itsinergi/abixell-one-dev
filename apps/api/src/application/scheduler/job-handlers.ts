@@ -1,5 +1,6 @@
 import type { TenantRepository } from "../../domain/tenant/tenant.entity.js";
 import type { IntegrationService } from "../integration/integration.service.js";
+import type { ServiceQualityService } from "../service-quality/service-quality.service.js";
 import type { WorkflowService } from "../workflow/workflow.service.js";
 import type { SchedulerService } from "./scheduler.service.js";
 
@@ -23,6 +24,7 @@ export function registerJobHandlers(
     tenantRepo: TenantRepository;
     workflow: WorkflowService;
     integration: IntegrationService;
+    serviceQuality: ServiceQualityService;
   },
 ): void {
   scheduler.registerHandler("workflow-escalation-sweep", async ({ actor }) => {
@@ -74,6 +76,37 @@ export function registerJobHandlers(
       totals.succeeded += result.succeeded;
       totals.retried += result.retried;
       totals.terminalFailed += result.terminalFailed;
+    }
+    return {
+      tenantsSwept: tenants.length,
+      ...totals,
+      ...(actor ? {} : { perTenant }),
+    };
+  });
+
+  scheduler.registerHandler("service-quality-sla-reconciliation", async ({ actor }) => {
+    const tenants = actor
+      ? [await deps.tenantRepo.findById(actor.tenantId)].filter((tenant) => tenant !== null)
+      : await deps.tenantRepo.list();
+    const totals = { scanned: 0, processed: 0, failed: 0 };
+    const perTenant: Record<string, Record<string, number>> = {};
+    for (const tenant of tenants) {
+      const result = await deps.serviceQuality.reconcileComplaintLifecycleEvents(tenant.id);
+      if (!actor) {
+        perTenant[tenant.code] = {
+          scanned: result.scanned,
+          processed: result.processed,
+          failed: result.failed,
+        };
+      }
+      totals.scanned += result.scanned;
+      totals.processed += result.processed;
+      totals.failed += result.failed;
+    }
+    if (totals.failed > 0) {
+      throw new Error(
+        `Service Quality reconciliation failed for ${totals.failed} of ${totals.scanned} event(s)`,
+      );
     }
     return {
       tenantsSwept: tenants.length,

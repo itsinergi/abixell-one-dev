@@ -412,6 +412,6 @@ test("current repository has no blocking platform-boundary findings", async () =
   // adds exactly the governed `user.role.manage` capability. Pinned
   // deliberately: an unexplained change means a permission was introduced or
   // removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 77);
+  assert.equal(result.permissionCount, 88);
   assert.equal(result.advisoryCount, 1);
 });

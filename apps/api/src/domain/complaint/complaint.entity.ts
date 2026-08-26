@@ -90,5 +90,6 @@ export interface ComplaintRepository {
     input: UpdateCustomerConfirmationInput,
     updatedBy: string | null,
   ): Promise<Complaint>;
+  updateSeverity(id: string, severity: string, updatedBy: string | null): Promise<Complaint>;
   markClosed(id: string, closureDate: Date): Promise<void>;
 }

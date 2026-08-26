@@ -7,7 +7,8 @@ import type {
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
-import { NotFoundError } from "../../domain/shared-kernel/errors.js";
+import type { UserRoleAssignment } from "../../domain/rbac/rbac.entity.js";
+import { ForbiddenError, NotFoundError } from "../../domain/shared-kernel/errors.js";
 
 export interface CreateCustomerInput {
   code: string;
@@ -144,9 +145,33 @@ export class CustomerService {
   async listScopedCustomerIds(actor: ActorContext): Promise<string[]> {
     const all = await this.repo.listByTenant(actor.tenantId);
     const assignments = await this.rbac.getAssignments(actor.userId);
-    if (assignments.some((a) => a.scopeType === "tenant")) return all.map((c) => c.id);
+    return this.filterCustomerIdsByAssignments(all, assignments);
+  }
+
+  /** Trusted-caller variant that couples the business permission and Customer
+   * Data Scope to the same effective assignment. This closes the privilege-
+   * composition gap where a narrow role supplied permission while an unrelated
+   * role supplied broader scope. */
+  async listScopedCustomerIdsForPermission(
+    actor: ActorContext,
+    permissionCode: string,
+  ): Promise<string[]> {
+    const [all, assignments] = await Promise.all([
+      this.repo.listByTenant(actor.tenantId),
+      this.rbac.getAssignmentsWithPermission(actor.userId, permissionCode),
+    ]);
+    return this.filterCustomerIdsByAssignments(all, assignments);
+  }
+
+  private async filterCustomerIdsByAssignments(
+    customers: Customer[],
+    assignments: UserRoleAssignment[],
+  ): Promise<string[]> {
+    if (assignments.some((assignment) => assignment.scopeType === "tenant")) {
+      return customers.map((customer) => customer.id);
+    }
     const ids: string[] = [];
-    for (const customer of all) {
+    for (const customer of customers) {
       const covered = await this.rbac.isCustomerContextScopeCoveredByAssignments(assignments, {
         customerId: customer.id,
         ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
@@ -168,6 +193,33 @@ export class CustomerService {
       customerId: customer.id,
       ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
     });
+    return customer;
+  }
+
+  /** Trusted-caller visibility gate with permission and Customer Data Scope
+   * coupled to the same effective assignment. */
+  async getAuthorizedForPermission(
+    actor: ActorContext,
+    customerId: string,
+    permissionCode: string,
+  ): Promise<Customer> {
+    const customer = await this.repo.findById(customerId);
+    if (!customer || customer.tenantId !== actor.tenantId) {
+      throw new NotFoundError("Customer", customerId);
+    }
+    const assignments = await this.rbac.getAssignmentsWithPermission(
+      actor.userId,
+      permissionCode,
+    );
+    const covered = await this.rbac.isCustomerContextScopeCoveredByAssignments(assignments, {
+      customerId: customer.id,
+      ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
+    });
+    if (!covered) {
+      throw new ForbiddenError(
+        `Permission '${permissionCode}' and Customer Data Scope must come from the same assignment`,
+      );
+    }
     return customer;
   }
 
@@ -242,5 +294,10 @@ export class CustomerService {
     await this.rbac.requirePermission(actor.userId, "customer.read");
     await this.getAuthorized(actor, customerId);
     return this.contactRepo.listByCustomer(customerId);
+  }
+
+  async getCustomer(actor: ActorContext, customerId: string): Promise<Customer> {
+    await this.rbac.requirePermission(actor.userId, "customer.read");
+    return this.getAuthorized(actor, customerId);
   }
 }

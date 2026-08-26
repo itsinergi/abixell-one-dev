@@ -10,7 +10,7 @@ import type { WorkflowService } from "../workflow/workflow.service.js";
 import type { ConfigurationService } from "../configuration/configuration.service.js";
 import type { EventBus } from "../event/event-bus.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../domain/shared-kernel/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../domain/shared-kernel/errors.js";
 
 /** Product Core integration point: the Workflow Definition code every
  * Complaint's lifecycle runs against. The DEFINITION's actual Steps/
@@ -668,6 +668,37 @@ export class ComplaintService {
     return { complaint: (await this.repo.findById(id))!, workflowResult: result };
   }
 
+  async updateSeverity(actor: ActorContext, id: string, severity: string, note?: string | null) {
+    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.getAuthorized(actor, id);
+    const severities = await this.configuration.listReferenceDataItemsForTrustedCaller(
+      actor.tenantId,
+      COMPLAINT_SEVERITY_REF_TYPE,
+    );
+    if (!severities.some((s) => s.code === severity && s.isActive)) {
+      throw new ValidationError(`Unknown or inactive severity code '${severity}'`);
+    }
+
+    const updated = await this.repo.updateSeverity(id, severity, actor.userId);
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "complaint.severity_updated",
+      entityType: "complaint",
+      entityId: id,
+      metadata: { severity, note },
+    });
+    await this.eventBus.publish({
+      tenantId: actor.tenantId,
+      eventType: "complaint.severity_updated",
+      entityType: "complaint",
+      entityId: id,
+      payload: { complaintNumber: updated.complaintNumber, severity, note },
+      createdBy: actor.userId,
+    });
+    return updated;
+  }
+
   /**
    * Complaint visibility gate — Customer Data Scope (ADR-0011, via
    * `CustomerService.canAccessForDocument`, deliberately the
@@ -683,6 +714,14 @@ export class ComplaintService {
    * PRECISE gate for whether a given action is allowed right now; this
    * method only answers "may this actor know the Complaint exists".
    */
+  /** Trusted read for a subscribing application service. It reveals only the
+   * Complaint aggregate after tenant ownership is proved; it grants no end-user
+   * visibility and must never be exposed directly from an HTTP route. */
+  async getForTrustedCaller(tenantId: string, id: string): Promise<Complaint | null> {
+    const complaint = await this.repo.findById(id);
+    return complaint?.tenantId === tenantId ? complaint : null;
+  }
+
   async getAuthorized(actor: ActorContext, id: string): Promise<Complaint> {
     const complaint = await this.repo.findById(id);
     if (!complaint || complaint.tenantId !== actor.tenantId) {

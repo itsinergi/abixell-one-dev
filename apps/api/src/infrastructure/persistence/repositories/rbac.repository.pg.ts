@@ -123,6 +123,31 @@ export class PgRbacRepository implements RbacRepository {
     return result.rows[0]?.allowed === true;
   }
 
+  async getAssignmentsWithPermission(
+    userId: string,
+    permissionCode: string,
+  ): Promise<UserRoleAssignment[]> {
+    const result = await this.pool.query(
+      `SELECT DISTINCT aura.id, aura.user_id, aura.role_id, r.code AS role_code,
+              aura.scope_type, aura.scope_organization_unit_id, aura.scope_customer_id
+         FROM authorization_effective_user_role_assignments aura
+         JOIN roles r ON r.id = aura.role_id
+         JOIN role_permissions rp ON rp.role_id = aura.role_id
+         JOIN permissions p ON p.id = rp.permission_id
+        WHERE aura.user_id = $1 AND p.code = $2`,
+      [userId, permissionCode],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      roleId: row.role_id,
+      roleCode: row.role_code,
+      scopeType: row.scope_type,
+      scopeOrganizationUnitId: row.scope_organization_unit_id,
+      scopeCustomerId: row.scope_customer_id,
+    }));
+  }
+
   async listAdminUserAccess(tenantId: string): Promise<AdminUserAccessSummary[]> {
     const result = await this.pool.query(
       `SELECT u.id AS user_id,

@@ -24,6 +24,8 @@ import {
   PgServiceRepository,
 } from "./infrastructure/persistence/repositories/service.repository.pg.js";
 import { PgComplaintRepository } from "./infrastructure/persistence/repositories/complaint.repository.pg.js";
+import { PgSalesRepository } from "./infrastructure/persistence/repositories/sales.repository.pg.js";
+import { PgServiceQualityRepository } from "./infrastructure/persistence/repositories/service-quality.repository.pg.js";
 import { LocalFileStorage } from "./infrastructure/storage/local-file-storage.js";
 
 import { AuditService } from "./application/audit/audit.service.js";
@@ -50,6 +52,8 @@ import { ComplaintService } from "./application/complaint/complaint.service.js";
 import { ComplaintDashboardService } from "./application/complaint/complaint-dashboard.service.js";
 import { PgComplaintDashboardRepository } from "./infrastructure/persistence/repositories/complaint-dashboard.repository.pg.js";
 import { ComplaintConfigurationService } from "./application/complaint/complaint-configuration.service.js";
+import { SalesService } from "./application/sales/sales.service.js";
+import { ServiceQualityService } from "./application/service-quality/service-quality.service.js";
 import { PgSurveyRepository } from "./infrastructure/persistence/repositories/survey.repository.pg.js";
 import { SurveyService } from "./application/survey/survey.service.js";
 import { SurveyResponseService } from "./application/survey/survey-response.service.js";
@@ -167,6 +171,42 @@ export function buildContainer() {
     configuration,
     notification,
     workflow,
+  );
+
+  // Wave A1 / CUS-ADV-001 — Sales pipeline, quotation, and configurable
+  // pricing on top of Customer Foundation (1A) + the generic Workflow
+  // Engine (0D/0E) + Configuration/Numbering (0C). Built before
+  // DocumentService so its `sales_quotation` Entity Authorization Resolver
+  // can close over `sales.canAccessForDocument`, exactly as `customer` and
+  // `complaint` do (ADR-0012).
+  const sales = new SalesService(
+    new PgSalesRepository(pool),
+    serviceRepo,
+    customer,
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
+  // Wave A1 / SQ-ADV-001…004 — Service Quality Advanced remains an
+  // application-level extension of Complaint Core. It reads the Complaint
+  // aggregate, owns only its advanced projections, and delegates lifecycle to
+  // Workflow rather than introducing a competing complaint state machine.
+  const serviceQuality = new ServiceQualityService(
+    new PgServiceQualityRepository(pool),
+    complaint,
+    contractRepo,
+    customer,
+    configuration,
+    rbac,
+    audit,
+    eventBus,
+    workflow,
+    (eventType, error) => {
+      console.error(`[ServiceQuality] event '${eventType}' failed:`, error);
+    },
   );
 
   // Phase 2 — Service Operations & Work Management Core. First module built
@@ -328,6 +368,14 @@ export function buildContainer() {
           projectDelivery.canAccessForDocument(actor, "project_delivery_milestone", entityId),
       },
     ],
+    [
+      "sales_quotation",
+      { canAccess: (actor, entityId) => sales.canAccessForDocument(actor, entityId) },
+    ],
+    [
+      "capa_action",
+      { canAccess: (actor, entityId) => serviceQuality.canAccessCapaForDocument(actor, entityId) },
+    ],
   ]);
   const document = new DocumentService(
     documentRepo,
@@ -406,6 +454,27 @@ export function buildContainer() {
   // of Complaint semantics and Complaint Core is never called from here.
   eventBus.subscribe("survey.submitted", (event) => surveyIntegration.handleSurveySubmitted(event));
 
+  // Wave A1 / SQ-ADV-001 — complaint-level SLA projections follow durable
+  // Complaint lifecycle events. The handler is idempotent and never advances
+  // Complaint/Workflow state itself.
+  for (const eventType of [
+    "complaint.submitted",
+    "complaint.acknowledged",
+    "complaint.customer_confirmed",
+  ]) {
+    eventBus.subscribe(eventType, (event) => serviceQuality.handleComplaintEvent(event));
+  }
+
+  // Wave A1 / SQ-ADV-004 — Founder-gated feedback automation proposals.
+  // The handler evaluates triggers and persists idempotent proposals ONLY.
+  for (const eventType of [
+    "survey.submitted",
+    "complaint.reopened",
+    "service_quality.sla_resolution_breached",
+  ]) {
+    eventBus.subscribe(eventType, (event) => serviceQuality.handleFeedbackEvent(event));
+  }
+
   const scheduler = new SchedulerService(
     schedulerRepo,
     rbac,
@@ -414,7 +483,7 @@ export function buildContainer() {
     },
     { timersDisabled: process.env.SCHEDULER_DISABLED === "true" },
   );
-  registerJobHandlers(scheduler, { tenantRepo, workflow, integration });
+  registerJobHandlers(scheduler, { tenantRepo, workflow, integration, serviceQuality });
 
   return {
     pool,
@@ -440,6 +509,8 @@ export function buildContainer() {
     complaint,
     complaintDashboard,
     complaintConfiguration,
+    sales,
+    serviceQuality,
     survey,
     surveyResponse,
     surveyIntegration,

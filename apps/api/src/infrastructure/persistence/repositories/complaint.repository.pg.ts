@@ -182,6 +182,23 @@ export class PgComplaintRepository implements ComplaintRepository {
     return mapRow(result.rows[0]);
   }
 
+  async updateSeverity(
+    id: string,
+    severity: string,
+    updatedBy: string | null,
+  ): Promise<Complaint> {
+    const result = await this.pool.query(
+      `UPDATE complaints SET
+         severity = $2,
+         updated_by = $3,
+         updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [id, severity, updatedBy],
+    );
+    return mapRow(result.rows[0]);
+  }
+
   async markClosed(id: string, closureDate: Date): Promise<void> {
     await this.pool.query(`UPDATE complaints SET closure_date = $2 WHERE id = $1`, [id, closureDate]);
   }

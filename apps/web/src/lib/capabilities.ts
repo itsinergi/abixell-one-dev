@@ -72,6 +72,11 @@ export const PERMISSIONS = {
   reportingRead: "reporting.read",
   reportingExport: "reporting.export",
   adminConsoleRead: "admin.console.read",
+  salesRead: "sales.read",
+  salesManage: "sales.manage",
+  salesApprove: "sales.approve",
+  serviceQualityRead: "service_quality.read",
+  serviceQualityConfigure: "service_quality.configure",
 } as const;
 
 export type NavGroupKey = "operations" | "enterprise-core" | "governance";
@@ -240,6 +245,24 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Customers",
     description: "Manage customers, contacts, contracts, projects, sites, and service links.",
     requiresAnyOf: [PERMISSIONS.customerRead],
+    requiresInternal: true,
+  },
+  {
+    key: "sales-pipeline",
+    group: "enterprise-core",
+    path: "/sales",
+    label: "Sales & Pipeline",
+    description: "Opportunities, stage pipelines, quotations, and price books.",
+    requiresAnyOf: [PERMISSIONS.salesRead, PERMISSIONS.salesManage],
+    requiresInternal: true,
+  },
+  {
+    key: "service-quality",
+    group: "operations",
+    path: "/service-quality",
+    label: "Service Quality",
+    description: "SLA performance, RCA categories, CAPA tracking, and recurrence analytics.",
+    requiresAnyOf: [PERMISSIONS.serviceQualityRead, PERMISSIONS.serviceQualityConfigure],
     requiresInternal: true,
   },
   {

@@ -36,6 +36,12 @@ export function registerCustomerRoutes(app: FastifyInstance, container: Containe
     return reply.send(list);
   });
 
+  app.get("/customers/:id", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = idParamSchema.parse(request.params);
+    const customer = await container.customer.getCustomer(request.actor!, params.id);
+    return reply.send(customer);
+  });
+
   app.patch("/customers/:id", { preHandler: app.authenticate }, async (request, reply) => {
     const params = idParamSchema.parse(request.params);
     const body = updateCustomerSchema.parse(request.body);

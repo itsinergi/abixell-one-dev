@@ -30,6 +30,8 @@ import { registerServiceRoutes } from "./interfaces/http/routes/services.js";
 import { registerComplaintRoutes } from "./interfaces/http/routes/complaints.js";
 import { registerSurveyRoutes } from "./interfaces/http/routes/surveys.js";
 import { registerAdminConsoleRoutes } from "./interfaces/http/routes/admin-console.js";
+import { registerSalesRoutes } from "./interfaces/http/routes/sales.js";
+import { registerServiceQualityRoutes } from "./interfaces/http/routes/service-quality.js";
 import { registerServiceOperationsRoutes } from "./modules/service-operations/core/api/service-operations.routes.js";
 import { registerWorkforceRoutes } from "./modules/workforce/core/api/workforce.routes.js";
 import { registerSupplyChainRoutes } from "./modules/supply-chain/core/api/supply-chain.routes.js";
@@ -156,6 +158,10 @@ export function buildApp(): FastifyInstance {
     registerReportingInsightRoutes(scoped, container);
     // Phase 11F — Business Admin Console with governed User Role assignments
     registerAdminConsoleRoutes(scoped, container);
+    // Wave A1 / CUS-ADV-001 — sales pipeline, quotation, and pricing
+    registerSalesRoutes(scoped, container);
+    // Wave A1 / SQ-ADV-001…004 — governed Service Quality Advanced
+    registerServiceQualityRoutes(scoped, container);
   });
 
   // Scheduler ownership is enforced by SchedulerService itself so a disabled

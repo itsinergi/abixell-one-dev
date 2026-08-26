@@ -132,6 +132,15 @@ export interface RbacRepository {
     permissionCode: string,
   ): Promise<boolean>;
 
+  /** Every authorization-effective assignment carrying `permissionCode`, with
+   * that same assignment's Data Scope. Business modules use this when a read
+   * or mutation must couple permission and Customer scope instead of combining
+   * effective permission from one assignment with scope from another. */
+  getAssignmentsWithPermission(
+    userId: string,
+    permissionCode: string,
+  ): Promise<UserRoleAssignment[]>;
+
   /** Phase 11F governed access reads. Administrative assignment inventory is
    * anchored through the assigned User's tenant. Role/scope display metadata
    * resolves only through same-tenant targets; unresolved metadata is redacted

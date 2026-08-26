@@ -1024,6 +1024,106 @@ export const api = {
   adminModules: (token: string) => request<AdminModuleSummary[]>("/admin/modules", { token }),
   adminWorkflows: (token: string) => request<AdminWorkflowSummary[]>("/admin/workflows", { token }),
   adminRecentAudit: (token: string) => request<AdminAuditEntry[]>("/admin/audit/recent", { token }),
+
+  // --- Wave A1: Sales & Pipeline (CUS-ADV-001) ------------------------------
+  salesReferenceOptions: (token: string) =>
+    request<{ stages: { code: string; label: string }[]; sources: { code: string; label: string }[]; units: { code: string; label: string }[] }>("/sales/reference-data", { token }),
+  priceBooks: (token: string) => request<PriceBookRecord[]>("/sales/price-books", { token }),
+  createPriceBook: (token: string, body: CreatePriceBookBody) =>
+    request<PriceBookRecord>("/sales/price-books", { method: "POST", token, body }),
+  priceBookEntries: (token: string, priceBookId: string) =>
+    request<PriceBookEntryRecord[]>(`/sales/price-books/${priceBookId}/entries`, { token }),
+  addPriceBookEntry: (token: string, priceBookId: string, body: AddPriceBookEntryBody) =>
+    request<PriceBookEntryRecord>(`/sales/price-books/${priceBookId}/entries`, { method: "POST", token, body }),
+  opportunities: (token: string, query?: { outcome?: string; stageCode?: string; customerId?: string }) => {
+    const qs = new URLSearchParams();
+    if (query?.outcome) qs.set("outcome", query.outcome);
+    if (query?.stageCode) qs.set("stageCode", query.stageCode);
+    if (query?.customerId) qs.set("customerId", query.customerId);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<OpportunityRecord[]>(`/sales/opportunities${suffix}`, { token });
+  },
+  opportunityPipeline: (token: string) =>
+    request<OpportunityPipelineSummary[]>("/sales/opportunities/pipeline", { token }),
+  opportunity: (token: string, id: string) =>
+    request<OpportunityDetailRecord>(`/sales/opportunities/${id}`, { token }),
+  createOpportunity: (token: string, body: CreateOpportunityBody) =>
+    request<OpportunityRecord>("/sales/opportunities", { method: "POST", token, body }),
+  changeOpportunityStage: (token: string, id: string, body: { stageCode: string; outcome?: string; outcomeReason?: string | null; note?: string | null }) =>
+    request<OpportunityRecord>(`/sales/opportunities/${id}/stage`, { method: "POST", token, body }),
+  quotations: (token: string) => request<QuotationRecord[]>("/sales/quotations", { token }),
+  quotation: (token: string, id: string) =>
+    request<QuotationDetailRecord>(`/sales/quotations/${id}`, { token }),
+  createQuotation: (token: string, body: CreateQuotationBody) =>
+    request<QuotationDetailRecord>("/sales/quotations", { method: "POST", token, body }),
+  submitQuotationForApproval: (token: string, id: string) =>
+    request<QuotationRecord>(`/sales/quotations/${id}/submit`, { method: "POST", token }),
+  recordQuotationApproval: (token: string, id: string, decision: "issued" | "withdrawn") =>
+    request<QuotationRecord>(`/sales/quotations/${id}/approval`, { method: "POST", token, body: { decision } }),
+  recordQuotationCustomerDecision: (token: string, id: string, body: { decision: "accepted" | "declined"; note?: string | null }) =>
+    request<QuotationRecord>(`/sales/quotations/${id}/customer-decision`, { method: "POST", token, body }),
+
+  // --- Wave A1: Service Quality Advanced (SQ-ADV-001…004) ------------------
+  sqCalendars: (token: string) =>
+    request<{ calendar: SqCalendarRecord; windows: SqCalendarWindow[]; holidays: SqHolidayRecord[] }[]>("/service-quality/calendars", { token }),
+  createSqCalendar: (token: string, body: CreateSqCalendarBody) =>
+    request<{ calendar: SqCalendarRecord; windows: SqCalendarWindow[] }>("/service-quality/calendars", { method: "POST", token, body }),
+  addSqHoliday: (token: string, calendarId: string, body: { holidayDate: string; name: string }) =>
+    request<SqHolidayRecord>(`/service-quality/calendars/${calendarId}/holidays`, { method: "POST", token, body }),
+  sqSlaPolicies: (token: string) =>
+    request<{ policy: SqSlaPolicyRecord; calendar: SqCalendarRecord | null; rules: SqSlaRuleRecord[] }[]>("/service-quality/sla-policies", { token }),
+  createSqSlaPolicy: (token: string, body: CreateSqSlaPolicyBody) =>
+    request<SqSlaPolicyRecord>("/service-quality/sla-policies", { method: "POST", token, body }),
+  createSqSlaRule: (token: string, body: CreateSqSlaRuleBody) =>
+    request<SqSlaRuleRecord>("/service-quality/sla-rules", { method: "POST", token, body }),
+  sqSlaPerformance: (token: string) =>
+    request<SqSlaPerformanceSummary[]>("/service-quality/sla-performance", { token }),
+  sqComplaintSla: (token: string, complaintId: string) =>
+    request<{ target: SqSlaTargetRecord | null; state: SqSlaTargetState | null }>(`/service-quality/complaints/${complaintId}/sla`, { token }),
+  sqRcaCategories: (token: string) =>
+    request<SqRcaCategoryRecord[]>("/service-quality/rca/categories", { token }),
+  createSqRcaCategory: (token: string, body: CreateSqRcaCategoryBody) =>
+    request<SqRcaCategoryRecord>("/service-quality/rca/categories", { method: "POST", token, body }),
+  sqComplaintRcaFindings: (token: string, complaintId: string) =>
+    request<SqRcaFindingRecord[]>(`/service-quality/complaints/${complaintId}/rca/findings`, { token }),
+  recordSqRcaFinding: (token: string, complaintId: string, body: CreateSqRcaFindingBody) =>
+    request<SqRcaFindingRecord>(`/service-quality/complaints/${complaintId}/rca/findings`, { method: "POST", token, body }),
+  clearSqPrimaryRcaFinding: (token: string, complaintId: string) =>
+    request<void>(`/service-quality/complaints/${complaintId}/rca/primary`, { method: "DELETE", token }),
+  sqCapaActions: (token: string) =>
+    request<SqCapaActionRecord[]>("/service-quality/capa/actions", { token }),
+  sqComplaintCapaActions: (token: string, complaintId: string) =>
+    request<SqCapaActionRecord[]>(`/service-quality/complaints/${complaintId}/capa/actions`, { token }),
+  createSqCapaAction: (token: string, body: CreateSqCapaActionBody) =>
+    request<SqCapaActionRecord>("/service-quality/capa/actions", { method: "POST", token, body }),
+  updateSqCapaStatus: (token: string, id: string, body: { status: string; completionNote?: string }) =>
+    request<SqCapaActionRecord>(`/service-quality/capa/actions/${id}/status`, { method: "PATCH", token, body }),
+  verifySqCapaEffectiveness: (token: string, id: string, body: { verdict: "effective" | "ineffective"; note?: string | null }) =>
+    request<SqCapaActionRecord>(`/service-quality/capa/actions/${id}/verify`, { method: "POST", token, body }),
+  sqCapaEffectivenessSummary: (token: string) =>
+    request<SqCapaEffectivenessSummary[]>("/service-quality/capa/effectiveness-summary", { token }),
+  sqRecurrenceRules: (token: string) =>
+    request<SqRecurrenceRuleRecord[]>("/service-quality/recurrence/rules", { token }),
+  createSqRecurrenceRule: (token: string, body: CreateSqRecurrenceRuleBody) =>
+    request<SqRecurrenceRuleRecord>("/service-quality/recurrence/rules", { method: "POST", token, body }),
+  detectSqRecurrence: (token: string, ruleId: string) =>
+    request<SqRecurrenceDetectionRecord>(`/service-quality/recurrence/rules/${ruleId}/detection`, { token }),
+  sqAutomationRules: (token: string) =>
+    request<SqAutomationRuleRecord[]>("/service-quality/automation/rules", { token }),
+  createSqAutomationRule: (token: string, body: CreateSqAutomationRuleBody) =>
+    request<SqAutomationRuleRecord>("/service-quality/automation/rules", { method: "POST", token, body }),
+  setSqAutomationRuleActive: (token: string, id: string, isActive: boolean) =>
+    request<SqAutomationRuleRecord>(`/service-quality/automation/rules/${id}/active`, { method: "PATCH", token, body: { isActive } }),
+  sqAutomationProposals: (token: string, status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return request<SqAutomationProposalRecord[]>(`/service-quality/automation/proposals${qs}`, { token });
+  },
+  sqAutomationProposal: (token: string, id: string) =>
+    request<SqAutomationProposalRecord>(`/service-quality/automation/proposals/${id}`, { token }),
+  approveSqAutomationProposal: (token: string, id: string, note?: string | null) =>
+    request<SqAutomationProposalRecord>(`/service-quality/automation/proposals/${id}/approve`, { method: "POST", token, body: { note } }),
+  rejectSqAutomationProposal: (token: string, id: string, note: string) =>
+    request<SqAutomationProposalRecord>(`/service-quality/automation/proposals/${id}/reject`, { method: "POST", token, body: { note } }),
 };
 
 // --- Business Admin Console types (Phase 11C) ---------------------------
@@ -2432,3 +2532,456 @@ export type MySurveyItem = {
   surveyName: string | null;
   versionNumber: number | null;
 };
+
+// --- Wave A1: Sales & Commercial Types --------------------------------------
+
+export type PriceBookRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  currency: string;
+  isStandard: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PriceBookEntryRecord = {
+  id: string;
+  tenantId: string;
+  priceBookId: string;
+  itemSku: string;
+  unitPrice: number;
+  minQuantity: number;
+  maxQuantity: number | null;
+  unitOfMeasure: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OpportunityRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  title: string;
+  customerId: string;
+  leadSource: string;
+  stageCode: string;
+  estimatedValue: number | null;
+  currency: string;
+  confidencePercent: number | null;
+  targetCloseDate: string | null;
+  outcome: string | null;
+  outcomeReason: string | null;
+  ownerUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OpportunityStageHistoryRecord = {
+  id: string;
+  opportunityId: string;
+  fromStageCode: string | null;
+  toStageCode: string;
+  fromOutcome: string | null;
+  toOutcome: string | null;
+  outcomeReason: string | null;
+  note: string | null;
+  changedBy: string | null;
+  changedAt: string;
+};
+
+export type OpportunityDetailRecord = {
+  opportunity: OpportunityRecord;
+  customer: Customer | null;
+  stageHistory: OpportunityStageHistoryRecord[];
+};
+
+export type OpportunityPipelineSummary = {
+  stageCode: string;
+  count: number;
+  totalEstimatedValue: number;
+};
+
+export type QuotationRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  opportunityId: string | null;
+  customerId: string;
+  priceBookId: string | null;
+  revisionNumber: number;
+  status: string;
+  totalAmount: number;
+  currency: string;
+  validUntil: string | null;
+  issuedAt: string | null;
+  acceptedAt: string | null;
+  declinedAt: string | null;
+  withdrawnAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuotationItemRecord = {
+  id: string;
+  quotationId: string;
+  itemSku: string | null;
+  description: string;
+  unitPrice: number;
+  quantity: number;
+  discountPercent: number;
+  lineTotal: number;
+  sortOrder: number;
+};
+
+export type QuotationDetailRecord = {
+  quotation: QuotationRecord;
+  customer: Customer | null;
+  opportunity: OpportunityRecord | null;
+  items: QuotationItemRecord[];
+};
+
+export type CreatePriceBookBody = {
+  code: string;
+  name: string;
+  currency: string;
+  isStandard?: boolean;
+};
+
+export type AddPriceBookEntryBody = {
+  itemSku: string;
+  unitPrice: number;
+  minQuantity?: number;
+  maxQuantity?: number | null;
+  unitOfMeasure?: string;
+};
+
+export type CreateOpportunityBody = {
+  code: string;
+  title: string;
+  customerId: string;
+  leadSource?: string;
+  stageCode?: string;
+  estimatedValue?: number | null;
+  currency?: string;
+  confidencePercent?: number | null;
+  targetCloseDate?: string | null;
+};
+
+export type CreateQuotationBody = {
+  code: string;
+  opportunityId?: string | null;
+  customerId: string;
+  priceBookId?: string | null;
+  currency?: string;
+  validUntil?: string | null;
+  notes?: string | null;
+  items: {
+    itemSku?: string | null;
+    description: string;
+    unitPrice: number;
+    quantity: number;
+    discountPercent?: number;
+  }[];
+};
+
+// --- Wave A1: Service Quality Advanced Types --------------------------------
+
+export type SqCalendarWindow = {
+  id?: string;
+  dayOfWeek: number;
+  startMinute: number;
+  endMinute: number;
+};
+
+export type SqHolidayRecord = {
+  id: string;
+  tenantId: string;
+  calendarId: string;
+  holidayDate: string;
+  name: string;
+  createdAt: string;
+};
+
+export type SqCalendarRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  timeZone: string;
+  isContinuous: boolean;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqSlaPolicyRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  calendarId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqSlaRuleRecord = {
+  id: string;
+  tenantId: string;
+  policyId: string;
+  code: string;
+  customerId: string | null;
+  contractId: string | null;
+  severityCode: string | null;
+  categoryCode: string | null;
+  responseMinutes: number | null;
+  resolutionMinutes: number | null;
+  priority: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqSlaTargetRecord = {
+  id: string;
+  tenantId: string;
+  complaintId: string;
+  policyId: string;
+  ruleId: string;
+  calendarId: string;
+  frozenAt: string;
+  responseDueAt: string | null;
+  resolutionDueAt: string | null;
+  responseMetAt: string | null;
+  resolutionMetAt: string | null;
+  responseBreached: boolean;
+  resolutionBreached: boolean;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqSlaTargetState = {
+  status: string;
+  responseMet: boolean;
+  resolutionMet: boolean;
+  responseBreached: boolean;
+  resolutionBreached: boolean;
+};
+
+export type SqSlaPerformanceSummary = {
+  status: string;
+  count: number;
+  metResponseCount: number;
+  metResolutionCount: number;
+  breachedCount: number;
+};
+
+export type SqRcaCategoryRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  parentId: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqRcaFindingRecord = {
+  id: string;
+  tenantId: string;
+  complaintId: string;
+  rootCauseCategoryId: string;
+  analysisMethodCode: string | null;
+  statement: string;
+  evidenceSummary: string | null;
+  isPrimary: boolean;
+  identifiedBy: string | null;
+  identifiedAt: string;
+  createdAt: string;
+};
+
+export type SqCapaActionRecord = {
+  id: string;
+  tenantId: string;
+  actionNumber: string;
+  complaintId: string;
+  rcaFindingId: string | null;
+  actionType: "corrective" | "preventive";
+  title: string;
+  description: string | null;
+  ownerUserId: string | null;
+  dueDate: string | null;
+  status: string;
+  workflowInstanceId: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  completionNote: string | null;
+  effectivenessVerdict: string | null;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  verificationNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqCapaEffectivenessSummary = {
+  status: string;
+  count: number;
+  effectiveCount: number;
+  ineffectiveCount: number;
+};
+
+export type SqRecurrenceRuleRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  groupBy: string;
+  windowDays: number;
+  minimumOccurrences: number;
+  customerId: string | null;
+  severityCode: string | null;
+  categoryCode: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqRecurrenceCluster = {
+  groupValue: string | null;
+  occurrences: number;
+  complaintIds: string[];
+  firstOccurredAt: string;
+  lastOccurredAt: string;
+};
+
+export type SqRecurrenceDetectionRecord = {
+  rule: SqRecurrenceRuleRecord;
+  windowDays: number;
+  minimumOccurrences: number;
+  clusters: SqRecurrenceCluster[];
+};
+
+export type SqAutomationRuleRecord = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  triggerEvent: string;
+  scoreThreshold: number | null;
+  proposedAction: string;
+  actionParameters: Record<string, unknown>;
+  requiresApproval: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SqAutomationProposalRecord = {
+  id: string;
+  tenantId: string;
+  ruleId: string;
+  triggerEvent: string;
+  sourceEntityId: string;
+  proposedAction: string;
+  actionParameters: Record<string, unknown>;
+  status: string;
+  requiresApproval: boolean;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  appliedAt: string | null;
+  failureReason: string | null;
+  createdAt: string;
+};
+
+export type CreateSqCalendarBody = {
+  code: string;
+  name: string;
+  timeZone: string;
+  isContinuous?: boolean;
+  isDefault?: boolean;
+  windows: { dayOfWeek: number; startMinute: number; endMinute: number }[];
+};
+
+export type CreateSqSlaPolicyBody = {
+  code: string;
+  name: string;
+  description?: string | null;
+  calendarId: string;
+};
+
+export type CreateSqSlaRuleBody = {
+  policyId: string;
+  code: string;
+  customerId?: string | null;
+  contractId?: string | null;
+  severityCode?: string | null;
+  categoryCode?: string | null;
+  responseMinutes?: number | null;
+  resolutionMinutes?: number | null;
+  priority?: number;
+};
+
+export type CreateSqRcaCategoryBody = {
+  code: string;
+  name: string;
+  description?: string | null;
+  parentId?: string | null;
+  sortOrder?: number;
+};
+
+export type CreateSqRcaFindingBody = {
+  rootCauseCategoryId: string;
+  analysisMethodCode?: string | null;
+  statement: string;
+  evidenceSummary?: string | null;
+  isPrimary?: boolean;
+  identifiedBy?: string | null;
+};
+
+export type CreateSqCapaActionBody = {
+  complaintId: string;
+  rcaFindingId?: string | null;
+  actionType: "corrective" | "preventive";
+  title: string;
+  description?: string | null;
+  ownerUserId?: string | null;
+  dueDate?: string | null;
+};
+
+export type CreateSqRecurrenceRuleBody = {
+  code: string;
+  name: string;
+  description?: string | null;
+  groupBy: string;
+  windowDays: number;
+  minimumOccurrences: number;
+  customerId?: string | null;
+  severityCode?: string | null;
+  categoryCode?: string | null;
+};
+
+export type CreateSqAutomationRuleBody = {
+  code: string;
+  name: string;
+  description?: string | null;
+  triggerEvent: string;
+  scoreThreshold?: number | null;
+  proposedAction: string;
+  actionParameters?: Record<string, unknown>;
+};
+
