@@ -469,6 +469,120 @@ describe.sequential("Wave A2 — Survey & Reporting Advanced Integration Suite",
       });
       expect(reuseRes.statusCode).toBe(409);
     });
+
+    it("releases single-use quota when a claimed submission fails validation", async () => {
+      const recipientLabel = `retryable-single-use-${Date.now()}`;
+      const tokenRes = await post(`/survey-versions/${surveyVersionId}/distribution-tokens`, adminToken, {
+        channel: "email",
+        recipientLabel,
+        maxUses: 1,
+      });
+      expect(tokenRes.statusCode).toBe(201);
+      const retryableToken = tokenRes.json().rawToken;
+
+      const invalidRes = await app.inject({
+        method: "POST",
+        url: `/public/surveys/${retryableToken}/submit`,
+        payload: {
+          answers: [{ questionId: ratingQuestionId, valueNumeric: 10 }],
+        },
+      });
+      expect(invalidRes.statusCode).toBe(400);
+
+      const validRes = await app.inject({
+        method: "POST",
+        url: `/public/surveys/${retryableToken}/submit`,
+        payload: {
+          answers: [{ questionId: ratingQuestionId, valueNumeric: 10 }],
+          matrixAnswers: [
+            {
+              questionId: matrixQuestionId,
+              matrixRowId: matrixRow1Id,
+              selectedOptionId: optionPassId,
+              valueNumeric: 5,
+              valueText: "EXCELLENT",
+            },
+            {
+              questionId: matrixQuestionId,
+              matrixRowId: matrixRow2Id,
+              selectedOptionId: optionPassId,
+              valueNumeric: 4,
+              valueText: "SATISFIED",
+            },
+          ],
+        },
+      });
+      expect(validRes.statusCode).toBe(201);
+
+      const tokenCheck = await pool.query(
+        `SELECT id, used_count
+           FROM survey_distribution_tokens
+          WHERE survey_version_id = $1 AND recipient_label = $2`,
+        [surveyVersionId, recipientLabel],
+      );
+      expect(Number(tokenCheck.rows[0].used_count)).toBe(1);
+
+      const assignmentCheck = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM survey_assignments WHERE distribution_token_id = $1",
+        [tokenCheck.rows[0].id],
+      );
+      expect(Number(assignmentCheck.rows[0].count)).toBe(1);
+    });
+
+    it("accepts exactly one concurrent submission for a single-use token", async () => {
+      const recipientLabel = `race-single-use-${Date.now()}`;
+      const tokenRes = await post(`/survey-versions/${surveyVersionId}/distribution-tokens`, adminToken, {
+        channel: "email",
+        recipientLabel,
+        maxUses: 1,
+      });
+      expect(tokenRes.statusCode).toBe(201);
+      const raceToken = tokenRes.json().rawToken;
+      const payload = {
+        answers: [{ questionId: ratingQuestionId, valueNumeric: 10 }],
+        matrixAnswers: [
+          {
+            questionId: matrixQuestionId,
+            matrixRowId: matrixRow1Id,
+            selectedOptionId: optionPassId,
+            valueNumeric: 5,
+            valueText: "EXCELLENT",
+          },
+          {
+            questionId: matrixQuestionId,
+            matrixRowId: matrixRow2Id,
+            selectedOptionId: optionPassId,
+            valueNumeric: 4,
+            valueText: "SATISFIED",
+          },
+        ],
+      };
+
+      const [resA, resB] = await Promise.all([
+        app.inject({ method: "POST", url: `/public/surveys/${raceToken}/submit`, payload }),
+        app.inject({ method: "POST", url: `/public/surveys/${raceToken}/submit`, payload }),
+      ]);
+      expect([resA.statusCode, resB.statusCode].sort((a, b) => a - b)).toEqual([201, 409]);
+      expect(
+        [resA, resB]
+          .filter((res) => res.statusCode === 201)
+          .map((res) => res.json().assignmentId),
+      ).toHaveLength(1);
+
+      const tokenCheck = await pool.query(
+        `SELECT id, used_count
+           FROM survey_distribution_tokens
+          WHERE survey_version_id = $1 AND recipient_label = $2`,
+        [surveyVersionId, recipientLabel],
+      );
+      expect(Number(tokenCheck.rows[0].used_count)).toBe(1);
+
+      const assignmentCheck = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM survey_assignments WHERE distribution_token_id = $1",
+        [tokenCheck.rows[0].id],
+      );
+      expect(Number(assignmentCheck.rows[0].count)).toBe(1);
+    });
   });
 
   // ===========================================================================
@@ -508,26 +622,136 @@ describe.sequential("Wave A2 — Survey & Reporting Advanced Integration Suite",
       expect(sectionScoresCheck.rows.length).toBeGreaterThanOrEqual(1);
     });
 
-    it("retrieves cross-survey analytics overview with NPS breakdown", async () => {
+    it("suppresses analytics aggregates while submitted sample stays below privacy threshold", async () => {
       const analyticsRes = await get(`/surveys/${surveyCode}/analytics`, adminToken);
       expect(analyticsRes.statusCode).toBe(200);
       const overview = analyticsRes.json();
       expect(overview.completionRatePercent).toBeGreaterThan(0);
       expect(overview.totalAssignments).toBeGreaterThanOrEqual(2);
-
-      // Check NPS aggregation (1 promoter (10), 1 detractor (4) -> NPS score = 0)
-      if (overview.nps) {
-        expect(overview.nps.promoterCount).toBeGreaterThanOrEqual(1);
-        expect(overview.nps.detractorCount).toBeGreaterThanOrEqual(1);
-      }
+      expect(overview.submittedCount).toBeGreaterThanOrEqual(2);
+      expect(overview.smallCellSuppressed).toBe(true);
+      expect(overview.averageScore).toBeNull();
+      expect(overview.nps.netPromoterScore).toBeNull();
+      expect(
+        overview.sectionAverages.every(
+          (section: { averagePercentageScore: number | null; averageWeightedScore: number | null }) =>
+            section.averagePercentageScore === null && section.averageWeightedScore === null,
+        ),
+      ).toBe(true);
+      expect(overview.questionDropOff).toHaveLength(0);
     });
 
-    it("performs contextual benchmarking across operational segments", async () => {
+    it("lifts suppression after five submissions and ignores rogue cross-tenant aggregate rows", async () => {
+      for (let i = 0; i < 3; i += 1) {
+        const submitRes = await app.inject({
+          method: "POST",
+          url: `/public/surveys/${publicDistributionToken}/submit`,
+          payload: {
+            answers: [{ questionId: ratingQuestionId, valueNumeric: 10 }],
+            matrixAnswers: [
+              {
+                questionId: matrixQuestionId,
+                matrixRowId: matrixRow1Id,
+                selectedOptionId: optionPassId,
+                valueNumeric: 5,
+                valueText: "EXCELLENT",
+              },
+              {
+                questionId: matrixQuestionId,
+                matrixRowId: matrixRow2Id,
+                selectedOptionId: optionPassId,
+                valueNumeric: 4,
+                valueText: "SATISFIED",
+              },
+            ],
+          },
+        });
+        expect(submitRes.statusCode).toBe(201);
+      }
+
+      const baselineAnalyticsRes = await get(`/surveys/${surveyCode}/analytics`, adminToken);
+      expect(baselineAnalyticsRes.statusCode).toBe(200);
+      const baselineOverview = baselineAnalyticsRes.json();
+      expect(baselineOverview.submittedCount).toBeGreaterThanOrEqual(5);
+      expect(baselineOverview.smallCellSuppressed).toBe(false);
+      expect(baselineOverview.averageScore).not.toBeNull();
+
+      const baselineSection = baselineOverview.sectionAverages.find(
+        (section: { sectionId: string }) => section.sectionId === section1Id,
+      );
+      const baselineDropOff = baselineOverview.questionDropOff.find(
+        (question: { questionId: string }) => question.questionId === ratingQuestionId,
+      );
+      expect(baselineSection).toBeDefined();
+      expect(baselineDropOff).toBeDefined();
+
+      const baselineBenchmarkRes = await get(`/surveys/${surveyCode}/benchmark`, adminToken);
+      expect(baselineBenchmarkRes.statusCode).toBe(200);
+      const baselineBenchmark = baselineBenchmarkRes.json();
+      expect(baselineBenchmark.items.length).toBeGreaterThan(0);
+
+      const rogueAssignmentRes = await pool.query(
+        `INSERT INTO survey_assignments
+           (tenant_id, survey_version_id, respondent_type, status, total_score, nps_score, submitted_at)
+         VALUES ($1, $2, 'anonymous', 'submitted', $3, $4, now())
+         RETURNING id`,
+        [otherTenantId, surveyVersionId, 999, 10],
+      );
+      const rogueAssignmentId = rogueAssignmentRes.rows[0].id;
+
+      await pool.query(
+        `INSERT INTO survey_section_scores
+           (tenant_id, survey_assignment_id, survey_section_id, raw_score, max_score, percentage_score, weighted_score)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [otherTenantId, rogueAssignmentId, section1Id, 5, 5, 100, 100],
+      );
+      await pool.query(
+        `INSERT INTO survey_answers
+           (survey_assignment_id, survey_question_id, value_numeric)
+         VALUES ($1, $2, $3)`,
+        [rogueAssignmentId, ratingQuestionId, 10],
+      );
+
+      const isolatedAnalyticsRes = await get(`/surveys/${surveyCode}/analytics`, adminToken);
+      expect(isolatedAnalyticsRes.statusCode).toBe(200);
+      const isolatedOverview = isolatedAnalyticsRes.json();
+      const isolatedSection = isolatedOverview.sectionAverages.find(
+        (section: { sectionId: string }) => section.sectionId === section1Id,
+      );
+      const isolatedDropOff = isolatedOverview.questionDropOff.find(
+        (question: { questionId: string }) => question.questionId === ratingQuestionId,
+      );
+
+      expect(isolatedOverview.totalAssignments).toBe(baselineOverview.totalAssignments);
+      expect(isolatedOverview.submittedCount).toBe(baselineOverview.submittedCount);
+      expect(isolatedOverview.averageScore).toBe(baselineOverview.averageScore);
+      expect(isolatedOverview.nps.netPromoterScore).toBe(baselineOverview.nps.netPromoterScore);
+      expect(isolatedSection.averagePercentageScore).toBe(baselineSection.averagePercentageScore);
+      expect(isolatedSection.averageWeightedScore).toBe(baselineSection.averageWeightedScore);
+      expect(isolatedDropOff.viewCount).toBe(baselineDropOff.viewCount);
+      expect(isolatedDropOff.answerCount).toBe(baselineDropOff.answerCount);
+
+      const isolatedBenchmarkRes = await get(`/surveys/${surveyCode}/benchmark`, adminToken);
+      expect(isolatedBenchmarkRes.statusCode).toBe(200);
+      const isolatedBenchmark = isolatedBenchmarkRes.json();
+      expect(isolatedBenchmark.items[0].responseCount).toBe(baselineBenchmark.items[0].responseCount);
+      expect(isolatedBenchmark.items[0].averageScore).toBe(baselineBenchmark.items[0].averageScore);
+      expect(isolatedBenchmark.items[0].npsScore).toBe(baselineBenchmark.items[0].npsScore);
+    });
+
+    it("performs contextual benchmarking across operational segments and blocks cross-tenant reads", async () => {
       const benchmarkRes = await get(`/surveys/${surveyCode}/benchmark`, adminToken);
       expect(benchmarkRes.statusCode).toBe(200);
       const benchmarks = benchmarkRes.json();
       expect(benchmarks.surveyDefinitionId).toBe(surveyDefinitionId);
       expect(benchmarks.items).toBeInstanceOf(Array);
+      expect(benchmarks.items.length).toBeGreaterThan(0);
+
+      const otherTenantAnalyticsRes = await get(`/surveys/${surveyCode}/analytics`, otherAdminToken);
+      expect([403, 404]).toContain(otherTenantAnalyticsRes.statusCode);
+
+      const otherTenantBenchmarkRes = await get(`/surveys/${surveyCode}/benchmark`, otherAdminToken);
+      expect([403, 404]).toContain(otherTenantBenchmarkRes.statusCode);
     });
   });
 

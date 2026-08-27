@@ -33,8 +33,15 @@ Module-specific dashboards (e.g. the Complaint management dashboard) belong to t
  
 | ID | Requirement | Status |
 |---|---|---|
-| **RPT-ADV-001** | Self-service business intelligence and a reporting data warehouse. | DEFERRED |
-| **RPT-ADV-002** | Predictive analytics across operational history. | DEFERRED |
+| **RPT-ADV-001** | Self-service business intelligence and a reporting data warehouse. | **COMPLETED** |
+| **RPT-ADV-002** | Predictive analytics across operational history. | **COMPLETED** |
+
+### Advanced delivery evidence (Wave A2)
+
+- Governed self-service BI surface: `bi_datasets`, `bi_dataset_fields`, `bi_saved_reports` (migration `1778000000000_wave-a2-survey-reporting-advanced.cjs`), a fixed metadata whitelist of tenant-scoped datasets/fields/aggregations — no arbitrary SQL editor, no query DSL, and no ad-hoc table access; all report execution is Data Scope-filtered by the same tenant/permission chain as Core reporting.
+- Predictive analytics foundation: `predictive_forecast_snapshots` stores bounded, deterministic time-series forecasts (moving average / OLS trend) with confidence intervals, generated on demand and persisted per tenant — no autonomous scheduling, no self-mutating model, no unbounded historical scan.
+- New permissions `reporting.bi.manage` and `reporting.predictive.read` gate both surfaces.
+- Evidence: `wave-a2-integration.test.ts` (23), covering dataset/field whitelist enforcement, saved report execution scoping, predictive snapshot generation and tenant isolation.
 
 ## Client Configuration
 

@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type {
   BranchConditionOperator,
   BranchTargetAction,
+  DistributionTokenClaimResult,
   NpsDistribution,
   QuestionDropOffMetric,
   SurveyAdvancedRepository,
@@ -348,6 +349,50 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
     );
   }
 
+  async claimDistributionTokenUse(tokenHash: string): Promise<DistributionTokenClaimResult> {
+    const claimed = await this.pool.query(
+      `UPDATE survey_distribution_tokens
+          SET used_count = used_count + 1
+        WHERE token_hash = $1
+          AND revoked_at IS NULL
+          AND (expires_at IS NULL OR expires_at > now())
+          AND (max_uses IS NULL OR used_count < max_uses)
+        RETURNING *`,
+      [tokenHash],
+    );
+
+    if (claimed.rows[0]) {
+      return { token: toDistributionToken(claimed.rows[0]) };
+    }
+
+    const inspected = await this.pool.query(
+      `SELECT revoked_at, expires_at, max_uses, used_count
+         FROM survey_distribution_tokens
+        WHERE token_hash = $1`,
+      [tokenHash],
+    );
+    const row = inspected.rows[0];
+    if (!row) {
+      return { token: null, rejectionReason: "not_found" };
+    }
+    if (row.revoked_at) {
+      return { token: null, rejectionReason: "revoked" };
+    }
+    if (row.expires_at && new Date(row.expires_at as Date) <= new Date()) {
+      return { token: null, rejectionReason: "expired" };
+    }
+    return { token: null, rejectionReason: "quota_exceeded" };
+  }
+
+  async releaseDistributionTokenUse(tokenId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE survey_distribution_tokens
+          SET used_count = GREATEST(used_count - 1, 0)
+        WHERE id = $1`,
+      [tokenId],
+    );
+  }
+
   async revokeDistributionToken(tenantId: string, tokenId: string): Promise<boolean> {
     const r = await this.pool.query(
       `UPDATE survey_distribution_tokens SET revoked_at = now() WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL RETURNING id`,
@@ -429,6 +474,7 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
          ROUND(AVG(sa.total_score) FILTER (WHERE sa.status = 'submitted')::numeric, 2)::text AS avg_score
        FROM survey_assignments sa
        JOIN survey_versions sv ON sv.id = sa.survey_version_id
+       JOIN survey_definitions sd ON sd.id = sv.survey_definition_id AND sd.tenant_id = sa.tenant_id
       WHERE sa.tenant_id = $1 AND sv.survey_definition_id = $2`,
       [tenantId, surveyDefinitionId],
     );
@@ -453,6 +499,7 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
          COUNT(*) FILTER (WHERE sa.nps_score <= 6 AND sa.nps_score IS NOT NULL)::int AS detractors
        FROM survey_assignments sa
        JOIN survey_versions sv ON sv.id = sa.survey_version_id
+       JOIN survey_definitions sd ON sd.id = sv.survey_definition_id AND sd.tenant_id = sa.tenant_id
       WHERE sa.tenant_id = $1 AND sv.survey_definition_id = $2 AND sa.status = 'submitted'`,
       [tenantId, surveyDefinitionId],
     );
@@ -478,7 +525,7 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
       netPromoterScore,
     };
 
-    // 4. Section averages
+    // 4. Section averages (tenant-isolated via definition ownership)
     const sectionRes = await this.pool.query(
       `SELECT
          sec.id AS section_id,
@@ -488,11 +535,12 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
          ROUND(AVG(ss.weighted_score)::numeric, 2)::text AS avg_weighted
        FROM survey_sections sec
        JOIN survey_versions sv ON sv.id = sec.survey_version_id
-       LEFT JOIN survey_section_scores ss ON ss.survey_section_id = sec.id
-      WHERE sv.survey_definition_id = $1
+       JOIN survey_definitions sd ON sd.id = sv.survey_definition_id AND sd.tenant_id = $1
+       LEFT JOIN survey_section_scores ss ON ss.survey_section_id = sec.id AND ss.tenant_id = $1
+      WHERE sv.survey_definition_id = $2
       GROUP BY sec.id, sec.code, sec.title, sec.sort_order
       ORDER BY sec.sort_order ASC`,
-      [surveyDefinitionId],
+      [tenantId, surveyDefinitionId],
     );
     const sectionAverages = sectionRes.rows.map((row) => ({
       sectionId: row.section_id as string,
@@ -502,7 +550,7 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
       averageWeightedScore: row.avg_weighted ? Number(row.avg_weighted) : null,
     }));
 
-    // 5. Question drop-off metrics (views vs answers)
+    // 5. Question drop-off metrics (views vs answers, tenant-isolated)
     const dropOffRes = await this.pool.query(
       `SELECT
          q.id AS question_id,
@@ -511,14 +559,17 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
          (SELECT COUNT(*)::int
             FROM survey_assignments sa2
             JOIN survey_versions sv2 ON sv2.id = sa2.survey_version_id
+            JOIN survey_definitions sd2 ON sd2.id = sv2.survey_definition_id AND sd2.tenant_id = sa2.tenant_id
            WHERE sv2.survey_definition_id = $1
              AND sa2.tenant_id = $2
              AND sa2.status IN ('in_progress', 'submitted')) AS views,
          (SELECT COUNT(DISTINCT ans.survey_assignment_id)::int
             FROM survey_answers ans
+            JOIN survey_assignments sa_ans ON sa_ans.id = ans.survey_assignment_id AND sa_ans.tenant_id = $2
            WHERE ans.survey_question_id = q.id) AS answers
        FROM survey_questions q
        JOIN survey_versions sv ON sv.id = q.survey_version_id
+       JOIN survey_definitions sd ON sd.id = sv.survey_definition_id AND sd.tenant_id = $2
       WHERE sv.survey_definition_id = $1 AND sv.is_current = true
       ORDER BY q.sort_order ASC`,
       [surveyDefinitionId, tenantId],
@@ -547,10 +598,25 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
       inProgressCount,
       expiredCount,
       completionRatePercent,
-      averageScore,
-      nps,
-      sectionAverages,
-      questionDropOff,
+      averageScore: smallCellSuppressed ? null : averageScore,
+      nps: smallCellSuppressed
+        ? {
+            totalNpsResponses: nps.totalNpsResponses,
+            promoterCount: 0,
+            passiveCount: 0,
+            detractorCount: 0,
+            promoterPercent: 0,
+            passivePercent: 0,
+            detractorPercent: 0,
+            netPromoterScore: null,
+          }
+        : nps,
+      sectionAverages: sectionAverages.map((section) => ({
+        ...section,
+        averagePercentageScore: smallCellSuppressed ? null : section.averagePercentageScore,
+        averageWeightedScore: smallCellSuppressed ? null : section.averageWeightedScore,
+      })),
+      questionDropOff: smallCellSuppressed ? [] : questionDropOff,
       smallCellSuppressed,
     };
   }
@@ -568,6 +634,7 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
          ROUND((COUNT(*) FILTER (WHERE sa.status = 'submitted')::numeric / NULLIF(COUNT(*), 0) * 100)::numeric, 2)::text AS completion_rate
        FROM survey_assignments sa
        JOIN survey_versions sv ON sv.id = sa.survey_version_id
+       JOIN survey_definitions sd ON sd.id = sv.survey_definition_id AND sd.tenant_id = sa.tenant_id
        LEFT JOIN complaints c ON sa.context_entity_type = 'complaint' AND c.id = sa.context_entity_id AND c.tenant_id = sa.tenant_id
       WHERE sa.tenant_id = $1 AND sv.survey_definition_id = $2
       GROUP BY sa.context_entity_type, sa.context_entity_id, COALESCE(c.category, sa.context_entity_type, 'General')
@@ -575,15 +642,22 @@ export class PgSurveyAdvancedRepository implements SurveyAdvancedRepository {
       [tenantId, surveyDefinitionId],
     );
 
-    const items: SurveyBenchmarkItem[] = r.rows.map((row) => ({
-      contextEntityType: row.context_entity_type as string,
-      contextEntityId: row.context_entity_id as string,
-      contextLabel: row.context_label as string,
-      responseCount: Number(row.response_count ?? 0),
-      averageScore: row.avg_score ? Number(row.avg_score) : null,
-      npsScore: row.avg_nps ? Number(row.avg_nps) : null,
-      completionRatePercent: row.completion_rate ? Number(row.completion_rate) : 0,
-    }));
+    // Small-cell privacy suppression: a category with fewer than 5 responses
+    // keeps its volume but never exposes score/NPS values that could be traced
+    // back to an individual respondent.
+    const items: SurveyBenchmarkItem[] = r.rows.map((row) => {
+      const responseCount = Number(row.response_count ?? 0);
+      const suppressed = responseCount > 0 && responseCount < 5;
+      return {
+        contextEntityType: row.context_entity_type as string,
+        contextEntityId: row.context_entity_id as string,
+        contextLabel: row.context_label as string,
+        responseCount,
+        averageScore: suppressed || !row.avg_score ? null : Number(row.avg_score),
+        npsScore: suppressed || !row.avg_nps ? null : Number(row.avg_nps),
+        completionRatePercent: row.completion_rate ? Number(row.completion_rate) : 0,
+      };
+    });
 
     return {
       surveyDefinitionId,

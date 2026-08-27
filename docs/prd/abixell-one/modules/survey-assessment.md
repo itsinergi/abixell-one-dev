@@ -33,11 +33,11 @@ This is a **generic** assessment engine. It must serve customer satisfaction, in
 |---|---|---|
 | **SUR-ADV-001** | **Feedback trigger → survey assignment** (orchestration): on a configured business lifecycle event, assign the configured survey to a validated respondent exactly once per source entity lifetime. | **DELIVERED** |
 | **SUR-ADV-002** | **Outcome → management attention** (orchestration): on submission, evaluate a configured question-code numeric threshold and raise an auditable management-attention signal on match. | **DELIVERED** |
-| **SUR-ADV-003** | Conditional branching and matrix/grid questions. | DEFERRED |
-| **SUR-ADV-004** | Weighted, section-level, percentage, and NPS scoring models. | DEFERRED |
-| **SUR-ADV-005** | Anonymous and public-token distribution to non-authenticated respondents. | DEFERRED |
-| **SUR-ADV-006** | Multi-language survey content. | DEFERRED |
-| **SUR-ADV-007** | Cross-survey analytics and benchmarking. | DEFERRED |
+| **SUR-ADV-003** | Conditional branching and matrix/grid questions. | **DELIVERED** |
+| **SUR-ADV-004** | Weighted, section-level, percentage, and NPS scoring models. | **DELIVERED** |
+| **SUR-ADV-005** | Anonymous and public-token distribution to non-authenticated respondents. | **DELIVERED** |
+| **SUR-ADV-006** | Multi-language survey content. | **DELIVERED** |
+| **SUR-ADV-007** | Cross-survey analytics and benchmarking. | **DELIVERED** |
 
 `SUR-ADV-001`/`SUR-ADV-002` are **orchestration-owned** (they span Survey, Service Quality, Notification, Events, Integration) and are classified Advanced, not Survey Core.
 
@@ -56,4 +56,4 @@ Orchestration: consumes Service Quality lifecycle events; never imports Service 
 
 ## Implementation reality
 
-Delivered in historical Phase 1D (engine, admin + respondent UX, stabilisation) and Phase 1E (the two Advanced orchestration capabilities). Evidence: `survey-engine.test.ts` (16), `survey-integration.test.ts` (18). Answers reference the immutable published question by key rather than snapshotting text, so historical meaning cannot drift.
+Delivered across Phase 1D (Core engine, admin + respondent UX, stabilisation), Phase 1E (the two Advanced orchestration capabilities `SUR-ADV-001`/`002`), and Wave A2 (`SUR-ADV-003`..`007`). Evidence: `survey-engine.test.ts` (16), `survey-integration.test.ts` (18), `wave-a2-integration.test.ts` (23). Migration `1778000000000_wave-a2-survey-reporting-advanced.cjs` introduces `survey_branching_rules`, `survey_matrix_rows`, `survey_matrix_answers`, `survey_section_scores`, `survey_distribution_tokens` (with atomic quota claim and compensating release on failure), `survey_translations`, and `survey.analytics.read` permission. Small-cell privacy suppression (<5 respondents) and strict tenant isolation via root definition joins are enforced on all analytics and benchmarking endpoints. Answers reference the immutable published question by key rather than snapshotting text, so historical meaning cannot drift.

@@ -118,6 +118,19 @@ export interface SurveyDistributionToken {
   createdAt: Date;
 }
 
+/** Why an atomic distribution-token claim was refused. */
+export type DistributionTokenRejectionReason =
+  | "not_found"
+  | "revoked"
+  | "expired"
+  | "quota_exceeded";
+
+export interface DistributionTokenClaimResult {
+  /** The token row *after* a successful claim, or `null` when refused. */
+  token: SurveyDistributionToken | null;
+  rejectionReason?: DistributionTokenRejectionReason;
+}
+
 export interface PublicSurveyView {
   definitionCode: string;
   definitionName: string;
@@ -318,6 +331,18 @@ export interface SurveyAdvancedRepository {
   findDistributionTokenById(tenantId: string, tokenId: string): Promise<SurveyDistributionToken | null>;
   listDistributionTokens(tenantId: string, surveyVersionId: string): Promise<SurveyDistributionToken[]>;
   incrementTokenUsage(tokenId: string): Promise<void>;
+  /**
+   * Atomically claims one use of a distribution token: validates
+   * revoked/expired/quota state and increments `used_count` in a single
+   * guarded UPDATE, so concurrent submissions on a `max_uses`-limited
+   * token can never both succeed (no stale-read race).
+   */
+  claimDistributionTokenUse(tokenHash: string): Promise<DistributionTokenClaimResult>;
+  /**
+   * Compensating release for a claim whose submission failed afterwards, so a
+   * rejected response never consumes quota permanently. Never drops below zero.
+   */
+  releaseDistributionTokenUse(tokenId: string): Promise<void>;
   revokeDistributionToken(tenantId: string, tokenId: string): Promise<boolean>;
 
   // --- Translations -------------------------------------------------------
