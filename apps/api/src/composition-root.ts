@@ -55,8 +55,11 @@ import { ComplaintConfigurationService } from "./application/complaint/complaint
 import { SalesService } from "./application/sales/sales.service.js";
 import { ServiceQualityService } from "./application/service-quality/service-quality.service.js";
 import { PgSurveyRepository } from "./infrastructure/persistence/repositories/survey.repository.pg.js";
+import { PgSurveyAdvancedRepository } from "./infrastructure/persistence/repositories/survey-advanced.repository.pg.js";
 import { SurveyService } from "./application/survey/survey.service.js";
 import { SurveyResponseService } from "./application/survey/survey-response.service.js";
+import { SurveyAnalyticsService } from "./application/survey/survey-analytics.service.js";
+import { SurveyPublicResponseService } from "./application/survey/survey-public.service.js";
 import { PgSurveyIntegrationRepository } from "./infrastructure/persistence/repositories/survey-integration.repository.pg.js";
 import { SurveyIntegrationService } from "./application/survey-integration/survey-integration.service.js";
 import { PgServiceOperationsRepository } from "./modules/service-operations/core/infrastructure/service-operations.repository.pg.js";
@@ -75,6 +78,10 @@ import { PgProjectDeliveryRepository } from "./modules/project-delivery/core/inf
 import { ProjectDeliveryService } from "./modules/project-delivery/core/application/project-delivery.service.js";
 import { PgReportingInsightRepository } from "./modules/reporting-insight/core/infrastructure/reporting-insight.repository.pg.js";
 import { ReportingInsightService } from "./modules/reporting-insight/core/application/reporting-insight.service.js";
+import { PgBiRepository } from "./modules/reporting-insight/advanced/infrastructure/bi.repository.pg.js";
+import { BiService } from "./modules/reporting-insight/advanced/application/bi.service.js";
+import { PgPredictiveRepository } from "./modules/reporting-insight/advanced/infrastructure/predictive.repository.pg.js";
+import { PredictiveService } from "./modules/reporting-insight/advanced/application/predictive.service.js";
 import { AdminConsoleService } from "./application/admin-console/admin-console.service.js";
 import type { EntityAuthorizationResolverRegistry } from "./application/document/entity-authorization-resolver.js";
 
@@ -304,6 +311,18 @@ export function buildContainer() {
     rbac,
   );
 
+  // Wave A2 / RPT-ADV-001 — Governed Self-Service BI and Reporting Warehouse.
+  // Static registry query compilation, zero dynamic arbitrary SQL or code
+  // execution, mandatory Data Scope projection and statement timeout.
+  const biRepo = new PgBiRepository(pool);
+  const reportingBi = new BiService(biRepo, audit, rbac);
+
+  // Wave A2 / RPT-ADV-002 — Deterministic Predictive Analytics Foundation.
+  // Moving-average + linear-trend regression across operational history,
+  // tenant-isolated, bounded computation, zero autonomous domain mutation.
+  const predictiveRepo = new PgPredictiveRepository(pool);
+  const reportingPredictive = new PredictiveService(predictiveRepo, audit, rbac);
+
   // Phase 11F — Business Admin Console plus governed User Role assignments.
   // Existing consolidation reads stay permission-gated; the narrow write
   // surface is owned transactionally by the RBAC repository using this same
@@ -391,8 +410,35 @@ export function buildContainer() {
   // entity (e.g. a Complaint) is authorized without Survey Core knowing that
   // module (ADR-0012). No Complaint/1E integration wired here.
   const surveyRepo = new PgSurveyRepository(pool);
-  const survey = new SurveyService(surveyRepo, audit, rbac, eventBus, documentEntityResolvers);
-  const surveyResponse = new SurveyResponseService(surveyRepo, audit, rbac, eventBus);
+  const surveyAdvancedRepo = new PgSurveyAdvancedRepository(pool);
+  const survey = new SurveyService(
+    surveyRepo,
+    audit,
+    rbac,
+    eventBus,
+    documentEntityResolvers,
+    surveyAdvancedRepo,
+  );
+  const surveyResponse = new SurveyResponseService(
+    surveyRepo,
+    audit,
+    rbac,
+    eventBus,
+    surveyAdvancedRepo,
+  );
+  const surveyAnalytics = new SurveyAnalyticsService(
+    surveyRepo,
+    surveyAdvancedRepo,
+    audit,
+    rbac,
+    eventBus,
+  );
+  const surveyPublic = new SurveyPublicResponseService(
+    surveyRepo,
+    surveyAdvancedRepo,
+    audit,
+    eventBus,
+  );
 
   // Survey Integration orchestrator (Checkpoint 1E.1) — turns a Complaint
   // customer-confirmation into a Survey Assignment WITHOUT coupling the two
@@ -513,6 +559,8 @@ export function buildContainer() {
     serviceQuality,
     survey,
     surveyResponse,
+    surveyAnalytics,
+    surveyPublic,
     surveyIntegration,
     serviceOperations,
     workforce,
@@ -522,6 +570,8 @@ export function buildContainer() {
     hse,
     projectDelivery,
     reportingInsight,
+    reportingBi,
+    reportingPredictive,
     adminConsole,
   };
 }

@@ -12,8 +12,10 @@
  */
 
 export type SurveyVersionStatus = "draft" | "published" | "retired";
-/** Full enum is future-ready; only the first three have behavior in 1D.1
- * (FD-1D-04). */
+/** Full enum is future-ready; only the first three had behavior in 1D.1
+ * (FD-1D-04). Wave A2 (SUR-ADV-003) activates `matrix_single_choice` and
+ * `matrix_rating`, which are answered via `survey_matrix_answers` (one row
+ * per matrix row) instead of the flat `survey_answers` table. */
 export type SurveyQuestionType =
   | "rating"
   | "single_choice"
@@ -22,14 +24,25 @@ export type SurveyQuestionType =
   | "multiple_choice"
   | "numeric"
   | "yes_no"
-  | "date";
+  | "date"
+  | "matrix_single_choice"
+  | "matrix_rating";
 export type SurveyAssignmentStatus =
   | "pending"
   | "in_progress"
   | "submitted"
   | "expired"
   | "cancelled";
-export type SurveyRespondentType = "user" | "customer_contact";
+/** Wave A2 (SUR-ADV-005) adds `anonymous` (no identity captured at all) and
+ * `public_link` (respondent reached the survey through a distribution
+ * token, identity intentionally not linked). Both never populate
+ * `respondentUserId`/`respondentCustomerContactId` — enforced in
+ * `SurveyPublicResponseService`, not just by convention. */
+export type SurveyRespondentType = "user" | "customer_contact" | "anonymous" | "public_link";
+
+/** Wave A2 (SUR-ADV-004). `sum` preserves the pre-Wave-A2 behavior (plain
+ * total of numeric/option scores). */
+export type SurveyScoringModel = "sum" | "weighted_average" | "percentage" | "nps";
 
 export interface SurveyDefinition {
   id: string;
@@ -50,6 +63,12 @@ export interface SurveyVersion {
   isCurrent: boolean;
   publishedAt: Date | null;
   createdAt: Date;
+  /** Wave A2 (SUR-ADV-004): scoring model applied when no section overrides
+   * it. Defaults to `sum` (pre-Wave-A2 behavior). */
+  scoringModel: SurveyScoringModel;
+  /** Wave A2 (SUR-ADV-006): locale used when a translation is missing for
+   * the respondent's requested locale. Defaults to `id-ID`. */
+  defaultLocale: string;
 }
 
 export interface SurveySection {
@@ -59,6 +78,9 @@ export interface SurveySection {
   title: string;
   description: string | null;
   sortOrder: number;
+  /** Wave A2 (SUR-ADV-004): null means "inherit the version's scoringModel". */
+  scoringModel: SurveyScoringModel | null;
+  weight: number;
 }
 
 export interface SurveyQuestion {
@@ -71,6 +93,9 @@ export interface SurveyQuestion {
   isRequired: boolean;
   config: Record<string, unknown>;
   sortOrder: number;
+  /** Wave A2 (SUR-ADV-004): multiplier applied to this question's score
+   * within its section's weighted_average calculation. Defaults to 1. */
+  weight: number;
 }
 
 export interface SurveyQuestionOption {
@@ -97,6 +122,16 @@ export interface SurveyAssignment {
   assignedBy: string | null;
   createdAt: Date;
   submittedAt: Date | null;
+  /** Wave A2 (SUR-ADV-004): null until the version's scoringModel is `nps`
+   * and a rating question is classified as the NPS driver question. */
+  npsScore: number | null;
+  /** Wave A2 (SUR-ADV-004): per-section score breakdown, keyed by
+   * survey_section_id — the same data persisted in survey_section_scores,
+   * denormalized here for fast read after submission. */
+  scoringBreakdown: Record<string, unknown> | null;
+  /** Wave A2 (SUR-ADV-005): set only for assignments created from a public
+   * distribution token (anonymous/public_link respondents). */
+  distributionTokenId: string | null;
 }
 
 export interface SurveyAnswer {
@@ -127,6 +162,8 @@ export interface SurveyRepository {
     surveyDefinitionId: string;
     versionNumber: number;
     createdBy: string;
+    scoringModel?: SurveyScoringModel;
+    defaultLocale?: string;
   }): Promise<SurveyVersion>;
   findVersionById(id: string): Promise<SurveyVersion | null>;
   findVersion(surveyDefinitionId: string, versionNumber: number): Promise<SurveyVersion | null>;
@@ -145,6 +182,8 @@ export interface SurveyRepository {
     title: string;
     description: string | null;
     sortOrder: number;
+    scoringModel?: SurveyScoringModel | null;
+    weight?: number;
   }): Promise<SurveySection>;
   listSections(surveyVersionId: string): Promise<SurveySection[]>;
   findSectionById(id: string): Promise<SurveySection | null>;
@@ -158,6 +197,7 @@ export interface SurveyRepository {
     isRequired: boolean;
     config: Record<string, unknown>;
     sortOrder: number;
+    weight?: number;
   }): Promise<SurveyQuestion>;
   listQuestions(surveyVersionId: string): Promise<SurveyQuestion[]>;
   findQuestionById(id: string): Promise<SurveyQuestion | null>;
@@ -191,13 +231,22 @@ export interface SurveyRepository {
      * layer) rather than a human assigner — the column is nullable and
      * attribution then lives in the audit/execution record (FD-1E-03). */
     assignedBy: string | null;
+    distributionTokenId?: string | null;
   }): Promise<SurveyAssignment>;
   findAssignmentById(id: string): Promise<SurveyAssignment | null>;
   listAssignmentsByRespondentUser(tenantId: string, userId: string): Promise<SurveyAssignment[]>;
   /** Guarded finalize: only succeeds if the assignment is still pending/
    * in_progress. Returns null if it was already submitted/cancelled/expired
    * (so submit is atomic and can never double-finalize). */
-  finalizeSubmission(id: string, totalScore: number | null, submittedAt: Date): Promise<SurveyAssignment | null>;
+  finalizeSubmission(
+    id: string,
+    totalScore: number | null,
+    submittedAt: Date,
+    options?: {
+      npsScore?: number | null;
+      scoringBreakdown?: Record<string, unknown> | null;
+    },
+  ): Promise<SurveyAssignment | null>;
   markInProgress(id: string): Promise<void>;
 
   // --- Answers -------------------------------------------------------------

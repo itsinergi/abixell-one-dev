@@ -16,6 +16,7 @@ import { SurveyListPage } from "./pages/survey/SurveyListPage";
 import { SurveyDetailPage } from "./pages/survey/SurveyDetailPage";
 import { MySurveysPage } from "./pages/survey/MySurveysPage";
 import { MySurveyDetailPage } from "./pages/survey/MySurveyDetailPage";
+import { PublicSurveyPage } from "./pages/survey/PublicSurveyPage";
 import { WorkOrderQueuePage } from "./modules/service-operations/WorkOrderQueuePage";
 import { WorkOrderDetailPage } from "./modules/service-operations/WorkOrderDetailPage";
 import { MyWorkPage } from "./modules/service-operations/MyWorkPage";
@@ -74,6 +75,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Wave A2 / SUR-ADV-005 — token-governed public route, intentionally
+          outside authentication and the internal workspace shell. */}
+      <Route path="/public/surveys/:token" element={<PublicSurveyPage />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<AppShell />}>
           <Route index element={<OverviewPage />} />

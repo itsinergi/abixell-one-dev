@@ -409,9 +409,11 @@ test("current repository has no blocking platform-boundary findings", async () =
   const result = validatePlatformBoundaries(repositoryFiles);
   assert.equal(result.blockerCount, 0, `\n${formatValidationReport(result)}`);
   // 75 through Phase 11B; Phase 11C adds `admin.console.read`, and Phase 11F
-  // adds exactly the governed `user.role.manage` capability. Pinned
-  // deliberately: an unexplained change means a permission was introduced or
-  // removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 88);
+  // adds exactly the governed `user.role.manage` capability. 88 through Wave
+  // A1; Wave A2 adds exactly `survey.analytics.read`, `reporting.bi.manage`,
+  // and `reporting.predictive.read` (SUR-ADV-007, RPT-ADV-001, RPT-ADV-002).
+  // Pinned deliberately: an unexplained change means a permission was
+  // introduced or removed without the accompanying governance step.
+  assert.equal(result.permissionCount, 91);
   assert.equal(result.advisoryCount, 1);
 });

@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.20 |
+| **Roadmap Baseline** | v1.21 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-26 |
-| **Measured at** | `master @ e7ab06a`, Wave A1 post-closure stabilization · five consecutive 390/390 full API runs plus one serial 390/390 run across 30 files · browser smoke PASS · 103 application base tables (104 incl. `pgmigrations`; plus 1 public VIEW) · 29 migrations · 88 permissions · head `1777000000000_wave-a1-service-quality-advanced` |
+| **Last Updated** | 2026-08-27 |
+| **Measured at** | `master` after Wave A2 delivery · 410/410 full API tests across 31 files · browser smoke PASS · 113 application base tables (114 incl. `pgmigrations`; plus 1 public VIEW) · 30 migrations · 91 permissions · head `1778000000000_wave-a2-survey-reporting-advanced` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.19 |
+| Metric | Value | Δ since v1.20 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
-| **Full Approved Roadmap Progress** | **56.4 %** | ▲ +5.4 pts |
+| **Full Approved Roadmap Progress** | **62.9 %** | ▲ +6.5 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -26,9 +26,9 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
 - **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, 11C, 11D, 11E, and 11F are recorded for governance traceability without moving either metric.
 
-The implementation measurement is pinned at `master @ e7ab06a` (Wave A1 delivery `95b346a`, closure correction `5eba91a`, metadata baseline `d9ed34b`, and post-closure stabilization): five consecutive 390/390 full API runs across 30 files plus a separate 390/390 `--no-file-parallelism` run, 103 application base tables (104 including `pgmigrations`, plus one public VIEW), 29 migrations, 88 permissions, and migration head `1777000000000_wave-a1-service-quality-advanced`. Relative to the v1.19 runtime baseline, Wave A1 adds 36 API tests, 3 files, 18 tables, 2 migrations, and 11 permissions; stabilization adds none of those and changes no roadmap point. Every figure here was read from the live database and final measured tree, not carried forward from a delivery report.
+The implementation measurement is pinned at `master` post Wave A2 delivery: 410/410 full API runs across 31 files, 113 application base tables (114 including `pgmigrations`, plus one public VIEW), 30 migrations, 91 permissions, and migration head `1778000000000_wave-a2-survey-reporting-advanced`. Relative to the v1.20 runtime baseline, Wave A2 adds 20 API tests, 1 test file, 10 base tables, 1 migration, and 3 permissions.
 
-Wave A1 is the first **weighted Advanced** delivery since Phase 1E, so unlike Phases 11A–11F it moves the Full Approved Roadmap metric. It completes all six units of Customer & Commercial Advanced (8 pts) and Service Quality Advanced (11 pts): sales pipeline with versioned quotations and effective-dated Price Books, the scoped self-service portal, multidimensional SLA with business calendars, RCA taxonomy with advanced CAPA, recurring-problem detection, and Founder-gated automation proposals. The automation surface only ever *proposes*; `requires_approval` is pinned true by a database CHECK, so an autonomous rule is not representable, and approving a proposal is routed through the same permission-checked service methods a human would use.
+Wave A2 delivers 23 weighted Advanced points across 7 units: Survey & Assessment Advanced (conditional branching & matrix questions 3, multi-dimensional/NPS scoring 2, anonymous/public-token distribution 3, multi-language survey localization 2, cross-survey analytics & benchmarking 3) and Reporting Advanced (governed self-service BI 5, deterministic operational forecasting 5). Survey versions remain immutable upon publication. Public tokens use SHA-256 hashing with zero identity leakage for anonymous respondents. Governed BI enforces static metadata catalogs with recursive CTE Customer Data Scope injection and zero arbitrary SQL/eval. Operational forecasting provides deterministic statistical forecasting (OLS regression, 7-day moving averages, seasonal decomposition, 95% confidence intervals) under strict tenant isolation.
 
 The correction commit `5eba91a` closes four defects found while validating `95b346a` — a permission bypass on automation-proposal approval, quotation money computed in binary floating point, Price Books resolved against a UTC rather than local date, and an automation-rules panel that was fetched but never rendered — plus the trailing-whitespace blocker. A regression test now pins exact-decimal quotation arithmetic and was verified against a deliberately reverted implementation.
 
@@ -53,7 +53,7 @@ The scheduler/outbox flakiness recorded at the prior closure baseline is resolve
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 16 / 16 | **100.0 %** |
 | Business Core | 117 / 117 | **100 %** |
-| Advanced Capabilities | 25 / 179 | **14.0 %** |
+| Advanced Capabilities | 48 / 179 | **26.8 %** |
 
 ## 3. Per-module progress
 
@@ -77,7 +77,7 @@ The scheduler/outbox flakiness recorded at the prior closure baseline is resolve
 |---|---:|---:|
 | Customer & Commercial | 17 / 17 | **100 %** |
 | Service Quality (Complaint) | 26 / 26 | **100 %** |
-| Survey & Assessment | 15 / 28 | 53.6 % |
+| Survey & Assessment | 28 / 28 | **100 %** |
 | Asset Core | 8 / 19 | 42.1 % |
 | Project Delivery Core | 8 / 21 | 38.1 % |
 | HSE Core | 9 / 23 | 39.1 % |
@@ -85,7 +85,7 @@ The scheduler/outbox flakiness recorded at the prior closure baseline is resolve
 | Finance Core | 12 / 33 | 36.4 % |
 | Workforce (HR) Core | 10 / 34 | 29.4 % |
 | Supply Chain Core | 14 / 36 | 38.9 % |
-| Reporting & Operational Insight | 10 / 20 | 50.0 % |
+| Reporting & Operational Insight | 20 / 20 | **100 %** |
 | Platform (cross-cutting Advanced) | 0 / 13 | 0 % |
 
 ---
@@ -99,7 +99,7 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16   (+7 — Phase H2 Production Hardening)
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed  25   (+19 — Wave A1)
+Advanced Capabilities  total 179   completed  48   (+19 — Wave A1; +23 — Wave A2)
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
@@ -109,18 +109,19 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 174 +  25 = 199
-  (199 + 0) / 353 × 100 = 56.4 %
+  completed   = 174 +  48 = 222
+  (222 + 0) / 353 × 100 = 62.9 %
 
-Wave A1 earned weight (all six units COMPLETED, full weight each):
-  Customer & Commercial Advanced   sales/opportunity/quotation      5
-                                   self-service portal expansion    3
-  Service Quality Advanced         multidimensional SLA + calendar  3
-                                   RCA taxonomy + advanced CAPA     3
-                                   recurring-problem detection      3
-                                   automatic mutation from feedback 2
-                                                                 = 19
-  Advanced completed 6 + 19 = 25 · Full completed 180 + 19 = 199
+Wave A2 earned weight (all seven units COMPLETED, full weight each):
+  Survey & Assessment Advanced     conditional branching & matrix questions  3
+                                   weighted / section / NPS scoring          2
+                                   anonymous & public-token distribution     3
+                                   multi-language survey content             2
+                                   cross-survey analytics & benchmarking     3
+  Reporting Advanced               self-service BI / reporting warehouse     5
+                                   predictive analytics across history       5
+                                                                          = 23
+  Advanced completed 25 + 23 = 48 · Full completed 199 + 23 = 222
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
@@ -155,21 +156,22 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 | AST.1–AST.4 | Phase 5; migration `1766000000000`; `asset.test.ts` (18); commits `b238b07`, `6ad67e7` |
 | SRV.1–SRV.3 | Phase 1D; migrations `1760000000000`, `1760000100000`; `survey-engine.test.ts` (16); commit `5c6e14a` |
 | ADV-SRV Survey-to-Action ×2 | Phase 1E; migrations `1761000000000`, `1762000000000`; `survey-integration.test.ts` (18); commits `8d64666`, `9fb8bbf`, `b7b6d64` |
+| CUS-ADV-001, CUS-ADV-002, SQ-ADV-001…004 | Wave A1; migrations `1776000000000`, `1777000000000`; `wave-a1-integration.test.ts` (36); commits `95b346a`, `5eba91a`, `d9ed34b`, `e7ab06a` |
+| SUR-ADV-003…007, RPT-ADV-001…002 | Wave A2; migration `1778000000000`; `wave-a2-integration.test.ts` (20); full test suite (410) |
 
 ## 6. Pending roadmap units
 
-All Advanced units except the two delivered Survey-to-Action units and the six units delivered in Wave A1. The remaining Advanced backlog is 154 points: Wave A2–A7 business-domain work totals 141 and Wave A8 platform cross-cutting work totals 13. These waves remain optional and out of Core scope. Platform Hardening has no pending roadmap units.
+All Advanced units except the delivered Survey-to-Action units (2), Wave A1 units (6), and Wave A2 units (7). The remaining Advanced backlog is 131 points: Wave A3–A7 business-domain work totals 118 and Wave A8 platform cross-cutting work totals 13. These waves remain optional and out of Core scope. Platform Hardening has no pending roadmap units.
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, and weighted Advanced Wave A1 are closed; all Core Product Readiness units and all six Wave A1 units are complete. Phase 11A established architecture/governance documentation, Phase 11B added repository boundary enforcement, Phase 11C delivered a read-only Business Admin Console, Phase 11D established the Platform Experience System & UX direction, Phase 11E implemented its first conservative Web shell/Admin UX slice, and Phase 11F delivered a bounded governed access-management slice; none of Phases 11A–11F delivered a weighted product unit.
-
-Phase 11C delivered the READ foundation of the Business Admin Console: a consolidated view of users, roles, the permission catalogue, module activation, workflow definitions, and recent activity, each gated by the permission that already governs it. Phase 11D documented the UX specification and multi-device presentation rules. Phase 11E implemented static grouped navigation, responsive accessible shell behavior, deterministic presentation states, and durable read-only Admin sections without changing backend authority. Phase 11F enables only permission-governed assignment and removal of existing tenant roles with explicit tenant, organization-unit, or customer Data Scope, plus privacy-minimized access review and one-role permission summaries. Its closure hardens authentication and authorization for inactive/deleted/tenant-moved actors, monotonically invalidates stale scoped assignments, couples reporting scope to effective permission grants, and supports correction-only removal of retained unavailable assignments. Governed user provisioning and all user profile/status mutation UI/API remain absent; role definitions, role-permission composition, permission-catalog mutation, bulk permission matrices, and every broader console-editing surface remain unstarted. The Platform Architect / Builder Console, Builder UI/API/runtime, executable Module Manifest runtime, dynamic packages, schema/query editors, scripting/DSL, remaining Advanced capability Waves A2–A8, Phase 11G, Client Extensions, and other new business functionality also remain unstarted.
+**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Wave A1, and weighted Advanced Wave A2 are closed; all Core Product Readiness units and all Wave A1/A2 units are complete.
 
 ## 8. Progress change log
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.21 | 2026-08-27 | 100.0 % | 62.9 % | **Wave A2 (Survey Advanced completion & Reporting Advanced) delivered — weighted.** Numerator +23 across all seven units: Survey & Assessment Advanced (conditional branching & matrix questions 3, multi-dimensional/NPS scoring 2, anonymous & public-token distribution 3, multi-language survey localization 2, cross-survey analytics & benchmarking 3) and Reporting Advanced (governed self-service BI 5, deterministic operational forecasting 5). Advanced 25 → 48; Full 199 → 222. Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Live database evidence: 113 application base tables (114 including `pgmigrations`, plus one public VIEW), 30 migrations, 91 permissions (0 duplicate codes, 3 added by Wave A2: `survey.analytics.read`, `reporting.bi.manage`, `reporting.predictive.read`), and migration head `1778000000000_wave-a2-survey-reporting-advanced`. Test evidence: 410/410 full API runs across 31 files (Wave A2 adds 20 tests in `wave-a2-integration.test.ts`). Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation. Survey versions remain immutable upon publication; public distribution uses SHA-256 token hashing; governed BI uses static metadata catalogs with recursive CTE Customer Data Scope injection and zero arbitrary SQL/eval; predictive analytics uses bounded statistical methods (OLS, moving averages, seasonal decomposition) with strict tenant isolation. Waves A3–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.20 | 2026-08-26 | 100.0 % | 56.4 % | **Wave A1 (Advanced Commercial & Service Quality) delivered — weighted.** Numerator +19 across all six units: Customer & Commercial Advanced (sales/opportunity/quotation 5, self-service portal 3) and Service Quality Advanced (multidimensional SLA + calendar 3, RCA taxonomy + advanced CAPA 3, recurring-problem detection 3, automatic mutation from feedback 2). Advanced 6 → 25; Full 180 → 199. Denominator unchanged at 174 / 353 — pure earned progress, no scope added or reclassified. Core Readiness unchanged at 100.0 %. Runtime baseline `master @ e7ab06a` = delivery `95b346a`, closure correction `5eba91a`, metadata baseline `d9ed34b`, and post-closure stabilization. The stabilization preserves the global Scheduler registry/lease contract while isolating integration fixtures on unique registered rows with production handler keys, and keeps endpoint inactive-window boundaries entirely in PostgreSQL to avoid `timestamptz` precision loss through JavaScript `Date`. It adds no migration, table, permission, API route, test, or roadmap point. Final evidence is five consecutive 390/390 full API runs across 30 files, a separate 390/390 `--no-file-parallelism` run, focused Scheduler/outbox 27/27, focused Wave A1 36/36, typecheck, lint, build, PWA validation, 23/23 platform-boundary tests, 0 blocking boundary findings, `npm audit --omit=dev` (0 vulnerabilities), and the required 10-step browser E2E PASS. Live database evidence remains 103 application base tables (104 including `pgmigrations`, plus one public VIEW), 29 migrations, 88 permissions (0 duplicate codes, 11 added by Wave A1), and head `1777000000000_wave-a1-service-quality-advanced`. Launcher `db:up` remains **PARTIAL / ENVIRONMENT-BLOCKED**, not falsely reported PASS, because Docker is unavailable and native Windows `postgres.exe` owns port 5432. Automation only ever proposes: `requires_approval` is pinned true by a database CHECK and approval is routed through permission-checked service methods. Waves A2–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.19 | 2026-08-25 | 100.0 % | 51.0 % | **Phase 11F final access-lifecycle hardening and closure completed (unweighted).** No product unit, numerator, or denominator change. Runtime baseline `master @ 63e43d1`, directly descended from the v1.18 metadata commit, closes inactive/deleted-user authentication, refresh-token revocation, live actor/tenant JWT revalidation, monotonic stale-scope assignment invalidation and correction, and effective permission-coupled Reporting scope. Adds one migration and 18 API tests with no table or permission; evidence is 354/354 tests across 27 files, 85 tables, 27 migrations, and 77 permissions, with complete governed-access and lifecycle real-browser smoke passing separately. Governed user provisioning is absent; Builder/Module Manifest runtime, Advanced waves, and Client Extensions remain unstarted. |
 | v1.18 | 2026-08-24 | 100.0 % | 51.0 % | **Phase 11F Business Admin Console Governed Access Management completed (unweighted).** No product unit, numerator, or denominator change. Runtime baseline `master @ fc01876` adds tenant-local privacy-minimized access review, on-demand one-role permission summaries, and separately authorized assignment/removal of existing roles with explicit Data Scope, exact-assignment uniqueness, atomic privacy-safe audit, and manager-lockout safeguards. Adds one migration and one permission with no table; evidence is 336/336 API tests across 26 files, 85 tables, 26 migrations, and 77 permissions, with real-browser governed add/remove and responsive dialog smoke passing separately. No Builder/manifest/package runtime, broad administration editing, Advanced wave, Client Extension, or weighted business capability. |

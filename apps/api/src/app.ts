@@ -29,6 +29,8 @@ import { registerSiteRoutes } from "./interfaces/http/routes/sites.js";
 import { registerServiceRoutes } from "./interfaces/http/routes/services.js";
 import { registerComplaintRoutes } from "./interfaces/http/routes/complaints.js";
 import { registerSurveyRoutes } from "./interfaces/http/routes/surveys.js";
+import { registerSurveyAdvancedRoutes } from "./interfaces/http/routes/surveys-advanced.js";
+import { registerPublicSurveyRoutes } from "./interfaces/http/routes/public-surveys.js";
 import { registerAdminConsoleRoutes } from "./interfaces/http/routes/admin-console.js";
 import { registerSalesRoutes } from "./interfaces/http/routes/sales.js";
 import { registerServiceQualityRoutes } from "./interfaces/http/routes/service-quality.js";
@@ -40,6 +42,7 @@ import { registerFinanceRoutes } from "./modules/finance/core/api/finance.routes
 import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
 import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
+import { registerReportingAdvancedRoutes } from "./interfaces/http/routes/reporting-advanced.js";
 import { buildContainer } from "./composition-root.js";
 import { getAllowedCorsOrigins, getGlobalRateLimitConfig, isCorsOriginAllowed } from "./infrastructure/security/http-hardening.js";
 
@@ -145,6 +148,8 @@ export function buildApp(): FastifyInstance {
     registerServiceRoutes(scoped, container);
     registerComplaintRoutes(scoped, container);
     registerSurveyRoutes(scoped, container);
+    registerSurveyAdvancedRoutes(scoped, container);
+    registerPublicSurveyRoutes(scoped, container);
     registerServiceOperationsRoutes(scoped, container);
     registerWorkforceRoutes(scoped, container);
     registerSupplyChainRoutes(scoped, container);
@@ -156,6 +161,8 @@ export function buildApp(): FastifyInstance {
     registerProjectDeliveryRoutes(scoped, container);
     // Phase 9 — Reporting & Operational Insight Core
     registerReportingInsightRoutes(scoped, container);
+    // Wave A2 / RPT-ADV-001…002 — governed BI and predictive analytics
+    registerReportingAdvancedRoutes(scoped, container);
     // Phase 11F — Business Admin Console with governed User Role assignments
     registerAdminConsoleRoutes(scoped, container);
     // Wave A1 / CUS-ADV-001 — sales pipeline, quotation, and pricing

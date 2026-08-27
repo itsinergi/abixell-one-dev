@@ -9,10 +9,14 @@ import type { Container } from "../../../composition-root.js";
  * vertical slice — no Complaint/1E integration.
  */
 
+const scoringModelSchema = z.enum(["sum", "weighted_average", "percentage", "nps"]);
+
 const createDefinitionSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
   description: z.string().nullable().optional(),
+  scoringModel: scoringModelSchema.optional(),
+  defaultLocale: z.string().min(2).optional(),
 });
 
 const addSectionSchema = z.object({
@@ -20,6 +24,8 @@ const addSectionSchema = z.object({
   title: z.string().min(1),
   description: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),
+  scoringModel: scoringModelSchema.nullable().optional(),
+  weight: z.number().min(0).optional(),
 });
 
 const addQuestionSchema = z.object({
@@ -30,6 +36,7 @@ const addQuestionSchema = z.object({
   isRequired: z.boolean().optional(),
   config: z.record(z.unknown()).optional(),
   sortOrder: z.number().int().optional(),
+  weight: z.number().min(0).optional(),
 });
 
 const addOptionSchema = z.object({
@@ -57,6 +64,15 @@ const saveAnswersSchema = z.object({
       optionIds: z.array(z.string().uuid()).optional(),
     }),
   ),
+  matrixAnswers: z.array(
+    z.object({
+      questionId: z.string().uuid(),
+      matrixRowId: z.string().uuid(),
+      valueText: z.string().nullable().optional(),
+      valueNumeric: z.number().nullable().optional(),
+      selectedOptionId: z.string().uuid().nullable().optional(),
+    }),
+  ).optional(),
 });
 
 export function registerSurveyRoutes(app: FastifyInstance, container: Container) {
@@ -163,7 +179,7 @@ export function registerSurveyRoutes(app: FastifyInstance, container: Container)
   app.post("/survey-assignments/:id/answers", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = saveAnswersSchema.parse(request.body);
-    await container.surveyResponse.saveAnswers(request.actor!, id, body.answers);
+    await container.surveyResponse.saveAnswers(request.actor!, id, body.answers, body.matrixAnswers);
     return reply.send({ ok: true });
   });
 

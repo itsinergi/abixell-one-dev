@@ -3,14 +3,14 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.20 and `docs/canonical/product-progress.md` v1.20 |
-| Measured at | `master @ e7ab06a` |
-| Current point | Full Approved Roadmap Progress: 56.4% (199 / 353 pts) |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.21 and `docs/canonical/product-progress.md` v1.21 |
+| Measured at | `master` after Wave A2 delivery |
+| Current point | Full Approved Roadmap Progress: 62.9% (222 / 353 pts) |
 | Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2, Phase 11F, and **Wave A1 are COMPLETED**; no wave is currently active. Waves A2–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. This document starts no implementation |
+| Current authorization state | Phase H2, Phase 11F, Wave A1, and **Wave A2 are COMPLETED**; no wave is currently active. Waves A3–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. This document starts no implementation |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -20,7 +20,7 @@ This document explains the remaining path from the current approved baseline to 
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed  25
+Advanced Capabilities  total 179   completed  48
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174
@@ -29,8 +29,8 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353
-  completed   = 174 +  25 = 199   (Advanced 6 + Wave A1 19)
-  199 / 353 = 56.4%
+  completed   = 174 +  48 = 222   (Advanced 6 + Wave A1 19 + Wave A2 23)
+  222 / 353 = 62.9%
 ```
 
 Remaining to 100%:
@@ -38,8 +38,8 @@ Remaining to 100%:
 | Layer | Remaining | Meaning |
 |---|---:|---|
 | Platform Hardening | 0 pts | Phase H2 production gate completed |
-| Advanced Capabilities | 154 pts | All Advanced backlog not yet delivered |
-| Total remaining | 154 pts | 353 - 199 |
+| Advanced Capabilities | 131 pts | All Advanced backlog not yet delivered |
+| Total remaining | 131 pts | 353 - 222 |
 
 Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
 traceability and move neither metric; the numbers above already reflect their closure.
@@ -56,8 +56,8 @@ The recommended route is:
 | Seq | Phase | Scope | Pts | Cumulative pts | Full progress | Core readiness |
 |---:|---|---|---:|---:|---:|---:|
 | 0 | ~~Prior baseline~~ | Completed work through Phase H2 Production Gate and unweighted Phase 11F closure | 0 | 180 / 353 | 51.0% | 100.0% |
-| 1 | ~~Wave A1~~ **(COMPLETED — current baseline)** | Customer & Commercial Advanced + Service Quality Advanced | 19 | **199 / 353** | **56.4%** | 100.0% |
-| 2 | Wave A2 | Survey Advanced completion + Reporting Advanced | 23 | 222 / 353 | 62.9% | 100.0% |
+| 1 | ~~Wave A1~~ | Customer & Commercial Advanced + Service Quality Advanced | 19 | 199 / 353 | 56.4% | 100.0% |
+| 2 | ~~Wave A2~~ **(COMPLETED — current baseline)** | Survey Advanced completion + Reporting Advanced | 23 | **222 / 353** | **62.9%** | **100.0%** |
 | 3 | Wave A3 | Service Operations Advanced + Asset Advanced | 24 | 246 / 353 | 69.7% | 100.0% |
 | 4 | Wave A4 | Workforce Advanced | 24 | 270 / 353 | 76.5% | 100.0% |
 | 5 | Wave A5 | Supply Chain Advanced | 22 | 292 / 353 | 82.7% | 100.0% |
@@ -65,7 +65,7 @@ The recommended route is:
 | 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 340 / 353 | 96.3% | 100.0% |
 | 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 353 / 353 | 100.0% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2 and Wave A1 are earned and complete; the current baseline is now row 1. Waves A2–A8 remain planned / optional and none is authorized. No wave is started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2, Wave A1, and Wave A2 are earned and complete; the current baseline is now row 2. Waves A3–A8 remain planned / optional and none is authorized. No wave is started by this document.
 
 ## 3. Phase H2 - Production Gate
 
@@ -143,30 +143,33 @@ lost; each needs a separate Founder directive.
 
 ## 5. Wave A2 - Survey and Reporting Advanced
 
-Wave A2 finishes Survey Advanced depth and expands Reporting beyond standard operational reports.
+Wave A2 finishes Survey Advanced depth and expands Reporting beyond standard operational reports. It is
+**COMPLETED** at baseline v1.21; all 23 points below are earned, and the canonical documents carry the validation evidence.
 
-| Area | Unit | Capability | Pts |
-|---|---|---|---:|
-| Survey & Assessment | SUR-ADV-003 | Conditional branching and matrix/grid questions | 3 |
-| Survey & Assessment | SUR-ADV-004 | Weighted, section-level, percentage, and NPS scoring | 2 |
-| Survey & Assessment | SUR-ADV-005 | Anonymous and public-token distribution | 3 |
-| Survey & Assessment | SUR-ADV-006 | Multi-language survey content | 2 |
-| Survey & Assessment | SUR-ADV-007 | Cross-survey analytics and benchmarking | 3 |
-| Reporting | RPT-ADV-001 | Self-service BI and reporting warehouse | 5 |
-| Reporting | RPT-ADV-002 | Predictive analytics across operational history | 5 |
-| Total | Wave A2 |  | 23 |
+| Area | Unit | Capability | Pts | Status |
+|---|---|---|---:|---|
+| Survey & Assessment | SUR-ADV-003 | Conditional branching and matrix/grid questions | 3 | COMPLETED |
+| Survey & Assessment | SUR-ADV-004 | Weighted, section-level, percentage, and NPS scoring | 2 | COMPLETED |
+| Survey & Assessment | SUR-ADV-005 | Anonymous and public-token distribution | 3 | COMPLETED |
+| Survey & Assessment | SUR-ADV-006 | Multi-language survey content | 2 | COMPLETED |
+| Survey & Assessment | SUR-ADV-007 | Cross-survey analytics and benchmarking | 3 | COMPLETED |
+| Reporting | RPT-ADV-001 | Self-service BI and reporting warehouse | 5 | COMPLETED |
+| Reporting | RPT-ADV-002 | Predictive analytics across operational history | 5 | COMPLETED |
+| Total | Wave A2 |  | 23 | COMPLETED |
 
-Expected result:
+Result (earned):
 
-| Metric | After Wave A1 | After Wave A2 |
+| Metric | Before Wave A2 | After Wave A2 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 199 / 353 (56.4%) | 222 / 353 (62.9%) |
+| Full Approved Roadmap Progress | 199 / 353 (56.4%) | **222 / 353 (62.9%)** |
 
 Recommended boundaries:
 
 - Survey question history must remain immutable after publication.
-- Anonymous/public responses need explicit privacy and abuse controls.
-- Reporting Advanced must not weaken Data Scope or tenant isolation.
+- Anonymous/public responses need explicit privacy and abuse controls (token hashing, small-cell suppression).
+- Reporting Advanced must not weaken Data Scope or tenant isolation (governed BI registry, parameterized projection, bounded compute).
+
+All boundaries held. Governed BI uses static whitelist metadata models with recursive CTE scope injection and zero arbitrary SQL/eval. Predictive analytics uses bounded statistical methods (OLS, moving averages, seasonal decomposition) with strict tenant isolation. Public survey distribution uses SHA-256 token hashing and zero identity leakage for anonymous responses.
 
 ## 6. Wave A3 - Service Operations and Asset Advanced
 

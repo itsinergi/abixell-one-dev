@@ -1,26 +1,44 @@
 /**
- * Checkpoint 1D.2 — Respondent survey form (survey.respond). Renders questions
- * from the definition, saves drafts, and submits. A submitted survey is
- * read-only and shows the total score from the assignment. Answers are never
- * cached offline (business data) — failed saves surface real errors.
+ * Checkpoint 1D.2 + Wave A2 (SUR-ADV-003…004): authenticated respondent
+ * survey form with all activated question types, matrix/grid answers,
+ * deterministic forward branching, draft save, and backend-authoritative submit.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { api, ApiError, type SurveyAnswerInput, type SurveyRespondentView } from "../../lib/api";
+import {
+  api,
+  ApiError,
+  type SurveyAnswerInput,
+  type SurveyMatrixAnswerInput,
+  type SurveyQuestion,
+  type SurveyRespondentView,
+} from "../../lib/api";
 import {
   Alert,
   Badge,
   Button,
   Card,
   Field,
+  Input,
   PageHeader,
   Spinner,
   StatusPill,
   Textarea,
 } from "../../shell/components/ui";
+import {
+  determineSkippedSurveyQuestionIds,
+  sortSurveyQuestions,
+  type ResponseAnswerState,
+} from "./survey-response";
 
-type LocalAnswer = { valueNumeric?: number | null; valueText?: string | null; optionIds?: string[] };
+type LocalAnswer = ResponseAnswerState;
+
+type LocalMatrixAnswer = {
+  selectedOptionId?: string | null;
+  valueNumeric?: number | null;
+  valueText?: string | null;
+};
 
 export function MySurveyDetailPage() {
   const { session } = useAuth();
@@ -30,6 +48,7 @@ export function MySurveyDetailPage() {
 
   const [view, setView] = useState<SurveyRespondentView | null>(null);
   const [answers, setAnswers] = useState<Record<string, LocalAnswer>>({});
+  const [matrixAnswers, setMatrixAnswers] = useState<Record<string, LocalMatrixAnswer>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -42,15 +61,26 @@ export function MySurveyDetailPage() {
     try {
       const v = await api.surveyAssignment(token, assignmentId);
       setView(v);
+
       const initial: Record<string, LocalAnswer> = {};
-      for (const a of v.answers) {
-        initial[a.questionId] = {
-          valueNumeric: a.valueNumeric,
-          valueText: a.valueText,
-          optionIds: a.selectedOptionIds,
+      for (const answer of v.answers) {
+        initial[answer.questionId] = {
+          valueNumeric: answer.valueNumeric,
+          valueText: answer.valueText,
+          optionIds: answer.selectedOptionIds,
         };
       }
       setAnswers(initial);
+
+      const initialMatrix: Record<string, LocalMatrixAnswer> = {};
+      for (const matrixAnswer of v.matrixAnswers ?? []) {
+        initialMatrix[`${matrixAnswer.questionId}:${matrixAnswer.matrixRowId}`] = {
+          selectedOptionId: matrixAnswer.selectedOptionId,
+          valueNumeric: matrixAnswer.valueNumeric,
+          valueText: matrixAnswer.valueText,
+        };
+      }
+      setMatrixAnswers(initialMatrix);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load survey");
     } finally {
@@ -64,29 +94,128 @@ export function MySurveyDetailPage() {
 
   const submitted = view?.assignment.status === "submitted";
 
-  const payload = useMemo<SurveyAnswerInput[]>(() => {
+  const sortedQuestions = useMemo(() => {
     if (!view) return [];
-    const out: SurveyAnswerInput[] = [];
-    for (const q of view.questions) {
-      const a = answers[q.id];
-      if (!a) continue;
-      if (q.questionType === "rating" && a.valueNumeric != null) {
-        out.push({ questionId: q.id, valueNumeric: a.valueNumeric });
-      } else if (q.questionType === "single_choice" && a.optionIds && a.optionIds.length === 1) {
-        out.push({ questionId: q.id, optionIds: a.optionIds });
-      } else if (q.questionType === "long_text" && a.valueText && a.valueText.trim()) {
-        out.push({ questionId: q.id, valueText: a.valueText });
+    return sortSurveyQuestions(view.sections, view.questions);
+  }, [view]);
+
+  const branchingAnswerState = useMemo(() => {
+    const combined: Record<string, LocalAnswer> = { ...answers };
+    if (!view) return combined;
+
+    for (const question of view.questions) {
+      if (
+        question.questionType === "matrix_single_choice" ||
+        question.questionType === "matrix_rating"
+      ) {
+        const answeredCount = (question.matrixRows ?? []).filter((row) => {
+          const answer = matrixAnswers[`${question.id}:${row.id}`];
+          return (
+            Boolean(answer?.selectedOptionId) ||
+            (answer?.valueNumeric !== null && answer?.valueNumeric !== undefined) ||
+            Boolean(answer?.valueText && answer.valueText.trim().length > 0)
+          );
+        }).length;
+        combined[question.id] = {
+          ...combined[question.id],
+          matrixRowsAnsweredCount: answeredCount,
+        };
       }
     }
-    return out;
-  }, [view, answers]);
+
+    return combined;
+  }, [answers, matrixAnswers, view]);
+
+  const skippedQuestionIds = useMemo(() => {
+    if (!view || (view.branchingRules ?? []).length === 0) return new Set<string>();
+    return determineSkippedSurveyQuestionIds(sortedQuestions, view.branchingRules, branchingAnswerState);
+  }, [view, sortedQuestions, branchingAnswerState]);
+
+  const payload = useMemo<SurveyAnswerInput[]>(() => {
+    if (!view) return [];
+    const output: SurveyAnswerInput[] = [];
+
+    for (const question of sortedQuestions) {
+      if (skippedQuestionIds.has(question.id)) continue;
+      const answer = answers[question.id];
+      if (!answer) continue;
+
+      if (
+        (question.questionType === "rating" || question.questionType === "numeric") &&
+        answer.valueNumeric !== null &&
+        answer.valueNumeric !== undefined
+      ) {
+        output.push({ questionId: question.id, valueNumeric: answer.valueNumeric });
+      } else if (
+        question.questionType === "single_choice" &&
+        answer.optionIds &&
+        answer.optionIds.length === 1
+      ) {
+        output.push({ questionId: question.id, optionIds: answer.optionIds });
+      } else if (
+        question.questionType === "multiple_choice" &&
+        answer.optionIds &&
+        answer.optionIds.length > 0
+      ) {
+        output.push({ questionId: question.id, optionIds: answer.optionIds });
+      } else if (
+        ["long_text", "short_text", "date", "yes_no"].includes(question.questionType) &&
+        answer.valueText &&
+        answer.valueText.trim()
+      ) {
+        output.push({ questionId: question.id, valueText: answer.valueText });
+      }
+    }
+
+    return output;
+  }, [view, sortedQuestions, skippedQuestionIds, answers]);
+
+  const matrixPayload = useMemo<SurveyMatrixAnswerInput[]>(() => {
+    if (!view) return [];
+    const output: SurveyMatrixAnswerInput[] = [];
+
+    for (const question of sortedQuestions) {
+      if (skippedQuestionIds.has(question.id)) continue;
+      if (
+        question.questionType !== "matrix_single_choice" &&
+        question.questionType !== "matrix_rating"
+      ) {
+        continue;
+      }
+
+      for (const row of question.matrixRows ?? []) {
+        const answer = matrixAnswers[`${question.id}:${row.id}`];
+        if (!answer) continue;
+
+        if (question.questionType === "matrix_single_choice" && answer.selectedOptionId) {
+          output.push({
+            questionId: question.id,
+            matrixRowId: row.id,
+            selectedOptionId: answer.selectedOptionId,
+          });
+        } else if (
+          question.questionType === "matrix_rating" &&
+          answer.valueNumeric !== null &&
+          answer.valueNumeric !== undefined
+        ) {
+          output.push({
+            questionId: question.id,
+            matrixRowId: row.id,
+            valueNumeric: answer.valueNumeric,
+          });
+        }
+      }
+    }
+
+    return output;
+  }, [view, sortedQuestions, skippedQuestionIds, matrixAnswers]);
 
   async function saveDraft() {
     if (!assignmentId) return;
     setBusy(true);
     setNotice(null);
     try {
-      await api.saveSurveyAnswers(token, assignmentId, payload);
+      await api.saveSurveyAnswers(token, assignmentId, payload, matrixPayload);
       setNotice({ tone: "success", text: "Draft saved." });
       await load();
     } catch (err) {
@@ -98,16 +227,39 @@ export function MySurveyDetailPage() {
 
   async function submit() {
     if (!assignmentId || !view) return;
-    // Client-side required check (backend is authoritative).
-    const missing = view.questions.filter((q) => q.isRequired && !payload.some((p) => p.questionId === q.id));
+
+    // Client-side branching-aware required check; backend remains authoritative.
+    const missing = sortedQuestions.filter((question) => {
+      if (!question.isRequired || skippedQuestionIds.has(question.id)) return false;
+
+      if (
+        question.questionType === "matrix_single_choice" ||
+        question.questionType === "matrix_rating"
+      ) {
+        const rows = question.matrixRows ?? [];
+        if (rows.length === 0) return false;
+        return rows.some((row) => {
+          const answer = matrixAnswers[`${question.id}:${row.id}`];
+          if (question.questionType === "matrix_single_choice") return !answer?.selectedOptionId;
+          return answer?.valueNumeric === null || answer?.valueNumeric === undefined;
+        });
+      }
+
+      return !payload.some((answer) => answer.questionId === question.id);
+    });
+
     if (missing.length > 0) {
-      setNotice({ tone: "error", text: `Please answer required question(s): ${missing.map((m) => m.text).join(", ")}` });
+      setNotice({
+        tone: "error",
+        text: `Please answer required question(s): ${missing.map((question) => question.text).join(", ")}`,
+      });
       return;
     }
+
     setBusy(true);
     setNotice(null);
     try {
-      await api.saveSurveyAnswers(token, assignmentId, payload);
+      await api.saveSurveyAnswers(token, assignmentId, payload, matrixPayload);
       await api.submitSurvey(token, assignmentId);
       setNotice({ tone: "success", text: "Survey submitted. Thank you!" });
       await load();
@@ -119,7 +271,7 @@ export function MySurveyDetailPage() {
   }
 
   if (loading) return <Spinner label="Loading survey…" />;
-  if (error)
+  if (error) {
     return (
       <div className="space-y-3">
         <Alert tone="error">{error}</Alert>
@@ -128,6 +280,7 @@ export function MySurveyDetailPage() {
         </Button>
       </div>
     );
+  }
   if (!view) return null;
 
   return (
@@ -147,6 +300,9 @@ export function MySurveyDetailPage() {
         {submitted && view.assignment.totalScore != null && (
           <Badge>Total score: {view.assignment.totalScore}</Badge>
         )}
+        {!submitted && skippedQuestionIds.size > 0 && (
+          <Badge>{skippedQuestionIds.size} question(s) skipped by branching</Badge>
+        )}
       </div>
 
       {notice && (
@@ -155,59 +311,79 @@ export function MySurveyDetailPage() {
         </div>
       )}
 
-      <div className="max-w-2xl space-y-4">
-        {view.questions.map((q, i) => {
-          const a = answers[q.id] ?? {};
+      <div className="max-w-3xl space-y-6">
+        {view.sections.map((section) => {
+          const visibleQuestions = sortedQuestions.filter(
+            (question) => question.sectionId === section.id && !skippedQuestionIds.has(question.id),
+          );
+          if (visibleQuestions.length === 0) return null;
+
           return (
-            <Card key={q.id}>
-              <div className="mb-2 text-sm font-medium text-slate-800">
-                {i + 1}. {q.text}
-                {q.isRequired && <span className="ml-1 text-red-500">*</span>}
+            <section key={section.id} className="space-y-3">
+              <div className="border-l-4 border-slate-900 pl-3">
+                <h2 className="text-base font-semibold text-slate-900">{section.title}</h2>
+                {section.description && <p className="text-xs text-slate-500">{section.description}</p>}
               </div>
 
-              {q.questionType === "rating" && (
-                <RatingInput
-                  min={Number(q.config.min ?? 1)}
-                  max={Number(q.config.max ?? 5)}
-                  value={a.valueNumeric ?? null}
+              {visibleQuestions.map((question, index) => (
+                <RespondentQuestion
+                  key={question.id}
+                  index={index + 1}
+                  question={question}
+                  answer={answers[question.id] ?? {}}
+                  matrixAnswers={matrixAnswers}
                   disabled={submitted}
-                  onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: { valueNumeric: v } }))}
+                  onAnswerChange={(update) =>
+                    setAnswers((previous) => ({
+                      ...previous,
+                      [question.id]: { ...previous[question.id], ...update },
+                    }))
+                  }
+                  onMatrixAnswerChange={(rowId, update) =>
+                    setMatrixAnswers((previous) => ({
+                      ...previous,
+                      [`${question.id}:${rowId}`]: {
+                        ...previous[`${question.id}:${rowId}`],
+                        ...update,
+                      },
+                    }))
+                  }
                 />
-              )}
-
-              {q.questionType === "single_choice" && (
-                <div className="space-y-1">
-                  {q.options.map((o) => (
-                    <label key={o.id} className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="radio"
-                        name={`q-${q.id}`}
-                        disabled={submitted}
-                        checked={(a.optionIds ?? [])[0] === o.id}
-                        onChange={() => setAnswers((prev) => ({ ...prev, [q.id]: { optionIds: [o.id] } }))}
-                      />
-                      {o.label}
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              {q.questionType === "long_text" && (
-                <Field label="">
-                  <Textarea
-                    rows={3}
-                    disabled={submitted}
-                    value={a.valueText ?? ""}
-                    onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: { valueText: e.target.value } }))}
-                  />
-                </Field>
-              )}
-            </Card>
+              ))}
+            </section>
           );
         })}
 
+        {sortedQuestions
+          .filter((question) => !question.sectionId && !skippedQuestionIds.has(question.id))
+          .map((question, index) => (
+            <RespondentQuestion
+              key={question.id}
+              index={index + 1}
+              question={question}
+              answer={answers[question.id] ?? {}}
+              matrixAnswers={matrixAnswers}
+              disabled={submitted}
+              onAnswerChange={(update) =>
+                setAnswers((previous) => ({
+                  ...previous,
+                  [question.id]: { ...previous[question.id], ...update },
+                }))
+              }
+              onMatrixAnswerChange={(rowId, update) =>
+                setMatrixAnswers((previous) => ({
+                  ...previous,
+                  [`${question.id}:${rowId}`]: {
+                    ...previous[`${question.id}:${rowId}`],
+                    ...update,
+                  },
+                }))
+              }
+            />
+          ))}
+
         {!submitted && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 border-t border-slate-200 pt-4">
             <Button variant="secondary" disabled={busy} onClick={saveDraft}>
               Save draft
             </Button>
@@ -221,37 +397,266 @@ export function MySurveyDetailPage() {
   );
 }
 
+function RespondentQuestion({
+  index,
+  question,
+  answer,
+  matrixAnswers,
+  disabled,
+  onAnswerChange,
+  onMatrixAnswerChange,
+}: {
+  index: number;
+  question: SurveyQuestion & {
+    options?: Array<{ id: string; label: string }>;
+    matrixRows?: Array<{ id: string; label: string }>;
+  };
+  answer: LocalAnswer;
+  matrixAnswers: Record<string, LocalMatrixAnswer>;
+  disabled: boolean;
+  onAnswerChange: (update: Partial<LocalAnswer>) => void;
+  onMatrixAnswerChange: (rowId: string, update: Partial<LocalMatrixAnswer>) => void;
+}) {
+  return (
+    <Card>
+      <div className="mb-2 text-sm font-medium text-slate-800">
+        {index}. {question.text}
+        {question.isRequired && <span className="ml-1 text-red-500">*</span>}
+      </div>
+
+      {question.questionType === "rating" && (
+        <RatingInput
+          min={Number(question.config.min ?? 1)}
+          max={Number(question.config.max ?? 5)}
+          value={answer.valueNumeric ?? null}
+          disabled={disabled}
+          onChange={(value) => onAnswerChange({ valueNumeric: value })}
+        />
+      )}
+
+      {question.questionType === "single_choice" && (
+        <div className="space-y-1">
+          {(question.options ?? []).map((option) => (
+            <label key={option.id} className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="radio"
+                name={`q-${question.id}`}
+                disabled={disabled}
+                checked={(answer.optionIds ?? [])[0] === option.id}
+                onChange={() => onAnswerChange({ optionIds: [option.id] })}
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      )}
+
+      {question.questionType === "multiple_choice" && (
+        <div className="space-y-1">
+          {(question.options ?? []).map((option) => {
+            const selected = (answer.optionIds ?? []).includes(option.id);
+            return (
+              <label key={option.id} className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  disabled={disabled}
+                  checked={selected}
+                  onChange={(event) => {
+                    const current = answer.optionIds ?? [];
+                    onAnswerChange({
+                      optionIds: event.target.checked
+                        ? [...current, option.id]
+                        : current.filter((id) => id !== option.id),
+                    });
+                  }}
+                />
+                {option.label}
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      {question.questionType === "yes_no" && (
+        <div className="flex gap-2">
+          {[
+            { value: "yes", label: "Yes" },
+            { value: "no", label: "No" },
+          ].map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              disabled={disabled}
+              aria-pressed={answer.valueText === choice.value}
+              onClick={() => onAnswerChange({ valueText: choice.value })}
+              className={`rounded border px-4 py-2 text-sm font-medium transition-colors ${
+                answer.valueText === choice.value
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              } disabled:opacity-50`}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {question.questionType === "short_text" && (
+        <Field label="">
+          <Input
+            disabled={disabled}
+            value={answer.valueText ?? ""}
+            onChange={(event) => onAnswerChange({ valueText: event.target.value })}
+          />
+        </Field>
+      )}
+
+      {question.questionType === "long_text" && (
+        <Field label="">
+          <Textarea
+            rows={3}
+            disabled={disabled}
+            value={answer.valueText ?? ""}
+            onChange={(event) => onAnswerChange({ valueText: event.target.value })}
+          />
+        </Field>
+      )}
+
+      {question.questionType === "numeric" && (
+        <Field label="">
+          <Input
+            type="number"
+            disabled={disabled}
+            value={answer.valueNumeric ?? ""}
+            onChange={(event) =>
+              onAnswerChange({
+                valueNumeric: event.target.value === "" ? null : Number(event.target.value),
+              })
+            }
+          />
+        </Field>
+      )}
+
+      {question.questionType === "date" && (
+        <Field label="">
+          <Input
+            type="date"
+            disabled={disabled}
+            value={answer.valueText ?? ""}
+            onChange={(event) => onAnswerChange({ valueText: event.target.value })}
+          />
+        </Field>
+      )}
+
+      {question.questionType === "matrix_single_choice" && (
+        <div className="overflow-x-auto pt-1">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Statement</th>
+                {(question.options ?? []).map((option) => (
+                  <th key={option.id} className="px-3 py-2 text-center text-xs font-semibold text-slate-600">
+                    {option.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {(question.matrixRows ?? []).map((row) => {
+                const matrixAnswer = matrixAnswers[`${question.id}:${row.id}`];
+                return (
+                  <tr key={row.id}>
+                    <td className="px-3 py-2 text-slate-800">{row.label}</td>
+                    {(question.options ?? []).map((option) => (
+                      <td key={option.id} className="px-3 py-2 text-center">
+                        <input
+                          type="radio"
+                          name={`matrix-${question.id}-${row.id}`}
+                          disabled={disabled}
+                          checked={matrixAnswer?.selectedOptionId === option.id}
+                          onChange={() => onMatrixAnswerChange(row.id, { selectedOptionId: option.id })}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {question.questionType === "matrix_rating" && (
+        <div className="overflow-x-auto pt-1">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Statement</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">
+                  Rating {String(question.config.min ?? 1)}–{String(question.config.max ?? 5)}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {(question.matrixRows ?? []).map((row) => {
+                const matrixAnswer = matrixAnswers[`${question.id}:${row.id}`];
+                return (
+                  <tr key={row.id}>
+                    <td className="px-3 py-2 text-slate-800">{row.label}</td>
+                    <td className="px-3 py-2 text-center">
+                      <RatingInput
+                        min={Number(question.config.min ?? 1)}
+                        max={Number(question.config.max ?? 5)}
+                        value={matrixAnswer?.valueNumeric ?? null}
+                        disabled={disabled}
+                        compact
+                        onChange={(value) => onMatrixAnswerChange(row.id, { valueNumeric: value })}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function RatingInput({
   min,
   max,
   value,
   disabled,
+  compact = false,
   onChange,
 }: {
   min: number;
   max: number;
   value: number | null;
   disabled: boolean;
-  onChange: (v: number) => void;
+  compact?: boolean;
+  onChange: (value: number) => void;
 }) {
   const scale = [];
-  for (let n = min; n <= max; n++) scale.push(n);
+  for (let number = min; number <= max; number += 1) scale.push(number);
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {scale.map((n) => (
+    <div className={`flex flex-wrap gap-1.5 ${compact ? "justify-center" : ""}`}>
+      {scale.map((number) => (
         <button
-          key={n}
+          key={number}
           type="button"
           disabled={disabled}
-          aria-pressed={value === n}
-          onClick={() => onChange(n)}
-          className={`h-9 w-9 rounded border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
-            value === n
+          aria-pressed={value === number}
+          onClick={() => onChange(number)}
+          className={`${compact ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm"} rounded border font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+            value === number
               ? "border-slate-900 bg-slate-900 text-white"
               : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
           } disabled:opacity-50`}
         >
-          {n}
+          {number}
         </button>
       ))}
     </div>

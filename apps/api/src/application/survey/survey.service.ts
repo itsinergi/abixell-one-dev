@@ -6,19 +6,49 @@ import type {
   SurveyQuestionOption,
   SurveyQuestionType,
   SurveyRepository,
+  SurveyScoringModel,
   SurveySection,
   SurveyVersion,
 } from "../../domain/survey/survey.entity.js";
+import type { SurveyAdvancedRepository } from "../../domain/survey/survey-advanced.entity.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 import type { EventBus } from "../event/event-bus.js";
 import type { EntityAuthorizationResolverRegistry } from "../document/entity-authorization-resolver.js";
+import { validateBranchGraph } from "./survey-branching.evaluator.js";
 
-/** Question types with real behavior in 1D.1 (FD-1D-04). The domain enum is
- * wider (future-ready); creating any other type is rejected here. */
-export const SUPPORTED_QUESTION_TYPES: SurveyQuestionType[] = ["rating", "single_choice", "long_text"];
+/** Question types with real behavior. 1D.1 (FD-1D-04) shipped the first three;
+ * Wave A2 (SUR-ADV-003) activates the rest, including the matrix types which
+ * are answered through `survey_matrix_answers` rather than `survey_answers`.
+ * The domain enum stays the single source of truth — anything not listed here
+ * is still rejected at authoring time. */
+export const SUPPORTED_QUESTION_TYPES: SurveyQuestionType[] = [
+  "rating",
+  "single_choice",
+  "long_text",
+  "short_text",
+  "multiple_choice",
+  "numeric",
+  "yes_no",
+  "date",
+  "matrix_single_choice",
+  "matrix_rating",
+];
+
+/** Question types whose answers live in `survey_matrix_answers` (one row per
+ * matrix row) instead of the flat `survey_answers` table. */
+export const MATRIX_QUESTION_TYPES: SurveyQuestionType[] = ["matrix_single_choice", "matrix_rating"];
+
+/** Question types that require at least one option to be publishable. */
+const CHOICE_QUESTION_TYPES: SurveyQuestionType[] = [
+  "single_choice",
+  "multiple_choice",
+  "matrix_single_choice",
+];
+
+const SCORING_MODELS: SurveyScoringModel[] = ["sum", "weighted_average", "percentage", "nps"];
 
 export interface QuestionWithOptions extends SurveyQuestion {
   options: SurveyQuestionOption[];
@@ -44,6 +74,10 @@ export class SurveyService {
     /** Reused ADR-0012 registry — authorizes an Assignment's optional context
      * entity (e.g. a Complaint) without Survey Core knowing that module. */
     private readonly contextResolvers: EntityAuthorizationResolverRegistry = new Map(),
+    /** Wave A2 repository is optional so Core-only tests/bootstraps can keep
+     * constructing SurveyService without enabling Advanced routes. When present,
+     * publish validation runs branching-graph cycle & forward-jump checks. */
+    private readonly repoAdvanced?: SurveyAdvancedRepository,
   ) {}
 
   // ===================================================================
@@ -52,11 +86,22 @@ export class SurveyService {
 
   async createDefinition(
     actor: ActorContext,
-    input: { code: string; name: string; description?: string | null },
+    input: {
+      code: string;
+      name: string;
+      description?: string | null;
+      scoringModel?: SurveyScoringModel;
+      defaultLocale?: string;
+    },
   ): Promise<{ definition: SurveyDefinition; version: SurveyVersion }> {
     await this.rbac.requirePermission(actor.userId, "survey.manage");
     const existing = await this.repo.findDefinitionByCode(actor.tenantId, input.code);
     if (existing) throw new ConflictError(`Survey Definition '${input.code}' already exists`);
+    if (input.scoringModel && !SCORING_MODELS.includes(input.scoringModel)) {
+      throw new ValidationError(
+        `Invalid scoring model '${input.scoringModel}' (valid: ${SCORING_MODELS.join(", ")})`,
+      );
+    }
     const definition = await this.repo.createDefinition({
       tenantId: actor.tenantId,
       code: input.code,
@@ -68,6 +113,8 @@ export class SurveyService {
       surveyDefinitionId: definition.id,
       versionNumber: 1,
       createdBy: actor.userId,
+      scoringModel: input.scoringModel ?? "sum",
+      defaultLocale: input.defaultLocale ?? "id-ID",
     });
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -80,14 +127,25 @@ export class SurveyService {
     return { definition, version };
   }
 
-  async createVersion(actor: ActorContext, definitionCode: string): Promise<SurveyVersion> {
+  async createVersion(
+    actor: ActorContext,
+    definitionCode: string,
+    input?: { scoringModel?: SurveyScoringModel; defaultLocale?: string },
+  ): Promise<SurveyVersion> {
     await this.rbac.requirePermission(actor.userId, "survey.manage");
     const definition = await this.getDefinitionOrThrow(actor, definitionCode);
+    if (input?.scoringModel && !SCORING_MODELS.includes(input.scoringModel)) {
+      throw new ValidationError(
+        `Invalid scoring model '${input.scoringModel}' (valid: ${SCORING_MODELS.join(", ")})`,
+      );
+    }
     const versionNumber = await this.repo.getNextVersionNumber(definition.id);
     const version = await this.repo.createVersion({
       surveyDefinitionId: definition.id,
       versionNumber,
       createdBy: actor.userId,
+      scoringModel: input?.scoringModel ?? "sum",
+      defaultLocale: input?.defaultLocale ?? "id-ID",
     });
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -103,16 +161,33 @@ export class SurveyService {
   async addSection(
     actor: ActorContext,
     versionId: string,
-    input: { code: string; title: string; description?: string | null; sortOrder?: number },
+    input: {
+      code: string;
+      title: string;
+      description?: string | null;
+      sortOrder?: number;
+      scoringModel?: SurveyScoringModel | null;
+      weight?: number;
+    },
   ): Promise<SurveySection> {
     await this.rbac.requirePermission(actor.userId, "survey.manage");
     const { version } = await this.getEditableVersionOrThrow(actor, versionId);
+    if (input.scoringModel && !SCORING_MODELS.includes(input.scoringModel)) {
+      throw new ValidationError(
+        `Invalid section scoring model '${input.scoringModel}' (valid: ${SCORING_MODELS.join(", ")})`,
+      );
+    }
+    if (input.weight !== undefined && (typeof input.weight !== "number" || input.weight < 0)) {
+      throw new ValidationError("Section weight must be a non-negative number");
+    }
     return this.repo.createSection({
       surveyVersionId: version.id,
       code: input.code,
       title: input.title,
       description: input.description ?? null,
       sortOrder: input.sortOrder ?? 0,
+      scoringModel: input.scoringModel ?? null,
+      weight: input.weight ?? 1,
     });
   }
 
@@ -127,6 +202,7 @@ export class SurveyService {
       isRequired?: boolean;
       config?: Record<string, unknown>;
       sortOrder?: number;
+      weight?: number;
     },
   ): Promise<SurveyQuestion> {
     await this.rbac.requirePermission(actor.userId, "survey.manage");
@@ -139,6 +215,11 @@ export class SurveyService {
     }
     const config = input.config ?? {};
     if (input.questionType === "rating") this.validateRatingConfig(config);
+    if (input.questionType === "matrix_rating") this.validateMatrixRatingConfig(config);
+
+    if (input.weight !== undefined && (typeof input.weight !== "number" || input.weight < 0)) {
+      throw new ValidationError("Question weight must be a non-negative number");
+    }
 
     if (input.sectionId) {
       const section = await this.repo.findSectionById(input.sectionId);
@@ -156,6 +237,7 @@ export class SurveyService {
       isRequired: input.isRequired ?? false,
       config,
       sortOrder: input.sortOrder ?? 0,
+      weight: input.weight ?? 1,
     });
   }
 
@@ -168,8 +250,10 @@ export class SurveyService {
     const question = await this.repo.findQuestionById(questionId);
     if (!question) throw new NotFoundError("SurveyQuestion", questionId);
     await this.getEditableVersionOrThrow(actor, question.surveyVersionId);
-    if (question.questionType !== "single_choice" && question.questionType !== "multiple_choice") {
-      throw new ValidationError(`Options are only valid for choice questions, not '${question.questionType}'`);
+    if (!CHOICE_QUESTION_TYPES.includes(question.questionType)) {
+      throw new ValidationError(
+        `Options are only valid for choice/matrix-choice questions, not '${question.questionType}'`,
+      );
     }
     return this.repo.createOption({
       surveyQuestionId: question.id,
@@ -207,11 +291,35 @@ export class SurveyService {
           problems.push(`Question '${q.code}': ${(e as Error).message}`);
         }
       }
-      if (q.questionType === "single_choice") {
+      if (q.questionType === "matrix_rating") {
+        try {
+          this.validateMatrixRatingConfig(q.config);
+        } catch (e) {
+          problems.push(`Question '${q.code}': ${(e as Error).message}`);
+        }
+      }
+      if (CHOICE_QUESTION_TYPES.includes(q.questionType)) {
         const opts = await this.repo.listOptions(q.id);
-        if (opts.length === 0) problems.push(`Single-choice question '${q.code}' has no options`);
+        if (opts.length === 0) problems.push(`Choice question '${q.code}' has no options`);
+      }
+      if (MATRIX_QUESTION_TYPES.includes(q.questionType) && this.repoAdvanced) {
+        const rows = await this.repoAdvanced.listMatrixRows(q.id);
+        if (rows.length === 0) problems.push(`Matrix question '${q.code}' has no matrix rows`);
       }
     }
+
+    // Wave A2 (SUR-ADV-003): the branching graph must be free of backward/
+    // self jumps before a version can go live — an invalid graph would let a
+    // respondent hit an unresolvable branch mid-submission.
+    if (this.repoAdvanced) {
+      const sections = await this.repo.listSections(version.id);
+      const rules = await this.repoAdvanced.listBranchingRules(version.id);
+      if (rules.length > 0) {
+        const graphCheck = validateBranchGraph(sections, questions, rules);
+        if (!graphCheck.isValid) problems.push(...graphCheck.errors);
+      }
+    }
+
     if (problems.length > 0) throw new ValidationError("Survey Version failed publish validation", problems);
 
     const published = await this.repo.publishVersion(version.id);
@@ -618,5 +726,15 @@ export class SurveyService {
     }
     if (min >= max) throw new ValidationError("Rating 'min' must be less than 'max'");
     if (max - min > 100) throw new ValidationError("Rating range is unreasonably large");
+  }
+
+  private validateMatrixRatingConfig(config: Record<string, unknown>): void {
+    const min = config.min;
+    const max = config.max;
+    if (typeof min !== "number" || typeof max !== "number" || !Number.isInteger(min) || !Number.isInteger(max)) {
+      throw new ValidationError("Matrix rating question requires integer 'min' and 'max' in config");
+    }
+    if (min >= max) throw new ValidationError("Matrix rating 'min' must be less than 'max'");
+    if (max - min > 100) throw new ValidationError("Matrix rating range is unreasonably large");
   }
 }

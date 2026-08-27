@@ -590,16 +590,30 @@ export const api = {
     request<SurveyVersion>(`/surveys/${code}/versions`, { method: "POST", token }),
   surveyVersionDetail: (token: string, versionId: string) =>
     request<SurveyVersionDetail>(`/survey-versions/${versionId}`, { token }),
+  addSurveySection: (
+    token: string,
+    versionId: string,
+    payload: {
+      code: string;
+      title: string;
+      description?: string | null;
+      sortOrder?: number;
+      scoringModel?: SurveyScoringModel | null;
+      weight?: number;
+    },
+  ) => request<SurveySection>(`/survey-versions/${versionId}/sections`, { method: "POST", token, body: payload }),
   addSurveyQuestion: (
     token: string,
     versionId: string,
     payload: {
+      sectionId?: string | null;
       code: string;
       text: string;
       questionType: string;
       isRequired?: boolean;
       config?: Record<string, unknown>;
       sortOrder?: number;
+      weight?: number;
     },
   ) => request<SurveyQuestion>(`/survey-versions/${versionId}/questions`, { method: "POST", token, body: payload }),
   addSurveyOption: (
@@ -627,10 +641,98 @@ export const api = {
   mySurveyAssignments: (token: string) => request<MySurveyItem[]>("/survey-assignments/my", { token }),
   surveyAssignment: (token: string, id: string) =>
     request<SurveyRespondentView>(`/survey-assignments/${id}`, { token }),
-  saveSurveyAnswers: (token: string, id: string, answers: SurveyAnswerInput[]) =>
-    request<{ ok: boolean }>(`/survey-assignments/${id}/answers`, { method: "POST", token, body: { answers } }),
+  saveSurveyAnswers: (
+    token: string,
+    id: string,
+    answers: SurveyAnswerInput[],
+    matrixAnswers: SurveyMatrixAnswerInput[] = [],
+  ) =>
+    request<{ ok: boolean }>(`/survey-assignments/${id}/answers`, {
+      method: "POST",
+      token,
+      body: { answers, matrixAnswers },
+    }),
   submitSurvey: (token: string, id: string) =>
     request<SurveyAssignment>(`/survey-assignments/${id}/submit`, { method: "POST", token }),
+
+  // --- Wave A2: Survey & Assessment Advanced (SUR-ADV-003…007) ---------
+  surveyBranchingRules: (token: string, versionId: string) =>
+    request<SurveyBranchingRule[]>(`/survey-versions/${versionId}/branching-rules`, { token }),
+  addSurveyBranchingRule: (token: string, versionId: string, body: CreateSurveyBranchingRuleBody) =>
+    request<SurveyBranchingRule>(`/survey-versions/${versionId}/branching-rules`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  deleteSurveyBranchingRule: (token: string, versionId: string, ruleId: string) =>
+    request<void>(`/survey-versions/${versionId}/branching-rules/${ruleId}`, {
+      method: "DELETE",
+      token,
+    }),
+  surveyMatrixRows: (token: string, questionId: string) =>
+    request<SurveyMatrixRow[]>(`/survey-questions/${questionId}/matrix-rows`, { token }),
+  addSurveyMatrixRow: (
+    token: string,
+    questionId: string,
+    body: { code: string; label: string; sortOrder?: number },
+  ) =>
+    request<SurveyMatrixRow>(`/survey-questions/${questionId}/matrix-rows`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  surveyDistributionTokens: (token: string, versionId: string) =>
+    request<SurveyDistributionToken[]>(`/survey-versions/${versionId}/distribution-tokens`, { token }),
+  createSurveyDistributionToken: (
+    token: string,
+    versionId: string,
+    body: CreateSurveyDistributionTokenBody,
+  ) =>
+    request<CreatedSurveyDistributionToken>(`/survey-versions/${versionId}/distribution-tokens`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  revokeSurveyDistributionToken: (token: string, tokenId: string) =>
+    request<{ ok: boolean }>(`/survey-distribution-tokens/${tokenId}/revoke`, {
+      method: "POST",
+      token,
+    }),
+  surveyTranslations: (token: string, versionId: string, locale?: string) => {
+    const query = locale ? `?locale=${encodeURIComponent(locale)}` : "";
+    return request<SurveyTranslation[]>(`/survey-versions/${versionId}/translations${query}`, { token });
+  },
+  upsertSurveyTranslation: (
+    token: string,
+    versionId: string,
+    body: UpsertSurveyTranslationBody,
+  ) =>
+    request<SurveyTranslation>(`/survey-versions/${versionId}/translations`, {
+      method: "PUT",
+      token,
+      body,
+    }),
+  deleteSurveyTranslation: (token: string, versionId: string, translationId: string) =>
+    request<void>(`/survey-versions/${versionId}/translations/${translationId}`, {
+      method: "DELETE",
+      token,
+    }),
+  surveyAnalytics: (token: string, code: string) =>
+    request<SurveyAnalyticsOverview>(`/surveys/${encodeURIComponent(code)}/analytics`, { token }),
+  surveyBenchmark: (token: string, code: string) =>
+    request<SurveyBenchmarkResult>(`/surveys/${encodeURIComponent(code)}/benchmark`, { token }),
+  publicSurvey: (publicToken: string, locale?: string) => {
+    const query = locale ? `?locale=${encodeURIComponent(locale)}` : "";
+    return request<PublicSurveyView>(`/public/surveys/${encodeURIComponent(publicToken)}${query}`);
+  },
+  submitPublicSurvey: (
+    publicToken: string,
+    body: { answers: SurveyAnswerInput[]; matrixAnswers?: SurveyMatrixAnswerInput[] },
+  ) =>
+    request<PublicSurveySubmissionResult>(`/public/surveys/${encodeURIComponent(publicToken)}/submit`, {
+      method: "POST",
+      body,
+    }),
 
   // --- Service Operations & Work Management (Phase 2) -----------------
   serviceDefinitions: (token: string) => request<ServiceDefinition[]>("/service-definitions", { token }),
@@ -948,6 +1050,56 @@ export const api = {
     const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? `${code}.csv`;
     return { filename, content };
   },
+
+  // --- Wave A2: Governed BI & Predictive Analytics ---------------------
+  biDatasets: (token: string) => request<BiDataset[]>("/reporting/bi/datasets", { token }),
+  biDataset: (token: string, code: string) =>
+    request<BiDatasetDetail>(`/reporting/bi/datasets/${encodeURIComponent(code)}`, { token }),
+  biQuery: (token: string, config: BiQueryConfig) =>
+    request<BiQueryResult>("/reporting/bi/query", { method: "POST", token, body: config }),
+  exportBiQuery: async (
+    token: string,
+    config: BiQueryConfig,
+  ): Promise<{ filename: string; content: string }> => {
+    const response = await fetch(`${API_BASE}/reporting/bi/export`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(config),
+    });
+    const content = await response.text();
+    if (!response.ok) throw new ApiError(response.status, content || `Export failed (${response.status})`);
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? `${config.datasetCode}.csv`;
+    return { filename, content };
+  },
+  biSavedReports: (token: string, datasetCode?: string) => {
+    const query = datasetCode ? `?datasetCode=${encodeURIComponent(datasetCode)}` : "";
+    return request<BiSavedReport[]>(`/reporting/bi/saved-reports${query}`, { token });
+  },
+  biSavedReport: (token: string, id: string) =>
+    request<BiSavedReport>(`/reporting/bi/saved-reports/${id}`, { token }),
+  createBiSavedReport: (token: string, body: CreateBiSavedReportBody) =>
+    request<BiSavedReport>("/reporting/bi/saved-reports", { method: "POST", token, body }),
+  deleteBiSavedReport: (token: string, id: string) =>
+    request<void>(`/reporting/bi/saved-reports/${id}`, { method: "DELETE", token }),
+  generatePredictiveForecast: (token: string, body: GenerateForecastBody) =>
+    request<GenerateForecastResponse>("/reporting/predictive/forecast", {
+      method: "POST",
+      token,
+      body,
+    }),
+  predictiveSnapshots: (token: string, modelCode?: ForecastModelCode) => {
+    const query = modelCode ? `?modelCode=${encodeURIComponent(modelCode)}` : "";
+    return request<PredictiveForecastSnapshot[]>(`/reporting/predictive/snapshots${query}`, { token });
+  },
+  latestPredictiveSnapshot: (token: string, modelCode: ForecastModelCode) =>
+    request<PredictiveForecastSnapshot | null>(
+      `/reporting/predictive/snapshots/latest/${encodeURIComponent(modelCode)}`,
+      { token },
+    ),
 
   // --- Project Delivery (Phase 8) --------------------------------------
   projectDeliveryProjects: (token: string) =>
@@ -1296,6 +1448,140 @@ export type DashboardModule = {
 export type ExecutiveDashboard = {
   generatedAt: string;
   modules: DashboardModule[];
+};
+
+// --- Wave A2 Reporting Advanced types ----------------------------------
+
+export type BiFieldType = "text" | "number" | "money" | "date" | "boolean";
+export type BiAggregation = "sum" | "avg" | "count" | "min" | "max";
+export type BiFilterOperator = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in";
+
+export type BiDataset = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  moduleCode: string;
+  requiredPermissions: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BiDatasetField = {
+  id: string;
+  tenantId: string;
+  datasetId: string;
+  code: string;
+  name: string;
+  fieldType: BiFieldType;
+  isDimension: boolean;
+  isMeasure: boolean;
+  isFilterable: boolean;
+  aggregation: BiAggregation | null;
+  sortOrder: number;
+};
+
+export type BiDatasetDetail = {
+  dataset: BiDataset;
+  fields: BiDatasetField[];
+};
+
+export type BiFilter = {
+  field: string;
+  operator: BiFilterOperator;
+  value: string | number | boolean | Array<string | number>;
+};
+
+export type BiQueryConfig = {
+  datasetCode: string;
+  dimensions: string[];
+  measures: string[];
+  filters: BiFilter[];
+};
+
+export type BiQueryResult = {
+  datasetCode: string;
+  columns: Array<{ key: string; label: string; type: BiFieldType }>;
+  rows: Array<Record<string, string | number | boolean | null>>;
+  rowCount: number;
+  truncated: boolean;
+  generatedAt: string;
+};
+
+export type BiSavedReport = {
+  id: string;
+  tenantId: string;
+  datasetId: string;
+  code: string;
+  title: string;
+  description: string | null;
+  config: BiQueryConfig;
+  isShared: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateBiSavedReportBody = {
+  code: string;
+  title: string;
+  description?: string | null;
+  config: BiQueryConfig;
+  isShared?: boolean;
+};
+
+export type ForecastModelCode =
+  | "complaint_volume_forecast"
+  | "sla_breach_risk_forecast"
+  | "survey_satisfaction_trend";
+export type ForecastStatus = "completed" | "insufficient_data";
+export type ForecastDataPoint = { period: string; value: number };
+export type ForecastMetrics = {
+  historicalAverage: number;
+  trendSlopePerDay: number;
+  projectedNextPeriodValue: number;
+};
+export type ForecastConfidenceInterval = { period: string; lower: number; upper: number };
+
+export type ForecastResult = {
+  modelCode: ForecastModelCode;
+  status: ForecastStatus;
+  forecastPeriodStart: string;
+  forecastPeriodEnd: string;
+  historicalDataPoints: ForecastDataPoint[];
+  projectedDataPoints: ForecastDataPoint[];
+  metrics: ForecastMetrics | null;
+  confidenceIntervals: ForecastConfidenceInterval[];
+  insufficientDataReason: string | null;
+};
+
+export type PredictiveForecastSnapshot = {
+  id: string;
+  tenantId: string;
+  modelCode: ForecastModelCode;
+  forecastPeriodStart: string;
+  forecastPeriodEnd: string;
+  inputParams: Record<string, unknown>;
+  dataPoints: ForecastDataPoint[];
+  metrics: ForecastMetrics | Record<string, never>;
+  confidenceIntervals: ForecastConfidenceInterval[];
+  status: ForecastStatus;
+  generatedAt: string;
+  generatedBy: string | null;
+  createdAt: string;
+};
+
+export type GenerateForecastBody = {
+  modelCode: ForecastModelCode;
+  lookbackDays?: number;
+  forecastDays?: number;
+};
+
+export type GenerateForecastResponse = {
+  forecast: ForecastResult;
+  snapshot: PredictiveForecastSnapshot;
 };
 
 // --- Finance types (Phase 6) -------------------------------------------
@@ -2417,7 +2703,10 @@ export type SurveyQuestionType =
   | "multiple_choice"
   | "numeric"
   | "yes_no"
-  | "date";
+  | "date"
+  | "matrix_single_choice"
+  | "matrix_rating";
+export type SurveyScoringModel = "sum" | "weighted_average" | "percentage" | "nps";
 export type SurveyAssignmentStatus = "pending" | "in_progress" | "submitted" | "expired" | "cancelled";
 
 export type SurveyDefinition = {
@@ -2438,6 +2727,8 @@ export type SurveyVersion = {
   isCurrent: boolean;
   publishedAt: string | null;
   createdAt: string;
+  scoringModel: SurveyScoringModel;
+  defaultLocale: string;
 };
 
 export type SurveySection = {
@@ -2447,6 +2738,8 @@ export type SurveySection = {
   title: string;
   description: string | null;
   sortOrder: number;
+  scoringModel: SurveyScoringModel | null;
+  weight: number;
 };
 
 export type SurveyQuestionOption = {
@@ -2468,7 +2761,9 @@ export type SurveyQuestion = {
   isRequired: boolean;
   config: Record<string, unknown>;
   sortOrder: number;
+  weight: number;
   options?: SurveyQuestionOption[];
+  matrixRows?: SurveyMatrixRow[];
 };
 
 export type SurveyAssignment = {
@@ -2491,7 +2786,7 @@ export type SurveyAssignment = {
 export type SurveyVersionDetail = {
   version: SurveyVersion;
   sections: SurveySection[];
-  questions: (SurveyQuestion & { options: SurveyQuestionOption[] })[];
+  questions: (SurveyQuestion & { options: SurveyQuestionOption[]; matrixRows: SurveyMatrixRow[] })[];
 };
 
 export type SurveyDetail = {
@@ -2510,8 +2805,10 @@ export type SurveyAnswerView = {
 export type SurveyRespondentView = {
   assignment: SurveyAssignment;
   sections: SurveySection[];
-  questions: (SurveyQuestion & { options: SurveyQuestionOption[] })[];
+  questions: (SurveyQuestion & { options: SurveyQuestionOption[]; matrixRows: SurveyMatrixRow[] })[];
   answers: SurveyAnswerView[];
+  matrixAnswers: SurveyMatrixAnswerView[];
+  branchingRules: SurveyBranchingRule[];
 };
 
 export type SurveyResultView = {
@@ -2525,6 +2822,179 @@ export type SurveyAnswerInput = {
   valueText?: string | null;
   valueNumeric?: number | null;
   optionIds?: string[];
+};
+
+// --- Wave A2 Survey & Assessment Advanced types --------------------------
+
+export type BranchConditionOperator =
+  | "equals"
+  | "not_equals"
+  | "greater_than"
+  | "less_than"
+  | "in"
+  | "not_in"
+  | "is_answered"
+  | "is_unanswered";
+
+export type BranchTargetAction = "jump_to_question" | "jump_to_section" | "end_survey";
+
+export type TokenDistributionChannel = "link" | "email" | "sms" | "qr";
+
+export type TranslationEntityType = "definition" | "section" | "question" | "option" | "matrix_row";
+
+export type SurveyMatrixRow = {
+  id: string;
+  tenantId: string;
+  surveyQuestionId: string;
+  code: string;
+  label: string;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type SurveyMatrixAnswerView = {
+  questionId: string;
+  matrixRowId: string;
+  valueText: string | null;
+  valueNumeric: number | null;
+  selectedOptionId: string | null;
+};
+
+export type SurveyMatrixAnswerInput = {
+  questionId: string;
+  matrixRowId: string;
+  valueText?: string | null;
+  valueNumeric?: number | null;
+  selectedOptionId?: string | null;
+};
+
+export type SurveyBranchingRule = {
+  id: string;
+  tenantId: string;
+  surveyVersionId: string;
+  sourceQuestionId: string;
+  conditionOperator: BranchConditionOperator;
+  conditionValue: unknown;
+  targetAction: BranchTargetAction;
+  targetQuestionId: string | null;
+  targetSectionId: string | null;
+  priority: number;
+  createdAt: string;
+};
+
+export type CreateSurveyBranchingRuleBody = {
+  sourceQuestionId: string;
+  conditionOperator: BranchConditionOperator;
+  conditionValue: unknown;
+  targetAction: BranchTargetAction;
+  targetQuestionId?: string | null;
+  targetSectionId?: string | null;
+  priority?: number;
+};
+
+export type SurveyDistributionToken = {
+  id: string;
+  tenantId: string;
+  surveyVersionId: string;
+  channel: TokenDistributionChannel;
+  recipientLabel: string | null;
+  maxUses: number | null;
+  usedCount: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type CreatedSurveyDistributionToken = SurveyDistributionToken & {
+  token: string;
+  publicUrl?: string;
+};
+
+export type CreateSurveyDistributionTokenBody = {
+  channel?: TokenDistributionChannel;
+  recipientLabel?: string | null;
+  maxUses?: number | null;
+  expiresAt?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type SurveyTranslation = {
+  id: string;
+  tenantId: string;
+  surveyVersionId: string;
+  locale: string;
+  entityType: TranslationEntityType;
+  entityId: string;
+  fieldName: string;
+  translatedText: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UpsertSurveyTranslationBody = {
+  locale: string;
+  entityType: TranslationEntityType;
+  entityId: string;
+  fieldName: string;
+  translatedText: string;
+};
+
+export type SurveyAnalyticsOverview = {
+  surveyCode: string;
+  completionRate: number;
+  assignmentCount: number;
+  submittedCount: number;
+  averageTotalScore: number | null;
+  sectionScores: Array<{
+    sectionId: string | null;
+    sectionCode: string | null;
+    sectionTitle: string | null;
+    averageScore: number | null;
+    averagePercentage: number | null;
+    respondentCount: number;
+  }>;
+  dropOff: Array<{
+    questionId: string;
+    questionCode: string;
+    questionText: string;
+    answeredCount: number;
+    skippedCount: number;
+    dropOffRate: number;
+  }>;
+  nps: {
+    score: number;
+    promoters: number;
+    passives: number;
+    detractors: number;
+    totalResponses: number;
+  } | null;
+};
+
+export type SurveyBenchmarkResult = {
+  surveyCode: string;
+  benchmarks: Array<{
+    dimension: string;
+    label: string;
+    responseCount: number;
+    completionRate: number;
+    averageScore: number | null;
+    averageNps: number | null;
+  }>;
+};
+
+export type PublicSurveyView = {
+  definition: SurveyDefinition;
+  version: SurveyVersion;
+  sections: SurveySection[];
+  questions: (SurveyQuestion & { options: SurveyQuestionOption[]; matrixRows: SurveyMatrixRow[] })[];
+  branchingRules: SurveyBranchingRule[];
+};
+
+export type PublicSurveySubmissionResult = {
+  assignmentId: string;
+  status: SurveyAssignmentStatus;
+  totalScore: number | null;
 };
 
 export type MySurveyItem = {

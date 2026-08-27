@@ -33,6 +33,8 @@ function toVersion(r: Record<string, unknown>): SurveyVersion {
     isCurrent: r.is_current as boolean,
     publishedAt: (r.published_at as Date) ?? null,
     createdAt: r.created_at as Date,
+    scoringModel: (r.scoring_model as SurveyVersion["scoringModel"]) ?? "sum",
+    defaultLocale: (r.default_locale as string) ?? "id-ID",
   };
 }
 function toSection(r: Record<string, unknown>): SurveySection {
@@ -43,6 +45,8 @@ function toSection(r: Record<string, unknown>): SurveySection {
     title: r.title as string,
     description: (r.description as string) ?? null,
     sortOrder: r.sort_order as number,
+    scoringModel: (r.scoring_model as SurveySection["scoringModel"]) ?? null,
+    weight: r.weight === null || r.weight === undefined ? 1 : Number(r.weight),
   };
 }
 function toQuestion(r: Record<string, unknown>): SurveyQuestion {
@@ -56,6 +60,7 @@ function toQuestion(r: Record<string, unknown>): SurveyQuestion {
     isRequired: r.is_required as boolean,
     config: (r.config as Record<string, unknown>) ?? {},
     sortOrder: r.sort_order as number,
+    weight: r.weight === null || r.weight === undefined ? 1 : Number(r.weight),
   };
 }
 function toOption(r: Record<string, unknown>): SurveyQuestionOption {
@@ -84,6 +89,9 @@ function toAssignment(r: Record<string, unknown>): SurveyAssignment {
     assignedBy: (r.assigned_by as string) ?? null,
     createdAt: r.created_at as Date,
     submittedAt: (r.submitted_at as Date) ?? null,
+    npsScore: r.nps_score === null || r.nps_score === undefined ? null : Number(r.nps_score),
+    scoringBreakdown: (r.scoring_breakdown as Record<string, unknown>) ?? null,
+    distributionTokenId: (r.distribution_token_id as string) ?? null,
   };
 }
 function toAnswer(r: Record<string, unknown>): SurveyAnswer {
@@ -136,15 +144,18 @@ export class PgSurveyRepository implements SurveyRepository {
   }
 
   // --- Versions ------------------------------------------------------------
-  async createVersion(input: {
-    surveyDefinitionId: string;
-    versionNumber: number;
-    createdBy: string;
-  }): Promise<SurveyVersion> {
+  async createVersion(input: Parameters<SurveyRepository["createVersion"]>[0]): Promise<SurveyVersion> {
     const r = await this.pool.query(
-      `INSERT INTO survey_versions (survey_definition_id, version_number, status, created_by)
-       VALUES ($1,$2,'draft',$3) RETURNING *`,
-      [input.surveyDefinitionId, input.versionNumber, input.createdBy],
+      `INSERT INTO survey_versions
+         (survey_definition_id, version_number, status, created_by, scoring_model, default_locale)
+       VALUES ($1,$2,'draft',$3,$4,$5) RETURNING *`,
+      [
+        input.surveyDefinitionId,
+        input.versionNumber,
+        input.createdBy,
+        input.scoringModel ?? "sum",
+        input.defaultLocale ?? "id-ID",
+      ],
     );
     return toVersion(r.rows[0]);
   }
@@ -202,17 +213,20 @@ export class PgSurveyRepository implements SurveyRepository {
   }
 
   // --- Sections / Questions / Options -------------------------------------
-  async createSection(input: {
-    surveyVersionId: string;
-    code: string;
-    title: string;
-    description: string | null;
-    sortOrder: number;
-  }): Promise<SurveySection> {
+  async createSection(input: Parameters<SurveyRepository["createSection"]>[0]): Promise<SurveySection> {
     const r = await this.pool.query(
-      `INSERT INTO survey_sections (survey_version_id, code, title, description, sort_order)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [input.surveyVersionId, input.code, input.title, input.description, input.sortOrder],
+      `INSERT INTO survey_sections
+         (survey_version_id, code, title, description, sort_order, scoring_model, weight)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [
+        input.surveyVersionId,
+        input.code,
+        input.title,
+        input.description,
+        input.sortOrder,
+        input.scoringModel ?? null,
+        input.weight ?? 1,
+      ],
     );
     return toSection(r.rows[0]);
   }
@@ -228,20 +242,11 @@ export class PgSurveyRepository implements SurveyRepository {
     return r.rows[0] ? toSection(r.rows[0]) : null;
   }
 
-  async createQuestion(input: {
-    surveyVersionId: string;
-    sectionId: string | null;
-    code: string;
-    text: string;
-    questionType: SurveyQuestion["questionType"];
-    isRequired: boolean;
-    config: Record<string, unknown>;
-    sortOrder: number;
-  }): Promise<SurveyQuestion> {
+  async createQuestion(input: Parameters<SurveyRepository["createQuestion"]>[0]): Promise<SurveyQuestion> {
     const r = await this.pool.query(
       `INSERT INTO survey_questions
-         (survey_version_id, section_id, code, text, question_type, is_required, config, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+         (survey_version_id, section_id, code, text, question_type, is_required, config, sort_order, weight)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [
         input.surveyVersionId,
         input.sectionId,
@@ -251,6 +256,7 @@ export class PgSurveyRepository implements SurveyRepository {
         input.isRequired,
         JSON.stringify(input.config ?? {}),
         input.sortOrder,
+        input.weight ?? 1,
       ],
     );
     return toQuestion(r.rows[0]);
@@ -307,22 +313,12 @@ export class PgSurveyRepository implements SurveyRepository {
     const r = await this.pool.query(`SELECT tenant_id FROM users WHERE id=$1`, [userId]);
     return r.rows[0] ? (r.rows[0].tenant_id as string) : null;
   }
-  async createAssignment(input: {
-    tenantId: string;
-    surveyVersionId: string;
-    respondentType: SurveyAssignment["respondentType"];
-    respondentUserId: string | null;
-    respondentCustomerContactId: string | null;
-    contextEntityType: string | null;
-    contextEntityId: string | null;
-    dueAt: Date | null;
-    assignedBy: string | null;
-  }): Promise<SurveyAssignment> {
+  async createAssignment(input: Parameters<SurveyRepository["createAssignment"]>[0]): Promise<SurveyAssignment> {
     const r = await this.pool.query(
       `INSERT INTO survey_assignments
          (tenant_id, survey_version_id, respondent_type, respondent_user_id, respondent_customer_contact_id,
-          context_entity_type, context_entity_id, due_at, assigned_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+          context_entity_type, context_entity_id, due_at, assigned_by, distribution_token_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [
         input.tenantId,
         input.surveyVersionId,
@@ -333,6 +329,7 @@ export class PgSurveyRepository implements SurveyRepository {
         input.contextEntityId,
         input.dueAt,
         input.assignedBy,
+        input.distributionTokenId ?? null,
       ],
     );
     return toAssignment(r.rows[0]);
@@ -354,13 +351,24 @@ export class PgSurveyRepository implements SurveyRepository {
     id: string,
     totalScore: number | null,
     submittedAt: Date,
+    options?: {
+      npsScore?: number | null;
+      scoringBreakdown?: Record<string, unknown> | null;
+    },
   ): Promise<SurveyAssignment | null> {
     const r = await this.pool.query(
       `UPDATE survey_assignments
-          SET status='submitted', total_score=$2, submitted_at=$3
+          SET status='submitted', total_score=$2, submitted_at=$3,
+              nps_score=$4, scoring_breakdown=$5
         WHERE id=$1 AND status IN ('pending','in_progress')
         RETURNING *`,
-      [id, totalScore, submittedAt],
+      [
+        id,
+        totalScore,
+        submittedAt,
+        options?.npsScore ?? null,
+        options?.scoringBreakdown ? JSON.stringify(options.scoringBreakdown) : null,
+      ],
     );
     return r.rows[0] ? toAssignment(r.rows[0]) : null;
   }
