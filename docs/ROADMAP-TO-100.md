@@ -3,14 +3,14 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.21 and `docs/canonical/product-progress.md` v1.21 |
-| Measured at | `master` after Wave A2 delivery |
-| Current point | Full Approved Roadmap Progress: 62.9% (222 / 353 pts) |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.22 and `docs/canonical/product-progress.md` v1.22 |
+| Measured at | `master` after Wave A3 (revised) delivery |
+| Current point | Full Approved Roadmap Progress: 68.3% (241 / 353 pts) |
 | Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2, Phase 11F, Wave A1, and **Wave A2 are COMPLETED**; no wave is currently active. Waves A3–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. This document starts no implementation |
+| Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, and **Wave A3 (revised) are COMPLETED**; no wave is currently active. Waves A4–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -20,7 +20,7 @@ This document explains the remaining path from the current approved baseline to 
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed  48
+Advanced Capabilities  total 179   completed  67
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174
@@ -29,8 +29,8 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353
-  completed   = 174 +  48 = 222   (Advanced 6 + Wave A1 19 + Wave A2 23)
-  222 / 353 = 62.9%
+  completed   = 174 +  67 = 241   (Advanced 6 + Wave A1 19 + Wave A2 23 + Wave A3 revised 19)
+  241 / 353 = 68.3%
 ```
 
 Remaining to 100%:
@@ -38,8 +38,8 @@ Remaining to 100%:
 | Layer | Remaining | Meaning |
 |---|---:|---|
 | Platform Hardening | 0 pts | Phase H2 production gate completed |
-| Advanced Capabilities | 131 pts | All Advanced backlog not yet delivered |
-| Total remaining | 131 pts | 353 - 222 |
+| Advanced Capabilities | 112 pts | All Advanced backlog not yet delivered (deferred `SO-ADV-006` 5 pts + Waves A4–A7 94 pts + Wave A8 13 pts) |
+| Total remaining | 112 pts | 353 - 241 |
 
 Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
 traceability and move neither metric; the numbers above already reflect their closure.
@@ -57,15 +57,15 @@ The recommended route is:
 |---:|---|---|---:|---:|---:|---:|
 | 0 | ~~Prior baseline~~ | Completed work through Phase H2 Production Gate and unweighted Phase 11F closure | 0 | 180 / 353 | 51.0% | 100.0% |
 | 1 | ~~Wave A1~~ | Customer & Commercial Advanced + Service Quality Advanced | 19 | 199 / 353 | 56.4% | 100.0% |
-| 2 | ~~Wave A2~~ **(COMPLETED — current baseline)** | Survey Advanced completion + Reporting Advanced | 23 | **222 / 353** | **62.9%** | **100.0%** |
-| 3 | Wave A3 | Service Operations Advanced + Asset Advanced | 24 | 246 / 353 | 69.7% | 100.0% |
-| 4 | Wave A4 | Workforce Advanced | 24 | 270 / 353 | 76.5% | 100.0% |
-| 5 | Wave A5 | Supply Chain Advanced | 22 | 292 / 353 | 82.7% | 100.0% |
-| 6 | Wave A6 | Finance Advanced | 21 | 313 / 353 | 88.7% | 100.0% |
-| 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 340 / 353 | 96.3% | 100.0% |
-| 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 353 / 353 | 100.0% | 100.0% |
+| 2 | ~~Wave A2~~ | Survey Advanced completion + Reporting Advanced | 23 | 222 / 353 | 62.9% | 100.0% |
+| 3 | ~~Wave A3 revised~~ **(COMPLETED — current baseline)** | Service Operations Advanced + Asset Advanced, excluding deferred SO-ADV-006 | 19 | **241 / 353** | **68.3%** | **100.0%** |
+| 4 | Wave A4 | Workforce Advanced | 24 | 265 / 353 | 75.1% | 100.0% |
+| 5 | Wave A5 | Supply Chain Advanced | 22 | 287 / 353 | 81.3% | 100.0% |
+| 6 | Wave A6 | Finance Advanced | 21 | 308 / 353 | 87.3% | 100.0% |
+| 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 335 / 353 | 94.9% | 100.0% |
+| 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 348 / 353 | 98.6% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2, Wave A1, and Wave A2 are earned and complete; the current baseline is now row 2. Waves A3–A8 remain planned / optional and none is authorized. No wave is started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2, Wave A1, Wave A2, and Wave A3 (revised) are earned and complete; the current baseline is now row 3. Waves A4–A8 remain planned / optional and none is authorized. Delivering all planned Waves A4–A8 yields 348 / 353 = 98.6%. Reaching the full 353 / 353 (100.0%) requires completing the separately deferred `SO-ADV-006` (5 pts) following Founder approval and a dedicated ADR. No wave is started by this document.
 
 ## 3. Phase H2 - Production Gate
 
@@ -171,31 +171,34 @@ Recommended boundaries:
 
 All boundaries held. Governed BI uses static whitelist metadata models with recursive CTE scope injection and zero arbitrary SQL/eval. Predictive analytics uses bounded statistical methods (OLS, moving averages, seasonal decomposition) with strict tenant isolation. Public survey distribution uses SHA-256 token hashing and zero identity leakage for anonymous responses.
 
-## 6. Wave A3 - Service Operations and Asset Advanced
+## 6. Wave A3 - Service Operations and Asset Advanced (Revised)
 
-Wave A3 adds operational depth around recurring field work, offline execution, maintenance, and asset reliability.
+Wave A3 adds operational depth around vertical service pack configuration, route/roster/workload optimization, maintenance scheduling, and asset reliability. It is **COMPLETED** (revised scope) at baseline v1.22; all 19 points below are earned, and canonical documents carry validation evidence.
 
-| Area | Unit | Capability | Pts |
-|---|---|---|---:|
-| Service Operations | SO-ADV group | Vertical service packs over the generic Service Operations engine | 5 |
-| Service Operations | SO-ADV group | Offline field PWA with deferred synchronization | 5 |
-| Service Operations | SO-ADV group | Route, roster, capacity, and workload optimization | 3 |
-| Asset | AST-ADV group | Preventive and corrective maintenance with work orders | 5 |
-| Asset | AST-ADV group | Meter reading, spare parts, and downtime tracking | 3 |
-| Asset | AST-ADV group | MTBF/MTTR and predictive maintenance | 3 |
-| Total | Wave A3 |  | 24 |
+| Area | Unit | Capability | Pts | Status |
+|---|---|---|---:|---|
+| Service Operations | PACK-001…004 | Vertical service packs (Catering, Housekeeping, Camp, Facility) | 5 | COMPLETED |
+| Service Operations | SO-ADV-002…005 | Route, roster, capacity, and workload optimization | 3 | COMPLETED |
+| Asset | AST-ADV-001/002 | Preventive maintenance schedules & maintenance work orders | 5 | COMPLETED |
+| Asset | AST-ADV-003…005 | Meter reading, spare parts, and downtime tracking | 3 | COMPLETED |
+| Asset | AST-ADV-006/007 | MTBF/MTTR reliability metrics & predictive maintenance | 3 | COMPLETED |
+| Total | Wave A3 (revised) |  | 19 | COMPLETED |
 
-Expected result:
+Result (earned):
 
-| Metric | After Wave A2 | After Wave A3 |
+| Metric | Before Wave A3 | After Wave A3 (revised) |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 222 / 353 (62.9%) | 246 / 353 (69.7%) |
+| Full Approved Roadmap Progress | 222 / 353 (62.9%) | **241 / 353 (68.3%)** |
+
+**Founder Deferred Scope Note:**
+Unit `SO-ADV-006` (Offline field execution with deferred synchronization, 5 pts) was explicitly **DEFERRED** by Founder decision and excluded from Wave A3 implementation. Offline capability earned 0 points, is not part of the Wave A3 completed scope, and remains deferred awaiting a dedicated Founder architecture ADR regarding offline mutation queues and local cache boundaries under platform security rules.
 
 Recommended boundaries:
 
-- Vertical packs remain configuration plus Advanced capability, not separate modules.
-- Offline mode must be conflict-safe and must not cache sensitive data beyond approved limits.
-- Asset maintenance must reuse Service Operations where work-order semantics overlap.
+- Vertical service packs remain configuration plus template metadata over the generic Service Operations engine, not separate duplicate engines.
+- Route, roster, capacity, and workload optimization heuristics are deterministic and advisory-only, with human-confirmed atomic database transaction apply.
+- Asset maintenance work orders delegate lifecycle state exclusively to the Workflow Engine (`workflow_instance_id`) with zero competing local status machines.
+- Meter readings enforce strong monotonicity serialized by asset row-level locking.
 
 ## 7. Wave A4 - Workforce Advanced
 
@@ -213,9 +216,9 @@ Wave A4 expands Workforce beyond employee master and placement into time, payrol
 
 Expected result:
 
-| Metric | After Wave A3 | After Wave A4 |
+| Metric | After Wave A3 (revised) | After Wave A4 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 246 / 353 (69.7%) | 270 / 353 (76.5%) |
+| Full Approved Roadmap Progress | 241 / 353 (68.3%) | 265 / 353 (75.1%) |
 
 Recommended boundaries:
 
@@ -241,7 +244,7 @@ Expected result:
 
 | Metric | After Wave A4 | After Wave A5 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 270 / 353 (76.5%) | 292 / 353 (82.7%) |
+| Full Approved Roadmap Progress | 265 / 353 (75.1%) | 287 / 353 (81.3%) |
 
 Recommended boundaries:
 
@@ -267,7 +270,7 @@ Expected result:
 
 | Metric | After Wave A5 | After Wave A6 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 292 / 353 (82.7%) | 313 / 353 (88.7%) |
+| Full Approved Roadmap Progress | 287 / 353 (81.3%) | 308 / 353 (87.3%) |
 
 Recommended boundaries:
 
@@ -294,7 +297,7 @@ Expected result:
 
 | Metric | After Wave A6 | After Wave A7 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 313 / 353 (88.7%) | 340 / 353 (96.3%) |
+| Full Approved Roadmap Progress | 308 / 353 (87.3%) | 335 / 353 (94.9%) |
 
 Recommended boundaries:
 
@@ -305,7 +308,7 @@ Recommended boundaries:
 
 ## 11. Wave A8 - Platform Cross-Cutting Advanced
 
-Wave A8 completes the final 13 Advanced points.
+Wave A8 completes the final 13 Advanced points of the planned wave sequences.
 
 | Area | Unit | Capability | Pts |
 |---|---|---|---:|
@@ -318,7 +321,7 @@ Expected result:
 
 | Metric | After Wave A7 | After Wave A8 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 340 / 353 (96.3%) | 353 / 353 (100.0%) |
+| Full Approved Roadmap Progress | 335 / 353 (94.9%) | 348 / 353 (98.6%) |
 
 Recommended boundaries:
 
@@ -331,11 +334,25 @@ Recommended boundaries:
 | Category | Remaining pts | Completion condition |
 |---|---:|---|
 | Phase H2 Production Gate | 0 | Completed; Platform Hardening is 16 / 16 |
-| Advanced business-domain waves (A2-A7) | 141 | Survey completion + Reporting (23), Service Operations + Asset (24), Workforce (24), Supply Chain (22), Finance (21), and Project Delivery + HSE (27) Advanced complete; Customer & Commercial and Service Quality Advanced were already delivered in Wave A1 |
-| Platform cross-cutting Advanced (A8) | 13 | Partner API, AI readiness, and marketplace ecosystem complete |
-| Total remaining Advanced | 154 | 141 (A2-A7) + 13 (A8); Full Approved Roadmap reaches 353 / 353 |
+| Delivered Advanced waves (A1, A2, A3 revised) | 0 | Completed; Customer & Commercial + Service Quality (19), Survey + Reporting (23), and Service Operations + Asset (19) delivered |
+| Planned Advanced business-domain waves (A4–A7) | 94 | Workforce (24), Supply Chain (22), Finance (21), and Project Delivery + HSE (27) Advanced complete |
+| Planned Platform cross-cutting Advanced (A8) | 13 | Partner API (3), AI readiness (5), and marketplace ecosystem (5) complete |
+| Deferred `SO-ADV-006` (Offline Field PWA) | 5 | Awaiting dedicated Founder architecture ADR, approval, implementation, and verification |
+| Total remaining Advanced | 112 | 94 (A4–A7) + 13 (A8) + 5 (SO-ADV-006); Full Approved Roadmap reaches 353 / 353 |
 
-After all phases:
+After planned Waves A4–A8 (excluding deferred `SO-ADV-006`):
+
+```text
+Platform Core          41 / 41   100.0%
+Platform Hardening     16 / 16   100.0%
+Business Core         117 / 117  100.0%
+Advanced Capabilities 174 / 179   97.2%
+
+Core Product Readiness        174 / 174  100.0%
+Full Approved Roadmap         348 / 353   98.6%
+```
+
+After deferred `SO-ADV-006` is also approved, designed, implemented, and verified:
 
 ```text
 Platform Core          41 / 41   100.0%
