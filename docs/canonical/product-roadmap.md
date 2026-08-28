@@ -4,9 +4,9 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.21 |
+| **Roadmap Baseline** | v1.22 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-08-27 |
+| **Last Updated** | 2026-08-28 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-blueprint.md](product-blueprint.md) · [product-progress.md](product-progress.md) · [documentation-map.md](documentation-map.md) · [decision-log.md](../decision-log.md) |
 
@@ -55,7 +55,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 6** | Finance Core | BC-8 Finance |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED. Phase 11B (unweighted boundary enforcement) — COMPLETED. Phase 11C (unweighted read-only admin console) — COMPLETED. Phase 11D (unweighted platform experience system & UX direction) — COMPLETED. Phase 11E (unweighted platform shell & admin console UX foundation) — COMPLETED. Phase 11F (unweighted governed admin access management and access-lifecycle hardening) — COMPLETED. Wave A1 — COMPLETED. Wave A2 — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED. Phase 11B (unweighted boundary enforcement) — COMPLETED. Phase 11C (unweighted read-only admin console) — COMPLETED. Phase 11D (unweighted platform experience system & UX direction) — COMPLETED. Phase 11E (unweighted platform shell & admin console UX foundation) — COMPLETED. Phase 11F (unweighted governed admin access management and access-lifecycle hardening) — COMPLETED. Wave A1 — COMPLETED. Wave A2 — COMPLETED. Wave A3 (revised) — COMPLETED.**
 
 ---
 
@@ -63,18 +63,18 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master` post Wave A2 delivery (corrected `435232d`) |
-| Migrations | 30 (Wave A2 adds 1) |
-| Migration head | `1778000000000_wave-a2-survey-reporting-advanced` |
-| Tables | 113 application base tables excluding `pgmigrations` (114 including it), plus 1 public VIEW; Wave A2 adds 10 base tables |
-| Permissions | 91 (Wave A2 adds 3: `survey.analytics.read`, `reporting.bi.manage`, `reporting.predictive.read`; 0 duplicate codes) |
-| API tests | 413 PASS (31 files) |
+| Branch / commit | `master` post Wave A3 delivery |
+| Migrations | 31 (Wave A3 adds 1) |
+| Migration head | `1779000000000_wave-a3-service-operations-asset-advanced` |
+| Tables | 122 application base tables excluding `pgmigrations` (123 including it), plus 1 public VIEW; Wave A3 adds 9 base tables |
+| Permissions | 99 (Wave A3 adds 8: `service_operations.pack.manage`, `service_operations.optimization.read`, `service_operations.optimization.apply`, `asset.maintenance.read`, `asset.maintenance.manage`, `asset.meter.manage`, `asset.downtime.manage`, `asset.analytics.read`; 0 duplicate codes) |
+| API tests | 442 PASS (32 files) |
 | Browser smoke | PASS |
-| Core / Full progress | 174 / 174 (100.0%) / 222 / 353 (62.9%) |
+| Core / Full progress | 174 / 174 (100.0%) / 241 / 353 (68.3%) |
 | typecheck / lint / build | PASS (0 errors); Vite retains its non-blocking >500 kB chunk-size advisory |
 | Security | `npm audit --omit=dev` — 0 vulnerabilities |
 | Launcher | PARTIAL — `db:up` environment-blocked (Docker daemon unreachable; native `postgres.exe` owns 5432). Downstream steps verified independently. Not a full PASS. |
-| Phase 11B repository governance | 23/23 focused boundary tests; 0 blocking findings; 1 expected Manifest advisory; 91 migration-owned permissions |
+| Phase 11B repository governance | 23/23 focused boundary tests; 0 blocking findings; 1 expected Manifest advisory; 99 migration-owned permissions |
 
 ---
 
@@ -216,11 +216,11 @@ Pilot/production readiness. **Not** business capability.
 | Customer & Commercial | **Sales/opportunity/quotation (5) ✅** · **Self-service portal expansion (3) ✅** | 8 | **8** |
 | Service Quality | **Multidimensional SLA + calendar (3) ✅** · **RCA taxonomy + advanced CAPA (3) ✅** · **Recurring-problem detection & service analytics (3) ✅** · **Automatic domain mutation from feedback (2) ✅** | 11 | **11** |
 | Survey & Assessment | **Survey-to-Action trigger→assignment (3) ✅** · **Outcome→management attention (3) ✅** · **Conditional/matrix (3) ✅** · **Weighted/section/NPS (2) ✅** · **Anonymous/public token (3) ✅** · **Multi-language (2) ✅** · **Analytics & benchmarking (3) ✅** | 19 | **19** |
-| Service Operations | Vertical service packs (5) · Offline field PWA (5) · Route/roster optimization (3) | 13 | 0 |
+| Service Operations | **Vertical service packs (5) ✅** · Offline field PWA (5) · **Route/roster optimization (3) ✅** | 13 | **8** |
 | Workforce (HR) | Attendance/shift/roster (5) · Leave & overtime (3) · Payroll+BPJS+PPh21 (5) · Recruitment (3) · Performance/competency/training/career (5) · Manpower planning (3) | 24 | 0 |
 | Finance | GL/COA/journal (5) · AP/AR + aging (3) · Budgeting & cost center (3) · Bank reconciliation (2) · Fixed-asset accounting (3) · Tax/consolidation/statements (5) | 21 | 0 |
 | Supply Chain | Multi-warehouse/bin/batch/serial (5) · Reservation/reorder/transfer/opname (3) · Valuation + landed cost (3) · RFQ/tender/bid (5) · Supplier evaluation & contract purchasing (3) · Spend analytics (3) | 22 | 0 |
-| Asset | Preventive & corrective maintenance + work orders (5) · Meter/spare parts/downtime (3) · MTBF/MTTR + predictive (3) | 11 | 0 |
+| Asset | **Preventive & corrective maintenance + work orders (5) ✅** · **Meter/spare parts/downtime (3) ✅** · **MTBF/MTTR + predictive (3) ✅** | 11 | **11** |
 | Project Delivery | WBS/dependencies/Gantt (5) · Resource loading + baseline (3) · Earned value + cost control + project accounting (5) | 13 | 0 |
 | HSE | Investigation + risk assessment JSA/HIRA (5) · Permit to work (3) · Inspection & audit (3) · Environmental monitoring + CAPA + indicators (3) | 14 | 0 |
 | Platform (cross-cutting) | API economy / partner surface (3) · AI readiness (5) · Marketplace & ecosystem (5) | 13 | 0 |
@@ -245,7 +245,8 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Phase H2~~ | Platform Hardening (Production gate) | PH-3, PH-4, PH-8 | 7 | Phase H | **COMPLETED** |
 | ~~Wave A1~~ | Advanced Commercial & Service Quality | CUS-ADV-001, CUS-ADV-002, SQ-ADV-001…004 | 19 | BC-1, BC-2 | **COMPLETED** |
 | ~~Wave A2~~ | Survey Advanced completion & Reporting Advanced | SUR-ADV-003…007, RPT-ADV-001…002 | 23 | BC-3, BC-11 | **COMPLETED** |
-| **Wave A3+** | Remaining Advanced capability waves | per module | 131 | respective Core | PLANNED / OPTIONAL |
+| ~~Wave A3~~ | Service Operations & Asset Advanced (revised) | PACK-001…004, SO-ADV-002…005, AST-ADV-001…007 | 19 | BC-4, BC-7 | **COMPLETED** |
+| **Wave A4+** | Remaining Advanced capability waves | per module | 112 | respective Core | PLANNED / OPTIONAL |
 
 ### Unweighted architecture / governance phases
 
@@ -279,6 +280,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.22 | 2026-08-28 | **Wave A3 (Service Operations Advanced & Asset Advanced revised) delivered — weighted.** Five units COMPLETED at full weight (+19 pts total): `PACK-001…004` vertical service packs (5), `SO-ADV-002…005` route/roster/workload optimization (3), `AST-ADV-001/002` preventive & corrective maintenance + workflow-delegated work orders (5), `AST-ADV-003…005` monotonic meter readings, spare parts & downtime tracking (3), `AST-ADV-006/007` MTBF/MTTR reliability metrics & deterministic predictive snapshots (3). Explicit Founder decision: `SO-ADV-006` (Offline Field PWA, 5 pts) deferred awaiting dedicated architecture ADR. Advanced completed 48 → 67; Full numerator 222 → 241 (62.9 % → 68.3 %). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Live database evidence: 122 application base tables (123 including `pgmigrations`, plus one public VIEW), 31 migrations, 99 permissions (0 duplicate codes, 8 added by Wave A3), and migration head `1779000000000_wave-a3-service-operations-asset-advanced`. Test evidence: 442/442 full API runs across 32 files (Wave A3 adds 29 tests in `wave-a3-integration.test.ts`). Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings, 99 migration-owned permissions), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities). All new tables enforce multi-tenant composite foreign keys `(tenant_id, foreign_id)`; Asset Maintenance lifecycle is authoritative exclusively through Workflow Engine via `workflow_instance_id` (zero competing state machines); optimization and predictive metrics are advisory and deterministic with atomic transaction apply; meter readings enforce strong monotonicity serialized by asset row-level locking. Waves A4–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.21 | 2026-08-27 | **Wave A2 (Survey Advanced completion & Reporting Advanced) delivered — weighted.** All seven units COMPLETED at full weight: `SUR-ADV-003` conditional branching & matrix questions (3), `SUR-ADV-004` weighted / section / NPS scoring (2), `SUR-ADV-005` anonymous & public-token distribution (3), `SUR-ADV-006` multi-language survey localization (2), `SUR-ADV-007` cross-survey analytics & benchmarking (3), `RPT-ADV-001` self-service BI & reporting warehouse (5), `RPT-ADV-002` predictive analytics across operational history (5). Advanced completed 25 → 48; Full numerator 199 → 222 (56.4 % → 62.9 %). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Correction commit `435232d` closes four pre-closure defects found during acceptance review: a concurrency race allowing a single-use public distribution token to be claimed twice, permanent quota loss on a claimed-but-rejected public submission, missing tenant predicates on the analytics section-average and question-drop-off aggregate queries, and unenforced small-cell aggregate masking below 5 respondents. Public token claim is now a single guarded atomic `UPDATE ... RETURNING`, with a compensating release restoring quota if the submission fails validation after the claim; all analytics/benchmark queries are now scoped through the tenant-owned `survey_definitions` root; small-cell aggregates are masked to null/empty when the sample is non-zero and below 5. Live database evidence: 113 application base tables (114 including `pgmigrations`, plus one public VIEW), 30 migrations, 91 permissions (0 duplicate codes, 3 added by Wave A2: `survey.analytics.read`, `reporting.bi.manage`, `reporting.predictive.read`), and migration head `1778000000000_wave-a2-survey-reporting-advanced`. Test evidence: 413/413 full API runs across 31 files (Wave A2 adds 23 tests in `wave-a2-integration.test.ts`, including concurrent single-use claim, release-on-failure, and cross-tenant rogue-row isolation coverage). Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities). Survey versions remain immutable upon publication; public distribution uses SHA-256 token hashing; governed BI uses static metadata catalogs with recursive CTE Customer Data Scope injection and zero arbitrary SQL/eval; predictive analytics uses bounded statistical methods (OLS, moving averages, seasonal decomposition) with strict tenant isolation. Waves A3–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.20 | 2026-08-26 | **Wave A1 (Advanced Commercial & Service Quality) delivered — the first weighted Advanced wave since Phase 1E — and post-closure validation stabilized.** All six units COMPLETED at full weight: `CUS-ADV-001` sales/opportunity/quotation (5), `CUS-ADV-002` self-service portal expansion (3), `SQ-ADV-001` multidimensional SLA + business calendar (3), `SQ-ADV-002` RCA taxonomy + advanced CAPA (3), `SQ-ADV-003` recurring-problem detection & service analytics (3), `SQ-ADV-004` automatic domain mutation from feedback (2). Advanced completed 6 → 25; Full numerator 180 → 199 (51.0 % → 56.4 %). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Runtime baseline `master @ e7ab06a` = delivery `95b346a`, closure correction `5eba91a`, metadata baseline `d9ed34b`, and post-closure stabilization. The stabilization preserves the intentional globally unique Scheduler registry/lease contract while giving integration files independent registered fixture rows with production handler keys; it also keeps endpoint inactive-window boundaries entirely in PostgreSQL, avoiding `timestamptz` microsecond truncation through JavaScript `Date`. Adds no migration, table, permission, API route, test, or roadmap point. Final evidence is five consecutive 390/390 full API runs across 30 files, a separate 390/390 `--no-file-parallelism` run, focused Scheduler/outbox 27/27, focused Wave A1 36/36, full quality gates, and browser E2E PASS. Live database remains 103 application base tables (104 including `pgmigrations`; one additional public VIEW), 29 migrations, 88 permissions, and head `1777000000000_wave-a1-service-quality-advanced`. Automation proposes only — `requires_approval` is pinned true by a database CHECK and approval routes through permission-checked service methods. Launcher `db:up` remains environment-blocked rather than falsely reported PASS: Docker daemon unavailable and native Windows `postgres.exe` owns port 5432. Waves A2–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.19 | 2026-08-25 | Phase 11F final access-lifecycle hardening and closure completed as an unweighted governance/administration phase with no roadmap units or points. Runtime baseline `master @ 63e43d1`, directly descended from the v1.18 metadata commit, closes inactive/deleted-user authentication, sibling refresh-token revocation, live actor/tenant JWT revalidation, monotonic stale-scope assignment invalidation and correction, and effective permission-coupled Reporting scope. Adds 1 migration (26 → 27) and 18 API tests (336 → 354 across 27 files), with no table or permission; complete governed-access and lifecycle real-browser smoke pass separately. Builder/Module Manifest runtime, Advanced waves, Client Extensions, broader user lifecycle/profile/status administration, and governed user provisioning remain unstarted. Numerator and denominator remain 174 / 174 and 180 / 353. |

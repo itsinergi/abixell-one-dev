@@ -30,12 +30,13 @@ This is the generic service-delivery spine. All four Vertical Service Packs (Cat
 
 | ID | Requirement | Status |
 |---|---|---|
+| **PACK-001…004** | Vertical Service Packs (Catering, Housekeeping, Camp Services, Facility Services) pack activation & templates. | DELIVERED (Wave A3) |
 | **SO-ADV-001** | Recurring service generation from a schedule/contract cycle. | DEFERRED |
-| **SO-ADV-002** | Advanced scheduling (capacity, constraints, rescheduling rules). | DEFERRED |
-| **SO-ADV-003** | Route planning for distributed execution. | DEFERRED |
-| **SO-ADV-004** | Productivity measurement and manpower optimisation. | DEFERRED |
-| **SO-ADV-005** | Demand and workload forecasting. | DEFERRED |
-| **SO-ADV-006** | Offline field execution with deferred synchronisation. | DEFERRED |
+| **SO-ADV-002** | Advanced scheduling (capacity, constraints, rescheduling rules). | DELIVERED (Wave A3) |
+| **SO-ADV-003** | Route planning for distributed execution. | DELIVERED (Wave A3) |
+| **SO-ADV-004** | Productivity measurement and manpower optimisation. | DELIVERED (Wave A3) |
+| **SO-ADV-005** | Demand and workload forecasting. | DELIVERED (Wave A3) |
+| **SO-ADV-006** | Offline field execution with deferred synchronisation. | DEFERRED (Pending Founder ADR) |
 
 ## Client Configuration
 
@@ -57,17 +58,15 @@ Delivered in Phase 2 (roadmap units OPS.1–OPS.5). Backend lives under
 frozen target repository architecture — with frontend surfaces under
 `apps/web/src/modules/service-operations/`.
 
-Lifecycle state is owned entirely by the Workflow Engine (`work_orders.
-workflow_instance_id`); this module stores no status column and forwards action
-codes verbatim. Checklists are snapshotted onto the Work Order at creation so
-later template edits cannot rewrite executed history. Evidence reuses Document
-Core with an entity authorization resolver for `work_order`. Numbering,
-configuration, audit, events, notification, RBAC, and Customer Data Scope are
-all reused, never re-implemented.
+Wave A3 (revised) delivered Advanced capabilities under `apps/api/src/modules/service-operations/advanced/`
+and frontend surfaces under `apps/web/src/modules/service-operations/`:
+- **Vertical Service Packs (`PACK-001…004`)**: Automated installation, validation, template extraction, and tenant-scoped pack activation for Catering, Housekeeping, Camp, and Facility Services (`ServicePacksPage.tsx`).
+- **Optimization Engine (`SO-ADV-002…005`)**: Deterministic heuristic route, roster, capacity, and workload optimization (`OptimizationPage.tsx`) with explainable score breakdowns and human-confirmed atomic assignment apply guarded by database transactions.
+- **SO-ADV-006 (Offline Field PWA)**: Explicitly deferred by Founder decision awaiting dedicated architecture ADR for offline mutation queue reconciling with platform security rules.
 
-Evidence: `service-operations.test.ts` (13 tests) plus a real-browser
-end-to-end acceptance covering define → request → work order → assign →
-schedule → execute → evidence → complete → verify.
+Lifecycle state is owned entirely by the Workflow Engine (`work_orders.workflow_instance_id`); this module stores no status column and forwards action codes verbatim. Checklists are snapshotted onto the Work Order at creation so later template edits cannot rewrite executed history. Evidence reuses Document Core with an entity authorization resolver for `work_order`. Numbering, configuration, audit, events, notification, RBAC, and Customer Data Scope are all reused, never re-implemented.
+
+Evidence: `service-operations.test.ts` (13 tests), `wave-a3-integration.test.ts` (29 tests), and full API test matrix.
 
 ## Why this module mattered
 

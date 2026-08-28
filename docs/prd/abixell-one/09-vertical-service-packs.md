@@ -40,10 +40,11 @@ Abixell One:  Service Operations & Work Management  (1 generic engine)
 
 ## Pack register
 
-All four packs are **PLANNED**, gated on Service Operations Core (Phase 2).
+All four packs are **DELIVERED** (Wave A3) as automated pack definitions with versioning, manifest validation, activation state management, and template extraction over generic Service Operations.
 
 ### PACK-001 — Catering
 ```text
+Status               : DELIVERED (Wave A3)
 Primary owner module : Service Operations & Work Management
 Required modules     : Service Operations, Customer & Commercial
 Optional modules     : Supply Chain (ingredients/consumables), Workforce (crew),
@@ -55,6 +56,7 @@ Optional extension    : client-specific meal-count or billing interface
 
 ### PACK-002 — Housekeeping
 ```text
+Status               : DELIVERED (Wave A3)
 Primary owner module : Service Operations & Work Management
 Required modules     : Service Operations, Customer & Commercial
 Optional modules     : Workforce (crew rostering), Supply Chain (consumables),
@@ -65,9 +67,24 @@ Optional advanced     : recurring service, route planning, manpower optimisation
 
 ### PACK-003 — Camp Services
 ```text
+Status               : DELIVERED (Wave A3)
 Primary owner module : Service Operations & Work Management
 Required modules     : Service Operations, Customer & Commercial
 Optional modules     : Asset (facilities/rooms), Workforce, Supply Chain, HSE
+Required configuration: accommodation/service types, occupancy handling, checklists
+Optional advanced     : recurring service, forecasting
+```
+
+### PACK-004 — Facility Services
+```text
+Status               : DELIVERED (Wave A3)
+Primary owner module : Service Operations & Work Management
+Required modules     : Service Operations, Customer & Commercial
+Optional modules     : Asset (maintenance objects), Workforce, Supply Chain, HSE
+Required configuration: facility/service types, inspection checklists, SLA
+Optional advanced     : preventive/corrective maintenance (Asset Advanced),
+                        advanced scheduling
+```
 Required configuration: accommodation/service types, occupancy handling, checklists
 Optional advanced     : recurring service, forecasting
 ```

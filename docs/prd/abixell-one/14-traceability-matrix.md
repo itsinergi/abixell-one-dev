@@ -44,11 +44,11 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 
 | Legacy area | Abixell One requirement | Disposition | New classification | Impl. status | Roadmap unit |
 |---|---|---|---|---|---|
-| Catering: Kitchen, Production, Distribution, Consumption, Waste, Quality, Nutrition, Menu, Meal Planning | `PACK-001` over `SO-CORE-*` | **SUPERSEDE** (as separate module) → pack + configuration | Pack | PLANNED | Pack wave |
-| Housekeeping: Area, Cleaning, Schedule, Task, Photo, Completion | `PACK-002` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | PLANNED | Pack wave |
-| Camp: Camp, Building, Room, Occupancy, Accommodation, Laundry, Utilities | `PACK-003` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | PLANNED | Pack wave |
-| Facilities: Facility, Service Request, Work Order, History | `PACK-004` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | PLANNED (engine DELIVERED) | Pack wave |
-| Facilities/Camp: Maintenance, Repair | `AST-ADV-001/002` | RECLASSIFY | Advanced (Asset) | DEFERRED | Wave A |
+| Catering: Kitchen, Production, Distribution, Consumption, Waste, Quality, Nutrition, Menu, Meal Planning | `PACK-001` over `SO-CORE-*` | **SUPERSEDE** (as separate module) → pack + configuration | Pack | DELIVERED | PACK-001 (Wave A3) |
+| Housekeeping: Area, Cleaning, Schedule, Task, Photo, Completion | `PACK-002` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | DELIVERED | PACK-002 (Wave A3) |
+| Camp: Camp, Building, Room, Occupancy, Accommodation, Laundry, Utilities | `PACK-003` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | DELIVERED | PACK-003 (Wave A3) |
+| Facilities: Facility, Service Request, Work Order, History | `PACK-004` over `SO-CORE-*` | **SUPERSEDE** → pack + configuration | Pack | DELIVERED | PACK-004 (Wave A3) |
+| Facilities/Camp: Maintenance, Repair | `AST-ADV-001/002` | RECLASSIFY | Advanced (Asset) | DELIVERED | Wave A3 |
 | Catering: Food Cost | `FIN-ADV-*` / `SCM-ADV-005` | RECLASSIFY | Advanced | DEFERRED | Wave A |
 
 > These four are the audit's most significant architectural correction: four IGSEP modules become **one** generic Service Operations engine plus four configuration packs. Business knowledge preserved; duplicate engines eliminated.
@@ -86,7 +86,7 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 | Legacy area | Abixell One requirement | Disposition | New classification | Impl. status | Roadmap unit |
 |---|---|---|---|---|---|
 | Asset Register / Assignment / Transfer / Retirement / History | `AST-CORE-001…010` | ADOPT | Business Core | DELIVERED | AST.1–AST.4 |
-| Asset Inspection / Maintenance / Repair | `AST-ADV-001/002` | RECLASSIFY | Advanced | DEFERRED | Wave A |
+| Asset Inspection / Maintenance / Repair | `AST-ADV-001/002` | RECLASSIFY | Advanced | DELIVERED | AST-ADV-001…007 (Wave A3) |
 
 ### Finance
 

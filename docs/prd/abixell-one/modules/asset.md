@@ -25,13 +25,13 @@ Core is a **register**, not a maintenance system. Maintenance is Advanced.
 
 | ID | Requirement | Status |
 |---|---|---|
-| **AST-ADV-001** | Preventive maintenance scheduling. | DEFERRED |
-| **AST-ADV-002** | Corrective maintenance and maintenance work orders. | DEFERRED |
-| **AST-ADV-003** | Meter reading and usage-based triggers. | DEFERRED |
-| **AST-ADV-004** | Spare parts management (with Supply Chain). | DEFERRED |
-| **AST-ADV-005** | Downtime tracking. | DEFERRED |
-| **AST-ADV-006** | Reliability metrics (MTBF, MTTR). | DEFERRED |
-| **AST-ADV-007** | Predictive maintenance. | DEFERRED |
+| **AST-ADV-001** | Preventive maintenance scheduling. | DELIVERED (Wave A3) |
+| **AST-ADV-002** | Corrective maintenance and maintenance work orders. | DELIVERED (Wave A3) |
+| **AST-ADV-003** | Meter reading and usage-based triggers. | DELIVERED (Wave A3) |
+| **AST-ADV-004** | Spare parts management (with Supply Chain). | DELIVERED (Wave A3) |
+| **AST-ADV-005** | Downtime tracking. | DELIVERED (Wave A3) |
+| **AST-ADV-006** | Reliability metrics (MTBF, MTTR). | DELIVERED (Wave A3) |
+| **AST-ADV-007** | Predictive maintenance. | DELIVERED (Wave A3) |
 | **AST-ADV-008** | Fixed-asset accounting and depreciation (with Finance). | DEFERRED |
 
 ## Client Configuration
@@ -52,7 +52,16 @@ Business: Workforce (custodian), Customer & Commercial (site context). Optional:
 Delivered in Phase 5 (roadmap units AST.1–AST.4). Backend at
 `apps/api/src/modules/asset/core/`, frontend at `apps/web/src/modules/asset/`.
 
-Two tables: `assets` and `asset_movements`. Identity is two-part —
+Wave A3 delivered Advanced capabilities under `apps/api/src/modules/asset/advanced/`
+and frontend surfaces under `apps/web/src/modules/asset/`:
+- **Preventive Maintenance Schedules (`AST-ADV-001`)**: Calendar-based (interval days) and usage-based (meter delta) triggers generating maintenance work orders.
+- **Corrective Maintenance Work Orders (`AST-ADV-002`)**: Asset maintenance work orders with zero competing state machines — lifecycle state is authoritative exclusively through Workflow Engine (`workflow_instance_id`), and timestamps (`started_at`, `completed_at`, `verified_at`) are recorded strictly on workflow transitions.
+- **Meter Readings (`AST-ADV-003`)**: Serialized non-decreasing meter readings via asset row-level locking (`SELECT 1 FROM assets WHERE id = $1 AND tenant_id = $2 FOR UPDATE`).
+- **Spare Parts Management (`AST-ADV-004`)**: Multi-tenant item linkage tracking planned vs actual spare parts quantity and unit costs.
+- **Downtime Tracking (`AST-ADV-005`)**: Tracking operational vs downtime intervals, planned vs unplanned failure types, and impact analysis.
+- **Reliability & Predictive Analytics (`AST-ADV-006/007`)**: Deterministic MTBF (Mean Time Between Failures), MTTR (Mean Time to Repair), Availability % calculation, and advisory predictive maintenance snapshots with failure risk scoring.
+
+Two tables in Core: `assets` and `asset_movements`. Identity is two-part —
 `asset_number` from Numbering Core (always present) plus an OPTIONAL
 `asset_tag`, the physical identifier, unique per tenant through a partial
 index because NULL never equals NULL.
@@ -88,9 +97,7 @@ narrow `CustodianReference` port (`{ id, employeeNumber, fullName }`) is
 implemented inside Asset's own repository, so no employment, contact, or
 other personal data ever reaches an Asset payload.
 
-Evidence: `asset.test.ts` (18 tests) plus a real-browser acceptance covering
-register → document → move → update → status change → retirement →
-history-preserved → hidden-by-default-but-retrievable.
+Evidence: `asset.test.ts` (18 tests), `wave-a3-integration.test.ts` (29 tests), and full API test matrix.
 
 ## Deliberate narrowing of AST-CORE-005
 
