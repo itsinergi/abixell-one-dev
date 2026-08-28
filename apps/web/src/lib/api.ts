@@ -819,6 +819,42 @@ export const api = {
   verifyWorkOrder: (token: string, id: string, notes: string | null) =>
     request<WorkOrder>(`/work-orders/${id}/verify`, { method: "POST", token, body: { notes } }),
 
+  // --- Wave A3: Service Operations Advanced (PACK-001…004 / SO-ADV-002…005)
+  servicePacks: (token: string) =>
+    request<ServicePackView[]>("/service-operations/packs", { token }),
+  servicePack: (token: string, packCode: ServicePackCode) =>
+    request<ServicePackDetail>(`/service-operations/packs/${encodeURIComponent(packCode)}`, { token }),
+  activateServicePack: (token: string, packCode: ServicePackCode, seedPresets: boolean) =>
+    request<ServicePackActivation>(
+      `/service-operations/packs/${encodeURIComponent(packCode)}/activate`,
+      { method: "POST", token, body: { seedPresets } },
+    ),
+  deactivateServicePack: (token: string, packCode: ServicePackCode) =>
+    request<ServicePackActivation>(
+      `/service-operations/packs/${encodeURIComponent(packCode)}/deactivate`,
+      { method: "POST", token },
+    ),
+  optimizationRuns: (token: string, limit = 50) =>
+    request<OptimizationRun[]>(`/service-operations/optimization/runs?limit=${limit}`, { token }),
+  optimizationRun: (token: string, id: string) =>
+    request<OptimizationRun>(`/service-operations/optimization/runs/${id}`, { token }),
+  generateOptimizationRun: (token: string, body: GenerateOptimizationRunBody) =>
+    request<OptimizationRun>("/service-operations/optimization/runs", {
+      method: "POST",
+      token,
+      body,
+    }),
+  applyOptimizationRun: (token: string, id: string) =>
+    request<ApplyOptimizationResponse>(`/service-operations/optimization/runs/${id}/apply`, {
+      method: "POST",
+      token,
+    }),
+  dismissOptimizationRun: (token: string, id: string) =>
+    request<OptimizationRun>(`/service-operations/optimization/runs/${id}/dismiss`, {
+      method: "POST",
+      token,
+    }),
+
   // --- Workforce / HR (Phase 3) ---------------------------------------
   positions: (token: string) => request<PositionRecord[]>("/positions", { token }),
   createPosition: (token: string, body: { code: string; name: string; description?: string | null }) =>
@@ -980,6 +1016,90 @@ export const api = {
       token,
       body: { comment: comment ?? null },
     }),
+
+  // --- Wave A3: Asset Advanced (AST-ADV-001…007) -----------------------
+  assetMaintenanceSchedules: (token: string, assetId?: string) => {
+    const query = assetId ? `?assetId=${encodeURIComponent(assetId)}` : "";
+    return request<AssetMaintenanceSchedule[]>(`/assets/schedules${query}`, { token });
+  },
+  dueAssetMaintenanceSchedules: (token: string, asOfDate?: string) => {
+    const query = asOfDate ? `?asOfDate=${encodeURIComponent(asOfDate)}` : "";
+    return request<AssetMaintenanceSchedule[]>(`/assets/schedules/due${query}`, { token });
+  },
+  assetMaintenanceSchedule: (token: string, id: string) =>
+    request<AssetMaintenanceSchedule>(`/assets/schedules/${id}`, { token }),
+  createAssetMaintenanceSchedule: (token: string, body: CreateAssetMaintenanceScheduleBody) =>
+    request<AssetMaintenanceSchedule>("/assets/schedules", { method: "POST", token, body }),
+
+  assetMaintenanceWorkOrders: (token: string, query: AssetMaintenanceWorkOrderQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.assetId) params.set("assetId", query.assetId);
+    if (query.maintenanceType) params.set("maintenanceType", query.maintenanceType);
+    if (query.assignedToUserId) params.set("assignedToUserId", query.assignedToUserId);
+    const suffix = params.toString() ? `?${params}` : "";
+    return request<AssetMaintenanceWorkOrderRow[]>(`/assets/work-orders${suffix}`, { token });
+  },
+  assetMaintenanceWorkOrder: (token: string, id: string) =>
+    request<AssetMaintenanceWorkOrderDetail>(`/assets/work-orders/${id}`, { token }),
+  createAssetMaintenanceWorkOrder: (token: string, body: CreateAssetMaintenanceWorkOrderBody) =>
+    request<AssetMaintenanceWorkOrder>("/assets/work-orders", { method: "POST", token, body }),
+  assignAssetMaintenanceWorkOrder: (token: string, id: string, assignedToUserId: string) =>
+    request<AssetMaintenanceWorkOrder>(`/assets/work-orders/${id}/assign`, {
+      method: "POST",
+      token,
+      body: { assignedToUserId },
+    }),
+  startAssetMaintenanceWorkOrder: (token: string, id: string) =>
+    request<AssetMaintenanceWorkOrder>(`/assets/work-orders/${id}/start`, { method: "POST", token }),
+  completeAssetMaintenanceWorkOrder: (
+    token: string,
+    id: string,
+    body: CompleteAssetMaintenanceWorkOrderBody,
+  ) => request<AssetMaintenanceWorkOrder>(`/assets/work-orders/${id}/complete`, { method: "POST", token, body }),
+  verifyAssetMaintenanceWorkOrder: (token: string, id: string, verificationNotes?: string | null) =>
+    request<AssetMaintenanceWorkOrder>(`/assets/work-orders/${id}/verify`, {
+      method: "POST",
+      token,
+      body: { verificationNotes: verificationNotes ?? null },
+    }),
+  actOnAssetMaintenanceWorkOrder: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ workOrder: AssetMaintenanceWorkOrder; workflowResult: unknown }>(`/assets/work-orders/${id}/act`, {
+      method: "POST",
+      token,
+      body: { actionCode, comment: comment ?? null },
+    }),
+  recordAssetMaintenancePart: (token: string, id: string, body: RecordAssetMaintenancePartBody) =>
+    request<AssetMaintenancePart>(`/assets/work-orders/${id}/parts`, { method: "POST", token, body }),
+  assetMaintenanceParts: (token: string, id: string) =>
+    request<AssetMaintenancePart[]>(`/assets/work-orders/${id}/parts`, { token }),
+
+  assetMeterReadings: (token: string, assetId: string, readingType?: MeterReadingType) => {
+    const query = readingType ? `?readingType=${encodeURIComponent(readingType)}` : "";
+    return request<AssetMeterReading[]>(`/assets/${assetId}/meter-readings${query}`, { token });
+  },
+  recordAssetMeterReading: (token: string, assetId: string, body: RecordAssetMeterReadingBody) =>
+    request<AssetMeterReading>(`/assets/${assetId}/meter-readings`, { method: "POST", token, body }),
+  assetDowntime: (token: string, assetId: string) =>
+    request<AssetDowntimeRecord[]>(`/assets/${assetId}/downtime`, { token }),
+  recordAssetDowntime: (token: string, assetId: string, body: RecordAssetDowntimeBody) =>
+    request<AssetDowntimeRecord>(`/assets/${assetId}/downtime`, { method: "POST", token, body }),
+  closeAssetDowntime: (token: string, id: string, endTime?: string | null) =>
+    request<AssetDowntimeRecord>(`/assets/downtime/${id}/close`, {
+      method: "POST",
+      token,
+      body: { endTime: endTime ?? null },
+    }),
+  assetReliability: (token: string, assetId: string, periodStart: string, periodEnd: string) =>
+    request<ReliabilityMetrics>(
+      `/assets/${assetId}/reliability?periodStart=${encodeURIComponent(periodStart)}&periodEnd=${encodeURIComponent(periodEnd)}`,
+      { token },
+    ),
+  assetPredictiveSnapshots: (token: string, assetId: string, limit = 20) =>
+    request<AssetPredictiveSnapshot[]>(`/assets/${assetId}/predictive-snapshots?limit=${limit}`, { token }),
+  latestAssetPredictiveSnapshot: (token: string, assetId: string) =>
+    request<AssetPredictiveSnapshot | null>(`/assets/${assetId}/predictive-snapshots/latest`, { token }),
+  generateAssetPredictiveSnapshot: (token: string, assetId: string) =>
+    request<AssetPredictiveSnapshot>(`/assets/${assetId}/predictive-snapshots`, { method: "POST", token }),
 
   // Location pickers reuse the existing Customer & Commercial hierarchy —
   // Asset never owns its own site or project master.
@@ -1978,6 +2098,210 @@ export type AssetQuery = {
   includeTerminal?: boolean;
 };
 
+// --- Wave A3 Asset Advanced types ---------------------------------------
+
+export type MaintenanceFrequencyType = "calendar" | "meter";
+export type MeterReadingType = "hours" | "km" | "cycles";
+export type MaintenanceType = "preventive" | "corrective" | "emergency";
+export type MaintenancePriority = "low" | "medium" | "high" | "critical";
+export type DowntimeReasonCategory =
+  | "breakdown"
+  | "scheduled_maintenance"
+  | "power_failure"
+  | "operator_error"
+  | "other";
+
+export type AssetMaintenanceSchedule = {
+  id: string;
+  tenantId: string;
+  assetId: string;
+  scheduleCode: string;
+  title: string;
+  description: string | null;
+  frequencyType: MaintenanceFrequencyType;
+  intervalDays: number | null;
+  meterInterval: number | null;
+  meterType: MeterReadingType | null;
+  lastPerformedAt: string | null;
+  lastMeterReading: number | null;
+  nextDueDate: string | null;
+  nextDueMeter: number | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+};
+
+export type CreateAssetMaintenanceScheduleBody = {
+  assetId: string;
+  scheduleCode: string;
+  title: string;
+  description?: string | null;
+  frequencyType: MaintenanceFrequencyType;
+  intervalDays?: number | null;
+  meterInterval?: number | null;
+  meterType?: MeterReadingType | null;
+  nextDueDate?: string | null;
+  nextDueMeter?: number | null;
+};
+
+export type AssetMaintenanceWorkOrder = {
+  id: string;
+  tenantId: string;
+  orderNumber: string;
+  assetId: string;
+  scheduleId: string | null;
+  maintenanceType: MaintenanceType;
+  priority: MaintenancePriority;
+  title: string;
+  description: string | null;
+  assignedToUserId: string | null;
+  assignedAt: string | null;
+  assignedByUserId: string | null;
+  startedAt: string | null;
+  startedByUserId: string | null;
+  completedAt: string | null;
+  completedByUserId: string | null;
+  completionNotes: string | null;
+  verifiedAt: string | null;
+  verifiedByUserId: string | null;
+  verificationNotes: string | null;
+  downtimeHours: number;
+  costEstimate: number | null;
+  actualCost: number | null;
+  workflowInstanceId: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+  deletedAt: string | null;
+};
+
+export type AssetMaintenanceWorkOrderRow = {
+  workOrder: AssetMaintenanceWorkOrder;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+};
+
+export type AssetMaintenanceWorkOrderQuery = {
+  assetId?: string;
+  maintenanceType?: MaintenanceType;
+  assignedToUserId?: string;
+};
+
+export type CreateAssetMaintenanceWorkOrderBody = {
+  assetId: string;
+  scheduleId?: string | null;
+  maintenanceType: MaintenanceType;
+  priority?: MaintenancePriority;
+  title: string;
+  description?: string | null;
+  costEstimate?: number | null;
+};
+
+export type AssetMaintenancePart = {
+  id: string;
+  tenantId: string;
+  maintenanceWorkOrderId: string;
+  itemId: string;
+  quantity: number;
+  unitCost: number | null;
+  notes: string | null;
+  recordedAt: string;
+  recordedByUserId: string | null;
+};
+
+export type AssetMaintenanceWorkOrderDetail = {
+  workOrder: AssetMaintenanceWorkOrder;
+  schedule: AssetMaintenanceSchedule | null;
+  parts: AssetMaintenancePart[];
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type CompleteAssetMaintenanceWorkOrderBody = {
+  completionNotes?: string | null;
+  actualCost?: number | null;
+  downtimeHours?: number | null;
+  currentMeterReading?: number | null;
+};
+
+export type RecordAssetMaintenancePartBody = {
+  itemId: string;
+  quantity: number;
+  unitCost?: number | null;
+  notes?: string | null;
+};
+
+export type AssetMeterReading = {
+  id: string;
+  tenantId: string;
+  assetId: string;
+  readingType: MeterReadingType;
+  readingValue: number;
+  readingDate: string;
+  recordedByUserId: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+export type RecordAssetMeterReadingBody = {
+  readingType: MeterReadingType;
+  readingValue: number;
+  readingDate?: string | null;
+  notes?: string | null;
+};
+
+export type AssetDowntimeRecord = {
+  id: string;
+  tenantId: string;
+  assetId: string;
+  maintenanceWorkOrderId: string | null;
+  startTime: string;
+  endTime: string | null;
+  durationMinutes: number | null;
+  reasonCategory: DowntimeReasonCategory;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type RecordAssetDowntimeBody = {
+  maintenanceWorkOrderId?: string | null;
+  startTime: string;
+  endTime?: string | null;
+  reasonCategory: DowntimeReasonCategory;
+  notes?: string | null;
+};
+
+export type ReliabilityMetrics = {
+  periodStart: string;
+  periodEnd: string;
+  elapsedHours: number;
+  downtimeHours: number;
+  operationalHours: number;
+  correctiveFailureCount: number;
+  mtbfHours: number;
+  mttrHours: number;
+  availabilityPct: number;
+};
+
+export type AssetPredictiveSnapshot = {
+  id: string;
+  tenantId: string;
+  assetId: string;
+  analysisDate: string;
+  mtbfHours: number | null;
+  mttrHours: number | null;
+  availabilityPct: number | null;
+  healthScore: number;
+  predictedFailureDate: string | null;
+  confidencePct: number | null;
+  recommendation: string | null;
+  algorithmVersion: string;
+  createdAt: string;
+  createdBy: string | null;
+};
+
 export type CreateAssetBody = {
   name: string;
   assetTag?: string | null;
@@ -2154,6 +2478,107 @@ export type Employee = {
   organizationUnitId: string | null;
   positionId: string | null;
   userId: string | null;
+};
+
+// --- Wave A3 Service Operations Advanced types --------------------------
+
+export type ServicePackCode = "catering" | "housekeeping" | "camp" | "facility";
+
+export type ServicePackChecklistPresetItem = {
+  code: string;
+  label: string;
+  isRequired: boolean;
+  sortOrder: number;
+};
+
+export type ServicePackDefinitionPreset = {
+  code: string;
+  name: string;
+  description: string;
+  category: string;
+  checklistItems: ServicePackChecklistPresetItem[];
+};
+
+export type ServicePackPreset = {
+  packCode: ServicePackCode;
+  name: string;
+  description: string;
+  serviceDefinitions: ServicePackDefinitionPreset[];
+};
+
+export type ServicePackActivation = {
+  id: string;
+  tenantId: string;
+  packCode: ServicePackCode;
+  isActive: boolean;
+  activatedAt: string;
+  activatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ServicePackView = {
+  packCode: ServicePackCode;
+  name: string;
+  description: string;
+  isActive: boolean;
+  activatedAt: string | null;
+  activatedBy: string | null;
+  presetServiceCount: number;
+};
+
+export type ServicePackDetail = ServicePackView & {
+  preset: ServicePackPreset;
+};
+
+export type OptimizationRunStatus = "proposed" | "applied" | "dismissed";
+
+export type OptimizationParameters = {
+  maxWorkOrdersPerWorker?: number;
+  maxMinutesPerWorker?: number;
+  prioritizeSla?: boolean;
+  groupDistanceNear?: boolean;
+};
+
+export type OptimizationAssignmentProposal = {
+  workOrderId: string;
+  workOrderNumber: string;
+  title: string;
+  priority: string | null;
+  customerId: string;
+  siteId: string | null;
+  organizationUnitId: string | null;
+  recommendedUserId: string;
+  recommendedUserName: string;
+  estimatedMinutes: number;
+  rationale: string;
+};
+
+export type OptimizationRun = {
+  id: string;
+  tenantId: string;
+  runNumber: string;
+  targetDate: string;
+  organizationUnitId: string | null;
+  parameters: OptimizationParameters;
+  proposals: OptimizationAssignmentProposal[];
+  status: OptimizationRunStatus;
+  appliedAt: string | null;
+  appliedBy: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type GenerateOptimizationRunBody = {
+  targetDate: string;
+  organizationUnitId?: string | null;
+  parameters?: OptimizationParameters;
+};
+
+export type ApplyOptimizationResponse = {
+  run: OptimizationRun;
+  appliedCount: number;
+  skippedCount: number;
 };
 
 export type EmployeeAssignmentRecord = {

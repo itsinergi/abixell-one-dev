@@ -8,7 +8,7 @@
  * Advanced.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
   api,
@@ -182,7 +182,14 @@ export function AssetDetailPage() {
       <PageHeader
         title={`${asset.assetNumber} — ${asset.name}`}
         subtitle={asset.category ?? undefined}
-        actions={<StatusPill tone={assetStatusTone(asset.status)}>{assetStatusLabel(asset.status)}</StatusPill>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Link to={`/asset-maintenance/assets/${asset.id}`}>
+              <Button variant="secondary">Meters &amp; Reliability</Button>
+            </Link>
+            <StatusPill tone={assetStatusTone(asset.status)}>{assetStatusLabel(asset.status)}</StatusPill>
+          </div>
+        }
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}

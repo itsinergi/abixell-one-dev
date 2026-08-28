@@ -35,9 +35,11 @@ import { registerAdminConsoleRoutes } from "./interfaces/http/routes/admin-conso
 import { registerSalesRoutes } from "./interfaces/http/routes/sales.js";
 import { registerServiceQualityRoutes } from "./interfaces/http/routes/service-quality.js";
 import { registerServiceOperationsRoutes } from "./modules/service-operations/core/api/service-operations.routes.js";
+import { registerServiceOperationsAdvancedRoutes } from "./modules/service-operations/advanced/api/service-operations-advanced.routes.js";
 import { registerWorkforceRoutes } from "./modules/workforce/core/api/workforce.routes.js";
 import { registerSupplyChainRoutes } from "./modules/supply-chain/core/api/supply-chain.routes.js";
 import { registerAssetRoutes } from "./modules/asset/core/api/asset.routes.js";
+import { registerAssetAdvancedRoutes } from "./modules/asset/advanced/api/asset-advanced.routes.js";
 import { registerFinanceRoutes } from "./modules/finance/core/api/finance.routes.js";
 import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
@@ -151,9 +153,11 @@ export function buildApp(): FastifyInstance {
     registerSurveyAdvancedRoutes(scoped, container);
     registerPublicSurveyRoutes(scoped, container);
     registerServiceOperationsRoutes(scoped, container);
+    registerServiceOperationsAdvancedRoutes(scoped, container);
     registerWorkforceRoutes(scoped, container);
     registerSupplyChainRoutes(scoped, container);
     registerAssetRoutes(scoped, container);
+    registerAssetAdvancedRoutes(scoped, container);
     registerFinanceRoutes(scoped, container);
     // Phase 7 — HSE Core
     registerHseRoutes(scoped, container);

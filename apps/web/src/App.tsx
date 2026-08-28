@@ -32,6 +32,12 @@ import { SuppliersPage } from "./modules/supply-chain/SuppliersPage";
 import { PurchasingPage } from "./modules/supply-chain/PurchasingPage";
 import { AssetsPage } from "./modules/asset/AssetsPage";
 import { AssetDetailPage } from "./modules/asset/AssetDetailPage";
+import { ServicePacksPage } from "./pages/service-operations/ServicePacksPage";
+import { ServiceOptimizationPage } from "./pages/service-operations/ServiceOptimizationPage";
+import { ServiceOptimizationDetailPage } from "./pages/service-operations/ServiceOptimizationDetailPage";
+import { AssetMaintenancePage } from "./pages/asset-advanced/AssetMaintenancePage";
+import { AssetMaintenanceWorkOrderDetailPage } from "./pages/asset-advanced/AssetMaintenanceWorkOrderDetailPage";
+import { AssetPerformancePage } from "./pages/asset-advanced/AssetPerformancePage";
 import { FinanceAccountsPage } from "./modules/finance/FinanceAccountsPage";
 import { FinanceTransactionsPage } from "./modules/finance/FinanceTransactionsPage";
 import { FinanceTransactionDetailPage } from "./modules/finance/FinanceTransactionDetailPage";
@@ -101,6 +107,10 @@ export default function App() {
           <Route path="my-work" element={<MyWorkPage />} />
           <Route path="my-work/:workOrderId" element={<MyWorkDetailPage />} />
           <Route path="service-types" element={<ServiceDefinitionsPage />} />
+          {/* Wave A3 — Vertical Packs and Service Operations optimization */}
+          <Route path="service-packs" element={<ServicePacksPage />} />
+          <Route path="service-optimization" element={<ServiceOptimizationPage />} />
+          <Route path="service-optimization/:runId" element={<ServiceOptimizationDetailPage />} />
           {/* Phase 10 — Customer & Commercial completion */}
           <Route path="customer-commercial" element={<CustomerCommercialPage />} />
           {/* Wave A1 — Sales & Pipeline */}
@@ -117,6 +127,10 @@ export default function App() {
           {/* Phase 5 — Asset */}
           <Route path="assets" element={<AssetsPage />} />
           <Route path="assets/:assetId" element={<AssetDetailPage />} />
+          {/* Wave A3 — Asset Advanced */}
+          <Route path="asset-maintenance" element={<AssetMaintenancePage />} />
+          <Route path="asset-maintenance/work-orders/:workOrderId" element={<AssetMaintenanceWorkOrderDetailPage />} />
+          <Route path="asset-maintenance/assets/:assetId" element={<AssetPerformancePage />} />
           {/* Phase 6 — Finance */}
           <Route path="finance/accounts" element={<FinanceAccountsPage />} />
           <Route path="finance/transactions" element={<FinanceTransactionsPage />} />

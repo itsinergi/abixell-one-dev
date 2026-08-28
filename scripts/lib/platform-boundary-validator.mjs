@@ -102,8 +102,19 @@ const ROUTE_CONTAINER_EXCEPTIONS = [
   typeOnly: true,
 }));
 
+const ADVANCED_ROUTE_CONTAINER_EXCEPTIONS = [
+  "asset", "service-operations",
+].map((moduleName) => ({
+  id: `route-container:${moduleName}:advanced`,
+  source: `apps/api/src/modules/${moduleName}/advanced/api/${moduleName}-advanced.routes.ts`,
+  target: "apps/api/src/composition-root.ts",
+  symbols: ["Container"],
+  typeOnly: true,
+}));
+
 export const DEFAULT_API_EXCEPTIONS = [
   ...ROUTE_CONTAINER_EXCEPTIONS,
+  ...ADVANCED_ROUTE_CONTAINER_EXCEPTIONS,
   {
     id: "transition:service-operations-customer-service",
     source: "apps/api/src/modules/service-operations/core/application/service-operations.service.ts",
@@ -467,7 +478,7 @@ export function validateImportBoundaries(files, options = {}) {
         }
 
         if (!sourceModule && targetModule) {
-          const isAppRoute = sourcePath === "apps/api/src/app.ts" && /\/core\/api\/.+\.routes\.ts$/.test(target);
+          const isAppRoute = sourcePath === "apps/api/src/app.ts" && /\/(?:core|advanced)\/api\/.+\.routes\.ts$/.test(target);
           const isComposition = sourcePath === "apps/api/src/composition-root.ts";
           if (!isAppRoute && !isComposition) {
             apiFindings.push(finding(

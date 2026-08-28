@@ -70,6 +70,10 @@ import { PgSupplyChainRepository } from "./modules/supply-chain/core/infrastruct
 import { SupplyChainService } from "./modules/supply-chain/core/application/supply-chain.service.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
+import { PgServiceOperationsAdvancedRepository } from "./modules/service-operations/advanced/infrastructure/service-operations-advanced.repository.pg.js";
+import { ServiceOperationsAdvancedService } from "./modules/service-operations/advanced/application/service-operations-advanced.service.js";
+import { PgAssetAdvancedRepository } from "./modules/asset/advanced/infrastructure/asset-advanced.repository.pg.js";
+import { AssetAdvancedService } from "./modules/asset/advanced/application/asset-advanced.service.js";
 import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finance.repository.pg.js";
 import { FinanceService } from "./modules/finance/core/application/finance.service.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
@@ -261,6 +265,29 @@ export function buildContainer() {
   // asset's own Data Scope, not by plain asset.read.
   const asset = new AssetService(
     new PgAssetRepository(pool),
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
+  // Wave A3 / PACK-001…004 & SO-ADV-002…005 — Vertical Service Packs and
+  // route/roster/capacity/workload optimization over Service Operations Core.
+  const serviceOperationsAdvanced = new ServiceOperationsAdvancedService(
+    new PgServiceOperationsAdvancedRepository(pool),
+    serviceOperations,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
+  // Wave A3 / AST-ADV-001…007 — preventive/corrective maintenance,
+  // spare parts, meter readings, downtime, reliability and predictive
+  // analytics. Lifecycle is delegated to Workflow Engine via instance id.
+  const assetAdvanced = new AssetAdvancedService(
+    new PgAssetAdvancedRepository(pool),
     workflow,
     configuration,
     audit,
@@ -563,9 +590,11 @@ export function buildContainer() {
     surveyPublic,
     surveyIntegration,
     serviceOperations,
+    serviceOperationsAdvanced,
     workforce,
     supplyChain,
     asset,
+    assetAdvanced,
     finance,
     hse,
     projectDelivery,
