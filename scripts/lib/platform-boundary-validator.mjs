@@ -103,7 +103,7 @@ const ROUTE_CONTAINER_EXCEPTIONS = [
 }));
 
 const ADVANCED_ROUTE_CONTAINER_EXCEPTIONS = [
-  "asset", "service-operations",
+  "asset", "service-operations", "workforce",
 ].map((moduleName) => ({
   id: `route-container:${moduleName}:advanced`,
   source: `apps/api/src/modules/${moduleName}/advanced/api/${moduleName}-advanced.routes.ts`,

@@ -27,6 +27,12 @@ import { SalesPipelinePage } from "./pages/sales/SalesPipelinePage";
 import { ServiceQualityPage } from "./pages/service-quality/ServiceQualityPage";
 import { EmployeesPage } from "./modules/workforce/EmployeesPage";
 import { EmployeeDetailPage } from "./modules/workforce/EmployeeDetailPage";
+import { WorkforceAttendancePage } from "./pages/workforce-advanced/WorkforceAttendancePage";
+import { WorkforceLeaveOvertimePage } from "./pages/workforce-advanced/WorkforceLeaveOvertimePage";
+import { WorkforcePayrollPage } from "./pages/workforce-advanced/WorkforcePayrollPage";
+import { WorkforceRecruitmentPage } from "./pages/workforce-advanced/WorkforceRecruitmentPage";
+import { WorkforcePerformancePage } from "./pages/workforce-advanced/WorkforcePerformancePage";
+import { WorkforcePlanningPage } from "./pages/workforce-advanced/WorkforcePlanningPage";
 import { ItemsPage } from "./modules/supply-chain/ItemsPage";
 import { SuppliersPage } from "./modules/supply-chain/SuppliersPage";
 import { PurchasingPage } from "./modules/supply-chain/PurchasingPage";
@@ -120,6 +126,13 @@ export default function App() {
           {/* Phase 3 — Workforce / HR */}
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="employees/:employeeId" element={<EmployeeDetailPage />} />
+          {/* Wave A4 — Workforce Advanced */}
+          <Route path="workforce/attendance" element={<WorkforceAttendancePage />} />
+          <Route path="workforce/leave-overtime" element={<WorkforceLeaveOvertimePage />} />
+          <Route path="workforce/payroll" element={<WorkforcePayrollPage />} />
+          <Route path="workforce/recruitment" element={<WorkforceRecruitmentPage />} />
+          <Route path="workforce/performance" element={<WorkforcePerformancePage />} />
+          <Route path="workforce/planning" element={<WorkforcePlanningPage />} />
           {/* Phase 4 — Supply Chain */}
           <Route path="items" element={<ItemsPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />

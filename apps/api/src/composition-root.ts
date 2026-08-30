@@ -66,6 +66,8 @@ import { PgServiceOperationsRepository } from "./modules/service-operations/core
 import { ServiceOperationsService } from "./modules/service-operations/core/application/service-operations.service.js";
 import { PgWorkforceRepository } from "./modules/workforce/core/infrastructure/workforce.repository.pg.js";
 import { WorkforceService } from "./modules/workforce/core/application/workforce.service.js";
+import { PgWorkforceAdvancedRepository } from "./modules/workforce/advanced/infrastructure/workforce-advanced.repository.pg.js";
+import { WorkforceAdvancedService } from "./modules/workforce/advanced/application/workforce-advanced.service.js";
 import { PgSupplyChainRepository } from "./modules/supply-chain/core/infrastructure/supply-chain.repository.pg.js";
 import { SupplyChainService } from "./modules/supply-chain/core/application/supply-chain.service.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
@@ -248,6 +250,18 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Wave A4 / HR-ADV-001…009 — Workforce Advanced owns operational HR
+  // extensions (attendance, leave, payroll, recruitment, performance, and
+  // manpower planning) while Core remains the identity/placement source.
+  const workforceAdvanced = new WorkforceAdvancedService(
+    new PgWorkforceAdvancedRepository(pool),
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   // Phase 4 — Supply Chain Core. Built before DocumentService so its
   // purchase-document resolvers can close over it (ADR-0012).
   const supplyChain = new SupplyChainService(
@@ -422,6 +436,18 @@ export function buildContainer() {
       "capa_action",
       { canAccess: (actor, entityId) => serviceQuality.canAccessCapaForDocument(actor, entityId) },
     ],
+    [
+      "workforce_leave_request",
+      { canAccess: (actor, entityId) => workforceAdvanced.canAccessLeaveRequestForDocument(actor, entityId) },
+    ],
+    [
+      "workforce_job_application",
+      { canAccess: (actor, entityId) => workforceAdvanced.canAccessJobApplicationForDocument(actor, entityId) },
+    ],
+    [
+      "workforce_training_enrollment",
+      { canAccess: (actor, entityId) => workforceAdvanced.canAccessTrainingEnrollmentForDocument(actor, entityId) },
+    ],
   ]);
   const document = new DocumentService(
     documentRepo,
@@ -592,6 +618,7 @@ export function buildContainer() {
     serviceOperations,
     serviceOperationsAdvanced,
     workforce,
+    workforceAdvanced,
     supplyChain,
     asset,
     assetAdvanced,

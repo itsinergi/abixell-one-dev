@@ -412,9 +412,10 @@ test("current repository has no blocking platform-boundary findings", async () =
   // adds exactly the governed `user.role.manage` capability. 88 through Wave
   // A1; Wave A2 adds three advanced analytics permissions. Wave A3 adds exactly
   // eight governed Service Operations / Asset Advanced permissions; SO-ADV-006
-  // remains deferred and contributes no offline-sync permission.
+  // remains deferred and contributes no offline-sync permission. Wave A4 adds
+  // exactly fifteen governed Workforce Advanced permissions.
   // Pinned deliberately: an unexplained change means a permission was
   // introduced or removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 99);
+  assert.equal(result.permissionCount, 114);
   assert.equal(result.advisoryCount, 1);
 });

@@ -1,0 +1,347 @@
+/** Wave A4 — headcount demand forecasting, budget gap analysis, simulation, and advisory actions. */
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../auth/AuthContext";
+import {
+  api,
+  ApiError,
+  type PositionRecord,
+  type WorkforceManpowerGapEntry,
+  type WorkforceManpowerPlan,
+  type WorkforceManpowerPlanStatus,
+} from "../../lib/api";
+import { PERMISSIONS } from "../../lib/capabilities";
+import { useShell } from "../../shell/layout/AppShell";
+import {
+  Alert,
+  Button,
+  Card,
+  DataTable,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  Spinner,
+  StatusPill,
+  type Column,
+} from "../../shell/components/ui";
+import { formatDateShort, formatMoney } from "../../shared/format";
+
+function label(value: string): string {
+  return value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+function statusTone(status: WorkforceManpowerPlanStatus) {
+  switch (status) {
+    case "applied":
+      return "success";
+    case "computed":
+      return "info";
+    case "draft":
+      return "neutral";
+    case "dismissed":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
+
+function money(amount: number | string | null | undefined): string {
+  if (amount == null) return "—";
+  return formatMoney(String(amount));
+}
+
+export function WorkforcePlanningPage() {
+  const { session } = useAuth();
+  const token = session!.accessToken;
+  const { permissions } = useShell();
+
+  const canManage = permissions.includes(PERMISSIONS.workforcePlanningManage);
+  const canApply = permissions.includes(PERMISSIONS.workforcePlanningApply);
+
+  const [plans, setPlans] = useState<WorkforceManpowerPlan[]>([]);
+  const [positions, setPositions] = useState<PositionRecord[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const [statusFilter, setStatusFilter] = useState<WorkforceManpowerPlanStatus | "">("");
+  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
+
+  const [planTitle, setPlanTitle] = useState("");
+  const [planYear, setPlanYear] = useState(String(new Date().getFullYear()));
+  const [planUnitId, setPlanUnitId] = useState("");
+
+  const [targetByPosition, setTargetByPosition] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [posList, planList] = await Promise.all([
+        api.positions(token).catch(() => [] as PositionRecord[]),
+        api.workforceManpowerPlans(token, {
+          planYear: Number(yearFilter) || undefined,
+          status: (statusFilter as WorkforceManpowerPlanStatus) || undefined,
+        }),
+      ]);
+      setPositions(posList.filter((item) => item.isActive));
+      setPlans(planList);
+      if (planList.length > 0 && !selectedPlanId) {
+        setSelectedPlanId(planList[0].id);
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load manpower planning records.");
+    } finally {
+      setLoading(false);
+    }
+  }, [token, yearFilter, statusFilter, selectedPlanId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const selectedPlan = useMemo(
+    () => plans.find((item) => item.id === selectedPlanId) ?? plans[0] ?? null,
+    [plans, selectedPlanId],
+  );
+
+  const positionName = useMemo(
+    () => (id: string | null) => {
+      if (!id) return "General / Unassigned";
+      return positions.find((item) => item.id === id)?.name ?? id;
+    },
+    [positions],
+  );
+
+  async function runAction(action: () => Promise<unknown>, message: string) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await action();
+      setNotice(message);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Planning operation failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createPlan() {
+    await runAction(
+      () => api.createWorkforceManpowerPlan(token, {
+        title: planTitle.trim(),
+        planYear: Number(planYear) || new Date().getFullYear(),
+        organizationUnitId: planUnitId || null,
+      }),
+      `Manpower plan scenario ${planTitle} created.`,
+    );
+    setPlanTitle("");
+  }
+
+  async function computePlan(id: string) {
+    const targets: Record<string, number> = {};
+    for (const [posId, count] of Object.entries(targetByPosition)) {
+      if (count && Number(count) >= 0) targets[posId] = Number(count);
+    }
+    await runAction(
+      () => api.computeWorkforceManpowerPlan(token, id, targets),
+      "Manpower plan demand gap and cost delta computed.",
+    );
+  }
+
+  async function applyPlan(id: string) {
+    await runAction(
+      () => api.applyWorkforceManpowerPlan(token, id),
+      "Manpower plan advisory recommendation applied.",
+    );
+  }
+
+  async function dismissPlan(id: string) {
+    await runAction(
+      () => api.dismissWorkforceManpowerPlan(token, id),
+      "Manpower plan dismissed.",
+    );
+  }
+
+  const planColumns: Column<WorkforceManpowerPlan>[] = [
+    {
+      header: "Plan",
+      cell: (row) => (
+        <div>
+          <div className="font-semibold text-slate-900">{row.title}</div>
+          <div className="font-mono text-xs text-slate-500">{row.planNumber} (FY {row.planYear})</div>
+        </div>
+      ),
+      mobileRole: "title",
+    },
+    { header: "Headcount (Current / Target)", cell: (row) => `${row.currentHeadcount} → ${row.plannedHeadcount}` },
+    {
+      header: "Headcount gap",
+      cell: (row) => (
+        <span className={row.varianceHeadcount >= 0 ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"}>
+          {row.varianceHeadcount >= 0 ? `+${row.varianceHeadcount}` : row.varianceHeadcount}
+        </span>
+      ),
+    },
+    { header: "Cost delta", cell: (row) => money(row.varianceCostProjection) },
+    {
+      header: "Status",
+      cell: (row) => <StatusPill tone={statusTone(row.status)}>{label(row.status)}</StatusPill>,
+      mobileRole: "status",
+    },
+    {
+      header: "Actions",
+      cell: (row) => (
+        <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+          <Button variant="secondary" className="text-xs" onClick={() => setSelectedPlanId(row.id)}>
+            Select
+          </Button>
+          {canApply && row.status === "computed" ? (
+            <Button variant="secondary" className="text-xs" disabled={busy} onClick={() => void applyPlan(row.id)}>
+              Apply
+            </Button>
+          ) : null}
+          {canManage && (row.status === "draft" || row.status === "computed") ? (
+            <Button variant="ghost" className="text-xs text-rose-700" disabled={busy} onClick={() => void dismissPlan(row.id)}>
+              Dismiss
+            </Button>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
+
+  const gapColumns: Column<WorkforceManpowerGapEntry>[] = [
+    { header: "Position", cell: (row) => <span className="font-semibold">{positionName(row.positionId)}</span>, mobileRole: "title" },
+    { header: "Current", cell: (row) => row.currentHeadcount },
+    { header: "Planned", cell: (row) => row.plannedHeadcount },
+    {
+      header: "Variance",
+      cell: (row) => (
+        <span className={row.variance >= 0 ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"}>
+          {row.variance >= 0 ? `+${row.variance}` : row.variance}
+        </span>
+      ),
+      mobileRole: "status",
+    },
+    { header: "Cost Impact", cell: (row) => money(row.costImpact) },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Workforce Planning"
+        subtitle="Compare demand models, compute headcount and payroll cost gaps, and make governed advisory planning decisions."
+      />
+
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      {notice ? <Alert tone="success">{notice}</Alert> : null}
+      {!canManage ? <Alert tone="info">Creating and computing scenarios require <code className="font-mono text-xs">workforce.planning.manage</code>.</Alert> : null}
+      {!canApply ? <Alert tone="info">Applying planning decisions requires <code className="font-mono text-xs">workforce.planning.apply</code>.</Alert> : null}
+
+      <Card>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">Scenario Filters</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Plan year"><Input type="number" min="2000" max="2100" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} /></Field>
+          <Field label="Status">
+            <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkforceManpowerPlanStatus)}>
+              <option value="">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="computed">Computed</option>
+              <option value="applied">Applied</option>
+              <option value="dismissed">Dismissed</option>
+            </Select>
+          </Field>
+        </div>
+      </Card>
+
+      {canManage ? (
+        <Card>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Manpower Planning Scenario</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Scenario title" required><Input value={planTitle} onChange={(event) => setPlanTitle(event.target.value)} placeholder="FY2026 Field Expansion" /></Field>
+            <Field label="Plan year" required><Input type="number" min="2000" max="2100" value={planYear} onChange={(event) => setPlanYear(event.target.value)} /></Field>
+            <Field label="Organization unit ID"><Input value={planUnitId} onChange={(event) => setPlanUnitId(event.target.value)} placeholder="Optional unit scope" /></Field>
+          </div>
+          <Button className="mt-3" disabled={busy || !planTitle.trim()} onClick={() => void createPlan()}>Create scenario</Button>
+        </Card>
+      ) : null}
+
+      {loading ? <Spinner label="Loading planning scenarios…" /> : (
+        <div className="space-y-4">
+          <Card>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">Planning Scenarios</h2>
+            <DataTable
+              columns={planColumns}
+              rows={plans}
+              keyOf={(row) => row.id}
+              mobileBreakpoint="md"
+              empty={<EmptyState title="No manpower plans found" description="Create a planning scenario above to begin simulation." />}
+            />
+          </Card>
+
+          {selectedPlan ? (
+            <Card>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">{selectedPlan.title} ({selectedPlan.planNumber})</h3>
+                  <div className="text-xs text-slate-500">FY {selectedPlan.planYear} | Status: {label(selectedPlan.status)} | Computed at: {formatDateShort(selectedPlan.computedAt)}</div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill tone={statusTone(selectedPlan.status)}>{label(selectedPlan.status)}</StatusPill>
+                  {canApply && selectedPlan.status === "computed" ? (
+                    <Button variant="primary" disabled={busy} onClick={() => void applyPlan(selectedPlan.id)}>
+                      Apply plan
+                    </Button>
+                  ) : null}
+                  {canManage && (selectedPlan.status === "draft" || selectedPlan.status === "computed") ? (
+                    <Button variant="secondary" className="text-rose-700" disabled={busy} onClick={() => void dismissPlan(selectedPlan.id)}>
+                      Dismiss
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
+              {canManage && selectedPlan.status !== "applied" ? (
+                <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="mb-2 text-sm font-semibold text-slate-800">Simulate Target Headcount by Role</h4>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {positions.map((position) => (
+                      <Field key={position.id} label={position.name}>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="Target headcount"
+                          value={targetByPosition[position.id] ?? ""}
+                          onChange={(event) => setTargetByPosition((current) => ({ ...current, [position.id]: event.target.value }))}
+                        />
+                      </Field>
+                    ))}
+                  </div>
+                  <Button className="mt-3" disabled={busy} onClick={() => void computePlan(selectedPlan.id)}>
+                    Compute headcount and cost gap
+                  </Button>
+                </div>
+              ) : null}
+
+              <h4 className="mb-2 text-sm font-semibold text-slate-800">Headcount &amp; Budget Gap Breakdown</h4>
+              <DataTable
+                columns={gapColumns}
+                rows={selectedPlan.gapAnalysis ?? []}
+                keyOf={(row) => `${row.positionId ?? "unassigned"}-${row.organizationUnitId ?? "all"}`}
+                mobileBreakpoint="md"
+                empty={<EmptyState title="No gap computation recorded" description="Run simulation above to calculate position variances and financial delta." />}
+              />
+            </Card>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}

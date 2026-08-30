@@ -52,6 +52,15 @@ async function requestForm<T>(path: string, token: string, form: FormData): Prom
   return data as T;
 }
 
+function queryString(query: Record<string, string | number | boolean | null | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  }
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
 export const api = {
   login: (payload: { tenantCode: string; email: string; password: string }) =>
     request<{
@@ -854,6 +863,129 @@ export const api = {
       method: "POST",
       token,
     }),
+
+  // --- Wave A4: Workforce Advanced (HR-ADV-001…009) ------------------
+  workforceShifts: (token: string, includeInactive = false) =>
+    request<WorkforceShift[]>(`/workforce/advanced/shifts${includeInactive ? "?includeInactive=true" : ""}`, { token }),
+  createWorkforceShift: (token: string, body: CreateWorkforceShiftBody) =>
+    request<WorkforceShift>("/workforce/advanced/shifts", { method: "POST", token, body }),
+  setWorkforceShiftActive: (token: string, id: string, isActive: boolean) =>
+    request<WorkforceShift>(`/workforce/advanced/shifts/${id}/active`, { method: "PATCH", token, body: { isActive } }),
+  workforceRosters: (token: string, query: WorkforceRosterQuery = {}) =>
+    request<WorkforceRoster[]>(`/workforce/advanced/rosters${queryString(query)}`, { token }),
+  upsertWorkforceRoster: (token: string, body: UpsertWorkforceRosterBody) =>
+    request<WorkforceRoster>("/workforce/advanced/rosters", { method: "PUT", token, body }),
+  workforceAttendance: (token: string, query: WorkforceAttendanceQuery = {}) =>
+    request<WorkforceAttendanceRecord[]>(`/workforce/advanced/attendance${queryString(query)}`, { token }),
+  recordWorkforceAttendance: (token: string, body: RecordWorkforceAttendanceBody) =>
+    request<WorkforceAttendanceRecord>("/workforce/advanced/attendance", { method: "POST", token, body }),
+
+  workforceLeaveTypes: (token: string, includeInactive = false) =>
+    request<WorkforceLeaveType[]>(`/workforce/advanced/leave-types${includeInactive ? "?includeInactive=true" : ""}`, { token }),
+  createWorkforceLeaveType: (token: string, body: CreateWorkforceLeaveTypeBody) =>
+    request<WorkforceLeaveType>("/workforce/advanced/leave-types", { method: "POST", token, body }),
+  workforceLeaveBalances: (token: string, employeeId: string, balanceYear?: number) =>
+    request<WorkforceLeaveBalance[]>(`/workforce/advanced/leave-balances${queryString({ employeeId, balanceYear })}`, { token }),
+  setWorkforceLeaveAllocation: (token: string, body: SetWorkforceLeaveAllocationBody) =>
+    request<WorkforceLeaveBalance>("/workforce/advanced/leave-balances", { method: "PUT", token, body }),
+  workforceLeaveRequests: (token: string, query: WorkforceLeaveRequestQuery = {}) =>
+    request<WorkforceLeaveRequestRow[]>(`/workforce/advanced/leave-requests${queryString(query)}`, { token }),
+  createWorkforceLeaveRequest: (token: string, body: CreateWorkforceLeaveRequestBody) =>
+    request<WorkforceLeaveRequest>("/workforce/advanced/leave-requests", { method: "POST", token, body }),
+  actOnWorkforceLeaveRequest: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ leaveRequest: WorkforceLeaveRequest; workflowResult: unknown }>(`/workforce/advanced/leave-requests/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+  workforceOvertimeRequests: (token: string, query: WorkforceOvertimeRequestQuery = {}) =>
+    request<WorkforceOvertimeRequestRow[]>(`/workforce/advanced/overtime-requests${queryString(query)}`, { token }),
+  createWorkforceOvertimeRequest: (token: string, body: CreateWorkforceOvertimeRequestBody) =>
+    request<WorkforceOvertimeRequest>("/workforce/advanced/overtime-requests", { method: "POST", token, body }),
+  recordWorkforceActualOvertime: (token: string, id: string, actualHours: number) =>
+    request<WorkforceOvertimeRequest>(`/workforce/advanced/overtime-requests/${id}/actual`, { method: "POST", token, body: { actualHours } }),
+  actOnWorkforceOvertimeRequest: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ overtimeRequest: WorkforceOvertimeRequest; workflowResult: unknown }>(`/workforce/advanced/overtime-requests/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+
+  workforceStatutoryPolicies: (token: string) =>
+    request<WorkforceStatutoryPolicy[]>("/workforce/advanced/statutory-policies", { token }),
+  createWorkforceStatutoryPolicy: (token: string, body: CreateWorkforceStatutoryPolicyBody) =>
+    request<WorkforceStatutoryPolicy>("/workforce/advanced/statutory-policies", { method: "POST", token, body }),
+  setWorkforceSalaryProfile: (token: string, body: SetWorkforceSalaryProfileBody) =>
+    request<WorkforceEmployeeSalaryProfile>("/workforce/advanced/salary-profiles", { method: "PUT", token, body }),
+  workforcePayrollRuns: (token: string, query: WorkforcePayrollRunQuery = {}) =>
+    request<WorkforcePayrollRunRow[]>(`/workforce/advanced/payroll-runs${queryString(query)}`, { token }),
+  workforcePayrollRun: (token: string, id: string) =>
+    request<WorkforcePayrollRunDetail>(`/workforce/advanced/payroll-runs/${id}`, { token }),
+  createWorkforcePayrollRun: (token: string, body: CreateWorkforcePayrollRunBody) =>
+    request<WorkforcePayrollRun>("/workforce/advanced/payroll-runs", { method: "POST", token, body }),
+  calculateWorkforcePayrollRun: (token: string, id: string) =>
+    request<WorkforcePayrollCalculation>(`/workforce/advanced/payroll-runs/${id}/calculate`, { method: "POST", token }),
+  actOnWorkforcePayrollRun: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ payrollRun: WorkforcePayrollRun; workflowResult: unknown }>(`/workforce/advanced/payroll-runs/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+  workforcePayslips: (token: string, payrollRunId: string) =>
+    request<WorkforcePayslip[]>(`/workforce/advanced/payroll-runs/${payrollRunId}/payslips`, { token }),
+
+  workforceJobPostings: (token: string, query: WorkforceJobPostingQuery = {}) =>
+    request<WorkforceJobPostingRow[]>(`/workforce/advanced/job-postings${queryString(query)}`, { token }),
+  createWorkforceJobPosting: (token: string, body: CreateWorkforceJobPostingBody) =>
+    request<WorkforceJobPosting>("/workforce/advanced/job-postings", { method: "POST", token, body }),
+  actOnWorkforceJobPosting: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ jobPosting: WorkforceJobPosting; workflowResult: unknown }>(`/workforce/advanced/job-postings/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+  workforceJobApplications: (token: string, query: WorkforceJobApplicationQuery = {}) =>
+    request<WorkforceJobApplication[]>(`/workforce/advanced/job-applications${queryString(query)}`, { token }),
+  createWorkforceJobApplication: (token: string, body: CreateWorkforceJobApplicationBody) =>
+    request<WorkforceJobApplication>("/workforce/advanced/job-applications", { method: "POST", token, body }),
+  advanceWorkforceJobApplication: (token: string, id: string, body: AdvanceWorkforceJobApplicationBody) =>
+    request<WorkforceJobApplication>(`/workforce/advanced/job-applications/${id}/stage`, { method: "POST", token, body }),
+
+  workforceCompetencies: (token: string, includeInactive = false) =>
+    request<WorkforceCompetency[]>(`/workforce/advanced/competencies${includeInactive ? "?includeInactive=true" : ""}`, { token }),
+  createWorkforceCompetency: (token: string, body: CreateWorkforceCompetencyBody) =>
+    request<WorkforceCompetency>("/workforce/advanced/competencies", { method: "POST", token, body }),
+  assessWorkforceEmployeeCompetency: (token: string, body: AssessWorkforceEmployeeCompetencyBody) =>
+    request<WorkforceEmployeeCompetency>("/workforce/advanced/employee-competencies", { method: "PUT", token, body }),
+  workforceEmployeeCompetencies: (token: string, employeeId: string) =>
+    request<WorkforceEmployeeCompetency[]>(`/workforce/advanced/employees/${employeeId}/competencies`, { token }),
+  workforceTrainingCourses: (token: string, includeInactive = false) =>
+    request<WorkforceTrainingCourse[]>(`/workforce/advanced/training-courses${includeInactive ? "?includeInactive=true" : ""}`, { token }),
+  createWorkforceTrainingCourse: (token: string, body: CreateWorkforceTrainingCourseBody) =>
+    request<WorkforceTrainingCourse>("/workforce/advanced/training-courses", { method: "POST", token, body }),
+  workforceTrainingEnrollments: (token: string, employeeId: string) =>
+    request<WorkforceTrainingEnrollment[]>(`/workforce/advanced/training-enrollments${queryString({ employeeId })}`, { token }),
+  enrollWorkforceTraining: (token: string, body: EnrollWorkforceTrainingBody) =>
+    request<WorkforceTrainingEnrollment>("/workforce/advanced/training-enrollments", { method: "POST", token, body }),
+  completeWorkforceTraining: (token: string, id: string, body: CompleteWorkforceTrainingBody) =>
+    request<WorkforceTrainingEnrollment>(`/workforce/advanced/training-enrollments/${id}/complete`, { method: "POST", token, body }),
+  workforcePerformanceReviews: (token: string, query: WorkforcePerformanceReviewQuery = {}) =>
+    request<WorkforcePerformanceReviewRow[]>(`/workforce/advanced/performance-reviews${queryString(query)}`, { token }),
+  createWorkforcePerformanceReview: (token: string, body: CreateWorkforcePerformanceReviewBody) =>
+    request<WorkforcePerformanceReview>("/workforce/advanced/performance-reviews", { method: "POST", token, body }),
+  actOnWorkforcePerformanceReview: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ review: WorkforcePerformanceReview; workflowResult: unknown }>(`/workforce/advanced/performance-reviews/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+  workforceCareerPaths: (token: string, fromPositionId?: string) =>
+    request<WorkforceCareerPath[]>(`/workforce/advanced/career-paths${queryString({ fromPositionId })}`, { token }),
+  createWorkforceCareerPath: (token: string, body: CreateWorkforceCareerPathBody) =>
+    request<WorkforceCareerPath>("/workforce/advanced/career-paths", { method: "POST", token, body }),
+
+  workforceManpowerPlans: (token: string, query: WorkforceManpowerPlanQuery = {}) =>
+    request<WorkforceManpowerPlan[]>(`/workforce/advanced/manpower-plans${queryString(query)}`, { token }),
+  createWorkforceManpowerPlan: (token: string, body: CreateWorkforceManpowerPlanBody) =>
+    request<WorkforceManpowerPlan>("/workforce/advanced/manpower-plans", { method: "POST", token, body }),
+  computeWorkforceManpowerPlan: (token: string, id: string, targetHeadcountByPosition: Record<string, number>) =>
+    request<WorkforceManpowerPlan>(`/workforce/advanced/manpower-plans/${id}/compute`, {
+      method: "POST", token, body: { targetHeadcountByPosition },
+    }),
+  applyWorkforceManpowerPlan: (token: string, id: string) =>
+    request<WorkforceManpowerPlan>(`/workforce/advanced/manpower-plans/${id}/apply`, { method: "POST", token }),
+  dismissWorkforceManpowerPlan: (token: string, id: string) =>
+    request<WorkforceManpowerPlan>(`/workforce/advanced/manpower-plans/${id}/dismiss`, { method: "POST", token }),
 
   // --- Workforce / HR (Phase 3) ---------------------------------------
   positions: (token: string) => request<PositionRecord[]>("/positions", { token }),
@@ -2453,6 +2585,171 @@ export type PurchaseOrderDetail = {
   supplier: SupplierRecord | null;
   state: string;
 };
+
+// --- Wave A4 Workforce Advanced types ----------------------------------
+
+export type WorkforceWorkflowStatus = {
+  stepCode: string | null;
+  stepName: string | null;
+  instanceStatus: "in_progress" | "approved" | "rejected" | "cancelled";
+  sla: { dueAt: string | null; slaHours: number | null } | null;
+  assignment: { roleCode: string | null; userId: string | null; isMine: boolean } | null;
+};
+
+export type WorkforceShift = {
+  id: string; tenantId: string; shiftCode: string; name: string; startTime: string; endTime: string;
+  breakMinutes: number; isOvernight: boolean; isActive: boolean; createdAt: string; createdBy: string | null;
+  updatedAt: string; updatedBy: string | null;
+};
+export type CreateWorkforceShiftBody = {
+  shiftCode: string; name: string; startTime: string; endTime: string; breakMinutes?: number; isOvernight?: boolean;
+};
+export type WorkforceRoster = {
+  id: string; tenantId: string; employeeId: string; shiftId: string; rosterDate: string;
+  organizationUnitId: string | null; notes: string | null; createdAt: string; createdBy: string | null;
+  updatedAt: string; updatedBy: string | null;
+};
+export type WorkforceRosterQuery = { employeeId?: string; organizationUnitId?: string; fromDate?: string; toDate?: string };
+export type UpsertWorkforceRosterBody = {
+  employeeId: string; shiftId: string; rosterDate: string; organizationUnitId?: string | null; notes?: string | null;
+};
+export type WorkforceAttendanceStatus = "present" | "late" | "absent" | "leave" | "holiday" | "day_off";
+export type WorkforceAttendanceSource = "manual" | "self_service" | "import" | "device";
+export type WorkforceAttendanceRecord = {
+  id: string; tenantId: string; employeeId: string; attendanceDate: string; shiftId: string | null;
+  clockIn: string | null; clockOut: string | null; workedMinutes: number | null; lateMinutes: number;
+  earlyOutMinutes: number; status: WorkforceAttendanceStatus; source: WorkforceAttendanceSource;
+  notes: string | null; createdAt: string; updatedAt: string;
+};
+export type WorkforceAttendanceQuery = { employeeId?: string; fromDate?: string; toDate?: string; status?: WorkforceAttendanceStatus };
+export type RecordWorkforceAttendanceBody = {
+  employeeId: string; attendanceDate: string; shiftId?: string | null; clockIn?: string | null; clockOut?: string | null;
+  status?: WorkforceAttendanceStatus; source?: WorkforceAttendanceSource; notes?: string | null;
+};
+
+export type WorkforceLeaveType = {
+  id: string; tenantId: string; code: string; name: string; annualAllowanceDays: number; isPaid: boolean;
+  requiresAttachment: boolean; isActive: boolean; createdAt: string; updatedAt: string;
+};
+export type CreateWorkforceLeaveTypeBody = { code: string; name: string; annualAllowanceDays?: number; isPaid?: boolean; requiresAttachment?: boolean };
+export type WorkforceLeaveBalance = {
+  id: string; tenantId: string; employeeId: string; leaveTypeId: string; balanceYear: number;
+  allocatedDays: number; usedDays: number; pendingDays: number; createdAt: string; updatedAt: string;
+};
+export type SetWorkforceLeaveAllocationBody = { employeeId: string; leaveTypeId: string; balanceYear: number; allocatedDays: number };
+export type WorkforceLeaveRequest = {
+  id: string; tenantId: string; requestNumber: string; employeeId: string; leaveTypeId: string; startDate: string;
+  endDate: string; totalDays: number; reason: string | null; attachmentDocumentId: string | null;
+  workflowInstanceId: string | null; submittedAt: string; approvedAt: string | null; rejectedAt: string | null; cancelledAt: string | null;
+};
+export type WorkforceLeaveRequestRow = { leaveRequest: WorkforceLeaveRequest; status: WorkforceWorkflowStatus | null };
+export type WorkforceLeaveRequestQuery = { employeeId?: string; leaveTypeId?: string; fromDate?: string; toDate?: string };
+export type CreateWorkforceLeaveRequestBody = {
+  employeeId: string; leaveTypeId: string; startDate: string; endDate: string; totalDays: number;
+  reason?: string | null; attachmentDocumentId?: string | null;
+};
+export type WorkforceOvertimeRequest = {
+  id: string; tenantId: string; requestNumber: string; employeeId: string; overtimeDate: string; startTime: string;
+  endTime: string; estimatedHours: number; actualHours: number | null; reason: string | null; workflowInstanceId: string | null;
+  submittedAt: string; approvedAt: string | null; rejectedAt: string | null; cancelledAt: string | null;
+};
+export type WorkforceOvertimeRequestRow = { overtimeRequest: WorkforceOvertimeRequest; status: WorkforceWorkflowStatus | null };
+export type WorkforceOvertimeRequestQuery = { employeeId?: string; fromDate?: string; toDate?: string };
+export type CreateWorkforceOvertimeRequestBody = {
+  employeeId: string; overtimeDate: string; startTime: string; endTime: string; estimatedHours: number; reason?: string | null;
+};
+
+export type WorkforcePphBracket = { upTo: number | null; rate: number };
+export type WorkforcePphTerBracket = { category: "A" | "B" | "C"; upTo: number | null; rate: number };
+export type WorkforceStatutoryPolicy = {
+  id: string; tenantId: string; policyCode: string; name: string; countryCode: string; effectiveFrom: string; effectiveTo: string | null;
+  bpjsKesehatanRateEmployer: number; bpjsKesehatanRateEmployee: number; bpjsKesehatanCap: number | null;
+  bpjsTkJhtRateEmployer: number; bpjsTkJhtRateEmployee: number; bpjsTkJkkRate: number; bpjsTkJkmRate: number;
+  bpjsTkJpRateEmployer: number; bpjsTkJpRateEmployee: number; bpjsTkJpCap: number | null; occupationalCostRate: number;
+  occupationalCostMonthlyCap: number | null; ptkpAnnualAmounts: Record<string, number>; pph21Brackets: WorkforcePphBracket[];
+  pph21TerBrackets: WorkforcePphTerBracket[]; pph21Method: "annualized" | "ter"; nonNpwpSurchargeRate: number;
+  roundingMode: "half_up" | "down" | "up"; isActive: boolean;
+};
+export type CreateWorkforceStatutoryPolicyBody = Omit<WorkforceStatutoryPolicy, "id" | "tenantId" | "isActive" | "countryCode" | "effectiveTo" | "bpjsKesehatanRateEmployer" | "bpjsKesehatanRateEmployee" | "bpjsKesehatanCap" | "bpjsTkJhtRateEmployer" | "bpjsTkJhtRateEmployee" | "bpjsTkJkkRate" | "bpjsTkJkmRate" | "bpjsTkJpRateEmployer" | "bpjsTkJpRateEmployee" | "bpjsTkJpCap" | "occupationalCostRate" | "occupationalCostMonthlyCap" | "ptkpAnnualAmounts" | "pph21Brackets" | "pph21TerBrackets" | "pph21Method" | "nonNpwpSurchargeRate" | "roundingMode"> & {
+  countryCode?: string; effectiveTo?: string | null; bpjsKesehatanRateEmployer?: number; bpjsKesehatanRateEmployee?: number;
+  bpjsKesehatanCap?: number | null; bpjsTkJhtRateEmployer?: number; bpjsTkJhtRateEmployee?: number; bpjsTkJkkRate?: number;
+  bpjsTkJkmRate?: number; bpjsTkJpRateEmployer?: number; bpjsTkJpRateEmployee?: number; bpjsTkJpCap?: number | null;
+  occupationalCostRate?: number; occupationalCostMonthlyCap?: number | null; ptkpAnnualAmounts?: Record<string, number>;
+  pph21Brackets?: WorkforcePphBracket[]; pph21TerBrackets?: WorkforcePphTerBracket[]; pph21Method?: "annualized" | "ter";
+  nonNpwpSurchargeRate?: number; roundingMode?: "half_up" | "down" | "up";
+};
+export type WorkforcePtkpStatus = "TK/0" | "TK/1" | "TK/2" | "TK/3" | "K/0" | "K/1" | "K/2" | "K/3";
+export type WorkforceEmployeeSalaryProfile = {
+  id: string; tenantId: string; employeeId: string; baseSalary: number; fixedAllowance: number; overtimeHourlyRate: number | null;
+  ptkpStatus: WorkforcePtkpStatus; hasNpwp: boolean; bpjsKesehatanNumber: string | null; bpjsTkNumber: string | null;
+  bankName: string | null; bankAccountNumber: string | null; effectiveFrom: string; effectiveTo: string | null;
+};
+export type SetWorkforceSalaryProfileBody = {
+  employeeId: string; baseSalary: number; fixedAllowance?: number; overtimeHourlyRate?: number | null; ptkpStatus: WorkforcePtkpStatus;
+  hasNpwp?: boolean; bpjsKesehatanNumber?: string | null; bpjsTkNumber?: string | null; bankName?: string | null;
+  bankAccountNumber?: string | null; effectiveFrom: string;
+};
+export type WorkforcePayrollRun = {
+  id: string; tenantId: string; runNumber: string; periodMonth: number; periodYear: number; organizationUnitId: string | null;
+  statutoryPolicyId: string | null; workflowInstanceId: string | null; employeeCount: number; totalGross: number;
+  totalDeductions: number; totalNet: number; totalEmployerContributions: number; calculatedAt: string | null;
+  approvedAt: string | null; closedAt: string | null;
+};
+export type WorkforcePayrollRunRow = { payrollRun: WorkforcePayrollRun; status: WorkforceWorkflowStatus | null };
+export type WorkforcePayslip = {
+  id: string; tenantId: string; payrollRunId: string; employeeId: string; baseSalary: number; allowances: number;
+  overtimeHours: number; overtimePay: number; grossSalary: number; bpjsKesehatanEmployee: number; bpjsKesehatanEmployer: number;
+  bpjsTkJhtEmployee: number; bpjsTkJhtEmployer: number; bpjsTkJkkEmployer: number; bpjsTkJkmEmployer: number;
+  bpjsTkJpEmployee: number; bpjsTkJpEmployer: number; pph21Withheld: number; otherDeductions: number; totalDeductions: number;
+  employerContributions: number; netSalary: number; ptkpStatus: string | null; calculationBreakdown: Record<string, unknown>; createdAt: string;
+};
+export type WorkforcePayrollRunDetail = { payrollRun: WorkforcePayrollRun; payslips: WorkforcePayslip[]; status: WorkforceWorkflowStatus | null; availableActions: WorkforceWorkflowAction[] };
+export type WorkforcePayrollCalculation = { payrollRun: WorkforcePayrollRun; payslipCount: number; totals: { totalGross: number; totalDeductions: number; totalNet: number; totalEmployerContributions: number } };
+export type WorkforcePayrollRunQuery = { organizationUnitId?: string; periodYear?: number };
+export type CreateWorkforcePayrollRunBody = { periodMonth: number; periodYear: number; organizationUnitId?: string | null };
+
+export type WorkforceJobPostingStatus = "draft" | "published" | "closed" | "cancelled";
+export type WorkforceJobPosting = {
+  id: string; tenantId: string; postingCode: string; title: string; positionId: string | null; organizationUnitId: string | null;
+  headcountTarget: number; employmentType: string | null; jobDescription: string | null; status: WorkforceJobPostingStatus;
+  workflowInstanceId: string | null; publishedAt: string | null; closedAt: string | null;
+};
+export type WorkforceJobPostingRow = { jobPosting: WorkforceJobPosting; status: WorkforceWorkflowStatus | null };
+export type WorkforceJobPostingQuery = { status?: WorkforceJobPostingStatus; organizationUnitId?: string };
+export type CreateWorkforceJobPostingBody = { title: string; positionId?: string | null; organizationUnitId?: string | null; headcountTarget?: number; employmentType?: string | null; jobDescription?: string | null };
+export type WorkforceJobApplicationStage = "applied" | "screening" | "interview" | "offer" | "hired" | "rejected" | "withdrawn";
+export type WorkforceJobApplication = {
+  id: string; tenantId: string; jobPostingId: string; candidateName: string; candidateEmail: string | null; candidatePhone: string | null;
+  resumeDocumentId: string | null; stage: WorkforceJobApplicationStage; rating: number | null; interviewerNotes: string | null;
+  hiredEmployeeId: string | null; appliedAt: string; decidedAt: string | null;
+};
+export type WorkforceJobApplicationQuery = { jobPostingId?: string; stage?: WorkforceJobApplicationStage };
+export type CreateWorkforceJobApplicationBody = { jobPostingId: string; candidateName: string; candidateEmail?: string | null; candidatePhone?: string | null; resumeDocumentId?: string | null };
+export type AdvanceWorkforceJobApplicationBody = { stage: WorkforceJobApplicationStage; rating?: number | null; interviewerNotes?: string | null; hiredEmployeeId?: string | null };
+
+export type WorkforceCompetency = { id: string; tenantId: string; code: string; name: string; category: string | null; description: string | null; scaleMin: number; scaleMax: number; isActive: boolean };
+export type CreateWorkforceCompetencyBody = { code: string; name: string; category?: string | null; description?: string | null; scaleMin?: number; scaleMax?: number };
+export type WorkforceEmployeeCompetency = { id: string; tenantId: string; employeeId: string; competencyId: string; proficiencyLevel: number; lastAssessedDate: string | null; assessedByUserId: string | null; notes: string | null };
+export type AssessWorkforceEmployeeCompetencyBody = { employeeId: string; competencyId: string; proficiencyLevel: number; notes?: string | null };
+export type WorkforceTrainingCourse = { id: string; tenantId: string; courseCode: string; title: string; provider: string | null; durationHours: number; competencyId: string | null; description: string | null; isActive: boolean };
+export type CreateWorkforceTrainingCourseBody = { courseCode: string; title: string; provider?: string | null; durationHours?: number; competencyId?: string | null; description?: string | null };
+export type WorkforceTrainingEnrollmentStatus = "enrolled" | "in_progress" | "completed" | "failed" | "cancelled";
+export type WorkforceTrainingEnrollment = { id: string; tenantId: string; trainingCourseId: string; employeeId: string; status: WorkforceTrainingEnrollmentStatus; enrolledAt: string; completionDate: string | null; score: number | null; certificateDocumentId: string | null; notes: string | null };
+export type EnrollWorkforceTrainingBody = { trainingCourseId: string; employeeId: string };
+export type CompleteWorkforceTrainingBody = { status: "completed" | "failed"; completionDate: string; score?: number | null; certificateDocumentId?: string | null };
+export type WorkforcePerformanceReview = { id: string; tenantId: string; reviewCode: string; employeeId: string; periodStart: string; periodEnd: string; reviewerUserId: string | null; goalsScore: number | null; competencyScore: number | null; overallRating: number | null; reviewNotes: string | null; developmentPlan: string | null; workflowInstanceId: string | null; submittedAt: string | null; finalizedAt: string | null };
+export type WorkforcePerformanceReviewRow = { review: WorkforcePerformanceReview; status: WorkforceWorkflowStatus | null };
+export type WorkforcePerformanceReviewQuery = { employeeId?: string; periodYear?: number };
+export type CreateWorkforcePerformanceReviewBody = { employeeId: string; periodStart: string; periodEnd: string; reviewerUserId?: string | null; goalsScore?: number | null; competencyScore?: number | null; overallRating?: number | null; reviewNotes?: string | null; developmentPlan?: string | null };
+export type WorkforceCareerPath = { id: string; tenantId: string; fromPositionId: string; toPositionId: string; requiredTenureMonths: number; requiredCompetencyIds: string[]; guidelines: string | null; isActive: boolean };
+export type CreateWorkforceCareerPathBody = { fromPositionId: string; toPositionId: string; requiredTenureMonths?: number; requiredCompetencyIds?: string[]; guidelines?: string | null };
+
+export type WorkforceManpowerPlanStatus = "draft" | "computed" | "applied" | "dismissed";
+export type WorkforceManpowerGapEntry = { organizationUnitId: string | null; positionId: string | null; currentHeadcount: number; plannedHeadcount: number; variance: number; costImpact: number };
+export type WorkforceManpowerPlan = { id: string; tenantId: string; planNumber: string; planYear: number; organizationUnitId: string | null; title: string; status: WorkforceManpowerPlanStatus; parameters: Record<string, unknown>; currentHeadcount: number; plannedHeadcount: number; varianceHeadcount: number; currentCostProjection: number; plannedCostProjection: number; varianceCostProjection: number; gapAnalysis: WorkforceManpowerGapEntry[]; computedAt: string | null; appliedAt: string | null; appliedBy: string | null };
+export type WorkforceManpowerPlanQuery = { organizationUnitId?: string; planYear?: number; status?: WorkforceManpowerPlanStatus };
+export type CreateWorkforceManpowerPlanBody = { planYear: number; organizationUnitId?: string | null; title: string; parameters?: Record<string, unknown> };
+export type WorkforceWorkflowAction = { actionCode: string; name: string; toStepCode: string };
 
 // --- Workforce types (Phase 3) -----------------------------------------
 
