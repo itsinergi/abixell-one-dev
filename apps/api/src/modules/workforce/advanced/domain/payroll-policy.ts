@@ -69,18 +69,67 @@ export interface PayrollCalculationResult {
   };
 }
 
-export function roundCents(val: number, mode: RoundingMode = "half_up"): number {
-  const scaled = val * 100;
-  let roundedScaled: number;
-  if (mode === "down") {
-    roundedScaled = Math.floor(scaled + 1e-9);
-  } else if (mode === "up") {
-    roundedScaled = Math.ceil(scaled - 1e-9);
-  } else {
-    // half_up
-    roundedScaled = Math.round(scaled);
+export const RATE_SCALE = 1_000_000n;
+
+export function toCents(nominal: number): bigint {
+  if (!Number.isFinite(nominal)) return 0n;
+  return BigInt(Math.round(nominal * 100));
+}
+
+export function fromCents(cents: bigint): number {
+  return Number(cents) / 100;
+}
+
+export function roundScaledDivision(
+  numerator: bigint,
+  denominator: bigint,
+  mode: RoundingMode = "half_up",
+): bigint {
+  if (denominator === 0n) return 0n;
+  const isNegative = (numerator < 0n && denominator > 0n) || (numerator > 0n && denominator < 0n);
+  const absNum = numerator < 0n ? -numerator : numerator;
+  const absDen = denominator < 0n ? -denominator : denominator;
+
+  const quotient = absNum / absDen;
+  const remainder = absNum % absDen;
+
+  let finalQuotient = quotient;
+  if (remainder > 0n) {
+    if (mode === "down") {
+      finalQuotient = quotient;
+    } else if (mode === "up") {
+      finalQuotient = quotient + 1n;
+    } else {
+      // half_up
+      if (remainder * 2n >= absDen) {
+        finalQuotient = quotient + 1n;
+      }
+    }
   }
-  return roundedScaled / 100;
+
+  return isNegative ? -finalQuotient : finalQuotient;
+}
+
+export function mulRateCents(
+  amountCents: bigint,
+  rate: number,
+  mode: RoundingMode = "half_up",
+): bigint {
+  if (amountCents === 0n || rate === 0 || !Number.isFinite(rate)) return 0n;
+  const scaledRate = BigInt(Math.round(rate * 1_000_000));
+  const product = amountCents * scaledRate;
+  return roundScaledDivision(product, RATE_SCALE, mode);
+}
+
+export function divCents(
+  numeratorCents: bigint,
+  divisor: number,
+  mode: RoundingMode = "half_up",
+): bigint {
+  if (numeratorCents === 0n || divisor === 0 || !Number.isFinite(divisor)) return 0n;
+  const scaledDivisor = BigInt(Math.round(divisor * 1_000_000));
+  const product = numeratorCents * RATE_SCALE;
+  return roundScaledDivision(product, scaledDivisor, mode);
 }
 
 export function resolveTerCategory(status: PtkpStatus): "A" | "B" | "C" {
@@ -263,35 +312,50 @@ export function resolveTerRate(monthlyGross: number, brackets: TerBracketEntry[]
   return sorted.length > 0 ? sorted[sorted.length - 1].rate : 0;
 }
 
+export function calculateProgressiveTaxCents(
+  pkpCents: bigint,
+  brackets: PphBracket[],
+  mode: RoundingMode,
+): bigint {
+  if (pkpCents <= 0n) return 0n;
+
+  let totalTaxCents = 0n;
+  let remainingPkpCents = pkpCents;
+  let previousUpToCents = 0n;
+
+  for (const bracket of brackets) {
+    if (remainingPkpCents <= 0n) break;
+
+    const bracketCapacityCents =
+      bracket.upTo !== null ? toCents(bracket.upTo) - previousUpToCents : null;
+    const taxableInBracketCents =
+      bracketCapacityCents !== null && remainingPkpCents > bracketCapacityCents
+        ? bracketCapacityCents
+        : remainingPkpCents;
+
+    totalTaxCents += mulRateCents(taxableInBracketCents, bracket.rate, mode);
+    remainingPkpCents -= taxableInBracketCents;
+
+    if (bracket.upTo !== null) {
+      previousUpToCents = toCents(bracket.upTo);
+    }
+  }
+
+  return totalTaxCents;
+}
+
 /**
  * Calculates progressive tax for an annual PKP under Pasal 17 brackets.
  */
 export function calculateProgressiveTax(pkp: number, brackets: PphBracket[], mode: RoundingMode): number {
-  if (pkp <= 0) return 0;
-
-  let totalTax = 0;
-  let remainingPkp = pkp;
-  let previousUpTo = 0;
-
-  for (const bracket of brackets) {
-    if (remainingPkp <= 0) break;
-
-    const bracketCapacity = bracket.upTo !== null ? bracket.upTo - previousUpTo : Infinity;
-    const taxableInBracket = Math.min(remainingPkp, bracketCapacity);
-
-    totalTax += taxableInBracket * bracket.rate;
-    remainingPkp -= taxableInBracket;
-
-    if (bracket.upTo !== null) {
-      previousUpTo = bracket.upTo;
-    }
-  }
-
-  return roundCents(totalTax, mode);
+  const pkpCents = toCents(pkp);
+  const taxCents = calculateProgressiveTaxCents(pkpCents, brackets, mode);
+  return fromCents(taxCents);
 }
 
 /**
- * Executes a full exact-decimal payroll calculation for an employee in a given run period.
+ * Executes a full exact-decimal payroll calculation for an employee in a given run period
+ * using scaled-integer cents / fixed-point arithmetic without IEEE-754 floating-point drift.
  */
 export function calculateEmployeePayroll(input: PayrollCalculationInput): PayrollCalculationResult {
   const {
@@ -307,61 +371,90 @@ export function calculateEmployeePayroll(input: PayrollCalculationInput): Payrol
 
   const mode = policy.roundingMode || "half_up";
 
+  const baseSalaryCents = toCents(baseSalary);
+  const fixedAllowanceCents = toCents(fixedAllowance);
+
   // 1. Earnings
-  const effectiveOvertimeRate =
+  const statutoryWageBaseCents = baseSalaryCents + fixedAllowanceCents;
+
+  const effectiveOvertimeRateCents =
     overtimeHourlyRate && overtimeHourlyRate > 0
-      ? overtimeHourlyRate
-      : roundCents((baseSalary + fixedAllowance) / 173, mode);
-  const overtimePay = roundCents(overtimeHours * effectiveOvertimeRate, mode);
-  const grossSalary = roundCents(baseSalary + fixedAllowance + overtimePay, mode);
+      ? toCents(overtimeHourlyRate)
+      : divCents(statutoryWageBaseCents, 173, mode);
+
+  const overtimePayCents =
+    overtimeHours > 0
+      ? mulRateCents(effectiveOvertimeRateCents, overtimeHours, mode)
+      : 0n;
+
+  const grossSalaryCents = baseSalaryCents + fixedAllowanceCents + overtimePayCents;
 
   // 2. BPJS Social Security Contributions
-  // Standard statutory wage base = base + fixed allowances
-  const statutoryWageBase = baseSalary + fixedAllowance;
-
   // BPJS Kesehatan (capped)
-  const bpjsKesWage =
+  const bpjsKesCapCents =
     policy.bpjsKesehatanCap && policy.bpjsKesehatanCap > 0
-      ? Math.min(statutoryWageBase, policy.bpjsKesehatanCap)
-      : statutoryWageBase;
-  const bpjsKesehatanEmployee = roundCents(bpjsKesWage * policy.bpjsKesehatanRateEmployee, mode);
-  const bpjsKesehatanEmployer = roundCents(bpjsKesWage * policy.bpjsKesehatanRateEmployer, mode);
+      ? toCents(policy.bpjsKesehatanCap)
+      : null;
+  const bpjsKesWageCents =
+    bpjsKesCapCents !== null && statutoryWageBaseCents > bpjsKesCapCents
+      ? bpjsKesCapCents
+      : statutoryWageBaseCents;
 
-  // BPJS Ketenagakerjaan JHT (uncapped)
-  const bpjsTkJhtEmployee = roundCents(statutoryWageBase * policy.bpjsTkJhtRateEmployee, mode);
-  const bpjsTkJhtEmployer = roundCents(statutoryWageBase * policy.bpjsTkJhtRateEmployer, mode);
-
-  // BPJS TK JKK & JKM (employer only)
-  const bpjsTkJkkEmployer = roundCents(statutoryWageBase * policy.bpjsTkJkkRate, mode);
-  const bpjsTkJkmEmployer = roundCents(statutoryWageBase * policy.bpjsTkJkmRate, mode);
-
-  // BPJS TK JP (capped)
-  const bpjsJpWage =
-    policy.bpjsTkJpCap && policy.bpjsTkJpCap > 0
-      ? Math.min(statutoryWageBase, policy.bpjsTkJpCap)
-      : statutoryWageBase;
-  const bpjsTkJPSEmployee = roundCents(bpjsJpWage * policy.bpjsTkJpRateEmployee, mode);
-  const bpjsTkJPSEmployer = roundCents(bpjsJpWage * policy.bpjsTkJpRateEmployer, mode);
-
-  const employerContributions = roundCents(
-    bpjsKesehatanEmployer +
-      bpjsTkJhtEmployer +
-      bpjsTkJkkEmployer +
-      bpjsTkJkmEmployer +
-      bpjsTkJPSEmployer,
+  const bpjsKesehatanEmployeeCents = mulRateCents(
+    bpjsKesWageCents,
+    policy.bpjsKesehatanRateEmployee,
+    mode,
+  );
+  const bpjsKesehatanEmployerCents = mulRateCents(
+    bpjsKesWageCents,
+    policy.bpjsKesehatanRateEmployer,
     mode,
   );
 
+  // BPJS Ketenagakerjaan JHT (uncapped)
+  const bpjsTkJhtEmployeeCents = mulRateCents(
+    statutoryWageBaseCents,
+    policy.bpjsTkJhtRateEmployee,
+    mode,
+  );
+  const bpjsTkJhtEmployerCents = mulRateCents(
+    statutoryWageBaseCents,
+    policy.bpjsTkJhtRateEmployer,
+    mode,
+  );
+
+  // BPJS TK JKK & JKM (employer only)
+  const bpjsTkJkkEmployerCents = mulRateCents(statutoryWageBaseCents, policy.bpjsTkJkkRate, mode);
+  const bpjsTkJkmEmployerCents = mulRateCents(statutoryWageBaseCents, policy.bpjsTkJkmRate, mode);
+
+  // BPJS TK JP (capped)
+  const bpjsJpCapCents =
+    policy.bpjsTkJpCap && policy.bpjsTkJpCap > 0 ? toCents(policy.bpjsTkJpCap) : null;
+  const bpjsJpWageCents =
+    bpjsJpCapCents !== null && statutoryWageBaseCents > bpjsJpCapCents
+      ? bpjsJpCapCents
+      : statutoryWageBaseCents;
+
+  const bpjsTkJPSEmployeeCents = mulRateCents(bpjsJpWageCents, policy.bpjsTkJpRateEmployee, mode);
+  const bpjsTkJPSEmployerCents = mulRateCents(bpjsJpWageCents, policy.bpjsTkJpRateEmployer, mode);
+
+  const employerContributionsCents =
+    bpjsKesehatanEmployerCents +
+    bpjsTkJhtEmployerCents +
+    bpjsTkJkkEmployerCents +
+    bpjsTkJkmEmployerCents +
+    bpjsTkJPSEmployerCents;
+
   // 3. PPh 21 Withholding Tax
-  let pph21Withheld = 0;
-  let taxableGross = 0;
-  let occupationalCost = 0;
-  let annualizedNetIncome = 0;
-  let annualPtkpAmount = 0;
-  let taxableAnnualIncomePkp = 0;
-  let annualTax = 0;
-  let monthlyTaxBeforeSurcharge = 0;
-  let surchargeApplied = 0;
+  let pph21WithheldCents = 0n;
+  let taxableGrossCents = 0n;
+  let occupationalCostCents = 0n;
+  let annualizedNetIncomeCents = 0n;
+  let annualPtkpAmountCents = 0n;
+  let taxableAnnualIncomePkpCents = 0n;
+  let annualTaxCents = 0n;
+  let monthlyTaxBeforeSurchargeCents = 0n;
+  let surchargeAppliedCents = 0n;
 
   const methodUsed = policy.pph21Method || "annualized";
   const brackets =
@@ -369,87 +462,110 @@ export function calculateEmployeePayroll(input: PayrollCalculationInput): Payrol
       ? policy.pph21Brackets
       : DEFAULT_PPH21_BRACKETS;
 
-  // Taxable monthly gross includes earnings + employer healthcare/JKK/JKM;
-  // employer JHT/JP contributions are exempt from employee gross tax.
-  taxableGross = roundCents(grossSalary + bpjsKesehatanEmployer + bpjsTkJkkEmployer + bpjsTkJkmEmployer, mode);
+  // Taxable monthly gross includes earnings + employer healthcare/JKK/JKM
+  taxableGrossCents =
+    grossSalaryCents +
+    bpjsKesehatanEmployerCents +
+    bpjsTkJkkEmployerCents +
+    bpjsTkJkmEmployerCents;
 
   if (methodUsed === "ter") {
     const category = resolveTerCategory(ptkpStatus);
     const configuredTerBrackets = Array.isArray(policy.pph21TerBrackets)
       ? policy.pph21TerBrackets.filter((entry) => entry.category === category)
       : [];
-    const terBrackets = configuredTerBrackets.length > 0
-      ? configuredTerBrackets
-      : DEFAULT_TER_BRACKETS.filter((entry) => entry.category === category);
-    const terRate = resolveTerRate(taxableGross, terBrackets);
-    monthlyTaxBeforeSurcharge = roundCents(taxableGross * terRate, mode);
+    const terBrackets =
+      configuredTerBrackets.length > 0
+        ? configuredTerBrackets
+        : DEFAULT_TER_BRACKETS.filter((entry) => entry.category === category);
+
+    const taxableGrossNominal = fromCents(taxableGrossCents);
+    const terRate = resolveTerRate(taxableGrossNominal, terBrackets);
+    monthlyTaxBeforeSurchargeCents = mulRateCents(taxableGrossCents, terRate, mode);
   } else {
     // Annualized method (Pasal 17).
     const occCostRate = policy.occupationalCostRate || 0.05;
-    const occCostMonthlyCap = policy.occupationalCostMonthlyCap ?? 500_000;
-    occupationalCost = roundCents(Math.min(taxableGross * occCostRate, occCostMonthlyCap), mode);
+    const occCostMonthlyCapCents = toCents(policy.occupationalCostMonthlyCap ?? 500_000);
+    const rawOccCostCents = mulRateCents(taxableGrossCents, occCostRate, mode);
+    occupationalCostCents =
+      rawOccCostCents > occCostMonthlyCapCents ? occCostMonthlyCapCents : rawOccCostCents;
 
     // Employee JHT & JP contributions are deductible.
-    const monthlyNet = Math.max(0, taxableGross - occupationalCost - bpjsTkJhtEmployee - bpjsTkJPSEmployee);
-    annualizedNetIncome = roundCents(monthlyNet * 12, mode);
+    const deductibleEmployeeCents =
+      occupationalCostCents + bpjsTkJhtEmployeeCents + bpjsTkJPSEmployeeCents;
+    const monthlyNetCents =
+      taxableGrossCents > deductibleEmployeeCents
+        ? taxableGrossCents - deductibleEmployeeCents
+        : 0n;
+
+    annualizedNetIncomeCents = monthlyNetCents * 12n;
 
     const ptkpAmounts = { ...DEFAULT_PTKP_ANNUAL_AMOUNTS, ...(policy.ptkpAnnualAmounts || {}) };
-    annualPtkpAmount = ptkpAmounts[ptkpStatus] ?? DEFAULT_PTKP_ANNUAL_AMOUNTS["TK/0"];
+    const ptkpNominal = ptkpAmounts[ptkpStatus] ?? DEFAULT_PTKP_ANNUAL_AMOUNTS["TK/0"];
+    annualPtkpAmountCents = toCents(ptkpNominal);
 
-    const rawPkp = Math.max(0, annualizedNetIncome - annualPtkpAmount);
-    taxableAnnualIncomePkp = Math.floor(rawPkp / 1000) * 1000;
-    annualTax = calculateProgressiveTax(taxableAnnualIncomePkp, brackets, mode);
-    monthlyTaxBeforeSurcharge = roundCents(annualTax / 12, mode);
+    const rawPkpCents =
+      annualizedNetIncomeCents > annualPtkpAmountCents
+        ? annualizedNetIncomeCents - annualPtkpAmountCents
+        : 0n;
+
+    // Taxable PKP rounded down to nearest thousand (in cents: multiple of 100,000 cents)
+    taxableAnnualIncomePkpCents = (rawPkpCents / 100_000n) * 100_000n;
+    annualTaxCents = calculateProgressiveTaxCents(taxableAnnualIncomePkpCents, brackets, mode);
+    monthlyTaxBeforeSurchargeCents = divCents(annualTaxCents, 12, mode);
   }
 
   if (!hasNpwp && (policy.nonNpwpSurchargeRate || 0) > 0) {
-    surchargeApplied = roundCents(monthlyTaxBeforeSurcharge * policy.nonNpwpSurchargeRate, mode);
-    pph21Withheld = roundCents(monthlyTaxBeforeSurcharge + surchargeApplied, mode);
+    surchargeAppliedCents = mulRateCents(
+      monthlyTaxBeforeSurchargeCents,
+      policy.nonNpwpSurchargeRate,
+      mode,
+    );
+    pph21WithheldCents = monthlyTaxBeforeSurchargeCents + surchargeAppliedCents;
   } else {
-    pph21Withheld = monthlyTaxBeforeSurcharge;
+    pph21WithheldCents = monthlyTaxBeforeSurchargeCents;
   }
 
   // 4. Net Salary
-  const totalDeductions = roundCents(
-    bpjsKesehatanEmployee +
-      bpjsTkJhtEmployee +
-      bpjsTkJPSEmployee +
-      pph21Withheld +
-      otherDeductions,
-    mode,
-  );
+  const otherDeductionsCents = toCents(otherDeductions);
+  const totalDeductionsCents =
+    bpjsKesehatanEmployeeCents +
+    bpjsTkJhtEmployeeCents +
+    bpjsTkJPSEmployeeCents +
+    pph21WithheldCents +
+    otherDeductionsCents;
 
-  const netSalary = roundCents(grossSalary - totalDeductions, mode);
+  const netSalaryCents = grossSalaryCents - totalDeductionsCents;
 
   return {
-    baseSalary: roundCents(baseSalary, mode),
-    allowances: roundCents(fixedAllowance, mode),
-    overtimeHours: roundCents(overtimeHours, mode),
-    overtimePay,
-    grossSalary,
-    bpjsKesehatanEmployee,
-    bpjsKesehatanEmployer,
-    bpjsTkJhtEmployee,
-    bpjsTkJhtEmployer,
-    bpjsTkJkkEmployer,
-    bpjsTkJkmEmployer,
-    bpjsTkJPSEmployee,
-    bpjsTkJPSEmployer,
-    pph21Withheld,
-    otherDeductions: roundCents(otherDeductions, mode),
-    totalDeductions,
-    employerContributions,
-    netSalary,
+    baseSalary: fromCents(baseSalaryCents),
+    allowances: fromCents(fixedAllowanceCents),
+    overtimeHours,
+    overtimePay: fromCents(overtimePayCents),
+    grossSalary: fromCents(grossSalaryCents),
+    bpjsKesehatanEmployee: fromCents(bpjsKesehatanEmployeeCents),
+    bpjsKesehatanEmployer: fromCents(bpjsKesehatanEmployerCents),
+    bpjsTkJhtEmployee: fromCents(bpjsTkJhtEmployeeCents),
+    bpjsTkJhtEmployer: fromCents(bpjsTkJhtEmployerCents),
+    bpjsTkJkkEmployer: fromCents(bpjsTkJkkEmployerCents),
+    bpjsTkJkmEmployer: fromCents(bpjsTkJkmEmployerCents),
+    bpjsTkJPSEmployee: fromCents(bpjsTkJPSEmployeeCents),
+    bpjsTkJPSEmployer: fromCents(bpjsTkJPSEmployerCents),
+    pph21Withheld: fromCents(pph21WithheldCents),
+    otherDeductions: fromCents(otherDeductionsCents),
+    totalDeductions: fromCents(totalDeductionsCents),
+    employerContributions: fromCents(employerContributionsCents),
+    netSalary: fromCents(netSalaryCents),
     ptkpStatus,
     breakdown: {
-      taxableGross,
-      occupationalCost,
-      annualizedNetIncome,
-      annualPtkpAmount,
-      taxableAnnualIncomePkp,
-      annualTax,
-      monthlyTaxBeforeSurcharge,
-      surchargeApplied,
+      taxableGross: fromCents(taxableGrossCents),
+      occupationalCost: fromCents(occupationalCostCents),
+      annualizedNetIncome: fromCents(annualizedNetIncomeCents),
+      annualPtkpAmount: fromCents(annualPtkpAmountCents),
+      taxableAnnualIncomePkp: fromCents(taxableAnnualIncomePkpCents),
+      annualTax: fromCents(annualTaxCents),
+      monthlyTaxBeforeSurcharge: fromCents(monthlyTaxBeforeSurchargeCents),
+      surchargeApplied: fromCents(surchargeAppliedCents),
       methodUsed,
     },
   };

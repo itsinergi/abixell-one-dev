@@ -777,7 +777,8 @@ export interface WorkforceAdvancedRepository {
   findEmployeeReference(tenantId: string, employeeId: string): Promise<EmployeeReference | null>;
   organizationUnitExists(tenantId: string, organizationUnitId: string): Promise<boolean>;
   positionExists(tenantId: string, positionId: string): Promise<boolean>;
-  listActiveEmployeeReferences(tenantId: string, organizationUnitId?: string | null): Promise<EmployeeReference[]>;
+  listOrganizationUnitDescendantIds(tenantId: string, rootIds: string[]): Promise<string[]>;
+  listActiveEmployeeReferences(tenantId: string, organizationUnitIds?: string[] | null): Promise<EmployeeReference[]>;
 
   // -- Shifts, Roster & Attendance --------------------------------------
   createShift(input: CreateShiftInput): Promise<WorkforceShift>;
@@ -786,10 +787,10 @@ export interface WorkforceAdvancedRepository {
   setShiftActive(tenantId: string, id: string, isActive: boolean): Promise<WorkforceShift>;
 
   upsertRoster(input: UpsertRosterInput): Promise<WorkforceRoster>;
-  listRosters(tenantId: string, filter: RosterListFilter): Promise<WorkforceRoster[]>;
+  listRosters(tenantId: string, filter: RosterListFilter, organizationUnitIds: string[] | null): Promise<WorkforceRoster[]>;
 
   recordAttendance(input: RecordAttendanceInput): Promise<WorkforceAttendanceRecord>;
-  listAttendance(tenantId: string, filter: AttendanceListFilter): Promise<WorkforceAttendanceRecord[]>;
+  listAttendance(tenantId: string, filter: AttendanceListFilter, organizationUnitIds: string[] | null): Promise<WorkforceAttendanceRecord[]>;
 
   // -- Leave & Overtime ---------------------------------------------------
   createLeaveType(input: CreateLeaveTypeInput): Promise<WorkforceLeaveType>;
@@ -802,14 +803,15 @@ export interface WorkforceAdvancedRepository {
 
   createLeaveRequest(input: CreateLeaveRequestInput, requestNumber: string): Promise<WorkforceLeaveRequest>;
   findLeaveRequestById(tenantId: string, id: string): Promise<WorkforceLeaveRequest | null>;
-  listLeaveRequests(tenantId: string, filter: LeaveRequestListFilter): Promise<WorkforceLeaveRequest[]>;
+  listLeaveRequests(tenantId: string, filter: LeaveRequestListFilter, organizationUnitIds: string[] | null): Promise<WorkforceLeaveRequest[]>;
   setLeaveRequestWorkflowInstance(tenantId: string, id: string, workflowInstanceId: string): Promise<void>;
   projectLeaveRequestDecision(tenantId: string, id: string, decision: "approved" | "rejected" | "cancelled", at: Date): Promise<WorkforceLeaveRequest>;
   deleteLeaveRequestWithoutWorkflow(tenantId: string, id: string): Promise<void>;
 
   createOvertimeRequest(input: CreateOvertimeRequestInput, requestNumber: string): Promise<WorkforceOvertimeRequest>;
   findOvertimeRequestById(tenantId: string, id: string): Promise<WorkforceOvertimeRequest | null>;
-  listOvertimeRequests(tenantId: string, filter: OvertimeRequestListFilter): Promise<WorkforceOvertimeRequest[]>;
+  listOvertimeRequests(tenantId: string, filter: OvertimeRequestListFilter, organizationUnitIds: string[] | null): Promise<WorkforceOvertimeRequest[]>;
+  findApprovedOvertimeHoursForEmployeePeriod(tenantId: string, employeeId: string, fromDate: string, toDate: string): Promise<number>;
   setOvertimeRequestWorkflowInstance(tenantId: string, id: string, workflowInstanceId: string): Promise<void>;
   projectOvertimeRequestDecision(tenantId: string, id: string, decision: "approved" | "rejected" | "cancelled", at: Date): Promise<WorkforceOvertimeRequest>;
   recordActualOvertimeHours(input: RecordActualOvertimeInput): Promise<WorkforceOvertimeRequest>;
@@ -821,12 +823,12 @@ export interface WorkforceAdvancedRepository {
   listStatutoryPolicies(tenantId: string): Promise<WorkforceStatutoryPolicy[]>;
 
   setSalaryProfile(input: SetSalaryProfileInput): Promise<WorkforceEmployeeSalaryProfile>;
-  findCurrentSalaryProfile(tenantId: string, employeeId: string): Promise<WorkforceEmployeeSalaryProfile | null>;
+  findCurrentSalaryProfile(tenantId: string, employeeId: string, asOfDate?: string): Promise<WorkforceEmployeeSalaryProfile | null>;
   closeOpenSalaryProfile(tenantId: string, employeeId: string, effectiveTo: string): Promise<void>;
 
   createPayrollRun(input: CreatePayrollRunInput, runNumber: string): Promise<WorkforcePayrollRun>;
   findPayrollRunById(tenantId: string, id: string): Promise<WorkforcePayrollRun | null>;
-  listPayrollRuns(tenantId: string, filter: PayrollRunListFilter): Promise<WorkforcePayrollRun[]>;
+  listPayrollRuns(tenantId: string, filter: PayrollRunListFilter, organizationUnitIds: string[] | null): Promise<WorkforcePayrollRun[]>;
   setPayrollRunWorkflowInstance(tenantId: string, id: string, workflowInstanceId: string): Promise<void>;
   deletePayrollRunWithoutWorkflow(tenantId: string, id: string): Promise<void>;
   savePayslipsAndTotals(
@@ -841,14 +843,14 @@ export interface WorkforceAdvancedRepository {
   // -- Recruitment ----------------------------------------------------------
   createJobPosting(input: CreateJobPostingInput, postingCode: string): Promise<WorkforceJobPosting>;
   findJobPostingById(tenantId: string, id: string): Promise<WorkforceJobPosting | null>;
-  listJobPostings(tenantId: string, filter: JobPostingListFilter): Promise<WorkforceJobPosting[]>;
+  listJobPostings(tenantId: string, filter: JobPostingListFilter, organizationUnitIds: string[] | null): Promise<WorkforceJobPosting[]>;
   setJobPostingWorkflowInstance(tenantId: string, id: string, workflowInstanceId: string): Promise<void>;
   projectJobPostingDecision(tenantId: string, id: string, decision: "published" | "closed" | "cancelled", at: Date): Promise<WorkforceJobPosting>;
   deleteJobPostingWithoutWorkflow(tenantId: string, id: string): Promise<void>;
 
   createJobApplication(input: CreateJobApplicationInput): Promise<WorkforceJobApplication>;
   findJobApplicationById(tenantId: string, id: string): Promise<WorkforceJobApplication | null>;
-  listJobApplications(tenantId: string, filter: JobApplicationListFilter): Promise<WorkforceJobApplication[]>;
+  listJobApplications(tenantId: string, filter: JobApplicationListFilter, organizationUnitIds: string[] | null): Promise<WorkforceJobApplication[]>;
   advanceJobApplication(input: AdvanceJobApplicationInput): Promise<WorkforceJobApplication>;
 
   // -- Competency, Training, Performance & Career --------------------------
@@ -868,7 +870,7 @@ export interface WorkforceAdvancedRepository {
 
   createPerformanceReview(input: CreatePerformanceReviewInput, reviewCode: string): Promise<WorkforcePerformanceReview>;
   findPerformanceReviewById(tenantId: string, id: string): Promise<WorkforcePerformanceReview | null>;
-  listPerformanceReviews(tenantId: string, filter: PerformanceReviewListFilter): Promise<WorkforcePerformanceReview[]>;
+  listPerformanceReviews(tenantId: string, filter: PerformanceReviewListFilter, organizationUnitIds: string[] | null): Promise<WorkforcePerformanceReview[]>;
   setPerformanceReviewWorkflowInstance(tenantId: string, id: string, workflowInstanceId: string): Promise<void>;
   projectPerformanceReviewDecision(tenantId: string, id: string, decision: "submitted" | "finalized", at: Date): Promise<WorkforcePerformanceReview>;
   deletePerformanceReviewWithoutWorkflow(tenantId: string, id: string): Promise<void>;
@@ -879,7 +881,7 @@ export interface WorkforceAdvancedRepository {
   // -- Manpower Planning ------------------------------------------------
   createManpowerPlan(input: CreateManpowerPlanInput, planNumber: string): Promise<WorkforceManpowerPlan>;
   findManpowerPlanById(tenantId: string, id: string): Promise<WorkforceManpowerPlan | null>;
-  listManpowerPlans(tenantId: string, filter: ManpowerPlanListFilter): Promise<WorkforceManpowerPlan[]>;
+  listManpowerPlans(tenantId: string, filter: ManpowerPlanListFilter, organizationUnitIds: string[] | null): Promise<WorkforceManpowerPlan[]>;
   saveManpowerPlanComputation(
     tenantId: string,
     id: string,

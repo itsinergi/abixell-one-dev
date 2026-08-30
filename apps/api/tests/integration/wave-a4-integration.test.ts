@@ -751,6 +751,61 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
     });
 
     it("creates payroll run, executes exact deterministic calculation, and inspects payslips", async () => {
+      const approvedEstimatedOnly = await post("/workforce/advanced/overtime-requests", hrStaffToken, {
+        employeeId: employeeAlphaId,
+        overtimeDate: "2026-09-06",
+        startTime: "18:00",
+        endTime: "19:15",
+        estimatedHours: 1.25,
+        reason: "Approved fallback-to-estimated overtime",
+      });
+      expect(approvedEstimatedOnly.statusCode).toBe(201);
+      const approveEstimatedOnly = await post(`/workforce/advanced/overtime-requests/${approvedEstimatedOnly.json().id}/act`, approverToken, {
+        actionCode: "approve",
+        comment: "Approved without actual hours so payroll uses estimated fallback",
+      });
+      expect(approveEstimatedOnly.statusCode).toBe(200);
+
+      const pendingOvertime = await post("/workforce/advanced/overtime-requests", hrStaffToken, {
+        employeeId: employeeAlphaId,
+        overtimeDate: "2026-09-07",
+        startTime: "18:00",
+        endTime: "23:00",
+        estimatedHours: 5,
+        reason: "Pending overtime must not enter payroll",
+      });
+      expect(pendingOvertime.statusCode).toBe(201);
+
+      const rejectedOvertime = await post("/workforce/advanced/overtime-requests", hrStaffToken, {
+        employeeId: employeeAlphaId,
+        overtimeDate: "2026-09-08",
+        startTime: "18:00",
+        endTime: "22:00",
+        estimatedHours: 4,
+        reason: "Rejected overtime must not enter payroll",
+      });
+      expect(rejectedOvertime.statusCode).toBe(201);
+      const rejectOvertime = await post(`/workforce/advanced/overtime-requests/${rejectedOvertime.json().id}/act`, approverToken, {
+        actionCode: "reject",
+        comment: "Rejected payroll exclusion control",
+      });
+      expect(rejectOvertime.statusCode).toBe(200);
+
+      const cancelledOvertime = await post("/workforce/advanced/overtime-requests", hrStaffToken, {
+        employeeId: employeeAlphaId,
+        overtimeDate: "2026-09-09",
+        startTime: "18:00",
+        endTime: "20:00",
+        estimatedHours: 2,
+        reason: "Cancelled overtime must not enter payroll",
+      });
+      expect(cancelledOvertime.statusCode).toBe(201);
+      const cancelOvertime = await post(`/workforce/advanced/overtime-requests/${cancelledOvertime.json().id}/act`, approverToken, {
+        actionCode: "cancel",
+        comment: "Cancelled payroll exclusion control",
+      });
+      expect(cancelOvertime.statusCode).toBe(200);
+
       const runRes = await post("/workforce/advanced/payroll-runs", hrStaffToken, {
         periodMonth: 9,
         periodYear: 2026,
@@ -775,7 +830,9 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
       const payslips = payslipsRes.json();
       const alphaSlip = payslips.find((p: any) => p.employeeId === employeeAlphaId);
       expect(alphaSlip).toBeDefined();
-      expect(alphaSlip.grossSalary).toBe(17_000_000); // 15M base + 2M allowance
+      expect(alphaSlip.overtimeHours).toBe(4.75);
+      expect(alphaSlip.overtimePay).toBe(466_763.03);
+      expect(alphaSlip.grossSalary).toBe(17_466_763.03); // salary + approved actual and estimated-fallback overtime
       expect(alphaSlip.bpjsKesehatanEmployer).toBe(480_000); // 4% of 12M cap
       expect(alphaSlip.bpjsKesehatanEmployee).toBe(120_000); // 1% of 12M cap
       expect(alphaSlip.pph21Withheld).toBeGreaterThan(0);
@@ -1041,6 +1098,13 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
   // =========================================================================
 
   describe("Cross-Cutting Invariants: Multi-Tenant Isolation, Data Scope & RBAC", () => {
+    const expectOnlyEmployeeIds = (records: any[], employeeIds: string[]) => {
+      const actualIds = records.map((record) =>
+        record.employeeId ?? record.leaveRequest?.employeeId ?? record.overtimeRequest?.employeeId ?? record.review?.employeeId,
+      );
+      expect(actualIds.every((id) => employeeIds.includes(id))).toBe(true);
+    };
+
     it("enforces multi-tenant isolation across all Workforce Advanced resources", async () => {
       // Other tenant cannot access Primary tenant shifts
       expect((await get(`/workforce/advanced/shifts`, otherAdminToken)).json().some((s: any) => s.id === morningShiftId)).toBe(false);
@@ -1058,19 +1122,241 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
       expect(otherApplyPlan.statusCode).toBe(404);
     });
 
-    it("enforces hierarchical Organization-Unit Data Scope", async () => {
-      // North manager can view/manage North and North Child teams
-      const northRosters = await get(`/workforce/advanced/rosters?organizationUnitId=${orgUnitNorthId}`, northManagerToken);
-      expect(northRosters.statusCode).toBe(200);
+    it("scopes every unfiltered Organization-Unit list at SQL level", async () => {
+      const northRosterSeed = await put("/workforce/advanced/rosters", hrStaffToken, {
+        employeeId: employeeBetaId,
+        shiftId: morningShiftId,
+        rosterDate: "2026-09-16",
+        organizationUnitId: orgUnitNorthChildId,
+      });
+      expect(northRosterSeed.statusCode).toBe(200);
 
-      // North manager CANNOT access South Org Unit resources
+      const southRosterSeed = await put("/workforce/advanced/rosters", hrStaffToken, {
+        employeeId: employeeGammaId,
+        shiftId: morningShiftId,
+        rosterDate: "2026-09-16",
+        organizationUnitId: orgUnitSouthId,
+      });
+      expect(southRosterSeed.statusCode).toBe(200);
+
+      const southAttendanceSeed = await post("/workforce/advanced/attendance", hrStaffToken, {
+        employeeId: employeeGammaId,
+        attendanceDate: "2026-09-16",
+        shiftId: morningShiftId,
+        status: "present",
+        source: "manual",
+      });
+      expect(southAttendanceSeed.statusCode).toBe(201);
+
+      const southLeaveSeed = await post("/workforce/advanced/leave-requests", hrStaffToken, {
+        employeeId: employeeGammaId,
+        leaveTypeId: annualLeaveTypeId,
+        startDate: "2026-11-03",
+        endDate: "2026-11-03",
+        totalDays: 1,
+        reason: "South scope negative control",
+      });
+      expect(southLeaveSeed.statusCode).toBe(201);
+      const southLeaveRequestId = southLeaveSeed.json().id;
+
+      const southOvertimeSeed = await post("/workforce/advanced/overtime-requests", hrStaffToken, {
+        employeeId: employeeGammaId,
+        overtimeDate: "2026-09-17",
+        startTime: "18:00",
+        endTime: "20:00",
+        estimatedHours: 2,
+        reason: "South scope negative control",
+      });
+      expect(southOvertimeSeed.statusCode).toBe(201);
+      const southOvertimeRequestId = southOvertimeSeed.json().id;
+
+      const southPayrollSeed = await post("/workforce/advanced/payroll-runs", hrStaffToken, {
+        periodMonth: 10,
+        periodYear: 2026,
+        organizationUnitId: orgUnitSouthId,
+      });
+      expect(southPayrollSeed.statusCode).toBe(201);
+      const southPayrollRunId = southPayrollSeed.json().id;
+
+      const southPostingSeed = await post("/workforce/advanced/job-postings", hrStaffToken, {
+        title: "South Operations Analyst",
+        positionId: supervisorPositionId,
+        organizationUnitId: orgUnitSouthId,
+        headcountTarget: 1,
+      });
+      expect(southPostingSeed.statusCode).toBe(201);
+      const southJobPostingId = southPostingSeed.json().id;
+
+      const southApplicationSeed = await post("/workforce/advanced/job-applications", hrStaffToken, {
+        jobPostingId: southJobPostingId,
+        candidateName: "South Scope Candidate",
+        candidateEmail: "south.scope@candidate.test",
+      });
+      expect(southApplicationSeed.statusCode).toBe(201);
+      const southJobApplicationId = southApplicationSeed.json().id;
+
+      const southReviewSeed = await post("/workforce/advanced/performance-reviews", hrStaffToken, {
+        employeeId: employeeGammaId,
+        periodStart: "2026-07-01",
+        periodEnd: "2026-12-31",
+        overallRating: 3.5,
+        reviewNotes: "South scope negative control",
+      });
+      expect(southReviewSeed.statusCode).toBe(201);
+      const southPerformanceReviewId = southReviewSeed.json().id;
+
+      const southPlanSeed = await post("/workforce/advanced/manpower-plans", hrStaffToken, {
+        planYear: 2027,
+        title: "South Operations Plan",
+        organizationUnitId: orgUnitSouthId,
+      });
+      expect(southPlanSeed.statusCode).toBe(201);
+      const southManpowerPlanId = southPlanSeed.json().id;
+
+      const scopedRosters = await get("/workforce/advanced/rosters", northManagerToken);
+      expect(scopedRosters.statusCode).toBe(200);
+      expectOnlyEmployeeIds(scopedRosters.json(), [employeeAlphaId, employeeBetaId]);
+      expect(scopedRosters.json().some((record: any) => record.id === northRosterSeed.json().id)).toBe(true);
+      expect(scopedRosters.json().some((record: any) => record.id === southRosterSeed.json().id)).toBe(false);
+
+      const scopedAttendance = await get("/workforce/advanced/attendance", northManagerToken);
+      expect(scopedAttendance.statusCode).toBe(200);
+      expectOnlyEmployeeIds(scopedAttendance.json(), [employeeAlphaId, employeeBetaId]);
+      expect(scopedAttendance.json().some((record: any) => record.id === southAttendanceSeed.json().id)).toBe(false);
+
+      const scopedLeave = await get("/workforce/advanced/leave-requests", northManagerToken);
+      expect(scopedLeave.statusCode).toBe(200);
+      expectOnlyEmployeeIds(scopedLeave.json(), [employeeAlphaId, employeeBetaId]);
+      expect(scopedLeave.json().some((item: any) => item.leaveRequest.id === southLeaveRequestId)).toBe(false);
+
+      const scopedOvertime = await get("/workforce/advanced/overtime-requests", northManagerToken);
+      expect(scopedOvertime.statusCode).toBe(200);
+      expectOnlyEmployeeIds(scopedOvertime.json(), [employeeAlphaId, employeeBetaId]);
+      expect(scopedOvertime.json().some((item: any) => item.overtimeRequest.id === southOvertimeRequestId)).toBe(false);
+
+      const scopedPayroll = await get("/workforce/advanced/payroll-runs", northManagerToken);
+      expect(scopedPayroll.statusCode).toBe(200);
+      expect(scopedPayroll.json().some((item: any) => item.payrollRun.id === payrollRunId)).toBe(true);
+      expect(scopedPayroll.json().some((item: any) => item.payrollRun.id === southPayrollRunId)).toBe(false);
+
+      const scopedPostings = await get("/workforce/advanced/job-postings", northManagerToken);
+      expect(scopedPostings.statusCode).toBe(200);
+      expect(scopedPostings.json().some((item: any) => item.jobPosting.id === jobPostingId)).toBe(true);
+      expect(scopedPostings.json().some((item: any) => item.jobPosting.id === southJobPostingId)).toBe(false);
+
+      const scopedApplications = await get("/workforce/advanced/job-applications", northManagerToken);
+      expect(scopedApplications.statusCode).toBe(200);
+      expect(scopedApplications.json().some((item: any) => item.id === southJobApplicationId)).toBe(false);
+
+      const scopedReviews = await get("/workforce/advanced/performance-reviews", northManagerToken);
+      expect(scopedReviews.statusCode).toBe(200);
+      expectOnlyEmployeeIds(scopedReviews.json(), [employeeAlphaId, employeeBetaId]);
+      expect(scopedReviews.json().some((item: any) => item.review.id === southPerformanceReviewId)).toBe(false);
+
+      const scopedPlans = await get("/workforce/advanced/manpower-plans", northManagerToken);
+      expect(scopedPlans.statusCode).toBe(200);
+      expect(scopedPlans.json().some((item: any) => item.id === southManpowerPlanId)).toBe(false);
+    });
+
+    it("fails closed on out-of-scope detail, mutation, workflow, and tenant-level paths", async () => {
+      const southLeave = (await get(`/workforce/advanced/leave-requests?employeeId=${employeeGammaId}`, hrStaffToken)).json()[0].leaveRequest;
+      const southOvertime = (await get(`/workforce/advanced/overtime-requests?employeeId=${employeeGammaId}`, hrStaffToken)).json()[0].overtimeRequest;
+      const southPayroll = (await get(`/workforce/advanced/payroll-runs?organizationUnitId=${orgUnitSouthId}`, hrStaffToken)).json()[0].payrollRun;
+      const southPosting = (await get(`/workforce/advanced/job-postings?organizationUnitId=${orgUnitSouthId}`, hrStaffToken)).json()[0].jobPosting;
+      const southApplication = (await get(`/workforce/advanced/job-applications?jobPostingId=${southPosting.id}`, hrStaffToken)).json()[0];
+      const southReview = (await get(`/workforce/advanced/performance-reviews?employeeId=${employeeGammaId}`, hrStaffToken)).json()[0].review;
+      const southPlan = (await get(`/workforce/advanced/manpower-plans?organizationUnitId=${orgUnitSouthId}`, hrStaffToken)).json()[0];
+
+      const detailDenials = await Promise.all([
+        get(`/workforce/advanced/leave-requests/${southLeave.id}`, northManagerToken),
+        get(`/workforce/advanced/overtime-requests/${southOvertime.id}`, northManagerToken),
+        get(`/workforce/advanced/payroll-runs/${southPayroll.id}`, northManagerToken),
+        get(`/workforce/advanced/job-postings/${southPosting.id}`, northManagerToken),
+        get(`/workforce/advanced/performance-reviews/${southReview.id}`, northManagerToken),
+        get(`/workforce/advanced/manpower-plans/${southPlan.id}`, northManagerToken),
+      ]);
+      for (const denial of detailDenials) expect([403, 404]).toContain(denial.statusCode);
+
       const southRosterDenied = await put("/workforce/advanced/rosters", northManagerToken, {
         employeeId: employeeGammaId,
         shiftId: morningShiftId,
-        rosterDate: "2026-09-15",
+        rosterDate: "2026-09-18",
         organizationUnitId: orgUnitSouthId,
       });
       expect(southRosterDenied.statusCode).toBe(403);
+      expect((await post(`/workforce/advanced/overtime-requests/${southOvertime.id}/actual`, northManagerToken, { actualHours: 2.5 })).statusCode).toBe(403);
+      expect((await post(`/workforce/advanced/payroll-runs/${southPayroll.id}/calculate`, northManagerToken)).statusCode).toBe(403);
+      expect((await post(`/workforce/advanced/job-applications/${southApplication.id}/stage`, northManagerToken, { stage: "screening" })).statusCode).toBe(403);
+      expect((await post(`/workforce/advanced/performance-reviews/${southReview.id}/act`, northManagerToken, { actionCode: "finalize" })).statusCode).toBe(403);
+      expect((await post(`/workforce/advanced/manpower-plans/${southPlan.id}/compute`, northManagerToken, { targetHeadcountByPosition: {} })).statusCode).toBe(403);
+      expect((await post(`/workforce/advanced/manpower-plans/${southPlan.id}/apply`, northManagerToken)).statusCode).toBe(403);
+
+      expect((await get("/workforce/advanced/shifts", northManagerToken)).statusCode).toBe(403);
+      expect((await get("/workforce/advanced/leave-types", northManagerToken)).statusCode).toBe(403);
+      expect((await get("/workforce/advanced/statutory-policies", northManagerToken)).statusCode).toBe(403);
+      expect((await get("/workforce/advanced/competencies", northManagerToken)).statusCode).toBe(403);
+      expect((await get("/workforce/advanced/training-courses", northManagerToken)).statusCode).toBe(403);
+      expect((await get("/workforce/advanced/career-paths", northManagerToken)).statusCode).toBe(403);
+    });
+
+    it("inherits Data Scope through Workforce Advanced document resolvers", async () => {
+      const northApplication = (await get(`/workforce/advanced/job-applications?jobPostingId=${jobPostingId}`, hrStaffToken)).json()[0];
+      const northEnrollment = (await get(`/workforce/advanced/training-enrollments?employeeId=${employeeAlphaId}`, hrStaffToken)).json()[0];
+      const southLeave = (await get(`/workforce/advanced/leave-requests?employeeId=${employeeGammaId}`, hrStaffToken)).json()[0].leaveRequest;
+      const southPosting = (await get(`/workforce/advanced/job-postings?organizationUnitId=${orgUnitSouthId}`, hrStaffToken)).json()[0].jobPosting;
+      const southApplication = (await get(`/workforce/advanced/job-applications?jobPostingId=${southPosting.id}`, hrStaffToken)).json()[0];
+      const southEnrollmentRes = await post("/workforce/advanced/training-enrollments", hrStaffToken, {
+        trainingCourseId,
+        employeeId: employeeGammaId,
+      });
+      expect(southEnrollmentRes.statusCode).toBe(201);
+      const southEnrollment = southEnrollmentRes.json();
+
+      const uploadDocument = (entityType: string, entityId: string, fileName: string) => {
+        const boundary = `----wavea4${Date.now()}${entityType}`;
+        return app.inject({
+          method: "POST",
+          url: "/documents",
+          headers: { ...authHeader(hrStaffToken), "content-type": `multipart/form-data; boundary=${boundary}` },
+          payload: Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="entityType"\r\n\r\n${entityType}\r\n` +
+              `--${boundary}\r\nContent-Disposition: form-data; name="entityId"\r\n\r\n${entityId}\r\n` +
+              `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
+              `Content-Type: text/plain\r\n\r\nwave-a4-scope-evidence\r\n--${boundary}--\r\n`,
+          ),
+        });
+      };
+
+      const northDocuments = await Promise.all([
+        uploadDocument("workforce_leave_request", leaveRequestId, "north-leave.txt"),
+        uploadDocument("workforce_job_application", northApplication.id, "north-resume.txt"),
+        uploadDocument("workforce_training_enrollment", northEnrollment.id, "north-training.txt"),
+      ]);
+      const southDocuments = await Promise.all([
+        uploadDocument("workforce_leave_request", southLeave.id, "south-leave.txt"),
+        uploadDocument("workforce_job_application", southApplication.id, "south-resume.txt"),
+        uploadDocument("workforce_training_enrollment", southEnrollment.id, "south-training.txt"),
+      ]);
+      for (const upload of [...northDocuments, ...southDocuments]) expect(upload.statusCode).toBe(201);
+
+      const entityChecks = [
+        ["workforce_leave_request", leaveRequestId, southLeave.id],
+        ["workforce_job_application", northApplication.id, southApplication.id],
+        ["workforce_training_enrollment", northEnrollment.id, southEnrollment.id],
+      ] as const;
+      for (const [entityType, northEntityId, southEntityId] of entityChecks) {
+        const allowed = await get(`/documents?entityType=${entityType}&entityId=${northEntityId}`, northManagerToken);
+        expect(allowed.statusCode).toBe(200);
+        expect(allowed.json().length).toBeGreaterThan(0);
+
+        const denied = await get(`/documents?entityType=${entityType}&entityId=${southEntityId}`, northManagerToken);
+        expect(denied.statusCode).toBe(403);
+      }
+
+      for (const upload of southDocuments) {
+        const deniedDownload = await get(`/documents/${upload.json().id}/download`, northManagerToken);
+        expect(deniedDownload.statusCode).toBe(403);
+      }
     });
 
     it("enforces RBAC denial for each individual permission family", async () => {

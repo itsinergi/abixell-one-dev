@@ -132,7 +132,7 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     };
   }
 
-  async listActiveEmployeeReferences(tenantId: string, organizationUnitId?: string | null): Promise<EmployeeReference[]> {
+  async listActiveEmployeeReferences(tenantId: string, organizationUnitIds?: string[] | null): Promise<EmployeeReference[]> {
     const params: unknown[] = [tenantId];
     let sql = `
       SELECT e.id, e.employee_number, e.full_name, e.employment_status,
@@ -140,9 +140,9 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
       FROM employees e
       WHERE e.tenant_id = $1 AND e.employment_status = 'active'
     `;
-    if (organizationUnitId) {
-      params.push(organizationUnitId);
-      sql += ` AND e.organization_unit_id = $${params.length}`;
+    if (organizationUnitIds !== undefined && organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND e.organization_unit_id = ANY($${params.length}::uuid[])`;
     }
     sql += ` ORDER BY e.employee_number ASC`;
     const res = await this.pool.query(sql, params);
@@ -170,6 +170,28 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
       [tenantId, organizationUnitId],
     );
     return (res.rowCount ?? 0) > 0;
+  }
+
+  async listOrganizationUnitDescendantIds(tenantId: string, rootIds: string[]): Promise<string[]> {
+    if (rootIds.length === 0) return [];
+    const res = await this.pool.query(
+      `WITH RECURSIVE descendants AS (
+         SELECT id
+           FROM organization_units
+          WHERE tenant_id = $1
+            AND id = ANY($2::uuid[])
+            AND deleted_at IS NULL
+         UNION
+         SELECT ou.id
+           FROM organization_units ou
+           JOIN descendants d ON ou.parent_id = d.id
+          WHERE ou.tenant_id = $1
+            AND ou.deleted_at IS NULL
+       )
+       SELECT id FROM descendants`,
+      [tenantId, rootIds],
+    );
+    return res.rows.map((row) => row.id as string);
   }
 
   // ---------------------------------------------------------------------------
@@ -252,26 +274,39 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return this.mapRoster(res.rows[0]);
   }
 
-  async listRosters(tenantId: string, filter: RosterListFilter): Promise<WorkforceRoster[]> {
+  async listRosters(
+    tenantId: string,
+    filter: RosterListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforceRoster[]> {
     const params: unknown[] = [tenantId];
-    let sql = `SELECT * FROM workforce_rosters WHERE tenant_id = $1`;
+    let sql = `SELECT r.*
+                 FROM workforce_rosters r
+                 JOIN employees e
+                   ON e.tenant_id = r.tenant_id
+                  AND e.id = r.employee_id
+                WHERE r.tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND COALESCE(r.organization_unit_id, e.organization_unit_id) = ANY($${params.length}::uuid[])`;
+    }
     if (filter.employeeId) {
       params.push(filter.employeeId);
-      sql += ` AND employee_id = $${params.length}`;
+      sql += ` AND r.employee_id = $${params.length}`;
     }
     if (filter.organizationUnitId) {
       params.push(filter.organizationUnitId);
-      sql += ` AND organization_unit_id = $${params.length}`;
+      sql += ` AND COALESCE(r.organization_unit_id, e.organization_unit_id) = $${params.length}`;
     }
     if (filter.fromDate) {
       params.push(filter.fromDate);
-      sql += ` AND roster_date >= $${params.length}`;
+      sql += ` AND r.roster_date >= $${params.length}`;
     }
     if (filter.toDate) {
       params.push(filter.toDate);
-      sql += ` AND roster_date <= $${params.length}`;
+      sql += ` AND r.roster_date <= $${params.length}`;
     }
-    sql += ` ORDER BY roster_date ASC, employee_id ASC`;
+    sql += ` ORDER BY r.roster_date ASC, r.employee_id ASC`;
     const res = await this.pool.query(sql, params);
     return res.rows.map(this.mapRoster);
   }
@@ -306,26 +341,39 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return this.mapAttendance(res.rows[0]);
   }
 
-  async listAttendance(tenantId: string, filter: AttendanceListFilter): Promise<WorkforceAttendanceRecord[]> {
+  async listAttendance(
+    tenantId: string,
+    filter: AttendanceListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforceAttendanceRecord[]> {
     const params: unknown[] = [tenantId];
-    let sql = `SELECT * FROM workforce_attendance_records WHERE tenant_id = $1`;
+    let sql = `SELECT a.*
+                 FROM workforce_attendance_records a
+                 JOIN employees e
+                   ON e.tenant_id = a.tenant_id
+                  AND e.id = a.employee_id
+                WHERE a.tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND e.organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.employeeId) {
       params.push(filter.employeeId);
-      sql += ` AND employee_id = $${params.length}`;
+      sql += ` AND a.employee_id = $${params.length}`;
     }
     if (filter.fromDate) {
       params.push(filter.fromDate);
-      sql += ` AND attendance_date >= $${params.length}`;
+      sql += ` AND a.attendance_date >= $${params.length}`;
     }
     if (filter.toDate) {
       params.push(filter.toDate);
-      sql += ` AND attendance_date <= $${params.length}`;
+      sql += ` AND a.attendance_date <= $${params.length}`;
     }
     if (filter.status) {
       params.push(filter.status);
-      sql += ` AND status = $${params.length}`;
+      sql += ` AND a.status = $${params.length}`;
     }
-    sql += ` ORDER BY attendance_date DESC, employee_id ASC`;
+    sql += ` ORDER BY a.attendance_date DESC, a.employee_id ASC`;
     const res = await this.pool.query(sql, params);
     return res.rows.map(this.mapAttendance);
   }
@@ -451,26 +499,39 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return res.rows.length > 0 ? this.mapLeaveRequest(res.rows[0]) : null;
   }
 
-  async listLeaveRequests(tenantId: string, filter: LeaveRequestListFilter): Promise<WorkforceLeaveRequest[]> {
+  async listLeaveRequests(
+    tenantId: string,
+    filter: LeaveRequestListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforceLeaveRequest[]> {
     const params: unknown[] = [tenantId];
-    let sql = `SELECT * FROM workforce_leave_requests WHERE tenant_id = $1`;
+    let sql = `SELECT lr.*
+                 FROM workforce_leave_requests lr
+                 JOIN employees e
+                   ON e.tenant_id = lr.tenant_id
+                  AND e.id = lr.employee_id
+                WHERE lr.tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND e.organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.employeeId) {
       params.push(filter.employeeId);
-      sql += ` AND employee_id = $${params.length}`;
+      sql += ` AND lr.employee_id = $${params.length}`;
     }
     if (filter.leaveTypeId) {
       params.push(filter.leaveTypeId);
-      sql += ` AND leave_type_id = $${params.length}`;
+      sql += ` AND lr.leave_type_id = $${params.length}`;
     }
     if (filter.fromDate) {
       params.push(filter.fromDate);
-      sql += ` AND start_date >= $${params.length}`;
+      sql += ` AND lr.start_date >= $${params.length}`;
     }
     if (filter.toDate) {
       params.push(filter.toDate);
-      sql += ` AND end_date <= $${params.length}`;
+      sql += ` AND lr.end_date <= $${params.length}`;
     }
-    sql += ` ORDER BY submitted_at DESC, id DESC`;
+    sql += ` ORDER BY lr.submitted_at DESC, lr.id DESC`;
     const res = await this.pool.query(sql, params);
     return res.rows.map(this.mapLeaveRequest);
   }
@@ -538,24 +599,58 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return res.rows.length > 0 ? this.mapOvertimeRequest(res.rows[0]) : null;
   }
 
-  async listOvertimeRequests(tenantId: string, filter: OvertimeRequestListFilter): Promise<WorkforceOvertimeRequest[]> {
+  async listOvertimeRequests(
+    tenantId: string,
+    filter: OvertimeRequestListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforceOvertimeRequest[]> {
     const params: unknown[] = [tenantId];
-    let sql = `SELECT * FROM workforce_overtime_requests WHERE tenant_id = $1`;
+    let sql = `SELECT o.*
+                 FROM workforce_overtime_requests o
+                 JOIN employees e
+                   ON e.tenant_id = o.tenant_id
+                  AND e.id = o.employee_id
+                WHERE o.tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND e.organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.employeeId) {
       params.push(filter.employeeId);
-      sql += ` AND employee_id = $${params.length}`;
+      sql += ` AND o.employee_id = $${params.length}`;
     }
     if (filter.fromDate) {
       params.push(filter.fromDate);
-      sql += ` AND overtime_date >= $${params.length}`;
+      sql += ` AND o.overtime_date >= $${params.length}`;
     }
     if (filter.toDate) {
       params.push(filter.toDate);
-      sql += ` AND overtime_date <= $${params.length}`;
+      sql += ` AND o.overtime_date <= $${params.length}`;
     }
-    sql += ` ORDER BY submitted_at DESC, id DESC`;
+    sql += ` ORDER BY o.submitted_at DESC, o.id DESC`;
     const res = await this.pool.query(sql, params);
     return res.rows.map(this.mapOvertimeRequest);
+  }
+
+  async findApprovedOvertimeHoursForEmployeePeriod(
+    tenantId: string,
+    employeeId: string,
+    fromDate: string,
+    toDate: string,
+  ): Promise<number> {
+    const res = await this.pool.query(
+      `SELECT COALESCE(SUM(COALESCE(actual_hours, estimated_hours)), 0) AS total_hours
+         FROM workforce_overtime_requests
+        WHERE tenant_id = $1
+          AND employee_id = $2
+          AND overtime_date >= $3
+          AND overtime_date <= $4
+          AND approved_at IS NOT NULL
+          AND rejected_at IS NULL
+          AND cancelled_at IS NULL`,
+      [tenantId, employeeId, fromDate, toDate],
+    );
+    return Number(res.rows[0]?.total_hours ?? 0);
   }
 
   async setOvertimeRequestWorkflowInstance(tenantId: string, id: string, workflowInstanceId: string): Promise<void> {
@@ -707,15 +802,20 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return this.mapSalaryProfile(res.rows[0]);
   }
 
-  async findCurrentSalaryProfile(tenantId: string, employeeId: string): Promise<WorkforceEmployeeSalaryProfile | null> {
+  async findCurrentSalaryProfile(
+    tenantId: string,
+    employeeId: string,
+    asOfDate?: string,
+  ): Promise<WorkforceEmployeeSalaryProfile | null> {
+    const targetDate = asOfDate ?? toDateString(new Date());
     const res = await this.pool.query(
       `SELECT * FROM workforce_employee_salary_profiles
        WHERE tenant_id = $1 AND employee_id = $2
-         AND effective_from <= CURRENT_DATE
-         AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+         AND effective_from <= $3
+         AND (effective_to IS NULL OR effective_to >= $3)
        ORDER BY effective_from DESC
        LIMIT 1`,
-      [tenantId, employeeId],
+      [tenantId, employeeId, targetDate],
     );
     return res.rows.length > 0 ? this.mapSalaryProfile(res.rows[0]) : null;
   }
@@ -755,9 +855,17 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return res.rows.length > 0 ? this.mapPayrollRun(res.rows[0]) : null;
   }
 
-  async listPayrollRuns(tenantId: string, filter: PayrollRunListFilter): Promise<WorkforcePayrollRun[]> {
+  async listPayrollRuns(
+    tenantId: string,
+    filter: PayrollRunListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforcePayrollRun[]> {
     const params: unknown[] = [tenantId];
     let sql = `SELECT * FROM workforce_payroll_runs WHERE tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.organizationUnitId) {
       params.push(filter.organizationUnitId);
       sql += ` AND organization_unit_id = $${params.length}`;
@@ -926,9 +1034,17 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return res.rows.length > 0 ? this.mapJobPosting(res.rows[0]) : null;
   }
 
-  async listJobPostings(tenantId: string, filter: JobPostingListFilter): Promise<WorkforceJobPosting[]> {
+  async listJobPostings(
+    tenantId: string,
+    filter: JobPostingListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforceJobPosting[]> {
     const params: unknown[] = [tenantId];
     let sql = `SELECT * FROM workforce_job_postings WHERE tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.status) {
       params.push(filter.status);
       sql += ` AND status = $${params.length}`;
@@ -1002,18 +1118,31 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return res.rows.length > 0 ? this.mapJobApplication(res.rows[0]) : null;
   }
 
-  async listJobApplications(tenantId: string, filter: JobApplicationListFilter): Promise<WorkforceJobApplication[]> {
+  async listJobApplications(
+    tenantId: string,
+    filter: JobApplicationListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforceJobApplication[]> {
     const params: unknown[] = [tenantId];
-    let sql = `SELECT * FROM workforce_job_applications WHERE tenant_id = $1`;
+    let sql = `SELECT a.*
+                 FROM workforce_job_applications a
+                 JOIN workforce_job_postings p
+                   ON p.tenant_id = a.tenant_id
+                  AND p.id = a.job_posting_id
+                WHERE a.tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND p.organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.jobPostingId) {
       params.push(filter.jobPostingId);
-      sql += ` AND job_posting_id = $${params.length}`;
+      sql += ` AND a.job_posting_id = $${params.length}`;
     }
     if (filter.stage) {
       params.push(filter.stage);
-      sql += ` AND stage = $${params.length}`;
+      sql += ` AND a.stage = $${params.length}`;
     }
-    sql += ` ORDER BY applied_at ASC`;
+    sql += ` ORDER BY a.applied_at ASC`;
     const res = await this.pool.query(sql, params);
     return res.rows.map(this.mapJobApplication);
   }
@@ -1233,18 +1362,31 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return res.rows.length > 0 ? this.mapPerformanceReview(res.rows[0]) : null;
   }
 
-  async listPerformanceReviews(tenantId: string, filter: PerformanceReviewListFilter): Promise<WorkforcePerformanceReview[]> {
+  async listPerformanceReviews(
+    tenantId: string,
+    filter: PerformanceReviewListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforcePerformanceReview[]> {
     const params: unknown[] = [tenantId];
-    let sql = `SELECT * FROM workforce_performance_reviews WHERE tenant_id = $1`;
+    let sql = `SELECT r.*
+                 FROM workforce_performance_reviews r
+                 JOIN employees e
+                   ON e.tenant_id = r.tenant_id
+                  AND e.id = r.employee_id
+                WHERE r.tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND e.organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.employeeId) {
       params.push(filter.employeeId);
-      sql += ` AND employee_id = $${params.length}`;
+      sql += ` AND r.employee_id = $${params.length}`;
     }
     if (filter.periodYear) {
       params.push(`${filter.periodYear}-%`);
-      sql += ` AND period_start::text LIKE $${params.length}`;
+      sql += ` AND r.period_start::text LIKE $${params.length}`;
     }
-    sql += ` ORDER BY period_end DESC, id DESC`;
+    sql += ` ORDER BY r.period_end DESC, r.id DESC`;
     const res = await this.pool.query(sql, params);
     return res.rows.map(this.mapPerformanceReview);
   }
@@ -1344,9 +1486,17 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return res.rows.length > 0 ? this.mapManpowerPlan(res.rows[0]) : null;
   }
 
-  async listManpowerPlans(tenantId: string, filter: ManpowerPlanListFilter): Promise<WorkforceManpowerPlan[]> {
+  async listManpowerPlans(
+    tenantId: string,
+    filter: ManpowerPlanListFilter,
+    organizationUnitIds: string[] | null,
+  ): Promise<WorkforceManpowerPlan[]> {
     const params: unknown[] = [tenantId];
     let sql = `SELECT * FROM workforce_manpower_plans WHERE tenant_id = $1`;
+    if (organizationUnitIds !== null) {
+      params.push(organizationUnitIds);
+      sql += ` AND organization_unit_id = ANY($${params.length}::uuid[])`;
+    }
     if (filter.organizationUnitId) {
       params.push(filter.organizationUnitId);
       sql += ` AND organization_unit_id = $${params.length}`;

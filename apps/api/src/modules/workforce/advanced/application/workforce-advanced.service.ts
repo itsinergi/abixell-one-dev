@@ -21,6 +21,7 @@
 import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
 import {
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../../../domain/shared-kernel/errors.js";
@@ -38,6 +39,7 @@ import type {
   AttendanceListFilter,
   CompleteTrainingInput,
   CreateStatutoryPolicyInput,
+  EmployeeReference,
   JobApplicationListFilter,
   JobPostingListFilter,
   LeaveRequestListFilter,
@@ -70,7 +72,11 @@ import type {
   WorkforceTrainingCourse,
   WorkforceTrainingEnrollment,
 } from "../domain/workforce-advanced.entity.js";
-import { calculateEmployeePayroll, roundCents } from "../domain/payroll-policy.js";
+import {
+  calculateEmployeePayroll,
+  fromCents,
+  toCents,
+} from "../domain/payroll-policy.js";
 
 /** Configuration numbering codes for Workforce Advanced. */
 export const WORKFORCE_LEAVE_REQUEST_NUMBERING_CODE = "workforce_leave_request";
@@ -145,6 +151,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceShift> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
+    await this.assertOrganizationUnitInScope(actor, null);
     this.validateTimeString(input.startTime, "startTime");
     this.validateTimeString(input.endTime, "endTime");
 
@@ -182,11 +189,13 @@ export class WorkforceAdvancedService {
 
   async listShifts(actor: ActorContext, includeInactive = false): Promise<WorkforceShift[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listShifts(actor.tenantId, includeInactive);
   }
 
   async getShift(actor: ActorContext, id: string): Promise<WorkforceShift> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     const shift = await this.repo.findShiftById(actor.tenantId, id);
     if (!shift) throw new NotFoundError("WorkforceShift", id);
     return shift;
@@ -194,6 +203,7 @@ export class WorkforceAdvancedService {
 
   async setShiftActive(actor: ActorContext, id: string, isActive: boolean): Promise<WorkforceShift> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
+    await this.assertOrganizationUnitInScope(actor, null);
     const shift = await this.repo.findShiftById(actor.tenantId, id);
     if (!shift) throw new NotFoundError("WorkforceShift", id);
 
@@ -222,7 +232,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceRoster> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const shift = await this.repo.findShiftById(actor.tenantId, input.shiftId);
     if (!shift) throw new NotFoundError("WorkforceShift", input.shiftId);
@@ -258,10 +268,11 @@ export class WorkforceAdvancedService {
 
   async listRosters(actor: ActorContext, filter: RosterListFilter = {}): Promise<WorkforceRoster[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
-    if (filter.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, filter.organizationUnitId);
+    if (filter.employeeId) {
+      await this.assertEmployeeInScope(actor, filter.employeeId);
     }
-    return this.repo.listRosters(actor.tenantId, filter);
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitId);
+    return this.repo.listRosters(actor.tenantId, filter, organizationUnitIds);
   }
 
   async recordAttendance(
@@ -278,7 +289,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceAttendanceRecord> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const attendanceDate = this.validateDateOnly(input.attendanceDate, "attendanceDate");
     if (input.shiftId) {
@@ -313,7 +324,11 @@ export class WorkforceAdvancedService {
 
   async listAttendance(actor: ActorContext, filter: AttendanceListFilter = {}): Promise<WorkforceAttendanceRecord[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
-    return this.repo.listAttendance(actor.tenantId, filter);
+    if (filter.employeeId) {
+      await this.assertEmployeeInScope(actor, filter.employeeId);
+    }
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor);
+    return this.repo.listAttendance(actor.tenantId, filter, organizationUnitIds);
   }
 
   // =========================================================================
@@ -331,6 +346,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceLeaveType> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
+    await this.assertOrganizationUnitInScope(actor, null);
 
     const leaveType = await this.repo.createLeaveType({
       tenantId: actor.tenantId,
@@ -356,6 +372,7 @@ export class WorkforceAdvancedService {
 
   async listLeaveTypes(actor: ActorContext, includeInactive = false): Promise<WorkforceLeaveType[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listLeaveTypes(actor.tenantId, includeInactive);
   }
 
@@ -369,7 +386,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceLeaveBalance> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     if (input.allocatedDays < 0) {
       throw new ValidationError("allocatedDays cannot be negative");
@@ -398,7 +415,7 @@ export class WorkforceAdvancedService {
 
   async listLeaveBalances(actor: ActorContext, employeeId: string, balanceYear?: number): Promise<WorkforceLeaveBalance[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
-    await this.assertEmployeeExists(actor.tenantId, employeeId);
+    await this.assertEmployeeInScope(actor, employeeId);
     const year = balanceYear ?? new Date().getFullYear();
     return this.repo.listLeaveBalances(actor.tenantId, employeeId, year);
   }
@@ -416,7 +433,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceLeaveRequest> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const startDate = this.validateDateOnly(input.startDate, "startDate");
     const endDate = this.validateDateOnly(input.endDate, "endDate");
@@ -519,7 +536,11 @@ export class WorkforceAdvancedService {
     filter: LeaveRequestListFilter = {},
   ): Promise<{ leaveRequest: WorkforceLeaveRequest; status: EntityWorkflowStatus | null }[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
-    const requests = await this.repo.listLeaveRequests(actor.tenantId, filter);
+    if (filter.employeeId) {
+      await this.assertEmployeeInScope(actor, filter.employeeId);
+    }
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor);
+    const requests = await this.repo.listLeaveRequests(actor.tenantId, filter, organizationUnitIds);
     return this.withWorkflowStatus(actor, requests, (r) => r.workflowInstanceId, (leaveRequest, status) => ({ leaveRequest, status }));
   }
 
@@ -527,6 +548,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
     const leaveRequest = await this.repo.findLeaveRequestById(actor.tenantId, id);
     if (!leaveRequest) throw new NotFoundError("WorkforceLeaveRequest", id);
+    await this.assertEmployeeInScope(actor, leaveRequest.employeeId);
 
     let status: EntityWorkflowStatus | null = null;
     let availableActions: EntityWorkflowAction[] = [];
@@ -548,6 +570,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.approve");
     const leaveRequest = await this.repo.findLeaveRequestById(actor.tenantId, id);
     if (!leaveRequest) throw new NotFoundError("WorkforceLeaveRequest", id);
+    await this.assertEmployeeInScope(actor, leaveRequest.employeeId);
     if (!leaveRequest.workflowInstanceId) {
       throw new ConflictError("This leave request has no active Workflow Instance");
     }
@@ -628,7 +651,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceOvertimeRequest> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const overtimeDate = this.validateDateOnly(input.overtimeDate, "overtimeDate");
     this.validateTimeString(input.startTime, "startTime");
@@ -700,7 +723,11 @@ export class WorkforceAdvancedService {
     filter: OvertimeRequestListFilter = {},
   ): Promise<{ overtimeRequest: WorkforceOvertimeRequest; status: EntityWorkflowStatus | null }[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
-    const requests = await this.repo.listOvertimeRequests(actor.tenantId, filter);
+    if (filter.employeeId) {
+      await this.assertEmployeeInScope(actor, filter.employeeId);
+    }
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor);
+    const requests = await this.repo.listOvertimeRequests(actor.tenantId, filter, organizationUnitIds);
     return this.withWorkflowStatus(actor, requests, (r) => r.workflowInstanceId, (overtimeRequest, status) => ({ overtimeRequest, status }));
   }
 
@@ -708,6 +735,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
     const overtimeRequest = await this.repo.findOvertimeRequestById(actor.tenantId, id);
     if (!overtimeRequest) throw new NotFoundError("WorkforceOvertimeRequest", id);
+    await this.assertEmployeeInScope(actor, overtimeRequest.employeeId);
 
     let status: EntityWorkflowStatus | null = null;
     let availableActions: EntityWorkflowAction[] = [];
@@ -727,6 +755,9 @@ export class WorkforceAdvancedService {
   ): Promise<WorkforceOvertimeRequest> {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
     if (actualHours < 0) throw new ValidationError("actualHours cannot be negative");
+    const overtimeRequest = await this.repo.findOvertimeRequestById(actor.tenantId, id);
+    if (!overtimeRequest) throw new NotFoundError("WorkforceOvertimeRequest", id);
+    await this.assertEmployeeInScope(actor, overtimeRequest.employeeId);
 
     const updated = await this.repo.recordActualOvertimeHours({
       tenantId: actor.tenantId,
@@ -756,6 +787,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.leave.approve");
     const overtimeRequest = await this.repo.findOvertimeRequestById(actor.tenantId, id);
     if (!overtimeRequest) throw new NotFoundError("WorkforceOvertimeRequest", id);
+    await this.assertEmployeeInScope(actor, overtimeRequest.employeeId);
     if (!overtimeRequest.workflowInstanceId) {
       throw new ConflictError("This overtime request has no active Workflow Instance");
     }
@@ -808,6 +840,7 @@ export class WorkforceAdvancedService {
     input: Omit<CreateStatutoryPolicyInput, "tenantId" | "createdBy">,
   ): Promise<WorkforceStatutoryPolicy> {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.manage");
+    await this.assertOrganizationUnitInScope(actor, null);
 
     const policy = await this.repo.createStatutoryPolicy({
       ...input,
@@ -829,11 +862,13 @@ export class WorkforceAdvancedService {
 
   async listStatutoryPolicies(actor: ActorContext): Promise<WorkforceStatutoryPolicy[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listStatutoryPolicies(actor.tenantId);
   }
 
   async getActiveStatutoryPolicy(actor: ActorContext, asOfDate?: string): Promise<WorkforceStatutoryPolicy | null> {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     const targetDate = asOfDate ? this.validateDateOnly(asOfDate, "asOfDate") : new Date().toISOString().slice(0, 10);
     return this.repo.findActiveStatutoryPolicy(actor.tenantId, targetDate);
   }
@@ -843,7 +878,7 @@ export class WorkforceAdvancedService {
     input: Omit<SetSalaryProfileInput, "tenantId" | "actorUserId">,
   ): Promise<WorkforceEmployeeSalaryProfile> {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const effectiveFrom = this.validateDateOnly(input.effectiveFrom, "effectiveFrom");
     await this.repo.closeOpenSalaryProfile(actor.tenantId, input.employeeId, effectiveFrom);
@@ -869,7 +904,7 @@ export class WorkforceAdvancedService {
 
   async getCurrentSalaryProfile(actor: ActorContext, employeeId: string): Promise<WorkforceEmployeeSalaryProfile | null> {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
-    await this.assertEmployeeExists(actor.tenantId, employeeId);
+    await this.assertEmployeeInScope(actor, employeeId);
     return this.repo.findCurrentSalaryProfile(actor.tenantId, employeeId);
   }
 
@@ -890,9 +925,7 @@ export class WorkforceAdvancedService {
       throw new ValidationError("periodYear is out of valid range");
     }
 
-    if (input.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.organizationUnitId);
-    }
+    await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
 
     const { number: runNumber } = await this.configuration.generateNumberForTenant(
       actor.tenantId,
@@ -953,6 +986,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
     const payrollRun = await this.repo.findPayrollRunById(actor.tenantId, id);
     if (!payrollRun) throw new NotFoundError("WorkforcePayrollRun", id);
+    await this.assertOrganizationUnitInScope(actor, payrollRun.organizationUnitId);
 
     const payslips = await this.repo.listPayslipsByRun(actor.tenantId, id);
 
@@ -972,10 +1006,8 @@ export class WorkforceAdvancedService {
     filter: PayrollRunListFilter = {},
   ): Promise<{ payrollRun: WorkforcePayrollRun; status: EntityWorkflowStatus | null }[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
-    if (filter.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, filter.organizationUnitId);
-    }
-    const runs = await this.repo.listPayrollRuns(actor.tenantId, filter);
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitId);
+    const runs = await this.repo.listPayrollRuns(actor.tenantId, filter, organizationUnitIds);
     return this.withWorkflowStatus(actor, runs, (r) => r.workflowInstanceId, (payrollRun, status) => ({ payrollRun, status }));
   }
 
@@ -990,36 +1022,54 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.manage");
     const run = await this.repo.findPayrollRunById(actor.tenantId, id);
     if (!run) throw new NotFoundError("WorkforcePayrollRun", id);
+    await this.assertOrganizationUnitInScope(actor, run.organizationUnitId);
     if (run.approvedAt || run.closedAt) {
       throw new ConflictError("Cannot recalculate an approved or closed payroll run");
     }
 
-    const asOfDate = `${run.periodYear}-${String(run.periodMonth).padStart(2, "0")}-01`;
-    const policy = await this.repo.findActiveStatutoryPolicy(actor.tenantId, asOfDate);
+    const periodMonth = String(run.periodMonth).padStart(2, "0");
+    const periodStartDate = `${run.periodYear}-${periodMonth}-01`;
+    const periodEndDate = new Date(Date.UTC(run.periodYear, run.periodMonth, 0))
+      .toISOString()
+      .slice(0, 10);
+    const policy = await this.repo.findActiveStatutoryPolicy(actor.tenantId, periodStartDate);
     if (!policy) {
       throw new ValidationError(`No active statutory policy found effective for period ${run.periodYear}-${run.periodMonth}`);
     }
 
-    const employees = await this.repo.listActiveEmployeeReferences(actor.tenantId, run.organizationUnitId);
+    let employeeOrganizationUnitIds: string[] | null = null;
+    if (run.organizationUnitId) {
+      const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, [run.organizationUnitId]);
+      employeeOrganizationUnitIds = descendantIds.length > 0 ? descendantIds : [run.organizationUnitId];
+    }
+
+    const employees = await this.repo.listActiveEmployeeReferences(actor.tenantId, employeeOrganizationUnitIds);
     if (employees.length === 0) {
       throw new ValidationError("No active employees found to calculate payroll for");
     }
 
     const payslips: Array<Omit<WorkforcePayslip, "id" | "tenantId" | "payrollRunId" | "createdAt">> = [];
 
-    let totalGross = 0;
-    let totalDeductions = 0;
-    let totalNet = 0;
-    let totalEmployerContributions = 0;
+    let totalGrossCents = 0n;
+    let totalDeductionsCents = 0n;
+    let totalNetCents = 0n;
+    let totalEmployerContributionsCents = 0n;
 
     for (const employee of employees) {
-      const profile = await this.repo.findCurrentSalaryProfile(actor.tenantId, employee.id);
+      const profile = await this.repo.findCurrentSalaryProfile(actor.tenantId, employee.id, periodStartDate);
       if (!profile) continue;
+
+      const overtimeHours = await this.repo.findApprovedOvertimeHoursForEmployeePeriod(
+        actor.tenantId,
+        employee.id,
+        periodStartDate,
+        periodEndDate,
+      );
 
       const calc = calculateEmployeePayroll({
         baseSalary: profile.baseSalary,
         fixedAllowance: profile.fixedAllowance,
-        overtimeHours: 0,
+        overtimeHours,
         overtimeHourlyRate: profile.overtimeHourlyRate,
         ptkpStatus: profile.ptkpStatus,
         hasNpwp: profile.hasNpwp,
@@ -1027,10 +1077,10 @@ export class WorkforceAdvancedService {
         policy,
       });
 
-      totalGross += calc.grossSalary;
-      totalDeductions += calc.totalDeductions;
-      totalNet += calc.netSalary;
-      totalEmployerContributions += calc.employerContributions;
+      totalGrossCents += toCents(calc.grossSalary);
+      totalDeductionsCents += toCents(calc.totalDeductions);
+      totalNetCents += toCents(calc.netSalary);
+      totalEmployerContributionsCents += toCents(calc.employerContributions);
 
       payslips.push({
         employeeId: employee.id,
@@ -1057,12 +1107,11 @@ export class WorkforceAdvancedService {
       });
     }
 
-    const mode = policy.roundingMode || "half_up";
     const totals = {
-      totalGross: roundCents(totalGross, mode),
-      totalDeductions: roundCents(totalDeductions, mode),
-      totalNet: roundCents(totalNet, mode),
-      totalEmployerContributions: roundCents(totalEmployerContributions, mode),
+      totalGross: fromCents(totalGrossCents),
+      totalDeductions: fromCents(totalDeductionsCents),
+      totalNet: fromCents(totalNetCents),
+      totalEmployerContributions: fromCents(totalEmployerContributionsCents),
       employeeCount: payslips.length,
     };
 
@@ -1094,6 +1143,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.approve");
     const payrollRun = await this.repo.findPayrollRunById(actor.tenantId, id);
     if (!payrollRun) throw new NotFoundError("WorkforcePayrollRun", id);
+    await this.assertOrganizationUnitInScope(actor, payrollRun.organizationUnitId);
     if (!payrollRun.workflowInstanceId) {
       throw new ConflictError("This payroll run has no active Workflow Instance");
     }
@@ -1139,6 +1189,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
     const run = await this.repo.findPayrollRunById(actor.tenantId, payrollRunId);
     if (!run) throw new NotFoundError("WorkforcePayrollRun", payrollRunId);
+    await this.assertOrganizationUnitInScope(actor, run.organizationUnitId);
     return this.repo.listPayslipsByRun(actor.tenantId, payrollRunId);
   }
 
@@ -1163,9 +1214,7 @@ export class WorkforceAdvancedService {
       const posExists = await this.repo.positionExists(actor.tenantId, input.positionId);
       if (!posExists) throw new NotFoundError("Position", input.positionId);
     }
-    if (input.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.organizationUnitId);
-    }
+    await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
 
     const { number: postingCode } = await this.configuration.generateNumberForTenant(
       actor.tenantId,
@@ -1228,8 +1277,14 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
     const jobPosting = await this.repo.findJobPostingById(actor.tenantId, id);
     if (!jobPosting) throw new NotFoundError("WorkforceJobPosting", id);
+    await this.assertOrganizationUnitInScope(actor, jobPosting.organizationUnitId);
 
-    const applications = await this.repo.listJobApplications(actor.tenantId, { jobPostingId: id });
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, jobPosting.organizationUnitId);
+    const applications = await this.repo.listJobApplications(
+      actor.tenantId,
+      { jobPostingId: id },
+      organizationUnitIds,
+    );
 
     let status: EntityWorkflowStatus | null = null;
     let availableActions: EntityWorkflowAction[] = [];
@@ -1247,10 +1302,8 @@ export class WorkforceAdvancedService {
     filter: JobPostingListFilter = {},
   ): Promise<{ jobPosting: WorkforceJobPosting; status: EntityWorkflowStatus | null }[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
-    if (filter.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, filter.organizationUnitId);
-    }
-    const postings = await this.repo.listJobPostings(actor.tenantId, filter);
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitId);
+    const postings = await this.repo.listJobPostings(actor.tenantId, filter, organizationUnitIds);
     return this.withWorkflowStatus(actor, postings, (r) => r.workflowInstanceId, (jobPosting, status) => ({ jobPosting, status }));
   }
 
@@ -1263,6 +1316,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.recruitment.manage");
     const jobPosting = await this.repo.findJobPostingById(actor.tenantId, id);
     if (!jobPosting) throw new NotFoundError("WorkforceJobPosting", id);
+    await this.assertOrganizationUnitInScope(actor, jobPosting.organizationUnitId);
     if (!jobPosting.workflowInstanceId) {
       throw new ConflictError("This job posting has no active Workflow Instance");
     }
@@ -1319,6 +1373,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.recruitment.manage");
     const posting = await this.repo.findJobPostingById(actor.tenantId, input.jobPostingId);
     if (!posting) throw new NotFoundError("WorkforceJobPosting", input.jobPostingId);
+    await this.assertOrganizationUnitInScope(actor, posting.organizationUnitId);
 
     const application = await this.repo.createJobApplication({
       tenantId: actor.tenantId,
@@ -1344,7 +1399,13 @@ export class WorkforceAdvancedService {
 
   async listJobApplications(actor: ActorContext, filter: JobApplicationListFilter = {}): Promise<WorkforceJobApplication[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
-    return this.repo.listJobApplications(actor.tenantId, filter);
+    if (filter.jobPostingId) {
+      const posting = await this.repo.findJobPostingById(actor.tenantId, filter.jobPostingId);
+      if (!posting) throw new NotFoundError("WorkforceJobPosting", filter.jobPostingId);
+      await this.assertOrganizationUnitInScope(actor, posting.organizationUnitId);
+    }
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor);
+    return this.repo.listJobApplications(actor.tenantId, filter, organizationUnitIds);
   }
 
   async advanceJobApplication(
@@ -1354,9 +1415,12 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.recruitment.manage");
     const application = await this.repo.findJobApplicationById(actor.tenantId, input.id);
     if (!application) throw new NotFoundError("WorkforceJobApplication", input.id);
+    const posting = await this.repo.findJobPostingById(actor.tenantId, application.jobPostingId);
+    if (!posting) throw new NotFoundError("WorkforceJobPosting", application.jobPostingId);
+    await this.assertOrganizationUnitInScope(actor, posting.organizationUnitId);
 
     if (input.hiredEmployeeId) {
-      await this.assertEmployeeExists(actor.tenantId, input.hiredEmployeeId);
+      await this.assertEmployeeInScope(actor, input.hiredEmployeeId);
     }
 
     const advanced = await this.repo.advanceJobApplication({
@@ -1393,6 +1457,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceCompetency> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.assertOrganizationUnitInScope(actor, null);
 
     const competency = await this.repo.createCompetency({
       tenantId: actor.tenantId,
@@ -1419,6 +1484,7 @@ export class WorkforceAdvancedService {
 
   async listCompetencies(actor: ActorContext, includeInactive = false): Promise<WorkforceCompetency[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listCompetencies(actor.tenantId, includeInactive);
   }
 
@@ -1432,7 +1498,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceEmployeeCompetency> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const assessed = await this.repo.assessEmployeeCompetency({
       tenantId: actor.tenantId,
@@ -1457,7 +1523,7 @@ export class WorkforceAdvancedService {
 
   async listEmployeeCompetencies(actor: ActorContext, employeeId: string): Promise<WorkforceEmployeeCompetency[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
-    await this.assertEmployeeExists(actor.tenantId, employeeId);
+    await this.assertEmployeeInScope(actor, employeeId);
     return this.repo.listEmployeeCompetencies(actor.tenantId, employeeId);
   }
 
@@ -1473,6 +1539,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceTrainingCourse> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.assertOrganizationUnitInScope(actor, null);
 
     const course = await this.repo.createTrainingCourse({
       tenantId: actor.tenantId,
@@ -1499,6 +1566,7 @@ export class WorkforceAdvancedService {
 
   async listTrainingCourses(actor: ActorContext, includeInactive = false): Promise<WorkforceTrainingCourse[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listTrainingCourses(actor.tenantId, includeInactive);
   }
 
@@ -1510,7 +1578,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceTrainingEnrollment> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const enrollment = await this.repo.enrollTraining({
       tenantId: actor.tenantId,
@@ -1533,7 +1601,7 @@ export class WorkforceAdvancedService {
 
   async listTrainingEnrollments(actor: ActorContext, employeeId: string): Promise<WorkforceTrainingEnrollment[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
-    await this.assertEmployeeExists(actor.tenantId, employeeId);
+    await this.assertEmployeeInScope(actor, employeeId);
     return this.repo.listTrainingEnrollments(actor.tenantId, employeeId);
   }
 
@@ -1544,6 +1612,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
     const enrollment = await this.repo.findTrainingEnrollmentById(actor.tenantId, input.id);
     if (!enrollment) throw new NotFoundError("WorkforceTrainingEnrollment", input.id);
+    await this.assertEmployeeInScope(actor, enrollment.employeeId);
 
     const completionDate = this.validateDateOnly(input.completionDate, "completionDate");
 
@@ -1581,7 +1650,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforcePerformanceReview> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
-    await this.assertEmployeeExists(actor.tenantId, input.employeeId);
+    await this.assertEmployeeInScope(actor, input.employeeId);
 
     const periodStart = this.validateDateOnly(input.periodStart, "periodStart");
     const periodEnd = this.validateDateOnly(input.periodEnd, "periodEnd");
@@ -1651,6 +1720,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
     const review = await this.repo.findPerformanceReviewById(actor.tenantId, id);
     if (!review) throw new NotFoundError("WorkforcePerformanceReview", id);
+    await this.assertEmployeeInScope(actor, review.employeeId);
 
     let status: EntityWorkflowStatus | null = null;
     let availableActions: EntityWorkflowAction[] = [];
@@ -1668,7 +1738,11 @@ export class WorkforceAdvancedService {
     filter: PerformanceReviewListFilter = {},
   ): Promise<{ review: WorkforcePerformanceReview; status: EntityWorkflowStatus | null }[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
-    const reviews = await this.repo.listPerformanceReviews(actor.tenantId, filter);
+    if (filter.employeeId) {
+      await this.assertEmployeeInScope(actor, filter.employeeId);
+    }
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor);
+    const reviews = await this.repo.listPerformanceReviews(actor.tenantId, filter, organizationUnitIds);
     return this.withWorkflowStatus(actor, reviews, (r) => r.workflowInstanceId, (review, status) => ({ review, status }));
   }
 
@@ -1681,6 +1755,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
     const review = await this.repo.findPerformanceReviewById(actor.tenantId, id);
     if (!review) throw new NotFoundError("WorkforcePerformanceReview", id);
+    await this.assertEmployeeInScope(actor, review.employeeId);
     if (!review.workflowInstanceId) {
       throw new ConflictError("This performance review has no active Workflow Instance");
     }
@@ -1733,6 +1808,7 @@ export class WorkforceAdvancedService {
     },
   ): Promise<WorkforceCareerPath> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.assertOrganizationUnitInScope(actor, null);
 
     if (input.fromPositionId === input.toPositionId) {
       throw new ValidationError("fromPositionId and toPositionId must be distinct positions");
@@ -1769,6 +1845,7 @@ export class WorkforceAdvancedService {
 
   async listCareerPaths(actor: ActorContext, fromPositionId?: string): Promise<WorkforceCareerPath[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listCareerPaths(actor.tenantId, fromPositionId);
   }
 
@@ -1791,9 +1868,7 @@ export class WorkforceAdvancedService {
       throw new ValidationError("planYear is out of valid range");
     }
 
-    if (input.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.organizationUnitId);
-    }
+    await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
 
     const { number: planNumber } = await this.configuration.generateNumberForTenant(
       actor.tenantId,
@@ -1829,15 +1904,14 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.planning.read");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", id);
+    await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
     return plan;
   }
 
   async listManpowerPlans(actor: ActorContext, filter: ManpowerPlanListFilter = {}): Promise<WorkforceManpowerPlan[]> {
     await this.rbac.requirePermission(actor.userId, "workforce.planning.read");
-    if (filter.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, filter.organizationUnitId);
-    }
-    return this.repo.listManpowerPlans(actor.tenantId, filter);
+    const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitId);
+    return this.repo.listManpowerPlans(actor.tenantId, filter, organizationUnitIds);
   }
 
   async computeManpowerPlan(
@@ -1850,11 +1924,18 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.planning.manage");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, input.id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", input.id);
+    await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
     if (plan.status === "applied" || plan.status === "dismissed") {
       throw new ConflictError(`Cannot compute manpower plan in '${plan.status}' status`);
     }
 
-    const employees = await this.repo.listActiveEmployeeReferences(actor.tenantId, plan.organizationUnitId);
+    let employeeOrganizationUnitIds: string[] | null = null;
+    if (plan.organizationUnitId) {
+      const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, [plan.organizationUnitId]);
+      employeeOrganizationUnitIds = descendantIds.length > 0 ? descendantIds : [plan.organizationUnitId];
+    }
+
+    const employees = await this.repo.listActiveEmployeeReferences(actor.tenantId, employeeOrganizationUnitIds);
 
     // Group current headcount by positionId
     const currentByPosition = new Map<string, number>();
@@ -1925,6 +2006,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.planning.apply");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", id);
+    await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
     if (plan.status === "applied" || plan.status === "dismissed") {
       throw new ConflictError(`Cannot apply manpower plan in '${plan.status}' status`);
     }
@@ -1947,6 +2029,7 @@ export class WorkforceAdvancedService {
     await this.rbac.requirePermission(actor.userId, "workforce.planning.manage");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", id);
+    await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
     if (plan.status === "applied" || plan.status === "dismissed") {
       throw new ConflictError(`Cannot dismiss manpower plan in '${plan.status}' status`);
     }
@@ -1969,9 +2052,60 @@ export class WorkforceAdvancedService {
   // Internals
   // =========================================================================
 
-  private async assertEmployeeExists(tenantId: string, employeeId: string): Promise<void> {
+  private async assertEmployeeExists(tenantId: string, employeeId: string): Promise<EmployeeReference> {
     const employee = await this.repo.findEmployeeReference(tenantId, employeeId);
     if (!employee) throw new NotFoundError("Employee", employeeId);
+    return employee;
+  }
+
+  private async assertEmployeeInScope(actor: ActorContext, employeeId: string): Promise<EmployeeReference> {
+    const employee = await this.assertEmployeeExists(actor.tenantId, employeeId);
+    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    if (!hasTenant) {
+      if (!employee.organizationUnitId) {
+        throw new ForbiddenError("Your assigned Data Scope does not cover unassigned employees");
+      }
+      await this.rbac.requireOrganizationUnitScope(actor.userId, employee.organizationUnitId);
+    }
+    return employee;
+  }
+
+  private async assertOrganizationUnitInScope(
+    actor: ActorContext,
+    organizationUnitId: string | null | undefined,
+  ): Promise<void> {
+    if (organizationUnitId) {
+      await this.rbac.requireOrganizationUnitScope(actor.userId, organizationUnitId);
+    } else {
+      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      if (!hasTenant) {
+        throw new ForbiddenError("Tenant-wide scope required for tenant-level entities");
+      }
+    }
+  }
+
+  private async resolveScopedOrganizationUnitIds(
+    actor: ActorContext,
+    requestedOrgUnitId?: string | null,
+  ): Promise<string[] | null> {
+    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    if (requestedOrgUnitId) {
+      await this.rbac.requireOrganizationUnitScope(actor.userId, requestedOrgUnitId);
+      const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, [requestedOrgUnitId]);
+      return descendantIds.length > 0 ? descendantIds : [requestedOrgUnitId];
+    }
+    if (hasTenant) {
+      return null;
+    }
+    const assignments = await this.rbac.getAssignments(actor.userId);
+    const rootOrgUnitIds = assignments
+      .filter((a) => a.scopeType === "organization_unit" && a.scopeOrganizationUnitId)
+      .map((a) => a.scopeOrganizationUnitId as string);
+    if (rootOrgUnitIds.length === 0) {
+      return [];
+    }
+    const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, rootOrgUnitIds);
+    return descendantIds.length > 0 ? descendantIds : rootOrgUnitIds;
   }
 
   private async withWorkflowStatus<T, R>(
@@ -2023,6 +2157,7 @@ export class WorkforceAdvancedService {
     if (!req) return false;
     try {
       await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+      await this.assertEmployeeInScope(actor, req.employeeId);
       return true;
     } catch {
       return false;
@@ -2032,8 +2167,11 @@ export class WorkforceAdvancedService {
   async canAccessJobApplicationForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
     const app = await this.repo.findJobApplicationById(actor.tenantId, entityId);
     if (!app) return false;
+    const posting = await this.repo.findJobPostingById(actor.tenantId, app.jobPostingId);
+    if (!posting) return false;
     try {
       await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
+      await this.assertOrganizationUnitInScope(actor, posting.organizationUnitId);
       return true;
     } catch {
       return false;
@@ -2045,6 +2183,7 @@ export class WorkforceAdvancedService {
     if (!enrollment) return false;
     try {
       await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+      await this.assertEmployeeInScope(actor, enrollment.employeeId);
       return true;
     } catch {
       return false;
