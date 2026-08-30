@@ -58,13 +58,13 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 | Legacy area | Abixell One requirement | Disposition | New classification | Impl. status | Roadmap unit |
 |---|---|---|---|---|---|
 | Employee identity, Deployment, Rotation, Termination | `HR-CORE-001…010` | ADAPT | Business Core | DELIVERED | HR.1–HR.4 |
-| Attendance | `HR-ADV-001` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| Shift | `HR-ADV-002` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| Leave | `HR-ADV-003` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| Recruitment | `HR-ADV-006` | RECLASSIFY | Advanced | DEFERRED | Wave A |
-| Training / Competency / Evaluation | `HR-ADV-007/008` | RECLASSIFY | Advanced | DEFERRED | Wave A |
+| Attendance | `HR-ADV-001` | RECLASSIFY | Advanced | DELIVERED | HR-ADV-001/002 (Wave A4) |
+| Shift | `HR-ADV-002` | RECLASSIFY | Advanced | DELIVERED | HR-ADV-001/002 (Wave A4) |
+| Leave | `HR-ADV-003` | RECLASSIFY | Advanced | DELIVERED | HR-ADV-003/004 (Wave A4) |
+| Recruitment | `HR-ADV-006` | RECLASSIFY | Advanced | DELIVERED | HR-ADV-006 (Wave A4) |
+| Training / Competency / Evaluation | `HR-ADV-007/008` | RECLASSIFY | Advanced | DELIVERED | HR-ADV-007/008 (Wave A4) |
 | Medical | `HR-CORE-006` (as document) + HSE | MERGE | Business Core / Advanced | PARTIAL (document mechanism delivered; no medical fields by design) | HR.3 |
-| Payroll (implied by attendance/shift) | `HR-ADV-005` | DEFER | Advanced | DEFERRED | Wave A |
+| Payroll (implied by attendance/shift) | `HR-ADV-005` | DEFER | Advanced | DELIVERED | HR-ADV-005 (Wave A4) |
 
 ### Procurement / Warehouse / Inventory
 

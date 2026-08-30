@@ -25,15 +25,15 @@ Core deliberately stops at **identity and placement**. Everything time-, money-,
 
 | ID | Requirement | Status |
 |---|---|---|
-| **HR-ADV-001** | Attendance capture and processing. | DEFERRED |
-| **HR-ADV-002** | Shift and roster management. | DEFERRED |
-| **HR-ADV-003** | Leave management. | DEFERRED |
-| **HR-ADV-004** | Overtime management. | DEFERRED |
-| **HR-ADV-005** | Payroll, including statutory social-security contributions and income-tax withholding. | DEFERRED |
-| **HR-ADV-006** | Recruitment. | DEFERRED |
-| **HR-ADV-007** | Performance management. | DEFERRED |
-| **HR-ADV-008** | Competency, training, and career development. | DEFERRED |
-| **HR-ADV-009** | Manpower planning. | DEFERRED |
+| **HR-ADV-001** | Attendance capture and processing. | DELIVERED (Wave A4) |
+| **HR-ADV-002** | Shift and roster management. | DELIVERED (Wave A4) |
+| **HR-ADV-003** | Leave management. | DELIVERED (Wave A4) |
+| **HR-ADV-004** | Overtime management. | DELIVERED (Wave A4) |
+| **HR-ADV-005** | Payroll, including statutory social-security contributions and income-tax withholding. | DELIVERED (Wave A4) |
+| **HR-ADV-006** | Recruitment. | DELIVERED (Wave A4) |
+| **HR-ADV-007** | Performance management. | DELIVERED (Wave A4) |
+| **HR-ADV-008** | Competency, training, and career development. | DELIVERED (Wave A4) |
+| **HR-ADV-009** | Manpower planning. | DELIVERED (Wave A4) |
 
 ## Client Configuration
 
@@ -50,14 +50,25 @@ Consumed by: Service Operations (executor identity), Asset (custodian), HSE (per
 
 ## Implementation reality
 
-Delivered in Phase 3 (roadmap units HR.1–HR.5). Backend at
-`apps/api/src/modules/workforce/core/`, frontend at
-`apps/web/src/modules/workforce/`.
+Delivered in Phase 3 (roadmap units HR.1–HR.5) and Wave A4 (Advanced units HR-ADV-001…009). Backend at
+`apps/api/src/modules/workforce/core/` and `apps/api/src/modules/workforce/advanced/`, frontend at
+`apps/web/src/modules/workforce/` and `apps/web/src/pages/workforce-advanced/`.
 
-Three tables: `positions`, `employees` (current placement + optional
+Workforce Core maintains three tables: `positions`, `employees` (current placement + optional
 `user_id`), and `employee_assignments` (one row per placement/status period).
 A placement change closes the open period and opens a new one, so historical
 facts are never rewritten; a partial unique index allows at most one open
+assignment per employee.
+
+Workforce Advanced delivers 15 tables under migration `1780000000000_wave-a4-workforce-advanced.cjs`:
+- Attendance & Shifts: `workforce_shifts`, `workforce_rosters`, `workforce_attendance_records`
+- Leave & Overtime: `workforce_leave_types`, `workforce_leave_balances`, `workforce_leave_requests`, `workforce_overtime_requests`
+- Payroll & Statutori: `workforce_statutory_policies`, `workforce_employee_salary_profiles`, `workforce_payroll_runs`, `workforce_payslips`
+- Recruitment: `workforce_job_postings`, `workforce_job_applications`
+- Performance & Talent: `workforce_competencies`, `workforce_employee_competencies`, `workforce_training_courses`, `workforce_training_enrollments`, `workforce_performance_reviews`, `workforce_career_paths`
+- Manpower Planning: `workforce_manpower_plans`
+
+Zero core regression: Core Workforce remains clean of Advanced dependencies. Lifecycle management delegates directly to generic Workflow Engine (`workflowInstanceId`). Payroll calculation uses integer-cent arithmetic with deterministic rounding (`half_up`, `down`, `up`). Manpower planning computes deterministic gaps without mutating employee records. All 24 integration tests pass deterministically in `apps/api/tests/integration/wave-a4-integration.test.ts`.
 period per employee.
 
 Employee is deliberately **not** a system user: the account link is optional

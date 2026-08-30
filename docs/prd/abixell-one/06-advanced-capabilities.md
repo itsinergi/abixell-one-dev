@@ -37,6 +37,12 @@ Reference: Survey-to-Action spans Survey + Service Quality + Notification + Even
 | **AST-ADV-001/002** | **Asset Maintenance Work Orders & Preventive Schedules.** Calendar/meter preventive triggers, workflow-governed work orders. | asset | DELIVERED (Wave A3) |
 | **AST-ADV-003…005** | **Meter Readings, Spare Parts & Downtime Tracking.** Serialized monotonic meters, planned/actual parts, downtime records. | asset | DELIVERED (Wave A3) |
 | **AST-ADV-006/007** | **MTBF/MTTR Reliability Metrics & Predictive Maintenance.** Reliability formula metrics and advisory failure prediction snapshots. | asset | DELIVERED (Wave A3) |
+| **HR-ADV-001/002** | **Attendance, Shift & Roster Management.** Standard/overnight shifts, monthly rosters, and clock-in/out attendance logs. | workforce | DELIVERED (Wave A4) |
+| **HR-ADV-003/004** | **Leave & Overtime Management.** Annual entitlement balances, pending-to-used transitions, and workflow-delegated approvals. | workforce | DELIVERED (Wave A4) |
+| **HR-ADV-005** | **Statutory Payroll & Payslip Engine.** Exact-decimal BPJS Kesehatan/TK and PPh 21 Pasal 17/TER PP 58/2023 calculations with immutable payslips. | workforce | DELIVERED (Wave A4) |
+| **HR-ADV-006** | **Recruitment & Applicant Tracking.** Requisition job postings, multi-stage candidate pipeline, and hire conversion. | workforce | DELIVERED (Wave A4) |
+| **HR-ADV-007/008** | **Performance Appraisals, Competency & Career Paths.** Competency matrix, training catalog, workflow-finalized reviews, and career progression rules. | workforce | DELIVERED (Wave A4) |
+| **HR-ADV-009** | **Deterministic Advisory Manpower Planning.** Demand simulation, headcount/cost variance calculations, and advisory plan application. | workforce | DELIVERED (Wave A4) |
 
 Both were delivered in historical Phase 1E. They remain **Advanced**, not Survey Core (Founder-confirmed).
 
