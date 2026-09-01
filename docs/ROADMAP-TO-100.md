@@ -3,8 +3,8 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.23 and `docs/canonical/product-progress.md` v1.23 |
-| Measured at | `master` after Wave A4 delivery |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.24 and `docs/canonical/product-progress.md` v1.24 |
+| Measured at | `master` after Wave A4 final precision & canonical closure |
 | Current point | Full Approved Roadmap Progress: 75.1% (265 / 353 pts) |
 | Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
@@ -202,7 +202,7 @@ Recommended boundaries:
 
 ## 7. Wave A4 - Workforce Advanced
 
-Wave A4 expands Workforce beyond employee master and placement into time, payroll-adjacent, and people-development processes. It is **COMPLETED** at baseline v1.23; all 24 points below are earned, and canonical documents carry validation evidence.
+Wave A4 expands Workforce beyond employee master and placement into time, payroll-adjacent, and people-development processes. It is **COMPLETED** at baseline v1.24 (post-closure precision & data scope reconciliation); all 24 points below are earned, and canonical documents carry validation evidence.
 
 | Area | Unit | Capability | Pts | Status |
 |---|---|---|---:|---|
@@ -228,7 +228,7 @@ Recommended boundaries:
 - Workflow engine delegation for leave, overtime, payroll run, job posting, and performance reviews with zero competing local state machines.
 - Deterministic advisory manpower planning with zero automatic mutation of core employee records.
 
-All boundaries held. Payroll calculation uses exact-decimal scaled arithmetic with zero floating-point imprecision. Leave, overtime, payroll runs, job postings, and performance reviews delegate lifecycle states to generic Workflow Engine. Manpower planning computes deterministic demand/variance snapshots with manual guarded apply. All 24 integration tests pass deterministically.
+All boundaries held. Payroll calculation uses exact-decimal scaled-integer (`bigint` cents) arithmetic with zero floating-point imprecision: monetary and rate inputs are parsed from exact decimal strings and fail closed with `ValidationError` on non-finite, exponential, or excessive-scale values rather than being silently coerced. Approved overtime is aggregated from `actual_hours` with `estimated_hours` fallback, excluding pending/rejected/cancelled requests, with approved/closed payroll runs immutable. Organization Unit Data Scope is enforced centrally and at SQL level across every Workforce Advanced access path. Leave, overtime, payroll runs, job postings, and performance reviews delegate lifecycle states to the generic Workflow Engine. Manpower planning computes deterministic demand/variance snapshots with manual guarded apply. All 26 Wave A4 integration tests and 7 payroll-policy unit tests pass deterministically within the 475/475 full suite.
 
 ## 8. Wave A5 - Supply Chain Advanced
 
