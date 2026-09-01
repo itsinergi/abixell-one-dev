@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.24 |
+| **Roadmap Baseline** | v1.25 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-09-01 |
-| **Measured at** | `master` after Wave A4 final precision & canonical closure · 475/475 full API tests across 34 files · 141 application base tables (142 incl. `pgmigrations`; plus 1 public VIEW) · 32 migrations · 114 permissions · head `1780000000000_wave-a4-workforce-advanced` |
+| **Measured at** | `master` after Wave A5 delivery & canonical closure · 495/495 full API tests across 35 files · 165 application base tables (166 incl. `pgmigrations`; plus 1 public VIEW) · 33 migrations · 128 permissions · head `1781000000000_wave-a5-supply-chain-advanced` |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.23 |
+| Metric | Value | Δ since v1.24 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
-| **Full Approved Roadmap Progress** | **75.1 %** | — 0.0 pts |
+| **Full Approved Roadmap Progress** | **81.3 %** | +6.2 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -26,15 +26,15 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
 - **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, 11C, 11D, 11E, and 11F are recorded for governance traceability without moving either metric.
 
-The implementation measurement is pinned at `master` post Wave A4 delivery and final precision closure: 475/475 full API runs across 34 files, 141 application base tables (142 including `pgmigrations`, plus one public VIEW), 32 migrations, 114 permissions, and migration head `1780000000000_wave-a4-workforce-advanced`. Relative to the recorded v1.22 runtime baseline, the current tree contains 33 additional API tests across 2 additional files, 19 additional application base tables, 1 additional migration, and 15 additional permissions. The Wave A4 migration itself adds 15 base tables; the other 4 are a correction of the previously recorded table-count baseline, not schema added by this closure pass.
+The implementation measurement is pinned at `master` post Wave A5 delivery and canonical closure: 495/495 full API runs across 35 files, 165 application base tables (166 including `pgmigrations`, plus one public VIEW), 33 migrations, 128 permissions, and migration head `1781000000000_wave-a5-supply-chain-advanced`. Relative to the recorded v1.24 runtime baseline, the current tree contains 20 additional API tests in `wave-a5-integration.test.ts` (raising total API tests to 495 across 35 files, including `valuation-policy.test.ts`), 24 additional application base tables, 1 additional migration, and 14 additional permissions.
 
-Wave A4 delivers 24 weighted Advanced points across 6 completed capability groups:
-1. **Attendance, Shift, and Roster** (`HR-ADV-001/002`, 5 pts): Shifts, overnight schedules, roster assignments, and daily attendance logs.
-2. **Leave and Overtime** (`HR-ADV-003/004`, 3 pts): Annual leave allocations, pending-to-used balance lifecycle, overtime requests, and workflow engine delegation.
-3. **Payroll, BPJS, and PPh 21** (`HR-ADV-005`, 5 pts): Indonesian statutory policies (BPJS Kesehatan with cap, BPJS Ketenagakerjaan JHT/JKK/JKM/JP with cap, PPh 21 Pasal 17 brackets and PP 58/2023 TER monthly withholding, non-NPWP surcharge), employee salary profiles, payroll run batches, and exact-decimal calculation with immutable payslips.
-4. **Recruitment** (`HR-ADV-006`, 3 pts): Requisition job postings with workflow publishing, candidate applications, hiring pipeline stages, and hire conversions.
-5. **Performance, Competency, Training, and Career** (`HR-ADV-007/008`, 5 pts): Competency dictionaries, employee assessments, training courses, enrollments, performance review appraisals with workflow finalization, and career progression paths.
-6. **Manpower Planning** (`HR-ADV-009`, 3 pts): Demand forecasting, deterministic budget and headcount gap analysis, scenario simulations, and advisory plan application.
+Wave A5 delivers 22 weighted Advanced points across 6 completed capability groups:
+1. **Multi-warehouse, Storage Topology, Batch & Serial Tracking** (`SCM-ADV-001/002/003`, 5 pts): Hierarchical warehouses and location bins, batch/lot tracking with manufacturing/expiry dates and quarantine status, individual item serial tracking with warranty periods and movement audit.
+2. **Stock Reservations, Reorder Policies, Inter-Warehouse Transfers & Opname Reconciliation** (`SCM-ADV-004`, 3 pts): Demand reservation holds with release lifecycles, dynamic reorder thresholds with alert generation, multi-stage transfer shipments and receipts, and physical stock opname discrepancy counting with automatic compensating ledger adjustments.
+3. **Inventory Valuation & Landed Cost Vouchers** (`SCM-ADV-005`, 3 pts): FIFO valuation layer tracking with depletion history, landed cost vouchers allocating freight/customs/insurance across PO lines via exact-decimal fixed-point algorithms (`by_value`, `by_quantity`, `by_weight`, `equal`), and effective unit cost recalculation.
+4. **RFQs, Tenders, Supplier Quotations, Comparative Scoring & Award** (`SCM-ADV-006`, 5 pts): Request for Quotation lifecycle with workflow delegation, supplier quotation submissions with line-item pricing and validity dates, multi-criteria comparative scoring, and quotation award with purchase order conversion.
+5. **Supplier Evaluation Scorecards & Master Purchasing Contracts** (`SCM-ADV-007`, 3 pts): Periodic supplier evaluation scorecards across quality/delivery/commercial criteria with workflow review, and master blanket purchasing contracts with spend limits and validity periods.
+6. **Spend Analytics Snapshots** (`SCM-ADV-008`, 3 pts): Bounded, tenant-safe parameterized analytical projections with category/supplier breakdowns and time-bucket aggregations protected by a 15-second local statement timeout.
 
 The correction commit `5eba91a` closes four defects found while validating `95b346a` — a permission bypass on automation-proposal approval, quotation money computed in binary floating point, Price Books resolved against a UTC rather than local date, and an automation-rules panel that was fetched but never rendered — plus the trailing-whitespace blocker. A regression test now pins exact-decimal quotation arithmetic and was verified against a deliberately reverted implementation.
 
@@ -59,7 +59,7 @@ The scheduler/outbox flakiness recorded at the prior closure baseline is resolve
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 16 / 16 | **100.0 %** |
 | Business Core | 117 / 117 | **100 %** |
-| Advanced Capabilities | 91 / 179 | **50.8 %** |
+| Advanced Capabilities | 113 / 179 | **63.1 %** |
 
 ## 3. Per-module progress
 
@@ -88,7 +88,7 @@ The scheduler/outbox flakiness recorded at the prior closure baseline is resolve
 | Workforce (HR) Core | 34 / 34 | **100 %** |
 | Reporting & Operational Insight | 20 / 20 | **100 %** |
 | Service Operations & Work Mgmt | 21 / 26 | 80.8 % |
-| Supply Chain Core | 14 / 36 | 38.9 % |
+| Supply Chain Core | 36 / 36 | **100 %** |
 | Project Delivery Core | 8 / 21 | 38.1 % |
 | Finance Core | 12 / 33 | 36.4 % |
 | HSE Core | 9 / 23 | 39.1 % |
@@ -105,7 +105,7 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16   (+7 — Phase H2 Production Hardening)
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed  91   (+19 — Wave A1; +23 — Wave A2; +19 — Wave A3 revised; +24 — Wave A4)
+Advanced Capabilities  total 179   completed 113   (+19 — Wave A1; +23 — Wave A2; +19 — Wave A3 revised; +24 — Wave A4; +22 — Wave A5)
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
@@ -115,18 +115,18 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 174 +  91 = 265
-  (265 + 0) / 353 × 100 = 75.1 %
+  completed   = 174 + 113 = 287
+  (287 + 0) / 353 × 100 = 81.3 %
 
-Wave A4 earned weight (six capability groups COMPLETED, full weight each):
-  Attendance, Shift & Roster       HR-ADV-001/002 (Shifts, Overnight, Roster, Clock-in/out) 5
-  Leave & Overtime                 HR-ADV-003/004 (Leave Balances, Requests, Overtime)       3
-  Payroll, BPJS & PPh21            HR-ADV-005     (Statutory Policies, Profiles, Runs, Payslips) 5
-  Recruitment Pipeline             HR-ADV-006     (Job Postings, Applications, Candidate Stages) 3
-  Performance, Talent & Career     HR-ADV-007/008 (Competencies, Courses, Reviews, Career)   5
-  Manpower Planning                HR-ADV-009     (Forecasting, Budget & Headcount Gaps)    3
-                                                                                     = 24
-  Advanced completed 67 + 24 = 91 · Full completed 241 + 24 = 265
+Wave A5 earned weight (six capability groups COMPLETED, full weight each):
+  Multi-Warehouse, Bin, Batch & Serial Tracking     SCM-ADV-001/002/003 (Topology, Batches, Serials)      5
+  Reservations, Reorder, Transfers & Opname         SCM-ADV-004         (Holds, Alerts, Transfers, Opname) 3
+  Valuation & Landed Cost Vouchers                  SCM-ADV-005         (FIFO Layers, Landed Costs)       3
+  RFQs, Tenders, Quotations, Scoring & Award        SCM-ADV-006         (Tenders, Bids, Scoring, PO Conv) 5
+  Supplier Scorecards & Master Contracts            SCM-ADV-007         (Evaluations, Blanket Contracts)  3
+  Spend Analytics Snapshots                         SCM-ADV-008         (Spend & Category Projections)    3
+                                                                                                    = 22
+  Advanced completed 91 + 22 = 113 · Full completed 265 + 22 = 287
 ```
 
 **Consistency check (§79):** sum of module weights equals the layer denominators —
@@ -165,19 +165,21 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 | SUR-ADV-003…007, RPT-ADV-001…002 | Wave A2; migration `1778000000000`; `wave-a2-integration.test.ts` (23); full test suite (413) |
 | PACK-001…004, SO-ADV-002…005, AST-ADV-001…007 | Wave A3 (revised); migration `1779000000000`; `wave-a3-integration.test.ts` (29); full test suite (442) across 32 files |
 | HR-ADV-001…009 | Wave A4; migration `1780000000000`; `payroll-policy.test.ts` (7) & `wave-a4-integration.test.ts` (26); full test suite (475) across 34 files |
+| SCM-ADV-001…008 | Wave A5; migration `1781000000000`; `wave-a5-integration.test.ts` (20) & `valuation-policy.test.ts` (14); full test suite (495) across 35 files |
 
 ## 6. Pending roadmap units
 
-All Advanced units except the delivered Survey-to-Action units (2), Wave A1 units (6), Wave A2 units (7), Wave A3 units (5), and Wave A4 units (6). The remaining Advanced backlog is 88 points: Wave A3 deferred `SO-ADV-006` (5 pts), Wave A5–A7 business-domain work totals 70 (Supply Chain 22, Finance 21, Project Delivery/HSE 27), and Wave A8 platform cross-cutting work totals 13. These waves remain optional and out of Core scope. Platform Hardening has no pending roadmap units.
+All Advanced units except the delivered Survey-to-Action units (2), Wave A1 units (6), Wave A2 units (7), Wave A3 units (5), Wave A4 units (6), and Wave A5 units (6). The remaining Advanced backlog is 66 points: Wave A3 deferred `SO-ADV-006` (5 pts), Wave A6–A7 business-domain work totals 48 (Finance 21, Project Delivery/HSE 27), and Wave A8 platform cross-cutting work totals 13. These waves remain optional and out of Core scope. Platform Hardening has no pending roadmap units.
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Wave A1, weighted Advanced Wave A2, weighted Advanced Wave A3 (revised), and weighted Advanced Wave A4 are closed; all Core Product Readiness units and all Wave A1/A2/A3/A4 units are complete.
+**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Wave A1, weighted Advanced Wave A2, weighted Advanced Wave A3 (revised), weighted Advanced Wave A4, and weighted Advanced Wave A5 are closed; all Core Product Readiness units and all Wave A1/A2/A3/A4/A5 units are complete.
 
 ## 8. Progress change log
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.25 | 2026-09-01 | 100.0 % | 81.3 % | **Wave A5 (Supply Chain Advanced) delivered — weighted.** Numerator +22 across six capability groups: Multi-Warehouse, Bin, Batch & Serial Tracking (`SCM-ADV-001/002/003`, 5), Reservations, Reorder, Transfers & Opname (`SCM-ADV-004`, 3), Valuation & Landed Cost (`SCM-ADV-005`, 3), RFQ/Tender/Bid Scoring & Award (`SCM-ADV-006`, 5), Supplier Scorecards & Master Contracts (`SCM-ADV-007`, 3), Spend Analytics (`SCM-ADV-008`, 3). Advanced 91 → 113; Full 265 → 287. Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Live database evidence: 165 application base tables (166 including `pgmigrations`, plus one public VIEW), 33 migrations, 128 permissions (0 duplicate codes, 14 added by Wave A5), and migration head `1781000000000_wave-a5-supply-chain-advanced`. Test evidence: 495/495 full API runs across 35 files (Wave A5 adds 20 tests in `wave-a5-integration.test.ts` plus 14 exact-decimal unit tests in `valuation-policy.test.ts`). Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings, 128 migration-owned permissions), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities). Centralized hierarchical Organization Unit Data Scope is enforced through `RbacService` with fail-closed empty-scope semantics across every Supply Chain Advanced access path; every new relationship carries composite `(tenant_id, id)` foreign keys preventing cross-tenant referencing; the Advanced Stock Ledger is append-only with atomic balance mutation under pessimistic row locks and corrections applied only via compensating ledger rows; stock transfers, opnames, RFQs, supplier evaluations, and purchasing contracts delegate lifecycle ownership exclusively to the Workflow Engine (`workflow_instance_id` as source of truth, zero competing local state machines); inventory valuation and landed-cost allocation use exact scaled-integer fixed-point arithmetic with zero authoritative floating-point drift; spend analytics queries are bounded, tenant-safe, and parameterized under a 15-second local statement timeout. Launcher remains PARTIAL / ENVIRONMENT-BLOCKED at `db:up` (Docker daemon unreachable; native Windows `postgres.exe` owns port 5432); downstream migrate/seed/sync-permissions/dev steps were re-inspected for Wave A5 compatibility and required no launcher change. Waves A6–A8, `SO-ADV-006` (deferred), Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.24 | 2026-09-01 | 100.0 % | 75.1 % | **Wave A4 final precision and canonical closure completed (unweighted correction).** No product unit, numerator, or denominator change — Advanced remains 91/179 and Full remains 265/353 at 75.1 %. This is a pre-closure correction pass over the already-delivered Wave A4 baseline, not new roadmap scope. Three items were addressed: (1) centralized hierarchical Organization Unit Data Scope enforcement across every Workforce Advanced list, detail, mutation, workflow, calculation, apply, and document-authorization access path (ADR-0009/ADR-0012), replacing per-endpoint ad hoc checks; (2) approved-overtime aggregation in `calculatePayrollRun()` now sources `actual_hours` with `estimated_hours` fallback, excludes pending/rejected/cancelled requests, avoids double-counting, and preserves approved/closed payroll run immutability; (3) elimination of authoritative floating-point drift in `payroll-policy.ts` — `toCents`/`mulRateCents`/`divCents` now parse exact-decimal strings instead of `Math.round(value * scale)` and fail closed with `ValidationError` (HTTP 400) on non-finite, NaN, exponential, or excessive-scale input instead of silently coercing to `0n`. A pre-existing, unrelated Wave A3 test defect was also fixed in a separate commit: `wave-a3-integration.test.ts`'s reliability-analytics window was hardcoded to a historical August 2026 date range being compared against a server-stamped `completed_at = now()`, which failed once the wall clock passed the window; the fix anchors `periodEnd` to the actual test-run date. Live database evidence refreshed with fresh measurement: 141 application base tables (142 including `pgmigrations`, plus one public VIEW — 4 more than the 137/138 recorded at v1.23, a pre-existing undercount in that baseline now corrected by direct `information_schema` measurement, not new schema), 32 migrations (unchanged), 114 permissions (unchanged), and migration head `1780000000000_wave-a4-workforce-advanced` (unchanged). Test evidence: 475/475 full API runs across 34 files — +9 tests and +1 file versus the v1.23-recorded 466 across 33, comprising the new `payroll-policy.test.ts` (7 tests: fixed-point overtime division, component/total cents integrity, exact two-decimal round-trip, excessive-scale rejection, non-finite/exponential rejection, deterministic statutory rate multiplication, and fail-closed rate/divisor validation) plus 2 additional Wave A4 integration tests raising `wave-a4-integration.test.ts` from 24 to 26. Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings, 114 migration-owned permissions), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities), and the required 10-step browser E2E PASS against API `:4000` / Web `:5173` backed by native PostgreSQL (Docker daemon unreachable on this machine; native Windows `postgres.exe` on port 5432 used instead, per the standing environment-substitution rule — `db:up` itself remains PARTIAL / ENVIRONMENT-BLOCKED, not falsely reported PASS). Runtime commits `bef34e1` (data scope + overtime + arithmetic), `8c4f414` (exact-decimal boundary hardening), `361c85d` (Wave A3 date-window stabilization, test-only, separately authorized). Waves A5–A8, `SO-ADV-006` (deferred), Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.23 | 2026-08-30 | 100.0 % | 75.1 % | **Wave A4 (Workforce Advanced) delivered — weighted.** Numerator +24 across six capability groups: Attendance, Shift & Roster (`HR-ADV-001/002`, 5), Leave & Overtime (`HR-ADV-003/004`, 3), Payroll, BPJS & PPh21 (`HR-ADV-005`, 5), Recruitment Pipeline (`HR-ADV-006`, 3), Performance, Competency, Training & Career (`HR-ADV-007/008`, 5), Manpower Planning (`HR-ADV-009`, 3). Advanced 67 → 91; Full 241 → 265. Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Live database evidence: 137 application base tables (138 including `pgmigrations`, plus one public VIEW), 32 migrations, 114 permissions (0 duplicate codes, 15 added by Wave A4), and migration head `1780000000000_wave-a4-workforce-advanced`. Test evidence: 466/466 full API runs across 33 files (Wave A4 adds 24 tests in `wave-a4-integration.test.ts`). Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings, 114 migration-owned permissions), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities). Zero core regression: Workforce Core remains clean of Advanced imports; statutory calculations use exact-decimal scaled arithmetic; manpower planning computes gaps deterministically without mutating employee master records. Waves A5–A8, SO-ADV-006 (deferred), Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.22 | 2026-08-28 | 100.0 % | 68.3 % | **Wave A3 (Service Operations Advanced & Asset Advanced revised) delivered — weighted.** Numerator +19 across five units under explicit Founder revision (skipping `SO-ADV-006` Offline Field PWA, 5 pts): Vertical Service Packs (`PACK-001…004`, 5), Route/Roster/Optimization (`SO-ADV-002…005`, 3), Asset Maintenance Work Orders & Preventive Schedules (`AST-ADV-001/002`, 5), Meter Readings, Spare Parts & Downtime (`AST-ADV-003…005`, 3), MTBF/MTTR & Predictive Maintenance (`AST-ADV-006/007`, 3). Advanced 48 → 67; Full 222 → 241. Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Live database evidence: 122 application base tables (123 including `pgmigrations`, plus one public VIEW), 31 migrations, 99 permissions (0 duplicate codes, 8 added by Wave A3), and migration head `1779000000000_wave-a3-service-operations-asset-advanced`. Test evidence: 442/442 full API runs across 32 files (Wave A3 adds 29 tests in `wave-a3-integration.test.ts`). Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings, 99 migration-owned permissions), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities). Asset Maintenance lifecycle is authoritative exclusively through Workflow Engine via `workflow_instance_id` (zero competing state machines); optimization and predictive metrics are advisory and deterministic with atomic transaction apply; meter readings enforce strong monotonicity serialized by asset row-level locking. Waves A4–A8, Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |

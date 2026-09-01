@@ -3,14 +3,14 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.24 and `docs/canonical/product-progress.md` v1.24 |
-| Measured at | `master` after Wave A4 final precision & canonical closure |
-| Current point | Full Approved Roadmap Progress: 75.1% (265 / 353 pts) |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.25 and `docs/canonical/product-progress.md` v1.25 |
+| Measured at | `master` after Wave A5 delivery & canonical closure |
+| Current point | Full Approved Roadmap Progress: 81.3% (287 / 353 pts) |
 | Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), and **Wave A4 are COMPLETED**; no wave is currently active. Waves A5–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
+| Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and **Wave A5 are COMPLETED**; no wave is currently active. Waves A6–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -20,7 +20,7 @@ This document explains the remaining path from the current approved baseline to 
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed  91
+Advanced Capabilities  total 179   completed 113
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174
@@ -29,8 +29,8 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353
-  completed   = 174 +  91 = 265   (Advanced 6 + Wave A1 19 + Wave A2 23 + Wave A3 revised 19 + Wave A4 24)
-  265 / 353 = 75.1%
+  completed   = 174 + 113 = 287   (Advanced 6 + Wave A1 19 + Wave A2 23 + Wave A3 revised 19 + Wave A4 24 + Wave A5 22)
+  287 / 353 = 81.3%
 ```
 
 Remaining to 100%:
@@ -38,8 +38,8 @@ Remaining to 100%:
 | Layer | Remaining | Meaning |
 |---|---:|---|
 | Platform Hardening | 0 pts | Phase H2 production gate completed |
-| Advanced Capabilities | 88 pts | All Advanced backlog not yet delivered (deferred `SO-ADV-006` 5 pts + Waves A5–A7 70 pts + Wave A8 13 pts) |
-| Total remaining | 88 pts | 353 - 265 |
+| Advanced Capabilities | 66 pts | All Advanced backlog not yet delivered (deferred `SO-ADV-006` 5 pts + Waves A6–A7 48 pts + Wave A8 13 pts) |
+| Total remaining | 66 pts | 353 - 287 |
 
 Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
 traceability and move neither metric; the numbers above already reflect their closure.
@@ -59,13 +59,13 @@ The recommended route is:
 | 1 | ~~Wave A1~~ | Customer & Commercial Advanced + Service Quality Advanced | 19 | 199 / 353 | 56.4% | 100.0% |
 | 2 | ~~Wave A2~~ | Survey Advanced completion + Reporting Advanced | 23 | 222 / 353 | 62.9% | 100.0% |
 | 3 | ~~Wave A3 revised~~ | Service Operations Advanced + Asset Advanced, excluding deferred SO-ADV-006 | 19 | 241 / 353 | 68.3% | 100.0% |
-| 4 | ~~Wave A4~~ **(COMPLETED — current baseline)** | Workforce Advanced | 24 | **265 / 353** | **75.1%** | **100.0%** |
-| 5 | Wave A5 | Supply Chain Advanced | 22 | 287 / 353 | 81.3% | 100.0% |
+| 4 | ~~Wave A4~~ | Workforce Advanced | 24 | 265 / 353 | 75.1% | 100.0% |
+| 5 | ~~Wave A5~~ **(COMPLETED — current baseline)** | Supply Chain Advanced | 22 | **287 / 353** | **81.3%** | **100.0%** |
 | 6 | Wave A6 | Finance Advanced | 21 | 308 / 353 | 87.3% | 100.0% |
 | 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 335 / 353 | 94.9% | 100.0% |
 | 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 348 / 353 | 98.6% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2, Wave A1, Wave A2, Wave A3 (revised), and Wave A4 are earned and complete; the current baseline is now row 4. Waves A5–A8 remain planned / optional and none is authorized. Delivering all planned Waves A5–A8 yields 348 / 353 = 98.6%. Reaching the full 353 / 353 (100.0%) requires completing the separately deferred `SO-ADV-006` (5 pts) following Founder approval and a dedicated ADR. No wave is started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and Wave A5 are earned and complete; the current baseline is now row 5. Waves A6–A8 remain planned / optional and none is authorized. Delivering all planned Waves A6–A8 yields 348 / 353 = 98.6%. Reaching the full 353 / 353 (100.0%) requires completing the separately deferred `SO-ADV-006` (5 pts) following Founder approval and a dedicated ADR. No wave is started by this document.
 
 ## 3. Phase H2 - Production Gate
 
@@ -232,29 +232,33 @@ All boundaries held. Payroll calculation uses exact-decimal scaled-integer (`big
 
 ## 8. Wave A5 - Supply Chain Advanced
 
-Wave A5 adds inventory depth, procurement depth, valuation, and spend intelligence.
+Wave A5 adds inventory depth, procurement depth, valuation, and spend intelligence. It is **COMPLETED** at baseline v1.25; all 22 points below are earned, and canonical documents carry validation evidence.
 
-| Area | Unit | Capability | Pts |
-|---|---|---|---:|
-| Supply Chain | SCM-ADV group | Multi-warehouse, bin/location, batch/lot, and serial tracking | 5 |
-| Supply Chain | SCM-ADV group | Reservation, reorder, transfer, and stock opname | 3 |
-| Supply Chain | SCM-ADV group | Inventory valuation and landed cost | 3 |
-| Supply Chain | SCM-ADV group | RFQ, tender, and bid comparison | 5 |
-| Supply Chain | SCM-ADV group | Supplier evaluation and contract purchasing | 3 |
-| Supply Chain | SCM-ADV group | Spend analytics | 3 |
-| Total | Wave A5 |  | 22 |
+| Area | Unit | Capability | Pts | Status |
+|---|---|---|---:|---|
+| Supply Chain | SCM-ADV-001…003 | Multi-warehouse, bin/location, batch/lot, and serial tracking | 5 | COMPLETED |
+| Supply Chain | SCM-ADV-004 | Reservation, reorder, transfer, and stock opname | 3 | COMPLETED |
+| Supply Chain | SCM-ADV-005 | Inventory valuation and landed cost | 3 | COMPLETED |
+| Supply Chain | SCM-ADV-006 | RFQ, tender, and bid comparison | 5 | COMPLETED |
+| Supply Chain | SCM-ADV-007 | Supplier evaluation and contract purchasing | 3 | COMPLETED |
+| Supply Chain | SCM-ADV-008 | Spend analytics | 3 | COMPLETED |
+| Total | Wave A5 |  | 22 | COMPLETED |
 
-Expected result:
+Result (earned):
 
-| Metric | After Wave A4 | After Wave A5 |
+| Metric | Before Wave A5 | After Wave A5 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 265 / 353 (75.1%) | 287 / 353 (81.3%) |
+| Full Approved Roadmap Progress | 265 / 353 (75.1%) | **287 / 353 (81.3%)** |
 
 Recommended boundaries:
 
 - Inventory valuation is Advanced and should align with Finance Advanced policy.
 - Procurement approval must reuse Workflow Engine instead of hardcoded status logic.
 - Stock control must preserve historical movement records and avoid hard deletes.
+- Centralized Organization Unit Data Scope must be enforced across all Supply Chain Advanced access paths with fail-closed semantics.
+- Spend analytics must use bounded, parameterized SQL queries with tenant isolation and execution timeouts.
+
+All boundaries held. Multi-warehouse topology, bin storage locations, batch quarantine lifecycles, and item serial tracking operate under strict tenant isolation. Advanced Stock Ledger movements are append-only with balance mutations serialized under pessimistic row locks. Stock transfers, opnames, RFQs, supplier evaluations, and master contracts delegate lifecycle state to the Workflow Engine with zero competing local state machines. Inventory valuation uses exact-decimal fixed-point FIFO layer consumption, and landed costs allocate charges across lines with final-line remainder absorption to eliminate floating-point drift. Spend analytics queries are bounded, tenant-isolated, and protected by a 15-second statement timeout. All 20 Wave A5 integration tests and 14 valuation-policy unit tests pass deterministically within the 495/495 full suite.
 
 ## 9. Wave A6 - Finance Advanced
 
@@ -338,13 +342,13 @@ Recommended boundaries:
 | Category | Remaining pts | Completion condition |
 |---|---:|---|
 | Phase H2 Production Gate | 0 | Completed; Platform Hardening is 16 / 16 |
-| Delivered Advanced waves (A1, A2, A3 revised, A4) | 0 | Completed; Customer & Commercial + Service Quality (19), Survey + Reporting (23), Service Operations + Asset (19), and Workforce (24) delivered |
-| Planned Advanced business-domain waves (A5–A7) | 70 | Supply Chain (22), Finance (21), and Project Delivery + HSE (27) Advanced complete |
+| Delivered Advanced waves (A1, A2, A3 revised, A4, A5) | 0 | Completed; Customer & Commercial + Service Quality (19), Survey + Reporting (23), Service Operations + Asset (19), Workforce (24), and Supply Chain (22) delivered |
+| Planned Advanced business-domain waves (A6–A7) | 48 | Finance (21), and Project Delivery + HSE (27) Advanced complete |
 | Planned Platform cross-cutting Advanced (A8) | 13 | Partner API (3), AI readiness (5), and marketplace ecosystem (5) complete |
 | Deferred `SO-ADV-006` (Offline Field PWA) | 5 | Awaiting dedicated Founder architecture ADR, approval, implementation, and verification |
-| Total remaining Advanced | 88 | 70 (A5–A7) + 13 (A8) + 5 (SO-ADV-006); Full Approved Roadmap reaches 353 / 353 |
+| Total remaining Advanced | 66 | 48 (A6–A7) + 13 (A8) + 5 (SO-ADV-006); Full Approved Roadmap reaches 353 / 353 |
 
-After planned Waves A5–A8 (excluding deferred `SO-ADV-006`):
+After planned Waves A6–A8 (excluding deferred `SO-ADV-006`):
 
 ```text
 Platform Core          41 / 41   100.0%
