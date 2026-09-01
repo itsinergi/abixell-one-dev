@@ -1,0 +1,2267 @@
+/**
+ * Supply Chain Advanced Application Service (Wave A5: SCM-ADV-001…008).
+ *
+ * Implements the six Advanced Supply Chain capability groups:
+ * 1. Multi-warehouse, Bin/Location, Batch/Lot, and Serial Tracking (SCM-ADV-001, SCM-ADV-002, SCM-ADV-003)
+ * 2. Reservation, Reorder, Transfer, and Stock Opname (SCM-ADV-004) — generic Workflow Engine lifecycle delegation
+ * 3. Inventory Valuation and Landed Cost (SCM-ADV-005) — deterministic exact-decimal calculation engine
+ * 4. RFQ, Tender, and Bid Comparison (SCM-ADV-006) — generic Workflow Engine lifecycle delegation & scoring
+ * 5. Supplier Evaluation and Contract Purchasing (SCM-ADV-007) — generic Workflow Engine lifecycle delegation
+ * 6. Spend Analytics (SCM-ADV-008) — bounded parameterized spend aggregation
+ *
+ * Architectural constraints:
+ * - Supply Chain Core is never mutated or directly imported; narrow repository read ports only.
+ * - All lifecycles with workflows use WorkflowService exclusively with zero competing state machines.
+ * - Workflow start failures are safely compensated (deleted if workflow fails to initialize).
+ * - Valuation and landed cost use exact scaled integer arithmetic via valuation-policy.ts (no binary floating-point drift).
+ * - Enforces the 14 Wave A5 RBAC permissions and centralized Organization Unit Data Scope (RbacService).
+ */
+
+import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "../../../../domain/shared-kernel/errors.js";
+import type { AuditService } from "../../../../application/audit/audit.service.js";
+import type { RbacService } from "../../../../application/rbac/rbac.service.js";
+import type { EventBus } from "../../../../application/event/event-bus.js";
+import type { ConfigurationService } from "../../../../application/configuration/configuration.service.js";
+import type {
+  EntityWorkflowAction,
+  EntityWorkflowStatus,
+  WorkflowService,
+} from "../../../../application/workflow/workflow.service.js";
+import type {
+  ApplyScmLandedCostInput,
+  AwardScmSupplierBidInput,
+  ConsumeScmValuationLayerInput,
+  CreateScmItemBatchInput,
+  CreateScmItemSerialInput,
+  CreateScmLandedCostInput,
+  CreateScmRfqInput,
+  CreateScmSpendAnalyticsSnapshotInput,
+  CreateScmStockOpnameInput,
+  CreateScmStockReservationInput,
+  CreateScmStockTransferInput,
+  CreateScmSupplierBidInput,
+  CreateScmSupplierContractInput,
+  CreateScmSupplierEvaluationInput,
+  CreateScmValuationLayerInput,
+  CreateScmWarehouseInput,
+  CreateScmWarehouseLocationInput,
+  RecordScmAdvancedStockMovementInput,
+  RecordScmStockOpnameCountInput,
+  RecordScmStockTransferReceiptInput,
+  RecordScmStockTransferShipmentInput,
+  RecordScmSupplierContractSpendInput,
+  ScmAdvancedStockBalance,
+  ScmAdvancedStockBalanceFilter,
+  ScmAdvancedStockMovement,
+  ScmAdvancedStockMovementFilter,
+  ScmItemBatch,
+  ScmItemBatchListFilter,
+  ScmItemSerial,
+  ScmItemSerialListFilter,
+  ScmLandedCost,
+  ScmLandedCostAllocation,
+  ScmLandedCostFilter,
+  ScmReorderPolicy,
+  ScmReorderPolicyFilter,
+  ScmRfq,
+  ScmRfqFilter,
+  ScmRfqInvitedSupplier,
+  ScmRfqItem,
+  ScmSpendAnalyticsSnapshot,
+  ScmSpendAnalyticsSnapshotFilter,
+  ScmStockOpname,
+  ScmStockOpnameFilter,
+  ScmStockOpnameLine,
+  ScmStockReservation,
+  ScmStockReservationFilter,
+  ScmStockTransfer,
+  ScmStockTransferFilter,
+  ScmStockTransferLine,
+  ScmSupplierBid,
+  ScmSupplierBidFilter,
+  ScmSupplierBidLine,
+  ScmSupplierContract,
+  ScmSupplierContractFilter,
+  ScmSupplierContractItem,
+  ScmSupplierEvaluation,
+  ScmSupplierEvaluationFilter,
+  ScmValuationLayer,
+  ScmValuationLayerFilter,
+  ScmWarehouse,
+  ScmWarehouseListFilter,
+  ScmWarehouseLocation,
+  ScmWarehouseLocationListFilter,
+  SupplyChainAdvancedRepository,
+  UpdateScmItemSerialInput,
+  UpdateScmRfqProjectionInput,
+  UpdateScmStockOpnameProjectionInput,
+  UpdateScmStockTransferProjectionInput,
+  UpdateScmSupplierBidScoreInput,
+  UpdateScmSupplierContractProjectionInput,
+  UpdateScmSupplierEvaluationProjectionInput,
+  UpdateScmWarehouseInput,
+  UpdateScmWarehouseLocationInput,
+  UpsertScmReorderPolicyInput,
+} from "../domain/supply-chain-advanced.entity.js";
+import {
+  allocateLandedCost,
+  divideCostQuantity,
+  fromExactUnits,
+  multiplyQuantityCost,
+  toExactUnits,
+} from "../domain/valuation-policy.js";
+
+/** Configuration numbering codes for Supply Chain Advanced. */
+export const SCM_STOCK_TRANSFER_NUMBERING_CODE = "scm_stock_transfer";
+export const SCM_STOCK_OPNAME_NUMBERING_CODE = "scm_stock_opname";
+export const SCM_RFQ_NUMBERING_CODE = "scm_rfq";
+export const SCM_SUPPLIER_BID_NUMBERING_CODE = "scm_supplier_bid";
+export const SCM_SUPPLIER_EVALUATION_NUMBERING_CODE = "scm_supplier_evaluation";
+export const SCM_SUPPLIER_CONTRACT_NUMBERING_CODE = "scm_supplier_contract";
+export const SCM_LANDED_COST_NUMBERING_CODE = "scm_landed_cost";
+export const SCM_ITEM_BATCH_NUMBERING_CODE = "scm_item_batch";
+
+/** Workflow definition codes for Supply Chain Advanced. */
+export const SCM_STOCK_TRANSFER_WORKFLOW_DEFINITION_CODE = "scm_stock_transfer";
+export const SCM_STOCK_OPNAME_WORKFLOW_DEFINITION_CODE = "scm_stock_opname";
+export const SCM_RFQ_WORKFLOW_DEFINITION_CODE = "scm_rfq";
+export const SCM_SUPPLIER_EVALUATION_WORKFLOW_DEFINITION_CODE = "scm_supplier_evaluation";
+export const SCM_SUPPLIER_CONTRACT_WORKFLOW_DEFINITION_CODE = "scm_supplier_contract";
+
+export interface StockTransferDetailView {
+  transfer: ScmStockTransfer;
+  lines: ScmStockTransferLine[];
+  status: EntityWorkflowStatus | null;
+  availableActions: EntityWorkflowAction[];
+}
+
+export interface StockOpnameDetailView {
+  opname: ScmStockOpname;
+  lines: ScmStockOpnameLine[];
+  status: EntityWorkflowStatus | null;
+  availableActions: EntityWorkflowAction[];
+}
+
+export interface RfqDetailView {
+  rfq: ScmRfq;
+  items: ScmRfqItem[];
+  invitedSuppliers: ScmRfqInvitedSupplier[];
+  bids: ScmSupplierBid[];
+  status: EntityWorkflowStatus | null;
+  availableActions: EntityWorkflowAction[];
+}
+
+export interface SupplierBidDetailView {
+  bid: ScmSupplierBid;
+  lines: ScmSupplierBidLine[];
+}
+
+export interface SupplierEvaluationDetailView {
+  evaluation: ScmSupplierEvaluation;
+  status: EntityWorkflowStatus | null;
+  availableActions: EntityWorkflowAction[];
+}
+
+export interface SupplierContractDetailView {
+  contract: ScmSupplierContract;
+  items: ScmSupplierContractItem[];
+  status: EntityWorkflowStatus | null;
+  availableActions: EntityWorkflowAction[];
+}
+
+export interface LandedCostDetailView {
+  landedCost: ScmLandedCost;
+  allocations: ScmLandedCostAllocation[];
+}
+
+export class SupplyChainAdvancedService {
+  constructor(
+    private readonly repo: SupplyChainAdvancedRepository,
+    private readonly rbac: RbacService,
+    private readonly audit: AuditService,
+    private readonly workflow: WorkflowService,
+    private readonly events: EventBus,
+    private readonly configuration: ConfigurationService,
+  ) {}
+
+  // =========================================================================
+  // 1. Warehouses & Storage Locations (SCM-ADV-001)
+  // =========================================================================
+
+  async createWarehouse(
+    actor: ActorContext,
+    input: Omit<CreateScmWarehouseInput, "createdBy">,
+  ): Promise<ScmWarehouse> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
+
+    const warehouse = await this.repo.createWarehouse(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.warehouse.created",
+      entityType: "scm_warehouse",
+      entityId: warehouse.id,
+      metadata: { code: warehouse.code, name: warehouse.name },
+    });
+
+    return warehouse;
+  }
+
+  async updateWarehouse(
+    actor: ActorContext,
+    warehouseId: string,
+    input: UpdateScmWarehouseInput,
+  ): Promise<ScmWarehouse> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    const existing = await this.repo.findWarehouseById(actor.tenantId, warehouseId);
+    if (!existing) {
+      throw new NotFoundError("ScmWarehouse", warehouseId);
+    }
+    await this.assertOrganizationUnitInScope(actor, existing.organizationUnitId);
+    if (input.organizationUnitId !== undefined) {
+      await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
+    }
+
+    const updated = await this.repo.updateWarehouse(actor.tenantId, warehouseId, {
+      ...input,
+      updatedBy: actor.userId,
+    });
+    if (!updated) {
+      throw new NotFoundError("ScmWarehouse", warehouseId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.warehouse.updated",
+      entityType: "scm_warehouse",
+      entityId: warehouseId,
+      metadata: { input },
+    });
+
+    return updated;
+  }
+
+  async getWarehouse(actor: ActorContext, warehouseId: string): Promise<ScmWarehouse> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    const warehouse = await this.repo.findWarehouseById(actor.tenantId, warehouseId);
+    if (!warehouse) {
+      throw new NotFoundError("ScmWarehouse", warehouseId);
+    }
+    await this.assertOrganizationUnitInScope(actor, warehouse.organizationUnitId);
+    return warehouse;
+  }
+
+  async listWarehouses(
+    actor: ActorContext,
+    filter: ScmWarehouseListFilter = {},
+  ): Promise<ScmWarehouse[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(
+      actor,
+      filter.organizationUnitIds && filter.organizationUnitIds.length > 0
+        ? filter.organizationUnitIds[0]
+        : undefined,
+    );
+
+    return this.repo.listWarehouses(actor.tenantId, {
+      ...filter,
+      organizationUnitIds: scopedOrgUnitIds ?? undefined,
+    });
+  }
+
+  async createWarehouseLocation(
+    actor: ActorContext,
+    input: Omit<CreateScmWarehouseLocationInput, "createdBy">,
+  ): Promise<ScmWarehouseLocation> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    const location = await this.repo.createWarehouseLocation(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.warehouse_location.created",
+      entityType: "scm_warehouse_location",
+      entityId: location.id,
+      metadata: { locationCode: location.code, warehouseId: location.warehouseId },
+    });
+
+    return location;
+  }
+
+  async updateWarehouseLocation(
+    actor: ActorContext,
+    locationId: string,
+    input: UpdateScmWarehouseLocationInput,
+  ): Promise<ScmWarehouseLocation> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    const existing = await this.repo.findWarehouseLocationById(actor.tenantId, locationId);
+    if (!existing) {
+      throw new NotFoundError("ScmWarehouseLocation", locationId);
+    }
+    await this.assertWarehouseInScope(actor, existing.warehouseId);
+
+    const updated = await this.repo.updateWarehouseLocation(actor.tenantId, locationId, {
+      ...input,
+      updatedBy: actor.userId,
+    });
+    if (!updated) {
+      throw new NotFoundError("ScmWarehouseLocation", locationId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.warehouse_location.updated",
+      entityType: "scm_warehouse_location",
+      entityId: locationId,
+      metadata: { input },
+    });
+
+    return updated;
+  }
+
+  async getWarehouseLocation(actor: ActorContext, locationId: string): Promise<ScmWarehouseLocation> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    const location = await this.repo.findWarehouseLocationById(actor.tenantId, locationId);
+    if (!location) {
+      throw new NotFoundError("ScmWarehouseLocation", locationId);
+    }
+    await this.assertWarehouseInScope(actor, location.warehouseId);
+    return location;
+  }
+
+  async listWarehouseLocations(
+    actor: ActorContext,
+    filter: ScmWarehouseLocationListFilter = {},
+  ): Promise<ScmWarehouseLocation[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    if (filter.warehouseId) {
+      await this.assertWarehouseInScope(actor, filter.warehouseId);
+    }
+    return this.repo.listWarehouseLocations(actor.tenantId, filter);
+  }
+
+  // =========================================================================
+  // 2. Batches & Serials (SCM-ADV-002, SCM-ADV-003)
+  // =========================================================================
+
+  async createBatch(
+    actor: ActorContext,
+    input: Omit<CreateScmItemBatchInput, "createdBy" | "batchNumber"> & { batchNumber?: string },
+  ): Promise<ScmItemBatch> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const batchNumber =
+      (input.batchNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_ITEM_BATCH_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    const batch = await this.repo.createItemBatch(actor.tenantId, {
+      ...input,
+      batchNumber,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.batch.created",
+      entityType: "scm_item_batch",
+      entityId: batch.id,
+      metadata: { batchNumber: batch.batchNumber, itemId: batch.itemId },
+    });
+
+    return batch;
+  }
+
+  async getBatch(actor: ActorContext, batchId: string): Promise<ScmItemBatch> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const batch = await this.repo.findItemBatchById(actor.tenantId, batchId);
+    if (!batch) {
+      throw new NotFoundError("ScmItemBatch", batchId);
+    }
+    return batch;
+  }
+
+  async listBatches(
+    actor: ActorContext,
+    filter: ScmItemBatchListFilter = {},
+  ): Promise<ScmItemBatch[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    return this.repo.listItemBatches(actor.tenantId, filter);
+  }
+
+  async createSerial(
+    actor: ActorContext,
+    input: Omit<CreateScmItemSerialInput, "createdBy">,
+  ): Promise<ScmItemSerial> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    if (input.warehouseId) {
+      await this.assertWarehouseInScope(actor, input.warehouseId);
+    }
+
+    const serial = await this.repo.createItemSerial(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.serial.created",
+      entityType: "scm_item_serial",
+      entityId: serial.id,
+      metadata: { serialNumber: serial.serialNumber, itemId: serial.itemId },
+    });
+
+    return serial;
+  }
+
+  async updateSerial(
+    actor: ActorContext,
+    serialId: string,
+    input: UpdateScmItemSerialInput,
+  ): Promise<ScmItemSerial> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const existing = await this.repo.findItemSerialById(actor.tenantId, serialId);
+    if (!existing) {
+      throw new NotFoundError("ScmItemSerial", serialId);
+    }
+    if (existing.warehouseId) {
+      await this.assertWarehouseInScope(actor, existing.warehouseId);
+    }
+    if (input.warehouseId) {
+      await this.assertWarehouseInScope(actor, input.warehouseId);
+    }
+
+    const updated = await this.repo.updateItemSerial(actor.tenantId, serialId, {
+      ...input,
+      updatedBy: actor.userId,
+    });
+    if (!updated) {
+      throw new NotFoundError("ScmItemSerial", serialId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.serial.updated",
+      entityType: "scm_item_serial",
+      entityId: serialId,
+      metadata: { input },
+    });
+
+    return updated;
+  }
+
+  async getSerial(actor: ActorContext, serialId: string): Promise<ScmItemSerial> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const serial = await this.repo.findItemSerialById(actor.tenantId, serialId);
+    if (!serial) {
+      throw new NotFoundError("ScmItemSerial", serialId);
+    }
+    if (serial.warehouseId) {
+      await this.assertWarehouseInScope(actor, serial.warehouseId);
+    }
+    return serial;
+  }
+
+  async listSerials(
+    actor: ActorContext,
+    filter: ScmItemSerialListFilter = {},
+  ): Promise<ScmItemSerial[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listItemSerials(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // =========================================================================
+  // 3. Stock Movements & Balances (SCM-ADV-001, SCM-ADV-004)
+  // =========================================================================
+
+  async recordStockMovement(
+    actor: ActorContext,
+    input: Omit<RecordScmAdvancedStockMovementInput, "createdBy">,
+  ): Promise<{ movement: ScmAdvancedStockMovement; balance: ScmAdvancedStockBalance }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    const result = await this.repo.recordAdvancedStockMovement(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_movement.recorded",
+      entityType: "scm_stock_movement",
+      entityId: result.movement.id,
+      metadata: {
+        movementType: result.movement.movementType,
+        quantity: result.movement.quantity,
+        itemId: result.movement.itemId,
+        warehouseId: result.movement.warehouseId,
+      },
+    });
+
+    return result;
+  }
+
+  async listStockMovements(
+    actor: ActorContext,
+    filter: ScmAdvancedStockMovementFilter = {},
+  ): Promise<ScmAdvancedStockMovement[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listAdvancedStockMovements(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  async getStockBalance(
+    actor: ActorContext,
+    itemId: string,
+    warehouseId: string,
+    locationId?: string,
+    batchId?: string,
+  ): Promise<ScmAdvancedStockBalance | null> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.assertWarehouseInScope(actor, warehouseId);
+    return this.repo.findAdvancedStockBalance(actor.tenantId, itemId, warehouseId, locationId, batchId);
+  }
+
+  async listStockBalances(
+    actor: ActorContext,
+    filter: ScmAdvancedStockBalanceFilter = {},
+  ): Promise<ScmAdvancedStockBalance[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listAdvancedStockBalances(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // =========================================================================
+  // 4. Reorder Policies & Reservations (SCM-ADV-004)
+  // =========================================================================
+
+  async upsertReorderPolicy(
+    actor: ActorContext,
+    input: Omit<UpsertScmReorderPolicyInput, "updatedBy">,
+  ): Promise<ScmReorderPolicy> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    if (input.warehouseId) {
+      await this.assertWarehouseInScope(actor, input.warehouseId);
+    }
+
+    const policy = await this.repo.upsertReorderPolicy(actor.tenantId, {
+      ...input,
+      updatedBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.reorder_policy.upserted",
+      entityType: "scm_reorder_policy",
+      entityId: policy.id,
+      metadata: { itemId: policy.itemId, warehouseId: policy.warehouseId, minQuantity: policy.minQuantity },
+    });
+
+    return policy;
+  }
+
+  async listReorderPolicies(
+    actor: ActorContext,
+    filter: ScmReorderPolicyFilter = {},
+  ): Promise<ScmReorderPolicy[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listReorderPolicies(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  async computeReorderAlerts(
+    actor: ActorContext,
+    warehouseId?: string,
+  ): Promise<Array<{ policy: ScmReorderPolicy; currentStock: number; suggestedOrderQuantity: number }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, warehouseId);
+
+    const policies = await this.repo.listReorderPolicies(actor.tenantId, {
+      warehouseId,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+      activeOnly: true,
+    });
+
+    const alerts: Array<{ policy: ScmReorderPolicy; currentStock: number; suggestedOrderQuantity: number }> = [];
+
+    for (const policy of policies) {
+      const balance = await this.repo.findAdvancedStockBalance(
+        actor.tenantId,
+        policy.itemId,
+        policy.warehouseId || "default",
+      );
+      const available = balance ? balance.availableQuantity : 0;
+
+      if (available <= policy.reorderPoint) {
+        const targetQuantity = Math.max(policy.minQuantity, policy.reorderPoint + policy.safetyStock);
+        const replenishmentGap = Math.max(0, targetQuantity - available);
+        const suggested = Math.max(policy.reorderQuantity, replenishmentGap);
+        alerts.push({
+          policy,
+          currentStock: available,
+          suggestedOrderQuantity: suggested,
+        });
+      }
+    }
+
+    return alerts;
+  }
+
+  async createStockReservation(
+    actor: ActorContext,
+    input: Omit<CreateScmStockReservationInput, "createdBy">,
+  ): Promise<ScmStockReservation> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    const reservation = await this.repo.createStockReservation(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_reservation.created",
+      entityType: "scm_stock_reservation",
+      entityId: reservation.id,
+      metadata: {
+        itemId: reservation.itemId,
+        warehouseId: reservation.warehouseId,
+        quantity: reservation.quantity,
+      },
+    });
+
+    return reservation;
+  }
+
+  async fulfillStockReservation(
+    actor: ActorContext,
+    reservationId: string,
+  ): Promise<ScmStockReservation> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const existing = await this.repo.findStockReservationById(actor.tenantId, reservationId);
+    if (!existing) {
+      throw new NotFoundError("ScmStockReservation", reservationId);
+    }
+    await this.assertWarehouseInScope(actor, existing.warehouseId);
+
+    const reservation = await this.repo.updateStockReservationStatus(
+      actor.tenantId,
+      reservationId,
+      "fulfilled",
+      new Date(),
+    );
+    if (!reservation) {
+      throw new NotFoundError("ScmStockReservation", reservationId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_reservation.fulfilled",
+      entityType: "scm_stock_reservation",
+      entityId: reservationId,
+      metadata: { status: "fulfilled" },
+    });
+
+    return reservation;
+  }
+
+  async cancelStockReservation(
+    actor: ActorContext,
+    reservationId: string,
+  ): Promise<ScmStockReservation> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const existing = await this.repo.findStockReservationById(actor.tenantId, reservationId);
+    if (!existing) {
+      throw new NotFoundError("ScmStockReservation", reservationId);
+    }
+    await this.assertWarehouseInScope(actor, existing.warehouseId);
+
+    const reservation = await this.repo.updateStockReservationStatus(
+      actor.tenantId,
+      reservationId,
+      "cancelled",
+      new Date(),
+    );
+    if (!reservation) {
+      throw new NotFoundError("ScmStockReservation", reservationId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_reservation.cancelled",
+      entityType: "scm_stock_reservation",
+      entityId: reservationId,
+      metadata: { status: "cancelled" },
+    });
+
+    return reservation;
+  }
+
+  async listStockReservations(
+    actor: ActorContext,
+    filter: ScmStockReservationFilter = {},
+  ): Promise<ScmStockReservation[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listStockReservations(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // =========================================================================
+  // 5. Stock Transfers & Opnames (SCM-ADV-004)
+  // =========================================================================
+
+  async createStockTransfer(
+    actor: ActorContext,
+    input: Omit<CreateScmStockTransferInput, "createdBy" | "transferNumber"> & { transferNumber?: string },
+  ): Promise<StockTransferDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.assertWarehouseInScope(actor, input.fromWarehouseId);
+    await this.assertWarehouseInScope(actor, input.toWarehouseId);
+
+    const transferNumber =
+      (input.transferNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_STOCK_TRANSFER_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    const { transfer, lines } = await this.repo.createStockTransfer(actor.tenantId, {
+      ...input,
+      transferNumber,
+      createdBy: actor.userId,
+    });
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: SCM_STOCK_TRANSFER_WORKFLOW_DEFINITION_CODE,
+        entityId: transfer.id,
+        contextData: {
+          transferNumber,
+          fromWarehouseId: input.fromWarehouseId,
+          toWarehouseId: input.toWarehouseId,
+        },
+      });
+      workflowInstanceId = instance.id;
+      await this.repo.updateStockTransferProjection(actor.tenantId, {
+        transferId: transfer.id,
+        status: "draft",
+        workflowInstanceId,
+        updatedBy: actor.userId,
+      });
+      transfer.status = "draft";
+      transfer.workflowInstanceId = workflowInstanceId;
+    } catch (err) {
+      // Compensating delete if workflow startup fails
+      await this.repo.deleteStockTransferWithoutWorkflow(actor.tenantId, transfer.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_transfer.created",
+      entityType: "scm_stock_transfer",
+      entityId: transfer.id,
+      metadata: { transferNumber, from: input.fromWarehouseId, to: input.toWarehouseId },
+    });
+
+    const status = workflowInstanceId ? await this.workflow.getEntityStatus(actor, workflowInstanceId) : null;
+    const availableActions = workflowInstanceId
+      ? (await this.workflow.getEntityWorkflowView(actor, workflowInstanceId)).availableActions
+      : [];
+
+    return { transfer, lines, status, availableActions };
+  }
+
+  async getStockTransfer(actor: ActorContext, transferId: string): Promise<StockTransferDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const result = await this.repo.findStockTransferById(actor.tenantId, transferId);
+    if (!result) {
+      throw new NotFoundError("ScmStockTransfer", transferId);
+    }
+    await this.assertWarehouseInScope(actor, result.transfer.fromWarehouseId);
+    await this.assertWarehouseInScope(actor, result.transfer.toWarehouseId);
+
+    const instanceId = result.transfer.workflowInstanceId;
+    let status: EntityWorkflowStatus | null = null;
+    let availableActions: EntityWorkflowAction[] = [];
+    if (instanceId) {
+      try {
+        status = await this.workflow.getEntityStatus(actor, instanceId);
+        const view = await this.workflow.getEntityWorkflowView(actor, instanceId);
+        availableActions = view.availableActions;
+      } catch {
+        // Workflow instance not found or unassigned
+      }
+    }
+
+    return {
+      transfer: result.transfer,
+      lines: result.lines,
+      status,
+      availableActions,
+    };
+  }
+
+  async listStockTransfers(
+    actor: ActorContext,
+    filter: ScmStockTransferFilter = {},
+  ): Promise<Array<{ transfer: ScmStockTransfer; status: EntityWorkflowStatus | null }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(
+      actor,
+      filter.fromWarehouseId || filter.toWarehouseId,
+    );
+
+    const transfers = await this.repo.listStockTransfers(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+
+    return this.withWorkflowStatus(
+      actor,
+      transfers,
+      (t) => t.workflowInstanceId,
+      (transfer, status) => ({ transfer, status }),
+    );
+  }
+
+  async actOnStockTransfer(
+    actor: ActorContext,
+    transferId: string,
+    action: string,
+    comment?: string,
+  ): Promise<StockTransferDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const result = await this.repo.findStockTransferById(actor.tenantId, transferId);
+    if (!result) {
+      throw new NotFoundError("ScmStockTransfer", transferId);
+    }
+    await this.assertWarehouseInScope(actor, result.transfer.fromWarehouseId);
+
+    if (!result.transfer.workflowInstanceId) {
+      throw new ValidationError(`Transfer ${transferId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.transfer.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending action exists on this transfer");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, action, comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, result.transfer.workflowInstanceId);
+
+    let projectedStatus = result.transfer.status;
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "approved";
+    } else if (workflowStatus.instanceStatus === "cancelled" || workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "cancelled";
+    }
+
+    const updatedTransfer = await this.repo.updateStockTransferProjection(actor.tenantId, {
+      transferId,
+      status: projectedStatus,
+      cancelledAt: projectedStatus === "cancelled" ? new Date() : undefined,
+      updatedBy: actor.userId,
+    });
+
+    return this.getStockTransfer(actor, transferId);
+  }
+
+  async recordStockTransferShipment(
+    actor: ActorContext,
+    input: RecordScmStockTransferShipmentInput,
+  ): Promise<StockTransferDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const result = await this.repo.findStockTransferById(actor.tenantId, input.transferId);
+    if (!result) {
+      throw new NotFoundError("ScmStockTransfer", input.transferId);
+    }
+    await this.assertWarehouseInScope(actor, result.transfer.fromWarehouseId);
+
+    await this.repo.recordStockTransferShipment(actor.tenantId, input);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_transfer.shipped",
+      entityType: "scm_stock_transfer",
+      entityId: input.transferId,
+      metadata: { lineShipments: input.lineShipments },
+    });
+
+    return this.getStockTransfer(actor, input.transferId);
+  }
+
+  async recordStockTransferReceipt(
+    actor: ActorContext,
+    input: RecordScmStockTransferReceiptInput,
+  ): Promise<StockTransferDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const result = await this.repo.findStockTransferById(actor.tenantId, input.transferId);
+    if (!result) {
+      throw new NotFoundError("ScmStockTransfer", input.transferId);
+    }
+    await this.assertWarehouseInScope(actor, result.transfer.toWarehouseId);
+
+    await this.repo.recordStockTransferReceipt(actor.tenantId, input);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_transfer.received",
+      entityType: "scm_stock_transfer",
+      entityId: input.transferId,
+      metadata: { lineReceipts: input.lineReceipts },
+    });
+
+    return this.getStockTransfer(actor, input.transferId);
+  }
+
+  async createStockOpname(
+    actor: ActorContext,
+    input: Omit<CreateScmStockOpnameInput, "createdBy" | "opnameNumber"> & { opnameNumber?: string },
+  ): Promise<StockOpnameDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    const opnameNumber =
+      (input.opnameNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_STOCK_OPNAME_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    const { opname, lines } = await this.repo.createStockOpname(actor.tenantId, {
+      ...input,
+      opnameNumber,
+      createdBy: actor.userId,
+    });
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: SCM_STOCK_OPNAME_WORKFLOW_DEFINITION_CODE,
+        entityId: opname.id,
+        contextData: {
+          opnameNumber,
+          warehouseId: input.warehouseId,
+        },
+      });
+      workflowInstanceId = instance.id;
+      await this.repo.updateStockOpnameProjection(actor.tenantId, {
+        opnameId: opname.id,
+        status: "in_progress",
+        workflowInstanceId,
+        updatedBy: actor.userId,
+      });
+      opname.status = "in_progress";
+      opname.workflowInstanceId = workflowInstanceId;
+    } catch (err) {
+      await this.repo.deleteStockOpnameWithoutWorkflow(actor.tenantId, opname.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_opname.created",
+      entityType: "scm_stock_opname",
+      entityId: opname.id,
+      metadata: { opnameNumber, warehouseId: input.warehouseId },
+    });
+
+    const status = workflowInstanceId ? await this.workflow.getEntityStatus(actor, workflowInstanceId) : null;
+    const availableActions = workflowInstanceId
+      ? (await this.workflow.getEntityWorkflowView(actor, workflowInstanceId)).availableActions
+      : [];
+
+    return { opname, lines, status, availableActions };
+  }
+
+  async recordStockOpnameCount(
+    actor: ActorContext,
+    input: RecordScmStockOpnameCountInput,
+  ): Promise<ScmStockOpnameLine> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const line = await this.repo.recordStockOpnameCount(actor.tenantId, input);
+    if (!line) {
+      throw new NotFoundError("ScmStockOpnameLine", input.lineId);
+    }
+    return line;
+  }
+
+  async getStockOpname(actor: ActorContext, opnameId: string): Promise<StockOpnameDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const result = await this.repo.findStockOpnameById(actor.tenantId, opnameId);
+    if (!result) {
+      throw new NotFoundError("ScmStockOpname", opnameId);
+    }
+    await this.assertWarehouseInScope(actor, result.opname.warehouseId);
+
+    const instanceId = result.opname.workflowInstanceId;
+    let status: EntityWorkflowStatus | null = null;
+    let availableActions: EntityWorkflowAction[] = [];
+    if (instanceId) {
+      try {
+        status = await this.workflow.getEntityStatus(actor, instanceId);
+        const view = await this.workflow.getEntityWorkflowView(actor, instanceId);
+        availableActions = view.availableActions;
+      } catch {
+        // Stale or unassigned instance
+      }
+    }
+
+    return {
+      opname: result.opname,
+      lines: result.lines,
+      status,
+      availableActions,
+    };
+  }
+
+  async listStockOpnames(
+    actor: ActorContext,
+    filter: ScmStockOpnameFilter = {},
+  ): Promise<Array<{ opname: ScmStockOpname; status: EntityWorkflowStatus | null }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    const opnames = await this.repo.listStockOpnames(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+
+    return this.withWorkflowStatus(
+      actor,
+      opnames,
+      (o) => o.workflowInstanceId,
+      (opname, status) => ({ opname, status }),
+    );
+  }
+
+  async actOnStockOpname(
+    actor: ActorContext,
+    opnameId: string,
+    action: string,
+    comment?: string,
+  ): Promise<StockOpnameDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    const result = await this.repo.findStockOpnameById(actor.tenantId, opnameId);
+    if (!result) {
+      throw new NotFoundError("ScmStockOpname", opnameId);
+    }
+    await this.assertWarehouseInScope(actor, result.opname.warehouseId);
+
+    if (!result.opname.workflowInstanceId) {
+      throw new ValidationError(`Opname ${opnameId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.opname.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending action exists on this opname");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, action, comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, result.opname.workflowInstanceId);
+
+    let projectedStatus = result.opname.status;
+    let completedAt: Date | undefined;
+    let completedBy: string | undefined;
+
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "completed";
+      completedAt = new Date();
+      completedBy = actor.userId;
+    } else if (workflowStatus.instanceStatus === "cancelled" || workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "cancelled";
+    }
+
+    await this.repo.updateStockOpnameProjection(actor.tenantId, {
+      opnameId,
+      status: projectedStatus,
+      completedAt,
+      completedBy,
+      updatedBy: actor.userId,
+    });
+
+    return this.getStockOpname(actor, opnameId);
+  }
+
+  // =========================================================================
+  // 6. Valuation & Landed Cost (SCM-ADV-005)
+  // =========================================================================
+
+  async createValuationLayer(
+    actor: ActorContext,
+    input: CreateScmValuationLayerInput,
+  ): Promise<ScmValuationLayer> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+    if (input.warehouseId) {
+      await this.assertWarehouseInScope(actor, input.warehouseId);
+    } else {
+      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      if (!hasTenant) {
+        throw new ForbiddenError("Tenant-wide scope required for global valuation layers");
+      }
+    }
+
+    const remainingQuantity = input.remainingQuantity ?? input.originalQuantity;
+    const effectiveUnitCost = input.effectiveUnitCost ?? input.unitCost;
+    const totalValue = input.totalValue ?? (input.originalQuantity * input.unitCost);
+
+    const layer = await this.repo.createValuationLayer(actor.tenantId, {
+      ...input,
+      remainingQuantity,
+      effectiveUnitCost,
+      totalValue,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.valuation_layer.created",
+      entityType: "scm_valuation_layer",
+      entityId: layer.id,
+      metadata: {
+        itemId: layer.itemId,
+        warehouseId: layer.warehouseId,
+        quantity: layer.originalQuantity,
+        unitCost: layer.unitCost,
+      },
+    });
+
+    return layer;
+  }
+
+  async consumeValuationLayer(
+    actor: ActorContext,
+    input: ConsumeScmValuationLayerInput,
+  ): Promise<ScmValuationLayer> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+    const existing = await this.repo.findValuationLayerById(actor.tenantId, input.layerId);
+    if (!existing) {
+      throw new NotFoundError("ScmValuationLayer", input.layerId);
+    }
+    if (existing.warehouseId) {
+      await this.assertWarehouseInScope(actor, existing.warehouseId);
+    } else {
+      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      if (!hasTenant) {
+        throw new ForbiddenError("Tenant-wide scope required for global valuation layers");
+      }
+    }
+
+    const layer = await this.repo.updateValuationLayerRemainingQuantity(actor.tenantId, input);
+    if (!layer) {
+      throw new NotFoundError("ScmValuationLayer", input.layerId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.valuation_layer.consumed",
+      entityType: "scm_valuation_layer",
+      entityId: layer.id,
+      metadata: { consumedQuantity: input.remainingQuantity, remaining: layer.remainingQuantity },
+    });
+
+    return layer;
+  }
+
+  async listValuationLayers(
+    actor: ActorContext,
+    filter: ScmValuationLayerFilter = {},
+  ): Promise<ScmValuationLayer[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listValuationLayers(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  async createLandedCost(
+    actor: ActorContext,
+    input: Omit<CreateScmLandedCostInput, "createdBy" | "voucherNumber"> & {
+      voucherNumber?: string;
+      itemsToAllocate?: Array<{ itemId: string; quantity: number; baseAmount: number; weight?: number }>;
+    },
+  ): Promise<LandedCostDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+
+    const voucherNumber =
+      (input.voucherNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_LANDED_COST_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    let allocationsInput = input.allocations || [];
+
+    // If items to allocate are provided dynamically, calculate allocations using exact decimal policy
+    if (input.itemsToAllocate && input.itemsToAllocate.length > 0 && allocationsInput.length === 0) {
+      const allocated = allocateLandedCost(
+        input.amount,
+        input.itemsToAllocate,
+        input.allocationMethod,
+      );
+      allocationsInput = allocated.map((a) => ({
+        itemId: a.itemId,
+        allocatedAmount: a.allocatedAmount,
+        costPerUnitAdded: a.costPerUnitAdded,
+      }));
+    }
+
+    const { landedCost, allocations } = await this.repo.createLandedCost(actor.tenantId, {
+      ...input,
+      voucherNumber,
+      allocations: allocationsInput,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.landed_cost.created",
+      entityType: "scm_landed_cost",
+      entityId: landedCost.id,
+      metadata: { voucherNumber, amount: landedCost.amount },
+    });
+
+    return { landedCost, allocations };
+  }
+
+  async applyLandedCost(
+    actor: ActorContext,
+    landedCostId: string,
+  ): Promise<LandedCostDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+    const existing = await this.repo.findLandedCostById(actor.tenantId, landedCostId);
+    if (!existing) {
+      throw new NotFoundError("ScmLandedCost", landedCostId);
+    }
+
+    await this.repo.applyLandedCost(actor.tenantId, {
+      landedCostId,
+      appliedAt: new Date(),
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.landed_cost.applied",
+      entityType: "scm_landed_cost",
+      entityId: landedCostId,
+      metadata: { status: "applied" },
+    });
+
+    const result = await this.repo.findLandedCostById(actor.tenantId, landedCostId);
+    return result!;
+  }
+
+  async getLandedCost(actor: ActorContext, landedCostId: string): Promise<LandedCostDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
+    const result = await this.repo.findLandedCostById(actor.tenantId, landedCostId);
+    if (!result) {
+      throw new NotFoundError("ScmLandedCost", landedCostId);
+    }
+    return result;
+  }
+
+  async listLandedCosts(
+    actor: ActorContext,
+    filter: ScmLandedCostFilter = {},
+  ): Promise<ScmLandedCost[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
+    return this.repo.listLandedCosts(actor.tenantId, filter);
+  }
+
+  // =========================================================================
+  // 7. RFQ, Tender & Bids (SCM-ADV-006)
+  // =========================================================================
+
+  async createRfq(
+    actor: ActorContext,
+    input: Omit<CreateScmRfqInput, "createdBy" | "rfqNumber"> & { rfqNumber?: string },
+  ): Promise<RfqDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
+
+    const rfqNumber =
+      (input.rfqNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_RFQ_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    const { rfq, items, invitedSuppliers } = await this.repo.createRfq(actor.tenantId, {
+      ...input,
+      rfqNumber,
+      createdBy: actor.userId,
+    });
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: SCM_RFQ_WORKFLOW_DEFINITION_CODE,
+        entityId: rfq.id,
+        contextData: {
+          rfqNumber,
+          title: rfq.title,
+          organizationUnitId: input.organizationUnitId,
+        },
+      });
+      workflowInstanceId = instance.id;
+      await this.repo.updateRfqProjection(actor.tenantId, {
+        rfqId: rfq.id,
+        status: "published",
+        workflowInstanceId,
+        updatedBy: actor.userId,
+      });
+      rfq.status = "published";
+      rfq.workflowInstanceId = workflowInstanceId;
+    } catch (err) {
+      await this.repo.deleteRfqWithoutWorkflow(actor.tenantId, rfq.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.rfq.created",
+      entityType: "scm_rfq",
+      entityId: rfq.id,
+      metadata: { rfqNumber, title: rfq.title },
+    });
+
+    const status = workflowInstanceId ? await this.workflow.getEntityStatus(actor, workflowInstanceId) : null;
+    const availableActions = workflowInstanceId
+      ? (await this.workflow.getEntityWorkflowView(actor, workflowInstanceId)).availableActions
+      : [];
+
+    return {
+      rfq,
+      items,
+      invitedSuppliers,
+      bids: [],
+      status,
+      availableActions,
+    };
+  }
+
+  async getRfq(actor: ActorContext, rfqId: string): Promise<RfqDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    const result = await this.repo.findRfqById(actor.tenantId, rfqId);
+    if (!result) {
+      throw new NotFoundError("ScmRfq", rfqId);
+    }
+    await this.assertOrganizationUnitInScope(actor, result.rfq.organizationUnitId);
+
+    const bids = await this.repo.listSupplierBids(actor.tenantId, { rfqId });
+
+    const instanceId = result.rfq.workflowInstanceId;
+    let status: EntityWorkflowStatus | null = null;
+    let availableActions: EntityWorkflowAction[] = [];
+    if (instanceId) {
+      try {
+        status = await this.workflow.getEntityStatus(actor, instanceId);
+        const view = await this.workflow.getEntityWorkflowView(actor, instanceId);
+        availableActions = view.availableActions;
+      } catch {
+        // Stale or unassigned instance
+      }
+    }
+
+    return {
+      rfq: result.rfq,
+      items: result.items,
+      invitedSuppliers: result.invitedSuppliers,
+      bids,
+      status,
+      availableActions,
+    };
+  }
+
+  async listRfqs(
+    actor: ActorContext,
+    filter: ScmRfqFilter = {},
+  ): Promise<Array<{ rfq: ScmRfq; status: EntityWorkflowStatus | null }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(
+      actor,
+      filter.organizationUnitIds && filter.organizationUnitIds.length > 0
+        ? filter.organizationUnitIds[0]
+        : undefined,
+    );
+
+    const rfqs = await this.repo.listRfqs(actor.tenantId, {
+      ...filter,
+      organizationUnitIds: scopedOrgUnitIds ?? undefined,
+    });
+
+    return this.withWorkflowStatus(
+      actor,
+      rfqs,
+      (r) => r.workflowInstanceId,
+      (rfq, status) => ({ rfq, status }),
+    );
+  }
+
+  async actOnRfq(
+    actor: ActorContext,
+    rfqId: string,
+    action: string,
+    comment?: string,
+  ): Promise<RfqDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    const result = await this.repo.findRfqById(actor.tenantId, rfqId);
+    if (!result) {
+      throw new NotFoundError("ScmRfq", rfqId);
+    }
+    await this.assertOrganizationUnitInScope(actor, result.rfq.organizationUnitId);
+
+    if (!result.rfq.workflowInstanceId) {
+      throw new ValidationError(`RFQ ${rfqId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.rfq.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending action exists on this RFQ");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, action, comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, result.rfq.workflowInstanceId);
+
+    let projectedStatus = result.rfq.status;
+    let awardedAt: Date | undefined;
+    let cancelledAt: Date | undefined;
+
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "closed";
+      awardedAt = new Date();
+    } else if (workflowStatus.instanceStatus === "cancelled" || workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "cancelled";
+      cancelledAt = new Date();
+    }
+
+    await this.repo.updateRfqProjection(actor.tenantId, {
+      rfqId,
+      status: projectedStatus,
+      awardedAt,
+      cancelledAt,
+      updatedBy: actor.userId,
+    });
+
+    return this.getRfq(actor, rfqId);
+  }
+
+  async submitSupplierBid(
+    actor: ActorContext,
+    input: Omit<CreateScmSupplierBidInput, "createdBy" | "bidNumber"> & { bidNumber?: string },
+  ): Promise<SupplierBidDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    const rfqResult = await this.repo.findRfqById(actor.tenantId, input.rfqId);
+    if (!rfqResult) {
+      throw new NotFoundError("ScmRfq", input.rfqId);
+    }
+    await this.assertOrganizationUnitInScope(actor, rfqResult.rfq.organizationUnitId);
+
+    const bidNumber =
+      (input.bidNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_SUPPLIER_BID_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    const { bid, lines } = await this.repo.createSupplierBid(actor.tenantId, {
+      ...input,
+      bidNumber,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.supplier_bid.submitted",
+      entityType: "scm_supplier_bid",
+      entityId: bid.id,
+      metadata: { bidNumber, rfqId: input.rfqId, supplierId: input.supplierId },
+    });
+
+    return { bid, lines };
+  }
+
+  async scoreSupplierBid(
+    actor: ActorContext,
+    bidId: string,
+    input: Omit<UpdateScmSupplierBidScoreInput, "bidId" | "updatedBy">,
+  ): Promise<ScmSupplierBid> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    const existing = await this.repo.findSupplierBidById(actor.tenantId, bidId);
+    if (!existing) {
+      throw new NotFoundError("ScmSupplierBid", bidId);
+    }
+    const rfq = await this.repo.findRfqById(actor.tenantId, existing.bid.rfqId);
+    if (rfq) {
+      await this.assertOrganizationUnitInScope(actor, rfq.rfq.organizationUnitId);
+    }
+
+    const tech = input.technicalScore !== undefined ? input.technicalScore : existing.bid.technicalScore;
+    const comm = input.commercialScore !== undefined ? input.commercialScore : existing.bid.commercialScore;
+    let finalScore = input.finalScore;
+    if (finalScore === undefined && (tech !== null || comm !== null)) {
+      const validScores: number[] = [];
+      if (tech !== null && tech !== undefined) validScores.push(tech);
+      if (comm !== null && comm !== undefined) validScores.push(comm);
+      if (validScores.length > 0) {
+        finalScore = validScores.reduce((a, b) => a + b, 0) / validScores.length;
+      }
+    }
+
+    const updated = await this.repo.updateSupplierBidScore(actor.tenantId, {
+      ...input,
+      finalScore,
+      bidId,
+      updatedBy: actor.userId,
+    });
+    if (!updated) {
+      throw new NotFoundError("ScmSupplierBid", bidId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.supplier_bid.scored",
+      entityType: "scm_supplier_bid",
+      entityId: bidId,
+      metadata: { finalScore: updated.finalScore, rank: updated.rank },
+    });
+
+    return updated;
+  }
+
+  async awardSupplierBid(
+    actor: ActorContext,
+    bidId: string,
+    resultingPurchaseOrderId?: string,
+  ): Promise<ScmSupplierBid> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    const existing = await this.repo.findSupplierBidById(actor.tenantId, bidId);
+    if (!existing) {
+      throw new NotFoundError("ScmSupplierBid", bidId);
+    }
+    const rfq = await this.repo.findRfqById(actor.tenantId, existing.bid.rfqId);
+    if (rfq) {
+      await this.assertOrganizationUnitInScope(actor, rfq.rfq.organizationUnitId);
+    }
+
+    const awarded = await this.repo.awardSupplierBid(actor.tenantId, {
+      bidId,
+      resultingPurchaseOrderId,
+      updatedBy: actor.userId,
+    });
+    if (!awarded) {
+      throw new NotFoundError("ScmSupplierBid", bidId);
+    }
+
+    // Update RFQ status to awarded
+    if (rfq) {
+      await this.repo.updateRfqProjection(actor.tenantId, {
+        rfqId: rfq.rfq.id,
+        status: "awarded",
+        awardedAt: new Date(),
+        updatedBy: actor.userId,
+      });
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.supplier_bid.awarded",
+      entityType: "scm_supplier_bid",
+      entityId: bidId,
+      metadata: { resultingPurchaseOrderId },
+    });
+
+    return awarded;
+  }
+
+  async getSupplierBid(actor: ActorContext, bidId: string): Promise<SupplierBidDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    const result = await this.repo.findSupplierBidById(actor.tenantId, bidId);
+    if (!result) {
+      throw new NotFoundError("ScmSupplierBid", bidId);
+    }
+    const rfq = await this.repo.findRfqById(actor.tenantId, result.bid.rfqId);
+    if (rfq) {
+      await this.assertOrganizationUnitInScope(actor, rfq.rfq.organizationUnitId);
+    }
+    return result;
+  }
+
+  async listSupplierBids(
+    actor: ActorContext,
+    filter: ScmSupplierBidFilter = {},
+  ): Promise<ScmSupplierBid[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    if (filter.rfqId) {
+      const rfq = await this.repo.findRfqById(actor.tenantId, filter.rfqId);
+      if (rfq) {
+        await this.assertOrganizationUnitInScope(actor, rfq.rfq.organizationUnitId);
+      }
+    }
+    return this.repo.listSupplierBids(actor.tenantId, filter);
+  }
+
+  // =========================================================================
+  // 8. Supplier Evaluations & Contracts (SCM-ADV-007)
+  // =========================================================================
+
+  async createSupplierEvaluation(
+    actor: ActorContext,
+    input: Omit<CreateScmSupplierEvaluationInput, "createdBy" | "evaluationNumber"> & {
+      evaluationNumber?: string;
+    },
+  ): Promise<SupplierEvaluationDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+
+    const evaluationNumber =
+      (input.evaluationNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_SUPPLIER_EVALUATION_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    // Deterministic overall score calculation: weights (Quality 35%, Delivery 30%, Pricing 20%, Service 15%)
+    const q = input.qualityScore ?? 0;
+    const d = input.deliveryScore ?? 0;
+    const p = input.pricingScore ?? 0;
+    const s = input.serviceScore ?? 0;
+    const overallScore = Math.round((q * 0.35 + d * 0.3 + p * 0.2 + s * 0.15) * 100) / 100;
+
+    let ratingGrade = input.ratingGrade;
+    if (!ratingGrade) {
+      if (overallScore >= 90) ratingGrade = "A";
+      else if (overallScore >= 75) ratingGrade = "B";
+      else if (overallScore >= 60) ratingGrade = "C";
+      else ratingGrade = "D";
+    }
+
+    const evaluation = await this.repo.createSupplierEvaluation(actor.tenantId, {
+      ...input,
+      evaluationNumber,
+      overallScore,
+      ratingGrade,
+      evaluatedBy: actor.userId,
+      evaluatedAt: new Date(),
+      createdBy: actor.userId,
+    });
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: SCM_SUPPLIER_EVALUATION_WORKFLOW_DEFINITION_CODE,
+        entityId: evaluation.id,
+        contextData: {
+          evaluationNumber,
+          supplierId: input.supplierId,
+          overallScore,
+          ratingGrade,
+        },
+      });
+      workflowInstanceId = instance.id;
+      await this.repo.updateSupplierEvaluationProjection(actor.tenantId, {
+        evaluationId: evaluation.id,
+        status: "submitted",
+        workflowInstanceId,
+        updatedBy: actor.userId,
+      });
+      evaluation.status = "submitted";
+      evaluation.workflowInstanceId = workflowInstanceId;
+    } catch (err) {
+      await this.repo.deleteSupplierEvaluationWithoutWorkflow(actor.tenantId, evaluation.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.supplier_evaluation.created",
+      entityType: "scm_supplier_evaluation",
+      entityId: evaluation.id,
+      metadata: { evaluationNumber, supplierId: input.supplierId, overallScore, ratingGrade },
+    });
+
+    const status = workflowInstanceId ? await this.workflow.getEntityStatus(actor, workflowInstanceId) : null;
+    const availableActions = workflowInstanceId
+      ? (await this.workflow.getEntityWorkflowView(actor, workflowInstanceId)).availableActions
+      : [];
+
+    return { evaluation, status, availableActions };
+  }
+
+  async getSupplierEvaluation(
+    actor: ActorContext,
+    evaluationId: string,
+  ): Promise<SupplierEvaluationDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    const evaluation = await this.repo.findSupplierEvaluationById(actor.tenantId, evaluationId);
+    if (!evaluation) {
+      throw new NotFoundError("ScmSupplierEvaluation", evaluationId);
+    }
+
+    const instanceId = evaluation.workflowInstanceId;
+    let status: EntityWorkflowStatus | null = null;
+    let availableActions: EntityWorkflowAction[] = [];
+    if (instanceId) {
+      try {
+        status = await this.workflow.getEntityStatus(actor, instanceId);
+        const view = await this.workflow.getEntityWorkflowView(actor, instanceId);
+        availableActions = view.availableActions;
+      } catch {
+        // Stale or unassigned instance
+      }
+    }
+
+    return { evaluation, status, availableActions };
+  }
+
+  async listSupplierEvaluations(
+    actor: ActorContext,
+    filter: ScmSupplierEvaluationFilter = {},
+  ): Promise<Array<{ evaluation: ScmSupplierEvaluation; status: EntityWorkflowStatus | null }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    const evaluations = await this.repo.listSupplierEvaluations(actor.tenantId, filter);
+
+    return this.withWorkflowStatus(
+      actor,
+      evaluations,
+      (e) => e.workflowInstanceId,
+      (evaluation, status) => ({ evaluation, status }),
+    );
+  }
+
+  async actOnSupplierEvaluation(
+    actor: ActorContext,
+    evaluationId: string,
+    action: string,
+    comment?: string,
+  ): Promise<SupplierEvaluationDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    const evaluation = await this.repo.findSupplierEvaluationById(actor.tenantId, evaluationId);
+    if (!evaluation) {
+      throw new NotFoundError("ScmSupplierEvaluation", evaluationId);
+    }
+
+    if (!evaluation.workflowInstanceId) {
+      throw new ValidationError(`Evaluation ${evaluationId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      evaluation.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending action exists on this evaluation");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, action, comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, evaluation.workflowInstanceId);
+
+    let projectedStatus = evaluation.status;
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "approved";
+    } else if (workflowStatus.instanceStatus === "cancelled" || workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "rejected";
+    }
+
+    await this.repo.updateSupplierEvaluationProjection(actor.tenantId, {
+      evaluationId,
+      status: projectedStatus,
+      updatedBy: actor.userId,
+    });
+
+    return this.getSupplierEvaluation(actor, evaluationId);
+  }
+
+  async createSupplierContract(
+    actor: ActorContext,
+    input: Omit<CreateScmSupplierContractInput, "createdBy" | "contractNumber"> & {
+      contractNumber?: string;
+    },
+  ): Promise<SupplierContractDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+
+    const contractNumber =
+      (input.contractNumber ?? (await this.configuration.generateNumberForTenant(
+        actor.tenantId,
+        SCM_SUPPLIER_CONTRACT_NUMBERING_CODE,
+        actor.userId,
+      )).number);
+
+    const { contract, items } = await this.repo.createSupplierContract(actor.tenantId, {
+      ...input,
+      contractNumber,
+      createdBy: actor.userId,
+    });
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: SCM_SUPPLIER_CONTRACT_WORKFLOW_DEFINITION_CODE,
+        entityId: contract.id,
+        contextData: {
+          contractNumber,
+          title: contract.title,
+          supplierId: input.supplierId,
+          committedAmount: input.committedAmount,
+        },
+      });
+      workflowInstanceId = instance.id;
+      await this.repo.updateSupplierContractProjection(actor.tenantId, {
+        contractId: contract.id,
+        status: "pending_approval",
+        workflowInstanceId,
+        updatedBy: actor.userId,
+      });
+      contract.status = "pending_approval";
+      contract.workflowInstanceId = workflowInstanceId;
+    } catch (err) {
+      await this.repo.deleteSupplierContractWithoutWorkflow(actor.tenantId, contract.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.supplier_contract.created",
+      entityType: "scm_supplier_contract",
+      entityId: contract.id,
+      metadata: { contractNumber, supplierId: input.supplierId, committedAmount: input.committedAmount },
+    });
+
+    const status = workflowInstanceId ? await this.workflow.getEntityStatus(actor, workflowInstanceId) : null;
+    const availableActions = workflowInstanceId
+      ? (await this.workflow.getEntityWorkflowView(actor, workflowInstanceId)).availableActions
+      : [];
+
+    return { contract, items, status, availableActions };
+  }
+
+  async recordContractSpend(
+    actor: ActorContext,
+    contractId: string,
+    additionalSpentAmount: number,
+  ): Promise<SupplierContractDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    const existing = await this.repo.findSupplierContractById(actor.tenantId, contractId);
+    if (!existing) {
+      throw new NotFoundError("ScmSupplierContract", contractId);
+    }
+
+    await this.repo.recordSupplierContractSpend(actor.tenantId, {
+      contractId,
+      additionalSpentAmount,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.supplier_contract.spend_recorded",
+      entityType: "scm_supplier_contract",
+      entityId: contractId,
+      metadata: { additionalSpentAmount },
+    });
+
+    return this.getSupplierContract(actor, contractId);
+  }
+
+  async getSupplierContract(
+    actor: ActorContext,
+    contractId: string,
+  ): Promise<SupplierContractDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    const result = await this.repo.findSupplierContractById(actor.tenantId, contractId);
+    if (!result) {
+      throw new NotFoundError("ScmSupplierContract", contractId);
+    }
+
+    const instanceId = result.contract.workflowInstanceId;
+    let status: EntityWorkflowStatus | null = null;
+    let availableActions: EntityWorkflowAction[] = [];
+    if (instanceId) {
+      try {
+        status = await this.workflow.getEntityStatus(actor, instanceId);
+        const view = await this.workflow.getEntityWorkflowView(actor, instanceId);
+        availableActions = view.availableActions;
+      } catch {
+        // Stale or unassigned instance
+      }
+    }
+
+    return {
+      contract: result.contract,
+      items: result.items,
+      status,
+      availableActions,
+    };
+  }
+
+  async listSupplierContracts(
+    actor: ActorContext,
+    filter: ScmSupplierContractFilter = {},
+  ): Promise<Array<{ contract: ScmSupplierContract; status: EntityWorkflowStatus | null }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    const contracts = await this.repo.listSupplierContracts(actor.tenantId, filter);
+
+    return this.withWorkflowStatus(
+      actor,
+      contracts,
+      (c) => c.workflowInstanceId,
+      (contract, status) => ({ contract, status }),
+    );
+  }
+
+  async actOnSupplierContract(
+    actor: ActorContext,
+    contractId: string,
+    action: string,
+    comment?: string,
+  ): Promise<SupplierContractDetailView> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    const result = await this.repo.findSupplierContractById(actor.tenantId, contractId);
+    if (!result) {
+      throw new NotFoundError("ScmSupplierContract", contractId);
+    }
+
+    if (!result.contract.workflowInstanceId) {
+      throw new ValidationError(`Contract ${contractId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.contract.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending action exists on this contract");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, action, comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, result.contract.workflowInstanceId);
+
+    let projectedStatus = result.contract.status;
+    let closedAt: Date | undefined;
+    let approvedAt: Date | undefined;
+
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "active";
+      approvedAt = new Date();
+    } else if (workflowStatus.instanceStatus === "cancelled" || workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "terminated";
+      closedAt = new Date();
+    }
+
+    await this.repo.updateSupplierContractProjection(actor.tenantId, {
+      contractId,
+      status: projectedStatus,
+      approvedAt,
+      closedAt,
+      updatedBy: actor.userId,
+    });
+
+    return this.getSupplierContract(actor, contractId);
+  }
+
+  // =========================================================================
+  // 9. Spend Analytics (SCM-ADV-008)
+  // =========================================================================
+
+  async computeSpendSnapshot(
+    actor: ActorContext,
+    input: {
+      periodType: "monthly" | "quarterly" | "yearly";
+      periodStart: string;
+      periodEnd: string;
+      organizationUnitId?: string;
+    },
+  ): Promise<ScmSpendAnalyticsSnapshot> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.analytics.read");
+    await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
+
+    const snapshot = await this.repo.computeSpendAnalyticsSnapshot(actor.tenantId, {
+      periodType: input.periodType,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      organizationUnitId: input.organizationUnitId,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.spend_analytics.computed",
+      entityType: "scm_spend_snapshot",
+      entityId: snapshot.id,
+      metadata: {
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+        totalSpend: snapshot.totalSpend,
+      },
+    });
+
+    return snapshot;
+  }
+
+  async getSpendSnapshot(
+    actor: ActorContext,
+    snapshotId: string,
+  ): Promise<ScmSpendAnalyticsSnapshot> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.analytics.read");
+    const snapshot = await this.repo.findSpendAnalyticsSnapshotById(actor.tenantId, snapshotId);
+    if (!snapshot) {
+      throw new NotFoundError("ScmSpendAnalyticsSnapshot", snapshotId);
+    }
+    await this.assertOrganizationUnitInScope(actor, snapshot.organizationUnitId);
+    return snapshot;
+  }
+
+  async listSpendSnapshots(
+    actor: ActorContext,
+    filter: ScmSpendAnalyticsSnapshotFilter = {},
+  ): Promise<ScmSpendAnalyticsSnapshot[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.analytics.read");
+    const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(
+      actor,
+      filter.organizationUnitIds && filter.organizationUnitIds.length > 0
+        ? filter.organizationUnitIds[0]
+        : undefined,
+    );
+
+    return this.repo.listSpendAnalyticsSnapshots(actor.tenantId, {
+      ...filter,
+      organizationUnitIds: scopedOrgUnitIds ?? undefined,
+    });
+  }
+
+  // =========================================================================
+  // Data Scope & Hierarchy Authorization Helpers
+  // =========================================================================
+
+  private async assertWarehouseInScope(
+    actor: ActorContext,
+    warehouseId: string,
+  ): Promise<ScmWarehouse> {
+    const warehouse = await this.repo.findWarehouseById(actor.tenantId, warehouseId);
+    if (!warehouse) {
+      throw new NotFoundError("ScmWarehouse", warehouseId);
+    }
+    await this.assertOrganizationUnitInScope(actor, warehouse.organizationUnitId);
+    return warehouse;
+  }
+
+  private async assertOrganizationUnitInScope(
+    actor: ActorContext,
+    organizationUnitId: string | null | undefined,
+  ): Promise<void> {
+    if (organizationUnitId) {
+      await this.rbac.requireOrganizationUnitScope(actor.userId, organizationUnitId);
+    } else {
+      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      if (!hasTenant) {
+        throw new ForbiddenError("Tenant-wide scope required for tenant-level entities");
+      }
+    }
+  }
+
+  private async resolveScopedOrganizationUnitIds(
+    actor: ActorContext,
+    requestedOrgUnitId?: string | null,
+  ): Promise<string[] | null> {
+    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    if (requestedOrgUnitId) {
+      await this.rbac.requireOrganizationUnitScope(actor.userId, requestedOrgUnitId);
+      const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, [requestedOrgUnitId]);
+      return descendantIds.length > 0 ? descendantIds : [requestedOrgUnitId];
+    }
+    if (hasTenant) {
+      return null;
+    }
+    const assignments = await this.rbac.getAssignments(actor.userId);
+    const rootOrgUnitIds = assignments
+      .filter((a) => a.scopeType === "organization_unit" && a.scopeOrganizationUnitId)
+      .map((a) => a.scopeOrganizationUnitId as string);
+    if (rootOrgUnitIds.length === 0) {
+      return [];
+    }
+    const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, rootOrgUnitIds);
+    return descendantIds.length > 0 ? descendantIds : rootOrgUnitIds;
+  }
+
+  private async resolveScopedWarehouseIds(
+    actor: ActorContext,
+    requestedWarehouseId?: string | null,
+  ): Promise<string[] | null> {
+    if (requestedWarehouseId) {
+      await this.assertWarehouseInScope(actor, requestedWarehouseId);
+      return [requestedWarehouseId];
+    }
+    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    if (hasTenant) {
+      return null;
+    }
+    const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(actor);
+    const warehouses = await this.repo.listWarehouses(actor.tenantId, {
+      organizationUnitIds: scopedOrgUnitIds ?? undefined,
+    });
+    return warehouses.map((w) => w.id);
+  }
+
+  private async withWorkflowStatus<T, R>(
+    actor: ActorContext,
+    items: T[],
+    getWorkflowInstanceId: (item: T) => string | null,
+    combine: (item: T, status: EntityWorkflowStatus | null) => R,
+  ): Promise<R[]> {
+    const instanceIds = items
+      .map(getWorkflowInstanceId)
+      .filter((id): id is string => id !== null);
+    const statusRows = await this.workflow.getEntityStatuses(actor, instanceIds);
+    const statusByInstanceId = new Map(statusRows.map((s) => [s.instanceId, s]));
+    return items.map((item) => {
+      const id = getWorkflowInstanceId(item);
+      const status = id ? statusByInstanceId.get(id) ?? null : null;
+      return combine(item, status);
+    });
+  }
+
+  // =========================================================================
+  // ADR-0012 Entity Document Authorization Resolvers
+  // =========================================================================
+
+  async canAccessStockTransferForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
+    const transferResult = await this.repo.findStockTransferById(actor.tenantId, entityId);
+    if (!transferResult) return false;
+    try {
+      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.assertWarehouseInScope(actor, transferResult.transfer.fromWarehouseId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async canAccessStockOpnameForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
+    const opnameResult = await this.repo.findStockOpnameById(actor.tenantId, entityId);
+    if (!opnameResult) return false;
+    try {
+      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.assertWarehouseInScope(actor, opnameResult.opname.warehouseId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async canAccessRfqForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
+    const rfqResult = await this.repo.findRfqById(actor.tenantId, entityId);
+    if (!rfqResult) return false;
+    try {
+      await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+      await this.assertOrganizationUnitInScope(actor, rfqResult.rfq.organizationUnitId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async canAccessSupplierContractForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
+    const contractResult = await this.repo.findSupplierContractById(actor.tenantId, entityId);
+    if (!contractResult) return false;
+    try {
+      await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      return hasTenant;
+    } catch {
+      return false;
+    }
+  }
+
+  async canAccessLandedCostForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
+    const lcResult = await this.repo.findLandedCostById(actor.tenantId, entityId);
+    if (!lcResult) return false;
+    try {
+      await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
+      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      return hasTenant;
+    } catch {
+      return false;
+    }
+  }
+}

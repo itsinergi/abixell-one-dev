@@ -1116,6 +1116,198 @@ export const api = {
     body: { lineId: string; quantity: number; note?: string | null },
   ) => request<StockMovementResult>(`/purchase-orders/${id}/receipts`, { method: "POST", token, body }),
 
+  // --- Wave A5: Supply Chain Advanced (SCM-ADV-001…008) ------------------
+  // 1. Warehouses & Storage Locations
+  scmWarehouses: (token: string, query: { siteId?: string; organizationUnitId?: string; activeOnly?: boolean } = {}) => {
+    const qs = queryString(query);
+    return request<ScmWarehouse[]>(`/supply-chain/advanced/warehouses${qs}`, { token });
+  },
+  scmWarehouse: (token: string, id: string) =>
+    request<ScmWarehouse>(`/supply-chain/advanced/warehouses/${id}`, { token }),
+  createScmWarehouse: (token: string, body: CreateScmWarehouseBody) =>
+    request<ScmWarehouse>("/supply-chain/advanced/warehouses", { method: "POST", token, body }),
+  updateScmWarehouse: (token: string, id: string, body: UpdateScmWarehouseBody) =>
+    request<ScmWarehouse>(`/supply-chain/advanced/warehouses/${id}`, { method: "PATCH", token, body }),
+
+  scmWarehouseLocations: (token: string, query: { warehouseId?: string; activeOnly?: boolean } = {}) => {
+    const qs = queryString(query);
+    return request<ScmWarehouseLocation[]>(`/supply-chain/advanced/warehouse-locations${qs}`, { token });
+  },
+  scmWarehouseLocation: (token: string, id: string) =>
+    request<ScmWarehouseLocation>(`/supply-chain/advanced/warehouse-locations/${id}`, { token }),
+  createScmWarehouseLocation: (token: string, body: CreateScmWarehouseLocationBody) =>
+    request<ScmWarehouseLocation>("/supply-chain/advanced/warehouse-locations", { method: "POST", token, body }),
+  updateScmWarehouseLocation: (token: string, id: string, body: UpdateScmWarehouseLocationBody) =>
+    request<ScmWarehouseLocation>(`/supply-chain/advanced/warehouse-locations/${id}`, { method: "PATCH", token, body }),
+
+  // 2. Batches & Serials
+  scmBatches: (token: string, query: { itemId?: string; includeExpired?: boolean } = {}) => {
+    const qs = queryString(query);
+    return request<ScmItemBatch[]>(`/supply-chain/advanced/batches${qs}`, { token });
+  },
+  scmBatch: (token: string, id: string) =>
+    request<ScmItemBatch>(`/supply-chain/advanced/batches/${id}`, { token }),
+  createScmBatch: (token: string, body: CreateScmItemBatchBody) =>
+    request<ScmItemBatch>("/supply-chain/advanced/batches", { method: "POST", token, body }),
+
+  scmSerials: (token: string, query: { itemId?: string; warehouseId?: string; locationId?: string; batchId?: string; status?: ScmSerialStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmItemSerial[]>(`/supply-chain/advanced/serials${qs}`, { token });
+  },
+  scmSerial: (token: string, id: string) =>
+    request<ScmItemSerial>(`/supply-chain/advanced/serials/${id}`, { token }),
+  createScmSerial: (token: string, body: CreateScmItemSerialBody) =>
+    request<ScmItemSerial>("/supply-chain/advanced/serials", { method: "POST", token, body }),
+  updateScmSerial: (token: string, id: string, body: UpdateScmItemSerialBody) =>
+    request<ScmItemSerial>(`/supply-chain/advanced/serials/${id}`, { method: "PATCH", token, body }),
+
+  // 3. Stock Balances & Immutable Ledger Movements
+  scmAdvancedStockBalances: (token: string, query: { itemId?: string; warehouseId?: string; locationId?: string; batchId?: string } = {}) => {
+    const qs = queryString(query);
+    return request<ScmAdvancedStockBalance[]>(`/supply-chain/advanced/balances${qs}`, { token });
+  },
+  recordScmAdvancedStockMovement: (token: string, body: RecordScmAdvancedStockMovementBody) =>
+    request<ScmAdvancedStockMovement>("/supply-chain/advanced/movements", { method: "POST", token, body }),
+  scmAdvancedStockMovements: (token: string, query: { itemId?: string; warehouseId?: string; movementType?: ScmAdvancedStockMovementType; limit?: number } = {}) => {
+    const qs = queryString(query);
+    return request<ScmAdvancedStockMovement[]>(`/supply-chain/advanced/movements${qs}`, { token });
+  },
+
+  // 4. Reorder Policies & Reservations
+  scmReorderPolicies: (token: string, query: { itemId?: string; warehouseId?: string; activeOnly?: boolean } = {}) => {
+    const qs = queryString(query);
+    return request<ScmReorderPolicy[]>(`/supply-chain/advanced/reorder-policies${qs}`, { token });
+  },
+  upsertScmReorderPolicy: (token: string, body: UpsertScmReorderPolicyBody) =>
+    request<ScmReorderPolicy>("/supply-chain/advanced/reorder-policies", { method: "PUT", token, body }),
+  scmReorderAlerts: (token: string, warehouseId?: string) => {
+    const qs = warehouseId ? `?warehouseId=${encodeURIComponent(warehouseId)}` : "";
+    return request<ScmReorderAlert[]>(`/supply-chain/advanced/reorder-alerts${qs}`, { token });
+  },
+  scmStockReservations: (token: string, query: { itemId?: string; warehouseId?: string; status?: ScmReservationStatus; reservedForType?: string } = {}) => {
+    const qs = queryString(query);
+    return request<ScmStockReservation[]>(`/supply-chain/advanced/reservations${qs}`, { token });
+  },
+  createScmStockReservation: (token: string, body: CreateScmStockReservationBody) =>
+    request<ScmStockReservation>("/supply-chain/advanced/reservations", { method: "POST", token, body }),
+  fulfillScmStockReservation: (token: string, id: string) =>
+    request<ScmStockReservation>(`/supply-chain/advanced/reservations/${id}/fulfill`, { method: "POST", token }),
+  cancelScmStockReservation: (token: string, id: string) =>
+    request<ScmStockReservation>(`/supply-chain/advanced/reservations/${id}/cancel`, { method: "POST", token }),
+
+  // 5. Stock Transfers & Opnames
+  scmStockTransfers: (token: string, query: { fromWarehouseId?: string; toWarehouseId?: string; status?: ScmTransferStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmStockTransfer[]>(`/supply-chain/advanced/transfers${qs}`, { token });
+  },
+  scmStockTransfer: (token: string, id: string) =>
+    request<ScmStockTransferDetail>(`/supply-chain/advanced/transfers/${id}`, { token }),
+  createScmStockTransfer: (token: string, body: CreateScmStockTransferBody) =>
+    request<ScmStockTransfer>("/supply-chain/advanced/transfers", { method: "POST", token, body }),
+  actOnScmStockTransfer: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ transfer: ScmStockTransfer; workflowResult: unknown }>(`/supply-chain/advanced/transfers/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+  recordScmStockTransferShipment: (token: string, body: RecordScmStockTransferShipmentBody) =>
+    request<ScmStockTransferDetail>("/supply-chain/advanced/transfers/shipments", { method: "POST", token, body }),
+  recordScmStockTransferReceipt: (token: string, body: RecordScmStockTransferReceiptBody) =>
+    request<ScmStockTransferDetail>("/supply-chain/advanced/transfers/receipts", { method: "POST", token, body }),
+
+  scmStockOpnames: (token: string, query: { warehouseId?: string; status?: ScmOpnameStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmStockOpname[]>(`/supply-chain/advanced/opnames${qs}`, { token });
+  },
+  scmStockOpname: (token: string, id: string) =>
+    request<ScmStockOpnameDetail>(`/supply-chain/advanced/opnames/${id}`, { token }),
+  createScmStockOpname: (token: string, body: CreateScmStockOpnameBody) =>
+    request<ScmStockOpname>("/supply-chain/advanced/opnames", { method: "POST", token, body }),
+  recordScmStockOpnameCount: (token: string, body: RecordScmStockOpnameCountBody) =>
+    request<ScmStockOpnameLine>("/supply-chain/advanced/opnames/counts", { method: "POST", token, body }),
+  actOnScmStockOpname: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ opname: ScmStockOpname; workflowResult: unknown }>(`/supply-chain/advanced/opnames/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+
+  // 6. Valuation & Landed Cost
+  scmValuationLayers: (token: string, query: { itemId?: string; warehouseId?: string } = {}) => {
+    const qs = queryString(query);
+    return request<ScmValuationLayer[]>(`/supply-chain/advanced/valuation-layers${qs}`, { token });
+  },
+  createScmValuationLayer: (token: string, body: CreateScmValuationLayerBody) =>
+    request<ScmValuationLayer>("/supply-chain/advanced/valuation-layers", { method: "POST", token, body }),
+  consumeScmValuationLayer: (token: string, body: { layerId: string; remainingQuantity: number }) =>
+    request<ScmValuationLayer>("/supply-chain/advanced/valuation-layers/consume", { method: "POST", token, body }),
+  scmLandedCosts: (token: string, query: { purchaseOrderId?: string; status?: ScmLandedCostStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmLandedCost[]>(`/supply-chain/advanced/landed-costs${qs}`, { token });
+  },
+  scmLandedCost: (token: string, id: string) =>
+    request<ScmLandedCostDetail>(`/supply-chain/advanced/landed-costs/${id}`, { token }),
+  createScmLandedCost: (token: string, body: CreateScmLandedCostBody) =>
+    request<ScmLandedCost>("/supply-chain/advanced/landed-costs", { method: "POST", token, body }),
+  applyScmLandedCost: (token: string, id: string) =>
+    request<ScmLandedCostDetail>(`/supply-chain/advanced/landed-costs/${id}/apply`, { method: "POST", token }),
+
+  // 7. RFQs, Tenders & Bid Comparisons
+  scmRfqs: (token: string, query: { procurementType?: ScmProcurementType; status?: ScmRfqStatus; organizationUnitId?: string } = {}) => {
+    const qs = queryString(query);
+    return request<ScmRfq[]>(`/supply-chain/advanced/rfqs${qs}`, { token });
+  },
+  scmRfq: (token: string, id: string) =>
+    request<ScmRfqDetail>(`/supply-chain/advanced/rfqs/${id}`, { token }),
+  createScmRfq: (token: string, body: CreateScmRfqBody) =>
+    request<ScmRfq>("/supply-chain/advanced/rfqs", { method: "POST", token, body }),
+  actOnScmRfq: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ rfq: ScmRfq; workflowResult: unknown }>(`/supply-chain/advanced/rfqs/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+  submitScmSupplierBid: (token: string, body: SubmitScmSupplierBidBody) =>
+    request<ScmSupplierBid>("/supply-chain/advanced/bids", { method: "POST", token, body }),
+  scmSupplierBid: (token: string, id: string) =>
+    request<ScmSupplierBidDetail>(`/supply-chain/advanced/bids/${id}`, { token }),
+  scoreScmSupplierBid: (token: string, id: string, body: ScoreScmSupplierBidBody) =>
+    request<ScmSupplierBid>(`/supply-chain/advanced/bids/${id}/score`, { method: "PATCH", token, body }),
+  awardScmSupplierBid: (token: string, body: { bidId: string; resultingPurchaseOrderId?: string | null }) =>
+    request<ScmSupplierBid>("/supply-chain/advanced/bids/award", { method: "POST", token, body }),
+
+  // 8. Supplier Evaluations & Contracts
+  scmSupplierEvaluations: (token: string, query: { supplierId?: string; status?: ScmSupplierEvaluationStatus; ratingGrade?: ScmSupplierRatingGrade } = {}) => {
+    const qs = queryString(query);
+    return request<ScmSupplierEvaluation[]>(`/supply-chain/advanced/evaluations${qs}`, { token });
+  },
+  scmSupplierEvaluation: (token: string, id: string) =>
+    request<ScmSupplierEvaluationDetail>(`/supply-chain/advanced/evaluations/${id}`, { token }),
+  createScmSupplierEvaluation: (token: string, body: CreateScmSupplierEvaluationBody) =>
+    request<ScmSupplierEvaluation>("/supply-chain/advanced/evaluations", { method: "POST", token, body }),
+  actOnScmSupplierEvaluation: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ evaluation: ScmSupplierEvaluation; workflowResult: unknown }>(`/supply-chain/advanced/evaluations/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+  scmSupplierContracts: (token: string, query: { supplierId?: string; contractType?: ScmSupplierContractType; status?: ScmSupplierContractStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmSupplierContract[]>(`/supply-chain/advanced/contracts${qs}`, { token });
+  },
+  scmSupplierContract: (token: string, id: string) =>
+    request<ScmSupplierContractDetail>(`/supply-chain/advanced/contracts/${id}`, { token }),
+  createScmSupplierContract: (token: string, body: CreateScmSupplierContractBody) =>
+    request<ScmSupplierContract>("/supply-chain/advanced/contracts", { method: "POST", token, body }),
+  recordScmSupplierContractSpend: (token: string, id: string, additionalSpentAmount: number) =>
+    request<ScmSupplierContract>(`/supply-chain/advanced/contracts/${id}/spend`, {
+      method: "POST", token, body: { additionalSpentAmount },
+    }),
+  actOnScmSupplierContract: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<{ contract: ScmSupplierContract; workflowResult: unknown }>(`/supply-chain/advanced/contracts/${id}/act`, {
+      method: "POST", token, body: { actionCode, comment: comment ?? null },
+    }),
+
+  // 9. Spend Analytics
+  computeScmSpendSnapshot: (token: string, body: ComputeScmSpendSnapshotBody) =>
+    request<ScmSpendAnalyticsSnapshot[]>("/supply-chain/advanced/spend-analytics/compute", { method: "POST", token, body }),
+  scmSpendSnapshots: (token: string, query: { periodType?: ScmSpendAnalyticsPeriodType; organizationUnitId?: string } = {}) => {
+    const qs = queryString(query);
+    return request<ScmSpendAnalyticsSnapshot[]>(`/supply-chain/advanced/spend-analytics${qs}`, { token });
+  },
+
   // --- Asset (Phase 5) --------------------------------------------------
   assets: (token: string, query: AssetQuery = {}) => {
     const qs = new URLSearchParams();
@@ -2584,6 +2776,776 @@ export type PurchaseOrderDetail = {
   lines: PurchaseOrderLineRecord[];
   supplier: SupplierRecord | null;
   state: string;
+};
+
+// --- Wave A5 Supply Chain Advanced types (SCM-ADV-001…008) -------------
+
+export type ScmSerialStatus =
+  | "in_stock"
+  | "reserved"
+  | "issued"
+  | "in_transit"
+  | "disposed"
+  | "maintenance";
+
+export type ScmAdvancedStockMovementType =
+  | "in"
+  | "out"
+  | "transfer_in"
+  | "transfer_out"
+  | "adjustment_in"
+  | "adjustment_out"
+  | "opname_in"
+  | "opname_out";
+
+export type ScmReservationStatus = "active" | "fulfilled" | "cancelled" | "expired";
+export type ScmTransferStatus = "draft" | "approved" | "in_transit" | "received" | "cancelled";
+export type ScmOpnameStatus = "draft" | "in_progress" | "completed" | "approved" | "adjusted" | "cancelled";
+export type ScmProcurementType = "rfq" | "tender" | "direct_sourcing";
+export type ScmRfqStatus = "draft" | "published" | "in_evaluation" | "awarded" | "cancelled" | "closed";
+export type ScmSupplierBidStatus = "submitted" | "evaluated" | "shortlisted" | "awarded" | "rejected";
+export type ScmSupplierEvaluationStatus = "draft" | "submitted" | "approved" | "rejected";
+export type ScmSupplierRatingGrade = "A" | "B" | "C" | "D" | "E";
+export type ScmSupplierContractType = "blanket_po" | "fixed_price" | "service_rate" | "consignment";
+export type ScmSupplierContractStatus = "draft" | "pending_approval" | "active" | "expired" | "terminated" | "closed";
+export type ScmLandedCostStatus = "draft" | "applied" | "cancelled";
+export type ScmLandedCostAllocationMethod = "by_value" | "by_quantity" | "by_weight" | "equal";
+export type ScmSpendAnalyticsPeriodType = "monthly" | "quarterly" | "yearly";
+
+export type ScmWorkflowStatus = {
+  stepCode: string | null;
+  stepName: string | null;
+  instanceStatus: "in_progress" | "approved" | "rejected" | "cancelled";
+  sla: { dueAt: string | null; slaHours: number | null } | null;
+  assignment: { roleCode: string | null; userId: string | null; isMine: boolean } | null;
+};
+
+export type ScmWarehouse = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  siteId: string | null;
+  organizationUnitId: string | null;
+  address: string | null;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type CreateScmWarehouseBody = {
+  code: string;
+  name: string;
+  siteId?: string | null;
+  organizationUnitId?: string | null;
+  address?: string | null;
+  isActive?: boolean;
+};
+
+export type UpdateScmWarehouseBody = {
+  name?: string;
+  siteId?: string | null;
+  organizationUnitId?: string | null;
+  address?: string | null;
+  isActive?: boolean;
+};
+
+export type ScmWarehouseLocation = {
+  id: string;
+  tenantId: string;
+  warehouseId: string;
+  code: string;
+  zone: string | null;
+  aisle: string | null;
+  rack: string | null;
+  shelf: string | null;
+  bin: string | null;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type CreateScmWarehouseLocationBody = {
+  warehouseId: string;
+  code: string;
+  zone?: string | null;
+  aisle?: string | null;
+  rack?: string | null;
+  shelf?: string | null;
+  bin?: string | null;
+  isActive?: boolean;
+};
+
+export type UpdateScmWarehouseLocationBody = {
+  zone?: string | null;
+  aisle?: string | null;
+  rack?: string | null;
+  shelf?: string | null;
+  bin?: string | null;
+  isActive?: boolean;
+};
+
+export type ScmItemBatch = {
+  id: string;
+  tenantId: string;
+  itemId: string;
+  batchNumber: string;
+  manufacturedDate: string | null;
+  expiryDate: string | null;
+  supplierId: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type CreateScmItemBatchBody = {
+  itemId: string;
+  batchNumber?: string;
+  manufacturedDate?: string | null;
+  expiryDate?: string | null;
+  supplierId?: string | null;
+  notes?: string | null;
+  isActive?: boolean;
+};
+
+export type ScmItemSerial = {
+  id: string;
+  tenantId: string;
+  itemId: string;
+  serialNumber: string;
+  batchId: string | null;
+  warehouseId: string | null;
+  locationId: string | null;
+  status: ScmSerialStatus;
+  warrantyExpiryDate: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type CreateScmItemSerialBody = {
+  itemId: string;
+  serialNumber: string;
+  batchId?: string | null;
+  warehouseId?: string | null;
+  locationId?: string | null;
+  status?: ScmSerialStatus;
+  warrantyExpiryDate?: string | null;
+  notes?: string | null;
+};
+
+export type UpdateScmItemSerialBody = {
+  batchId?: string | null;
+  warehouseId?: string | null;
+  locationId?: string | null;
+  status?: ScmSerialStatus;
+  warrantyExpiryDate?: string | null;
+  notes?: string | null;
+};
+
+export type ScmAdvancedStockBalance = {
+  id: string;
+  tenantId: string;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  quantity: number;
+  reservedQty: number;
+  availableQuantity: number;
+  updatedAt: string;
+};
+
+export type ScmAdvancedStockMovement = {
+  id: string;
+  tenantId: string;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  serialId: string | null;
+  movementType: ScmAdvancedStockMovementType;
+  quantity: number;
+  unitCost: number | null;
+  totalCost: number | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  referenceNumber: string | null;
+  notes: string | null;
+  occurredAt: string;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+export type RecordScmAdvancedStockMovementBody = {
+  itemId: string;
+  warehouseId: string;
+  locationId?: string | null;
+  batchId?: string | null;
+  serialId?: string | null;
+  movementType: ScmAdvancedStockMovementType;
+  quantity: number;
+  unitCost?: number;
+  totalCost?: number;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  referenceNumber?: string | null;
+  notes?: string | null;
+  occurredAt?: string;
+};
+
+export type ScmReorderPolicy = {
+  id: string;
+  tenantId: string;
+  itemId: string;
+  warehouseId: string | null;
+  minQuantity: number;
+  reorderPoint: number;
+  reorderQuantity: number;
+  safetyStock: number;
+  leadTimeDays: number;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type UpsertScmReorderPolicyBody = {
+  itemId: string;
+  warehouseId?: string | null;
+  minQuantity: number;
+  reorderPoint: number;
+  reorderQuantity: number;
+  safetyStock?: number;
+  leadTimeDays?: number;
+  isActive?: boolean;
+};
+
+export type ScmReorderAlert = {
+  itemId: string;
+  warehouseId: string | null;
+  currentBalance: number;
+  reorderPoint: number;
+  reorderQuantity: number;
+  minQuantity: number;
+  suggestedReorderQuantity: number;
+};
+
+export type ScmStockReservation = {
+  id: string;
+  tenantId: string;
+  reservationNumber: string;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  quantity: number;
+  reservedForType: string;
+  reservedForId: string | null;
+  reservedForNumber: string | null;
+  status: ScmReservationStatus;
+  validUntil: string | null;
+  fulfilledAt: string | null;
+  cancelledAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type CreateScmStockReservationBody = {
+  reservationNumber: string;
+  itemId: string;
+  warehouseId: string;
+  locationId?: string | null;
+  batchId?: string | null;
+  quantity: number;
+  reservedForType: string;
+  reservedForId?: string | null;
+  reservedForNumber?: string | null;
+  validUntil?: string | null;
+  notes?: string | null;
+};
+
+export type ScmStockTransferLine = {
+  id: string;
+  tenantId: string;
+  transferId: string;
+  itemId: string;
+  fromLocationId: string | null;
+  toLocationId: string | null;
+  batchId: string | null;
+  quantityRequested: number;
+  quantityShipped: number;
+  quantityReceived: number;
+  notes: string | null;
+  sortOrder: number;
+};
+
+export type ScmStockTransfer = {
+  id: string;
+  tenantId: string;
+  transferNumber: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  status: ScmTransferStatus;
+  shippedAt: string | null;
+  receivedAt: string | null;
+  cancelledAt: string | null;
+  workflowInstanceId: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type ScmStockTransferDetail = {
+  transfer: ScmStockTransfer;
+  lines: ScmStockTransferLine[];
+  status: ScmWorkflowStatus | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type CreateScmStockTransferBody = {
+  transferNumber?: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  notes?: string | null;
+  lines: {
+    itemId: string;
+    quantityRequested: number;
+    batchId?: string | null;
+    fromLocationId?: string | null;
+    toLocationId?: string | null;
+    notes?: string | null;
+    sortOrder?: number;
+  }[];
+};
+
+export type RecordScmStockTransferShipmentBody = {
+  transferId: string;
+  lineShipments: { lineId: string; quantityShipped: number }[];
+};
+
+export type RecordScmStockTransferReceiptBody = {
+  transferId: string;
+  lineReceipts: { lineId: string; quantityReceived: number }[];
+};
+
+export type ScmStockOpnameLine = {
+  id: string;
+  tenantId: string;
+  opnameId: string;
+  itemId: string;
+  locationId: string | null;
+  batchId: string | null;
+  systemQuantity: number;
+  physicalQuantity: number | null;
+  varianceQuantity: number | null;
+  adjustmentMovementId: string | null;
+  notes: string | null;
+  sortOrder: number;
+};
+
+export type ScmStockOpname = {
+  id: string;
+  tenantId: string;
+  opnameNumber: string;
+  warehouseId: string;
+  opnameDate: string;
+  status: ScmOpnameStatus;
+  workflowInstanceId: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type ScmStockOpnameDetail = {
+  opname: ScmStockOpname;
+  lines: ScmStockOpnameLine[];
+  status: ScmWorkflowStatus | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type CreateScmStockOpnameBody = {
+  warehouseId: string;
+  opnameDate: string;
+  opnameNumber?: string;
+  notes?: string | null;
+  lines: {
+    itemId: string;
+    locationId?: string | null;
+    batchId?: string | null;
+    systemQuantity: number;
+    physicalQuantity?: number | null;
+    notes?: string | null;
+    sortOrder?: number;
+  }[];
+};
+
+export type RecordScmStockOpnameCountBody = {
+  lineId: string;
+  physicalQuantity: number;
+};
+
+export type ScmValuationLayer = {
+  id: string;
+  tenantId: string;
+  itemId: string;
+  warehouseId: string | null;
+  receiptMovementId: string | null;
+  receivedDate: string;
+  originalQuantity: number;
+  remainingQuantity: number;
+  unitCost: number;
+  landedCostAdded: number;
+  effectiveUnitCost: number;
+  totalValue: number;
+  createdAt: string;
+};
+
+export type CreateScmValuationLayerBody = {
+  itemId: string;
+  warehouseId?: string | null;
+  receiptMovementId?: string | null;
+  receivedDate: string;
+  originalQuantity: number;
+  remainingQuantity: number;
+  unitCost: number;
+  landedCostAdded?: number;
+  effectiveUnitCost: number;
+  totalValue: number;
+};
+
+export type ScmLandedCostAllocation = {
+  id: string;
+  tenantId: string;
+  landedCostId: string;
+  itemId: string;
+  valuationLayerId: string | null;
+  allocatedAmount: number;
+  costPerUnitAdded: number;
+};
+
+export type ScmLandedCost = {
+  id: string;
+  tenantId: string;
+  voucherNumber: string;
+  purchaseOrderId: string;
+  costType: string;
+  currency: string;
+  amount: number;
+  allocationMethod: ScmLandedCostAllocationMethod;
+  status: ScmLandedCostStatus;
+  appliedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type ScmLandedCostDetail = {
+  landedCost: ScmLandedCost;
+  allocations: ScmLandedCostAllocation[];
+};
+
+export type CreateScmLandedCostBody = {
+  purchaseOrderId: string;
+  costType: string;
+  currency?: string;
+  amount: number;
+  allocationMethod: ScmLandedCostAllocationMethod;
+  voucherNumber?: string;
+  notes?: string | null;
+  allocations: {
+    itemId: string;
+    valuationLayerId?: string | null;
+    allocatedAmount: number;
+    costPerUnitAdded: number;
+  }[];
+};
+
+export type ScmRfqItem = {
+  id: string;
+  tenantId: string;
+  rfqId: string;
+  itemId: string;
+  targetQuantity: number;
+  targetUnitPrice: number | null;
+  specifications: string | null;
+  sortOrder: number;
+};
+
+export type ScmRfqInvitedSupplier = {
+  id: string;
+  tenantId: string;
+  rfqId: string;
+  supplierId: string;
+  invitedAt: string;
+  respondedAt: string | null;
+};
+
+export type ScmSupplierBidLine = {
+  id: string;
+  tenantId: string;
+  bidId: string;
+  rfqItemId: string;
+  offeredQuantity: number;
+  offeredUnitPrice: number;
+  offeredTotalPrice: number;
+  remarks: string | null;
+};
+
+export type ScmSupplierBid = {
+  id: string;
+  tenantId: string;
+  bidNumber: string;
+  rfqId: string;
+  supplierId: string;
+  submittedAt: string;
+  currency: string;
+  totalAmount: number;
+  leadTimeDays: number;
+  validUntil: string | null;
+  status: ScmSupplierBidStatus;
+  technicalScore: number | null;
+  commercialScore: number | null;
+  finalScore: number | null;
+  rank: number | null;
+  isWinningBid: boolean;
+  resultingPurchaseOrderId: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type ScmSupplierBidDetail = {
+  bid: ScmSupplierBid;
+  lines: ScmSupplierBidLine[];
+};
+
+export type ScmRfq = {
+  id: string;
+  tenantId: string;
+  rfqNumber: string;
+  title: string;
+  procurementType: ScmProcurementType;
+  organizationUnitId: string | null;
+  purchaseRequestId: string | null;
+  submissionDeadline: string;
+  status: ScmRfqStatus;
+  workflowInstanceId: string | null;
+  awardedAt: string | null;
+  cancelledAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type ScmRfqDetail = {
+  rfq: ScmRfq;
+  items: ScmRfqItem[];
+  invitedSuppliers: ScmRfqInvitedSupplier[];
+  bids: ScmSupplierBid[];
+  status: ScmWorkflowStatus | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type CreateScmRfqBody = {
+  title: string;
+  procurementType: ScmProcurementType;
+  organizationUnitId?: string | null;
+  purchaseRequestId?: string | null;
+  submissionDeadline: string;
+  rfqNumber?: string;
+  notes?: string | null;
+  items: {
+    itemId: string;
+    targetQuantity: number;
+    targetUnitPrice?: number | null;
+    specifications?: string | null;
+    sortOrder?: number;
+  }[];
+  invitedSuppliers?: {
+    supplierId: string;
+    respondedAt?: string | null;
+  }[];
+};
+
+export type SubmitScmSupplierBidBody = {
+  rfqId: string;
+  supplierId: string;
+  currency?: string;
+  totalAmount?: number;
+  bidNumber?: string;
+  validUntil?: string | null;
+  leadTimeDays?: number;
+  notes?: string | null;
+  lines: {
+    rfqItemId: string;
+    offeredQuantity: number;
+    offeredUnitPrice: number;
+    offeredTotalPrice: number;
+    remarks?: string | null;
+  }[];
+};
+
+export type ScoreScmSupplierBidBody = {
+  commercialScore?: number | null;
+  technicalScore?: number | null;
+  rank?: number | null;
+  status?: ScmSupplierBidStatus;
+};
+
+export type ScmSupplierEvaluation = {
+  id: string;
+  tenantId: string;
+  evaluationNumber: string;
+  supplierId: string;
+  evaluationPeriod: string;
+  periodStartDate: string;
+  periodEndDate: string;
+  qualityScore: number;
+  deliveryScore: number;
+  pricingScore: number;
+  serviceScore: number;
+  overallScore: number;
+  ratingGrade: ScmSupplierRatingGrade;
+  status: ScmSupplierEvaluationStatus;
+  workflowInstanceId: string | null;
+  notes: string | null;
+  evaluatedBy: string | null;
+  evaluatedAt: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type ScmSupplierEvaluationDetail = {
+  evaluation: ScmSupplierEvaluation;
+  status: ScmWorkflowStatus | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type CreateScmSupplierEvaluationBody = {
+  supplierId: string;
+  evaluationPeriod: string;
+  periodStartDate: string;
+  periodEndDate: string;
+  qualityScore?: number;
+  deliveryScore?: number;
+  pricingScore?: number;
+  serviceScore?: number;
+  evaluationNumber?: string;
+  notes?: string | null;
+};
+
+export type ScmSupplierContractItem = {
+  id: string;
+  tenantId: string;
+  contractId: string;
+  itemId: string;
+  agreedUnitPrice: number;
+  minOrderQuantity: number;
+  maxOrderQuantity: number | null;
+  leadTimeDays: number;
+  notes: string | null;
+};
+
+export type ScmSupplierContract = {
+  id: string;
+  tenantId: string;
+  contractNumber: string;
+  supplierId: string;
+  title: string;
+  contractType: ScmSupplierContractType;
+  startDate: string;
+  endDate: string;
+  currency: string;
+  committedAmount: number;
+  spentAmount: number;
+  status: ScmSupplierContractStatus;
+  workflowInstanceId: string | null;
+  termsAndConditions: string | null;
+  approvedAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+export type ScmSupplierContractDetail = {
+  contract: ScmSupplierContract;
+  items: ScmSupplierContractItem[];
+  status: ScmWorkflowStatus | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type CreateScmSupplierContractBody = {
+  supplierId: string;
+  title: string;
+  contractType: ScmSupplierContractType;
+  startDate: string;
+  endDate: string;
+  currency?: string;
+  committedAmount?: number;
+  termsAndConditions?: string | null;
+  contractNumber?: string;
+  items: {
+    itemId: string;
+    agreedUnitPrice: number;
+    minOrderQuantity?: number;
+    maxOrderQuantity?: number | null;
+    leadTimeDays?: number;
+    notes?: string | null;
+  }[];
+};
+
+export type ScmSpendAnalyticsSnapshot = {
+  id: string;
+  tenantId: string;
+  snapshotDate: string;
+  periodType: ScmSpendAnalyticsPeriodType;
+  periodKey: string;
+  organizationUnitId: string | null;
+  supplierId: string | null;
+  itemCategory: string | null;
+  totalSpend: number;
+  poCount: number;
+  itemsPurchasedCount: number;
+  avgPoValue: number;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type ComputeScmSpendSnapshotBody = {
+  periodType: ScmSpendAnalyticsPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  organizationUnitId?: string;
 };
 
 // --- Wave A4 Workforce Advanced types ----------------------------------

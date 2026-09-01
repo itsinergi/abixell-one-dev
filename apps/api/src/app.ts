@@ -39,6 +39,7 @@ import { registerServiceOperationsAdvancedRoutes } from "./modules/service-opera
 import { registerWorkforceRoutes } from "./modules/workforce/core/api/workforce.routes.js";
 import { registerWorkforceAdvancedRoutes } from "./modules/workforce/advanced/api/workforce-advanced.routes.js";
 import { registerSupplyChainRoutes } from "./modules/supply-chain/core/api/supply-chain.routes.js";
+import { registerSupplyChainAdvancedRoutes } from "./modules/supply-chain/advanced/api/supply-chain-advanced.routes.js";
 import { registerAssetRoutes } from "./modules/asset/core/api/asset.routes.js";
 import { registerAssetAdvancedRoutes } from "./modules/asset/advanced/api/asset-advanced.routes.js";
 import { registerFinanceRoutes } from "./modules/finance/core/api/finance.routes.js";
@@ -158,6 +159,7 @@ export function buildApp(): FastifyInstance {
     registerWorkforceRoutes(scoped, container);
     registerWorkforceAdvancedRoutes(scoped, container);
     registerSupplyChainRoutes(scoped, container);
+    registerSupplyChainAdvancedRoutes(scoped, container);
     registerAssetRoutes(scoped, container);
     registerAssetAdvancedRoutes(scoped, container);
     registerFinanceRoutes(scoped, container);

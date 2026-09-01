@@ -70,6 +70,8 @@ import { PgWorkforceAdvancedRepository } from "./modules/workforce/advanced/infr
 import { WorkforceAdvancedService } from "./modules/workforce/advanced/application/workforce-advanced.service.js";
 import { PgSupplyChainRepository } from "./modules/supply-chain/core/infrastructure/supply-chain.repository.pg.js";
 import { SupplyChainService } from "./modules/supply-chain/core/application/supply-chain.service.js";
+import { PgSupplyChainAdvancedRepository } from "./modules/supply-chain/advanced/infrastructure/supply-chain-advanced.repository.pg.js";
+import { SupplyChainAdvancedService } from "./modules/supply-chain/advanced/application/supply-chain-advanced.service.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
 import { PgServiceOperationsAdvancedRepository } from "./modules/service-operations/advanced/infrastructure/service-operations-advanced.repository.pg.js";
@@ -273,6 +275,17 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Wave A5 / SCM-ADV-001…008 — Supply Chain Advanced extends inventory,
+  // valuation, procurement/tendering, vendor contracts, and spend analytics.
+  const supplyChainAdvanced = new SupplyChainAdvancedService(
+    new PgSupplyChainAdvancedRepository(pool),
+    rbac,
+    audit,
+    workflow,
+    eventBus,
+    configuration,
+  );
+
   // Phase 5 — Asset Core. Built before DocumentService so its `asset` Entity
   // Authorization Resolver can close over `asset.canAccessForDocument`
   // (ADR-0012). Asset documents are gated by a dedicated capability AND the
@@ -448,6 +461,26 @@ export function buildContainer() {
       "workforce_training_enrollment",
       { canAccess: (actor, entityId) => workforceAdvanced.canAccessTrainingEnrollmentForDocument(actor, entityId) },
     ],
+    [
+      "scm_stock_transfer",
+      { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessStockTransferForDocument(actor, entityId) },
+    ],
+    [
+      "scm_stock_opname",
+      { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessStockOpnameForDocument(actor, entityId) },
+    ],
+    [
+      "scm_rfq",
+      { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessRfqForDocument(actor, entityId) },
+    ],
+    [
+      "scm_supplier_contract",
+      { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessSupplierContractForDocument(actor, entityId) },
+    ],
+    [
+      "scm_landed_cost",
+      { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessLandedCostForDocument(actor, entityId) },
+    ],
   ]);
   const document = new DocumentService(
     documentRepo,
@@ -620,6 +653,7 @@ export function buildContainer() {
     workforce,
     workforceAdvanced,
     supplyChain,
+    supplyChainAdvanced,
     asset,
     assetAdvanced,
     finance,
