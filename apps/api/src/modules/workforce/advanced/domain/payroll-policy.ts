@@ -12,6 +12,7 @@
  * - Decimal rounding is deterministic and governed by `policy.roundingMode`.
  */
 
+import { ValidationError } from "../../../../domain/shared-kernel/errors.js";
 import type {
   PphBracket,
   PtkpStatus,
@@ -70,10 +71,73 @@ export interface PayrollCalculationResult {
 }
 
 export const RATE_SCALE = 1_000_000n;
+const MONETARY_SCALE = 2;
+const RATE_DECIMAL_SCALE = 6;
 
+/**
+ * Parses a finite JavaScript `number` into an exact scaled `bigint` using
+ * string-decimal decomposition — never `value * 10 ** scale`, which can
+ * introduce IEEE-754 drift (e.g. `1.005 * 100` is `100.49999999999999` in
+ * native floating point, not `100.5`).
+ *
+ * Fails closed (throws `ValidationError`, mapped to HTTP 400) rather than
+ * silently rounding or truncating when:
+ * - the value is not a finite number (`NaN`, `Infinity`, `-Infinity`, or a
+ *   non-number);
+ * - the value is expressed in exponential notation (`Number.toString()`
+ *   switches to exponential form outside a fixed range, at which point
+ *   naive string decomposition would be wrong);
+ * - the value carries more fractional decimal digits than `maxScale`
+ *   permits — this is the exact-scale contract boundary (2 decimals for
+ *   monetary amounts matching the `NUMERIC(15,2)`/`NUMERIC(18,2)` payroll
+ *   columns, 6 decimals for statutory rate ratios matching `NUMERIC(9,6)`
+ *   and this module's `RATE_SCALE`).
+ */
+function parseExactDecimalToScaledBigInt(value: number, maxScale: number, label: string): bigint {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ValidationError(`${label} must be a finite number`, { value });
+  }
+  const text = value.toString();
+  if (text.includes("e") || text.includes("E")) {
+    throw new ValidationError(
+      `${label} cannot be represented in exponential notation for exact decimal conversion: ${text}`,
+      { value },
+    );
+  }
+  const isNegative = text.startsWith("-");
+  const unsigned = isNegative ? text.slice(1) : text;
+  const [intPart, fracPart = ""] = unsigned.split(".");
+  if (fracPart.length > maxScale) {
+    throw new ValidationError(
+      `${label} exceeds the maximum of ${maxScale} decimal place(s): ${text}`,
+      { value, maxScale },
+    );
+  }
+  const paddedFrac = fracPart.padEnd(maxScale, "0");
+  const scaled = BigInt(intPart || "0") * 10n ** BigInt(maxScale) + BigInt(paddedFrac || "0");
+  return isNegative ? -scaled : scaled;
+}
+
+/**
+ * Converts a monetary nominal `number` (at most 2 decimal places, matching
+ * every payroll `NUMERIC(15,2)`/`NUMERIC(18,2)` column) into exact cents.
+ * Fails closed — see `parseExactDecimalToScaledBigInt` — instead of
+ * `Math.round(nominal * 100)`, which both silently coerced non-finite
+ * input to `0n` and could misround boundary values such as `1.005`.
+ */
 export function toCents(nominal: number): bigint {
-  if (!Number.isFinite(nominal)) return 0n;
-  return BigInt(Math.round(nominal * 100));
+  return parseExactDecimalToScaledBigInt(nominal, MONETARY_SCALE, "Monetary amount");
+}
+
+/**
+ * Converts a dimensionless ratio (statutory rate, e.g. `0.005`) or a
+ * quantity reused through the same rate-multiplication path (overtime
+ * hours) into an exact integer scaled by `RATE_SCALE` (10^6), matching the
+ * `NUMERIC(9,6)` statutory rate columns. Fails closed on non-finite,
+ * exponential, or excessive-scale (>6 decimal place) input.
+ */
+function toScaledRate(value: number, label: string): bigint {
+  return parseExactDecimalToScaledBigInt(value, RATE_DECIMAL_SCALE, label);
 }
 
 export function fromCents(cents: bigint): number {
@@ -85,7 +149,9 @@ export function roundScaledDivision(
   denominator: bigint,
   mode: RoundingMode = "half_up",
 ): bigint {
-  if (denominator === 0n) return 0n;
+  if (denominator === 0n) {
+    throw new ValidationError("Scaled division denominator must not be zero");
+  }
   const isNegative = (numerator < 0n && denominator > 0n) || (numerator > 0n && denominator < 0n);
   const absNum = numerator < 0n ? -numerator : numerator;
   const absDen = denominator < 0n ? -denominator : denominator;
@@ -115,8 +181,10 @@ export function mulRateCents(
   rate: number,
   mode: RoundingMode = "half_up",
 ): bigint {
-  if (amountCents === 0n || rate === 0 || !Number.isFinite(rate)) return 0n;
-  const scaledRate = BigInt(Math.round(rate * 1_000_000));
+  // Validated before the zero short-circuit so non-finite or excessive-scale
+  // multipliers fail closed instead of silently yielding zero.
+  const scaledRate = toScaledRate(rate, "Rate multiplier");
+  if (amountCents === 0n || scaledRate === 0n) return 0n;
   const product = amountCents * scaledRate;
   return roundScaledDivision(product, RATE_SCALE, mode);
 }
@@ -126,8 +194,11 @@ export function divCents(
   divisor: number,
   mode: RoundingMode = "half_up",
 ): bigint {
-  if (numeratorCents === 0n || divisor === 0 || !Number.isFinite(divisor)) return 0n;
-  const scaledDivisor = BigInt(Math.round(divisor * 1_000_000));
+  const scaledDivisor = toScaledRate(divisor, "Divisor");
+  if (scaledDivisor === 0n) {
+    throw new ValidationError("Divisor must not be zero", { divisor });
+  }
+  if (numeratorCents === 0n) return 0n;
   const product = numeratorCents * RATE_SCALE;
   return roundScaledDivision(product, scaledDivisor, mode);
 }
