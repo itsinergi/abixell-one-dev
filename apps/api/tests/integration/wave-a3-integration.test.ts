@@ -822,15 +822,26 @@ describe.sequential("Wave A3 — Service Operations & Asset Advanced Integration
   // =========================================================================
 
   describe("AST-ADV-006/007: Deterministic Reliability Analytics & Predictive Snapshots", () => {
+    // The corrective work order below is completed via the API without an explicit
+    // completedAt override, so the server stamps completed_at = NOW() at test-run time
+    // (see completeMaintenanceWorkOrder in asset-advanced.repository.pg.ts). periodEnd
+    // must therefore stay anchored to "tomorrow" (relative to whenever this suite runs)
+    // rather than a hardcoded historical date, or the corrective failure would fall
+    // outside the query window on any run date after that hardcoded cutoff. periodStart
+    // stays fixed at 2026-08-01, safely before the fixture's hardcoded downtime records
+    // (2026-08-10 / 2026-08-20).
+    const reliabilityPeriodStart = "2026-08-01";
+    const reliabilityPeriodEnd = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+
     it("computes mathematical reliability metrics (MTBF, MTTR, Availability %)", async () => {
       const res = await get(
-        `/assets/${assetId}/reliability?periodStart=2026-08-01&periodEnd=2026-08-31`,
+        `/assets/${assetId}/reliability?periodStart=${reliabilityPeriodStart}&periodEnd=${reliabilityPeriodEnd}`,
         operatorToken,
       );
       expect(res.statusCode).toBe(200);
       const metrics = res.json();
-      expect(metrics.periodStart).toBe("2026-08-01");
-      expect(metrics.periodEnd).toBe("2026-08-31");
+      expect(metrics.periodStart).toBe(reliabilityPeriodStart);
+      expect(metrics.periodEnd).toBe(reliabilityPeriodEnd);
       expect(metrics.elapsedHours).toBeGreaterThan(0);
       expect(metrics.downtimeHours).toBeGreaterThan(0);
       expect(metrics.operationalHours).toBeGreaterThan(0);
@@ -885,7 +896,7 @@ describe.sequential("Wave A3 — Service Operations & Asset Advanced Integration
 
     it("enforces cross-tenant isolation on reliability analytics and predictive snapshots", async () => {
       const otherRelRes = await get(
-        `/assets/${assetId}/reliability?periodStart=2026-08-01&periodEnd=2026-08-31`,
+        `/assets/${assetId}/reliability?periodStart=${reliabilityPeriodStart}&periodEnd=${reliabilityPeriodEnd}`,
         otherAdminToken,
       );
       expect(otherRelRes.statusCode).toBe(404);
