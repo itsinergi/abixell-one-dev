@@ -159,7 +159,7 @@ export function buildApp(): FastifyInstance {
     registerWorkforceRoutes(scoped, container);
     registerWorkforceAdvancedRoutes(scoped, container);
     registerSupplyChainRoutes(scoped, container);
-    registerSupplyChainAdvancedRoutes(scoped, container);
+    registerSupplyChainAdvancedRoutes(scoped, { supplyChainAdvanced: container.supplyChainAdvanced });
     registerAssetRoutes(scoped, container);
     registerAssetAdvancedRoutes(scoped, container);
     registerFinanceRoutes(scoped, container);

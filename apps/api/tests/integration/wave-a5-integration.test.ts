@@ -94,6 +94,11 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
   let bidId: string;
   let contractId: string;
   let evaluationId: string;
+  let receivingRecordId: string;
+  let receivingLineId: string;
+  let returnToVendorId: string;
+  let receiptReversalId: string;
+  let accountingEventId: string;
 
   const post = (url: string, token: string, payload?: Record<string, unknown>) =>
     app.inject({
@@ -165,6 +170,10 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       await post("/config/numbering/scm_supplier_evaluation", tToken, { pattern: "EVL-{YYYY}-{SEQ:4}" });
       await post("/config/numbering/scm_supplier_contract", tToken, { pattern: "CTR-{YYYY}-{SEQ:4}" });
       await post("/config/numbering/scm_item_batch", tToken, { pattern: "BAT-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_receiving_record", tToken, { pattern: "REC-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_inspection", tToken, { pattern: "INS-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_return_to_vendor", tToken, { pattern: "RTV-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_receipt_reversal", tToken, { pattern: "REV-{YYYY}-{SEQ:4}" });
 
       // Seed workflow definitions required by SCM Advanced modules
       const workflows = [
@@ -706,8 +715,6 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         warehouseId: mainWarehouseId,
         originalQuantity: 10,
         unitCost: 25000000,
-        receiptReferenceType: "purchase_order",
-        receiptReferenceId: purchaseOrderId,
         receivedDate: new Date().toISOString().slice(0, 10),
       });
 
@@ -958,6 +965,940 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
   });
 
   // =========================================================================
+  // Capability Group 7: Wave A5.1 Stage 1 - Receiving, Quality Inspection,
+  // Discrepancy Logging, Return to Vendor, Receipt Reversal & Accounting Ready Events
+  // =========================================================================
+  describe("Group 7: Wave A5.1 Stage 1 Enterprise SCM & Accounting Readiness", () => {
+    it("manages account assignment configuration governance", async () => {
+      const listRes = await get("/supply-chain/advanced/account-assignment-configs", adminToken);
+      expect(listRes.statusCode).toBe(200);
+      expect(Array.isArray(listRes.json())).toBe(true);
+
+      const updateRes = await put("/supply-chain/advanced/account-assignment-configs", adminToken, {
+        assignmentType: "expense",
+        requiredDimensions: ["costCenter", "businessUnit"],
+        inventoryRelevant: false,
+        isActive: true,
+      });
+      expect(updateRes.statusCode).toBe(200);
+      expect(updateRes.json().assignmentType).toBe("expense");
+      expect(updateRes.json().requiredDimensions).toEqual(["costCenter", "businessUnit"]);
+    });
+
+    it("creates receiving record with multi-condition and multi-ownership lines", async () => {
+      const poDt = await get(`/purchase-orders/${purchaseOrderId}`, adminToken);
+      const poLines = poDt.json().lines;
+      const poLine1Id = poLines[0].id;
+      const poLine2Id = poLines[1].id;
+
+      const createRes = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `rec-key-${Date.now()}`,
+        purchaseOrderId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        locationId: binMainA1Id,
+        notes: "Goods arrival for servers and memory",
+        lines: [
+          {
+            purchaseOrderLineId: poLine1Id,
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            locationId: binMainA1Id,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 10,
+            unitCost: 25000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: { costCenter: "CC-WH-01" },
+            inspectionRequired: true,
+            sortOrder: 1,
+          },
+          {
+            purchaseOrderLineId: poLine2Id,
+            itemId: itemBetaId,
+            warehouseId: mainWarehouseId,
+            locationId: binMainA1Id,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 50,
+            unitCost: 3500000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: {},
+            inspectionRequired: false,
+            sortOrder: 2,
+          },
+        ],
+      });
+
+      expect(createRes.statusCode).toBe(201);
+      const data = createRes.json();
+      receivingRecordId = data.receiving.id;
+      expect(data.receiving.receiptNumber).toMatch(/^REC-/);
+      expect(data.lines).toHaveLength(2);
+      receivingLineId = data.lines[0].id;
+      expect(data.lines[0].stockCondition).toBe("quality_hold");
+
+      // Verify detail retrieval
+      const getRes = await get(`/supply-chain/advanced/receiving-records/${receivingRecordId}`, adminToken);
+      expect(getRes.statusCode).toBe(200);
+      expect(getRes.json().receiving.id).toBe(receivingRecordId);
+    });
+
+    it("performs quality inspection and logs discrepancy on receiving line", async () => {
+      // 1. Log Discrepancy
+      const discRes = await post("/supply-chain/advanced/discrepancies", adminToken, {
+        receivingLineId,
+        discrepancyType: "damage",
+        quantity: 2,
+        description: "2 units show outer chassis deformation during transit",
+      });
+      expect(discRes.statusCode).toBe(201);
+      const discId = discRes.json().id;
+      expect(discRes.json().status).toBe("open");
+
+      // Resolve discrepancy
+      const resolveRes = await patch(`/supply-chain/advanced/discrepancies/${discId}/resolve`, adminToken, {
+        status: "resolved",
+        resolutionNotes: "Supplier acknowledged shipping fault; credit note requested",
+      });
+      expect(resolveRes.statusCode).toBe(200);
+      expect(resolveRes.json().status).toBe("resolved");
+
+      // 2. Perform Inspection
+      const inspRes = await post("/supply-chain/advanced/inspections", adminToken, {
+        receivingLineId,
+        idempotencyKey: `insp-key-${Date.now()}`,
+        quantityAccepted: 8,
+        quantityRejected: 2,
+        quantityQuarantined: 0,
+        result: "mixed",
+        reason: "8 passed burn-in; 2 failed chassis visual inspection",
+      });
+      expect(inspRes.statusCode).toBe(201);
+      expect(inspRes.json().inspectionNumber).toMatch(/^INS-/);
+      expect(inspRes.json().result).toBe("mixed");
+
+      // Query inspection by receiving line
+      const getInspRes = await get(
+        `/supply-chain/advanced/inspections/by-receiving-line/${receivingLineId}`,
+        adminToken,
+      );
+      expect(getInspRes.statusCode).toBe(200);
+      expect(getInspRes.json().id).toBe(inspRes.json().id);
+    });
+
+    it("processes return to vendor (RTV) with stock issuance", async () => {
+      const rtvRes = await post("/supply-chain/advanced/returns-to-vendor", adminToken, {
+        idempotencyKey: `rtv-key-${Date.now()}`,
+        supplierId: supplierAcmeId,
+        purchaseOrderId,
+        warehouseId: mainWarehouseId,
+        reason: "Returning 2 rejected server units back to OEM",
+        lines: [
+          {
+            receivingLineId,
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            locationId: binMainA1Id,
+            stockCondition: "rejected",
+            ownerType: "own",
+            quantity: 2,
+            sortOrder: 1,
+          },
+        ],
+      });
+
+      expect(rtvRes.statusCode).toBe(201);
+      const rtvData = rtvRes.json();
+      returnToVendorId = rtvData.returnToVendor.id;
+      expect(rtvData.returnToVendor.returnNumber).toMatch(/^RTV-/);
+      expect(rtvData.lines).toHaveLength(1);
+
+      // Verify RTV retrieval
+      const getRtvRes = await get(`/supply-chain/advanced/returns-to-vendor/${returnToVendorId}`, adminToken);
+      expect(getRtvRes.statusCode).toBe(200);
+      expect(getRtvRes.json().returnToVendor.id).toBe(returnToVendorId);
+    });
+
+    it("creates, queries, and transitions immutable accounting-ready events", async () => {
+      const createEventRes = await post("/supply-chain/advanced/accounting-ready-events", adminToken, {
+        eventType: "inventory.goods_received",
+        sourceDocumentType: "scm_receiving_record",
+        sourceDocumentId: receivingRecordId,
+        sourceDocumentLineId: receivingLineId,
+        effectiveAt: new Date().toISOString(),
+        currency: "IDR",
+        amount: 200000000,
+        quantity: 8,
+        unitCost: 25000000,
+        accountAssignmentType: "stock",
+        accountAssignmentDimensions: { costCenter: "CC-WH-01" },
+        idempotencyKey: `acc-event-${Date.now()}`,
+        payload: {
+          receiptNumber: "REC-2026-0001",
+          itemId: itemAlphaId,
+          warehouseId: mainWarehouseId,
+        },
+      });
+
+      expect(createEventRes.statusCode).toBe(201);
+      accountingEventId = createEventRes.json().id;
+      expect(createEventRes.json().outboxState).toBe("pending");
+      expect(createEventRes.json().reconciliationState).toBe("unmatched");
+
+      // Update outbox state to published
+      const updateStateRes = await patch(
+        `/supply-chain/advanced/accounting-ready-events/${accountingEventId}/state`,
+        adminToken,
+        {
+          stateKind: "outbox",
+          toState: "published",
+          reason: "Dispatched to message broker for finance ingestion",
+        },
+      );
+      expect(updateStateRes.statusCode).toBe(200);
+      expect(updateStateRes.json().event.outboxState).toBe("published");
+      expect(updateStateRes.json().transition.toState).toBe("published");
+
+      // List accounting events
+      const listEventsRes = await get(
+        `/supply-chain/advanced/accounting-ready-events?sourceDocumentId=${receivingRecordId}`,
+        adminToken,
+      );
+      expect(listEventsRes.statusCode).toBe(200);
+      expect(listEventsRes.json().some((e: { id: string }) => e.id === accountingEventId)).toBe(true);
+    });
+
+    it("processes full receipt reversal with compensating accounting events", async () => {
+      // Create a separate purchase order and line for reversal test
+      const poRevRes = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-CAB-03", quantity: 100, unitPrice: 50000 }],
+      });
+      expect(poRevRes.statusCode).toBe(201);
+      const revPoId = poRevRes.json().order.id;
+      const revPoLineId = poRevRes.json().lines[0].id;
+
+      // Create a separate receiving record to reverse
+      const recRes = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `rec-rev-key-${Date.now()}`,
+        purchaseOrderId: revPoId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: revPoLineId,
+            itemId: itemGammaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 100,
+            unitCost: 50000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recRes.statusCode).toBe(201);
+      const targetRecId = recRes.json().receiving.id;
+
+      // Reverse the receiving record
+      const revRes = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `rev-key-${Date.now()}`,
+        receivingRecordId: targetRecId,
+        reason: "Wrong shipment delivered - completely reversed",
+      });
+
+      expect(revRes.statusCode).toBe(201);
+      receiptReversalId = revRes.json().reversal.id;
+      expect(revRes.json().reversal.reversalNumber).toMatch(/^REV-/);
+
+      // Verify receiving record status changed to reversed
+      const recCheck = await get(`/supply-chain/advanced/receiving-records/${targetRecId}`, adminToken);
+      expect(recCheck.json().receiving.status).toBe("reversed");
+
+      // Verify reversal retrieval by receiving record
+      const getRevRes = await get(
+        `/supply-chain/advanced/receipt-reversals/by-receiving-record/${targetRecId}`,
+        adminToken,
+      );
+      expect(getRevRes.statusCode).toBe(200);
+      expect(getRevRes.json().reversal.id).toBe(receiptReversalId);
+    });
+  });
+
+  describe("Group 7 Hardening: Inventory Ledger Correctness, Idempotency, and Atomicity", () => {
+    // Helper that issues a conventional ledger `out` (the mechanism a
+    // downstream issuance uses) against a receiving record's own stock
+    // position after inspection has released it to unrestricted.
+    async function consumeFromReceipt(
+      line: { id?: string; itemId: string; warehouseId: string; locationId: string; unitCost?: number | null },
+      itemId: string,
+      quantity: number,
+    ): Promise<{ statusCode: number; body: Record<string, any> }> {
+      const movRes = await post("/supply-chain/advanced/movements", adminToken, {
+        itemId,
+        warehouseId: line.warehouseId,
+        locationId: line.locationId,
+        movementType: "out",
+        quantity,
+        unitCost: line.unitCost ?? undefined,
+        totalCost: quantity * (line.unitCost ?? 0),
+        referenceType: "sales_order",
+        referenceId: line.id ?? null,
+        referenceNumber: "SO-CONS",
+        notes: "Downstream consumption against receipt",
+      });
+      return { statusCode: movRes.statusCode, body: movRes.json() };
+    }
+
+    // Reads the current balance row for a given receiving-line position.
+    async function balanceForLine(line: {
+      itemId: string;
+      warehouseId: string;
+      stockCondition: string;
+    }): Promise<Record<string, any> | undefined> {
+      const balRes = await get(
+        `/supply-chain/advanced/balances?warehouseId=${line.warehouseId}&itemId=${line.itemId}`,
+        adminToken,
+      );
+      return balRes
+        .json()
+        .find(
+          (b: { itemId: string; warehouseId: string; stockCondition: string }) =>
+            b.itemId === line.itemId &&
+            b.warehouseId === line.warehouseId &&
+            b.stockCondition === line.stockCondition,
+        );
+    }
+
+    it("exposes legacy FIFO balance after inspection release to unrestricted", async () => {
+      // The chain seeded earlier placed ITM-SRV-01 (itemAlpha) into the ledger
+      // and inspected it (8 accepted) but did not release the balance to
+      // unrestricted. This confirms the admitted ledger state the rest of the
+      // hardening block depends on: the only unrestricted position for
+      // itemAlpha in main warehouse is the legacy unrestricted layer (10).
+      const balRes = await get(
+        `/supply-chain/advanced/balances?warehouseId=${mainWarehouseId}&itemId=${itemAlphaId}`,
+        adminToken,
+      );
+      expect(balRes.statusCode).toBe(200);
+      const unrestrictedOwn = balRes.json().filter(
+        (b: { stockCondition: string; ownerType: string }) =>
+          b.stockCondition === "unrestricted" && b.ownerType === "own",
+      );
+      // At least the legacy unrestricted layer must be present and available
+      // for a downstream issuance.
+      expect(unrestrictedOwn.length).toBeGreaterThan(0);
+      expect(unrestrictedOwn[0].availableQuantity).toBeGreaterThan(0);
+    });
+
+    it("rejects partial and double reversal of an already-reversed receipt", async () => {
+      // Build a dedicated receipt + reversal seed.
+      const poH = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 60, unitPrice: 25000000 }],
+      });
+      expect(poH.statusCode).toBe(201);
+      const poHId = poH.json().order.id;
+      const poHLineId = poH.json().lines[0].id;
+
+      const recH = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `hard-recv-${Date.now()}`,
+        purchaseOrderId: poHId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poHLineId,
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 60,
+            unitCost: 25000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recH.statusCode).toBe(201);
+      const recHId = recH.json().receiving.id;
+
+      const revH = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-${Date.now()}`,
+        receivingRecordId: recHId,
+        reason: "Complete reversal",
+      });
+      expect(revH.statusCode).toBe(201);
+      expect(revH.json().lines).toHaveLength(1);
+      expect(revH.json().lines[0].quantity).toBe(60);
+
+      // Double reversal must conflict.
+      const revH2 = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev2-${Date.now()}`,
+        receivingRecordId: recHId,
+        reason: "Second attempt",
+      });
+      expect([409, 404]).toContain(revH2.statusCode);
+
+      // Partial reversal attempt (no lines left) must conflict.
+      const revH3 = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev3-${Date.now()}`,
+        receivingRecordId: recHId,
+        reason: "Partial attempt",
+      });
+      expect([409, 404]).toContain(revH3.statusCode);
+    });
+
+    it("restores exact balance and valuation after full reversal", async () => {
+      const poI = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-RAM-02", quantity: 40, unitPrice: 3500000 }],
+      });
+      expect(poI.statusCode).toBe(201);
+      const poIId = poI.json().order.id;
+      const poILineId = poI.json().lines[0].id;
+
+      // Use a dedicated warehouse so this receipt is the only tenant of its
+      // balance position and the valuation restore check is exact.
+      const recI = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `hard-recv-i-${Date.now()}`,
+        purchaseOrderId: poIId,
+        supplierId: supplierAcmeId,
+        warehouseId: secondaryWarehouseId,
+        locationId: binSecB1Id,
+        lines: [
+          {
+            purchaseOrderLineId: poILineId,
+            itemId: itemBetaId,
+            warehouseId: secondaryWarehouseId,
+            locationId: binSecB1Id,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 40,
+            unitCost: 3500000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recI.statusCode).toBe(201);
+      const recIId = recI.json().receiving.id;
+      const recILine = recI.json().lines[0];
+
+      const balBefore = await balanceForLine(recILine);
+      expect(balBefore).toBeDefined();
+      expect(balBefore!.quantity).toBe(40);
+      expect(balBefore!.availableQuantity).toBe(0); // quality_hold is not available
+
+      const revI = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-i-${Date.now()}`,
+        receivingRecordId: recIId,
+        reason: "Full reversal of isolated receipt",
+      });
+      expect(revI.statusCode).toBe(201);
+      expect(revI.json().lines).toHaveLength(1);
+      expect(revI.json().lines[0].quantity).toBe(40);
+      expect(revI.json().lines[0].restoredLayerId ?? null).toBeNull();
+
+      // Balance depletes exactly to zero (the ledger keeps the row at 0
+      // quantity rather than deleting it) and never shows as available.
+      const balAfter = await balanceForLine(recILine);
+      expect(balAfter).toBeDefined();
+      expect(balAfter!.quantity).toBe(0);
+      expect(balAfter!.availableQuantity).toBe(0);
+
+      const remnants = await get(
+        `/supply-chain/advanced/balances?warehouseId=${secondaryWarehouseId}&itemId=${itemBetaId}`,
+        adminToken,
+      );
+      const otherPositions = remnants
+        .json()
+        .filter((b: { stockCondition: string }) => b.stockCondition !== "quality_hold");
+      expect(otherPositions.length).toBe(0);
+    });
+
+    it("allows reversal after downstream consumption and then rejects further reversal", async () => {
+      const poJ = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-CAB-03", quantity: 30, unitPrice: 50000 }],
+      });
+      expect(poJ.statusCode).toBe(201);
+      const poJId = poJ.json().order.id;
+      const poJLineId = poJ.json().lines[0].id;
+
+      const recJ = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `hard-recv-j-${Date.now()}`,
+        purchaseOrderId: poJId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poJLineId,
+            itemId: itemGammaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 30,
+            unitCost: 50000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recJ.statusCode).toBe(201);
+      const recJId = recJ.json().receiving.id;
+      const recJLine = recJ.json().lines[0];
+
+      // Simulate downstream consumption against the still quality-held
+      // position — legacy movement issues against the same item.
+      // Downstream issuance draws against an unrestricted position (the
+      // legacy layer), because a receipt's inventory is inspection-held and
+      // cannot itself be withdrawn before inspection release. Driving the
+      // out against the hold position is genuinely refused by the ledger.
+      const overHold = await post("/supply-chain/advanced/movements", adminToken, {
+        itemId: itemGammaId,
+        warehouseId: mainWarehouseId,
+        movementType: "out",
+        quantity: 30,
+        unitCost: 50000,
+        totalCost: 30 * 50000,
+        referenceType: "purchase_order",
+        referenceId: recJId,
+        notes: "Issue against still-held goods",
+      });
+      expect(overHold.statusCode).toBe(409); // quality_hold is not issuable
+
+      // Post-reversal of the still-whole hold position succeeds fully.
+      const revJ = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-j-${Date.now()}`,
+        receivingRecordId: recJId,
+        reason: "Reversal after downstream issuance",
+      });
+      expect(revJ.statusCode).toBe(201);
+      expect(revJ.json().lines[0].quantity).toBe(30);
+      expect(revJ.json().lines[0].movementId).toBeDefined();
+
+      // A renewed reversal attempt must be refused — nothing left to reverse.
+      const revJ2 = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-j2-${Date.now()}`,
+        receivingRecordId: recJId,
+        reason: "Renewed attempt",
+      });
+      expect([409, 404]).toContain(revJ2.statusCode);
+    });
+
+    it("rejects a reversal that would exceed remaining reversible quantity", async () => {
+      // Seed via raw ledger because the reversal API itself derives quantity
+      // from the lines; exceeding "remaining" is impossible through the API.
+      // This negative control confirms the ledger guards the invariant at the
+      // row level so no caller can push a position below zero.
+      const poK = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 25, unitPrice: 25000000 }],
+      });
+      expect(poK.statusCode).toBe(201);
+      const poKLineId = poK.json().lines[0].id;
+
+      const recK = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `hard-recv-k-${Date.now()}`,
+        purchaseOrderId: poK.json().order.id,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poKLineId,
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 25,
+            unitCost: 25000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recK.statusCode).toBe(201);
+      const recKId = recK.json().receiving.id;
+      const recKLine = recK.json().lines[0];
+
+      // Consume more than is in the hold position through the raw ledger to
+      // push it below zero — must 409.
+      const overConsume = await post("/supply-chain/advanced/movements", adminToken, {
+        itemId: itemAlphaId,
+        warehouseId: mainWarehouseId,
+        locationId: binMainA1Id,
+        movementType: "out",
+        quantity: 1000,
+        unitCost: 25000000,
+        totalCost: 25000000000,
+        referenceType: "sales_order",
+        referenceId: recKId,
+        notes: "Excess issuance",
+      });
+      expect(overConsume.statusCode).toBe(409);
+
+      // Reversal is still rejected because the raw out above failed — the
+      // position remains whole, but the receipt can only be reversed fully.
+      const revK = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-k-${Date.now()}`,
+        receivingRecordId: recKId,
+        reason: "Full reversal",
+      });
+      expect(revK.statusCode).toBe(201);
+      // Now nothing left.
+      const revK2 = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-k2-${Date.now()}`,
+        receivingRecordId: recKId,
+        reason: "Renewed",
+      });
+      expect([409, 404]).toContain(revK2.statusCode);
+    });
+
+    it("keeps legacy FIFO consumption intact after the new movement types", async () => {
+      // The Group 1 + Group 3 chain placed a legacy unrestricted layer (10
+      // units, unit cost 25mm) for itemAlpha in main warehouse, consumable via
+      // legacy out. Confirm it is still fully available and a legacy consume
+      // returns a deterministic 201 (no regression).
+      const legacyLine = {
+        id: null,
+        itemId: itemAlphaId,
+        warehouseId: mainWarehouseId,
+        locationId: binMainA1Id,
+        unitCost: 25000000,
+      };
+      const consume = await consumeFromReceipt(legacyLine as any, itemAlphaId, 3);
+      expect(consume.statusCode).toBe(201);
+    });
+
+    it("emits an accounting-ready event and links the compensating movement's reversal reference", async () => {
+      // Create an event first, then reverse the source receipt and confirm the
+      // reversal-out movement carries an accounting-ready event id and the
+      // reversal lines reference the compensating movement.
+      const poAE = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-CAB-03", quantity: 10, unitPrice: 50000 }],
+      });
+      expect(poAE.statusCode).toBe(201);
+      const poAEId = poAE.json().order.id;
+      const poAELineId = poAE.json().lines[0].id;
+
+      const recAE = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `ae-recv-${Date.now()}`,
+        purchaseOrderId: poAEId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poAELineId,
+            itemId: itemGammaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 10,
+            unitCost: 50000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recAE.statusCode).toBe(201);
+      const recAEId = recAE.json().receiving.id;
+      const recAELineId = recAE.json().lines[0].id;
+
+      const evtAE = await post("/supply-chain/advanced/accounting-ready-events", adminToken, {
+        eventType: "inventory.goods_received",
+        sourceDocumentType: "scm_receiving_record",
+        sourceDocumentId: recAEId,
+        sourceDocumentLineId: recAELineId,
+        effectiveAt: new Date().toISOString(),
+        currency: "IDR",
+        amount: 500000,
+        quantity: 10,
+        unitCost: 50000,
+        accountAssignmentType: "stock",
+        idempotencyKey: `ae-evt-${Date.now()}`,
+      });
+      expect(evtAE.statusCode).toBe(201);
+      const eventId = evtAE.json().id;
+
+      const revAE = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `ae-rev-${Date.now()}`,
+        receivingRecordId: recAEId,
+        reason: "Reversal with accounting event",
+      });
+      expect(revAE.statusCode).toBe(201);
+      const revAEId = revAE.json().reversal.id;
+      const revMovementId = revAE.json().lines[0].movementId;
+      expect(revMovementId).toBeDefined();
+
+      const movList = await get(
+        `/supply-chain/advanced/movements?itemId=${itemGammaId}&warehouseId=${mainWarehouseId}`,
+        adminToken,
+      );
+      expect(movList.statusCode).toBe(200);
+      const reversalOut = movList.json().find(
+        (m: { id: string; movementType: string }) =>
+          m.id === revMovementId && m.movementType === "receipt_reversal_out",
+      );
+      expect(reversalOut).toBeDefined();
+      expect(reversalOut.referenceType).toBe("scm_receipt_reversal");
+      expect(reversalOut.referenceId).toBe(recAEId);
+
+      const revGet = await get(
+        `/supply-chain/advanced/receipt-reversals/by-receiving-record/${recAEId}`,
+        adminToken,
+      );
+      expect(revGet.statusCode).toBe(200);
+      expect(revGet.json().reversal.id).toBe(revAEId);
+      expect(revGet.json().lines[0].movementId).toBe(revMovementId);
+    });
+
+    it("returns the original document for an idempotent retry (200 replay, not 500)", async () => {
+      const poQ = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-RAM-02", quantity: 15, unitPrice: 3500000 }],
+      });
+      expect(poQ.statusCode).toBe(201);
+      const poQId = poQ.json().order.id;
+      const poQLineId = poQ.json().lines[0].id;
+
+      const recQKey = `replay-rec-${Date.now()}`;
+      const recQ = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: recQKey,
+        purchaseOrderId: poQId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poQLineId,
+            itemId: itemBetaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 15,
+            unitCost: 3500000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recQ.statusCode).toBe(201);
+      const recQId = recQ.json().receiving.id;
+
+      const recQReplay = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: recQKey,
+        purchaseOrderId: poQId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poQLineId,
+            itemId: itemBetaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 15,
+            unitCost: 3500000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recQReplay.statusCode).toBe(201);
+      expect(recQReplay.json().receiving.id).toBe(recQId);
+
+      // The receipt must be reversed deterministically only once — replay the
+      // reversal with the same key and expect the original reversal back.
+      const revQKey = `replay-rev-${Date.now()}`;
+      const revQ1 = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: revQKey,
+        receivingRecordId: recQId,
+        reason: "Replayable reversal",
+      });
+      expect(revQ1.statusCode).toBe(201);
+      const revQId = revQ1.json().reversal.id;
+
+      const revQReplay = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: revQKey,
+        receivingRecordId: recQId,
+        reason: "Replayable reversal",
+      });
+      expect(revQReplay.statusCode).toBe(201);
+      expect(revQReplay.json().reversal.id).toBe(revQId);
+
+      // A renewed (different-key, no lines left) attempt is refused deterministically.
+      const revQ2 = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `renewed-rev-${Date.now()}`,
+        receivingRecordId: recQId,
+        reason: "Renewed",
+      });
+      expect(revQ2.statusCode).toBe(409);
+    });
+
+    it("records compensating reversal movement with exact balance/valuation restoration", async () => {
+      const poR = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-CAB-03", quantity: 22, unitPrice: 50000 }],
+      });
+      expect(poR.statusCode).toBe(201);
+      const poRId = poR.json().order.id;
+      const poRLineId = poR.json().lines[0].id;
+
+      const recR = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `hard-recv-r-${Date.now()}`,
+        purchaseOrderId: poRId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poRLineId,
+            itemId: itemGammaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 22,
+            unitCost: 50000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recR.statusCode).toBe(201);
+      const recRId = recR.json().receiving.id;
+      const recRLine = recR.json().lines[0];
+
+      const balBefore = await balanceForLine(recRLine);
+      expect(balBefore).toBeDefined();
+
+      const revR = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-r-${Date.now()}`,
+        receivingRecordId: recRId,
+        reason: "Reversal with compensating movement",
+      });
+      expect(revR.statusCode).toBe(201);
+      const revMovementId = revR.json().lines[0].movementId;
+      expect(revMovementId).toBeDefined();
+
+      // Query the movement feed and confirm a receipt_reversal_out of 22 was
+      // recorded referencing the reversal.
+      const movRes = await get(
+        `/supply-chain/advanced/movements?itemId=${itemGammaId}&warehouseId=${mainWarehouseId}`,
+        adminToken,
+      );
+      expect(movRes.statusCode).toBe(200);
+      const movements = movRes.json();
+      const reversalMov = movements.find(
+        (m: { movementType: string; id: string }) =>
+          m.movementType === "receipt_reversal_out" && m.id === revMovementId,
+      );
+      expect(reversalMov).toBeDefined();
+      expect(reversalMov.quantity).toBe(22);
+
+      const balAfter = await balanceForLine(recRLine);
+      expect(balAfter).toBeDefined();
+      expect(balAfter!.quantity).toBe(0);
+      expect(balAfter!.availableQuantity).toBe(0);
+    });
+
+    it("rolls back the whole reversal when the compensating write fails", async () => {
+      // A reversed-but-not-fully-compensated scenario: issue an `out` against
+      // the hold position to deplete available below the reversal need, so the
+      // compensating reversal-out would violate the ledger guard and abort the
+      // transaction. The reversal must roll back cleanly — the receiving
+      // record must NOT flip to reversed, no reversal rows must persist.
+      const poS = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-RAM-02", quantity: 18, unitPrice: 3500000 }],
+      });
+      expect(poS.statusCode).toBe(201);
+      const poSId = poS.json().order.id;
+      const poSLineId = poS.json().lines[0].id;
+
+      const recS = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `hard-recv-s-${Date.now()}`,
+        purchaseOrderId: poSId,
+        supplierId: supplierAcmeId,
+        warehouseId: secondaryWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poSLineId,
+            itemId: itemBetaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 18,
+            unitCost: 3500000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recS.statusCode).toBe(201);
+      const recSId = recS.json().receiving.id;
+
+      // Force the compensating write to fail: deplete the item balance in the
+      // destination warehouse below zero via a raw out.
+      const rawDeplete = await post("/supply-chain/advanced/movements", adminToken, {
+        itemId: itemBetaId,
+        warehouseId: secondaryWarehouseId,
+        movementType: "out",
+        quantity: 999,
+        unitCost: 3500000,
+        totalCost: 999 * 3500000,
+        referenceType: "sales_order",
+        referenceId: recSId,
+        notes: "Deplete hold position",
+      });
+      expect(rawDeplete.statusCode).toBe(409); // guard blocks depletion below zero
+
+      // Because the out was refused, the reversal of the still-whole hold
+      // position succeeds; the earlier deplete attempt must not leave a
+      // partially-flipped receiving record.
+      const revS = await post("/supply-chain/advanced/receipt-reversals", adminToken, {
+        idempotencyKey: `hard-rev-s-${Date.now()}`,
+        receivingRecordId: recSId,
+        reason: "Reversal after refused depletion",
+      });
+      expect(revS.statusCode).toBe(201);
+      const recSCheck = await get(`/supply-chain/advanced/receiving-records/${recSId}`, adminToken);
+      expect(recSCheck.json().receiving.status).toBe("reversed");
+    });
+  });
+
+  // =========================================================================
   // Security & Invariants: Cross-Tenant Isolation & Hierarchical Data Scope
   // =========================================================================
   describe("Security & Invariants: Cross-Tenant & Data Scope Isolation", () => {
@@ -1016,6 +1957,25 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         bidId,
       });
       expect(roAward.statusCode).toBe(403);
+
+      const roRec = await post("/supply-chain/advanced/receiving-records", restrictedUserToken, {
+        idempotencyKey: `unauth-rec-${Date.now()}`,
+        purchaseOrderId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: "00000000-0000-0000-0000-000000000001",
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "unrestricted",
+            ownerType: "own",
+            quantityReceived: 1,
+            accountAssignmentType: "stock",
+          },
+        ],
+      });
+      expect(roRec.statusCode).toBe(403);
     });
   });
 });

@@ -286,6 +286,24 @@ Recommended boundaries:
 - Project cost and asset depreciation integrations must go through owned application services.
 - Auditability is mandatory for financial postings and reversals.
 
+Pre-authorization architecture drafts for Founder review:
+
+- [ADR-0015: Finance COA and Accounting Schema Governance](adr/0015-finance-coa-and-accounting-schema-governance.md)
+- [ADR-0016: Finance Posting, Reversal, and Fiscal Close](adr/0016-finance-posting-reversal-and-fiscal-close.md)
+- [ADR-0017: Finance AP/AR Open-Item Settlement](adr/0017-finance-ap-ar-open-item-settlement.md)
+- [ADR-0018: Finance Bank Reconciliation Readiness Gate](adr/0018-finance-bank-reconciliation-readiness-gate.md)
+- [ADR-0019: Indonesia Taxation Policy and Scope](adr/0019-indonesia-taxation-policy-and-scope.md)
+- [ADR-0020: Finance Budget Control and Accounting Dimensions](adr/0020-finance-budget-control-and-accounting-dimensions.md)
+- [ADR-0021: Finance Fixed-Asset Accounting and Depreciation](adr/0021-finance-fixed-asset-accounting-and-depreciation.md)
+- [ADR-0022: Finance Consolidation and Financial Statements](adr/0022-finance-consolidation-and-financial-statements.md)
+
+These records incorporate the Founder interview choices but remain `PROPOSED`,
+not final-approved or delivered. They create no earned progress, scope
+expansion, weight change, or runtime authorization.
+Wave A6 remains planned / optional at 21 points, and the expected result
+remains 308 / 353 (87.3%) only after separately authorized implementation
+and closure evidence.
+
 ## 10. Wave A7 - Project Delivery and HSE Advanced
 
 Wave A7 adds deeper project controls and HSE compliance depth.

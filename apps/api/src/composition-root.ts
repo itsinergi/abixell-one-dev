@@ -481,6 +481,14 @@ export function buildContainer() {
       "scm_landed_cost",
       { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessLandedCostForDocument(actor, entityId) },
     ],
+    [
+      "scm_receiving_record",
+      { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessReceivingRecordForDocument(actor, entityId) },
+    ],
+    [
+      "scm_return_to_vendor",
+      { canAccess: (actor, entityId) => supplyChainAdvanced.canAccessReturnToVendorForDocument(actor, entityId) },
+    ],
   ]);
   const document = new DocumentService(
     documentRepo,

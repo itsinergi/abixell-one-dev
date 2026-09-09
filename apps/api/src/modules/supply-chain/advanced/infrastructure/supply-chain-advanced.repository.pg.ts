@@ -4,10 +4,16 @@ import type {
   ApplyScmLandedCostInput,
   AwardScmSupplierBidInput,
   ConsumeScmValuationLayerInput,
+  CreateScmAccountingReadyEventInput,
+  CreateScmDiscrepancyRecordInput,
+  CreateScmInspectionInput,
   CreateScmItemBatchInput,
   CreateScmItemSerialInput,
   CreateScmLandedCostInput,
+  CreateScmReceiptReversalInput,
+  CreateScmReceivingRecordInput,
   CreateScmRfqInput,
+  CreateScmReturnToVendorInput,
   CreateScmSpendAnalyticsSnapshotInput,
   CreateScmStockOpnameInput,
   CreateScmStockReservationInput,
@@ -15,6 +21,7 @@ import type {
   CreateScmSupplierBidInput,
   CreateScmSupplierContractInput,
   CreateScmSupplierEvaluationInput,
+  CreateScmValuationLayerAllocationInput,
   CreateScmWarehouseInput,
   CreateScmWarehouseLocationInput,
   CreateScmValuationLayerInput,
@@ -23,10 +30,21 @@ import type {
   RecordScmStockTransferReceiptInput,
   RecordScmStockTransferShipmentInput,
   RecordScmSupplierContractSpendInput,
+  ResolveScmDiscrepancyRecordInput,
+  ScmAccountAssignmentConfig,
+  ScmAccountAssignmentType,
+  ScmAccountingOutboxState,
+  ScmAccountingReadyEvent,
+  ScmAccountingReadyEventFilter,
+  ScmAccountingReadyEventStateTransition,
+  ScmAccountingReconciliationState,
   ScmAdvancedStockBalance,
   ScmAdvancedStockBalanceFilter,
   ScmAdvancedStockMovement,
   ScmAdvancedStockMovementFilter,
+  ScmDiscrepancyRecord,
+  ScmDiscrepancyRecordFilter,
+  ScmInspection,
   ScmItemBatch,
   ScmItemBatchListFilter,
   ScmItemSerial,
@@ -34,9 +52,18 @@ import type {
   ScmLandedCost,
   ScmLandedCostAllocation,
   ScmLandedCostFilter,
+  ScmReceiptReversal,
+  ScmReceiptReversalLine,
+  ScmReceivingLine,
+  ScmReceivingRecord,
+  ScmReceivingRecordFilter,
+  ScmReceivingStatus,
   ScmReorderPolicy,
   ScmReorderPolicyFilter,
   ScmReservationStatus,
+  ScmReturnToVendor,
+  ScmReturnToVendorFilter,
+  ScmReturnToVendorLine,
   ScmRfq,
   ScmRfqFilter,
   ScmRfqInvitedSupplier,
@@ -44,9 +71,11 @@ import type {
   ScmSpendAnalyticsPeriodType,
   ScmSpendAnalyticsSnapshot,
   ScmSpendAnalyticsSnapshotFilter,
+  ScmStockCondition,
   ScmStockOpname,
   ScmStockOpnameFilter,
   ScmStockOpnameLine,
+  ScmStockOwnerType,
   ScmStockReservation,
   ScmStockReservationFilter,
   ScmStockTransfer,
@@ -61,13 +90,19 @@ import type {
   ScmSupplierEvaluation,
   ScmSupplierEvaluationFilter,
   ScmValuationLayer,
+  ScmValuationLayerAllocation,
+  ScmValuationLayerAllocationFilter,
   ScmValuationLayerFilter,
   ScmWarehouse,
   ScmWarehouseListFilter,
   ScmWarehouseLocation,
   ScmWarehouseLocationListFilter,
   SupplyChainAdvancedRepository,
+  UpdateScmAccountAssignmentConfigInput,
+  UpdateScmAccountingReadyEventStateInput,
   UpdateScmItemSerialInput,
+  UpdateScmReceivingLineInspectionProjectionInput,
+  UpdateScmReceivingRecordStatusInput,
   UpdateScmRfqProjectionInput,
   UpdateScmStockOpnameProjectionInput,
   UpdateScmStockTransferProjectionInput,
@@ -386,8 +421,13 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         ],
       );
       return toItemSerial(r.rows[0]!);
-    } catch (error: any) {
-      if (error?.code === "23505") {
+    } catch (error: unknown) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "23505"
+      ) {
         throw new ConflictError(`Serial number ${input.serialNumber} already exists for this item`);
       }
       throw error;
@@ -491,6 +531,9 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     warehouseId: string,
     locationId: string | null = null,
     batchId: string | null = null,
+    stockCondition: ScmStockCondition = "unrestricted",
+    ownerType: ScmStockOwnerType = "own",
+    ownerPartyId: string | null = null,
   ): Promise<ScmAdvancedStockBalance | null> {
     const r = await this.pool.query(
       `SELECT * FROM scm_advanced_stock_balances
@@ -498,8 +541,11 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
           AND item_id = $2
           AND warehouse_id = $3
           AND (location_id IS NOT DISTINCT FROM $4)
-          AND (batch_id IS NOT DISTINCT FROM $5)`,
-      [tenantId, itemId, warehouseId, locationId, batchId],
+          AND (batch_id IS NOT DISTINCT FROM $5)
+          AND stock_condition = $6
+          AND owner_type = $7
+          AND (owner_party_id IS NOT DISTINCT FROM $8)`,
+      [tenantId, itemId, warehouseId, locationId, batchId, stockCondition, ownerType, ownerPartyId],
     );
     return r.rows[0] ? toStockBalance(r.rows[0]) : null;
   }
@@ -525,15 +571,29 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     }
     if (filter.locationId !== undefined) {
       params.push(filter.locationId);
-      conditions.push(`location_id = $${params.length}`);
+      conditions.push(`location_id IS NOT DISTINCT FROM $${params.length}`);
     }
     if (filter.batchId !== undefined) {
       params.push(filter.batchId);
-      conditions.push(`batch_id = $${params.length}`);
+      conditions.push(`batch_id IS NOT DISTINCT FROM $${params.length}`);
+    }
+    if (filter.stockCondition) {
+      params.push(filter.stockCondition);
+      conditions.push(`stock_condition = $${params.length}`);
+    }
+    if (filter.ownerType) {
+      params.push(filter.ownerType);
+      conditions.push(`owner_type = $${params.length}`);
+    }
+    if (filter.ownerPartyId !== undefined) {
+      params.push(filter.ownerPartyId);
+      conditions.push(`owner_party_id IS NOT DISTINCT FROM $${params.length}`);
     }
 
     const r = await this.pool.query(
-      `SELECT * FROM scm_advanced_stock_balances WHERE ${conditions.join(" AND ")} ORDER BY item_id, warehouse_id`,
+      `SELECT * FROM scm_advanced_stock_balances
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY item_id, warehouse_id, stock_condition, owner_type, condition_since ASC`,
       params,
     );
     return r.rows.map(toStockBalance);
@@ -543,14 +603,40 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     tenantId: string,
     input: RecordScmAdvancedStockMovementInput,
   ): Promise<{ movement: ScmAdvancedStockMovement; balance: ScmAdvancedStockBalance }> {
-    return this.inTransaction(async (client) => {
-      // 1. Insert immutable movement row
+    return this.inTransaction((client) => this.recordMovementTx(client, tenantId, input));
+  }
+
+  /**
+   * Movement + balance mutation bound to a caller-supplied transaction.
+   *
+   * Receiving, inspection and reversal must mutate the stock ledger inside the
+   * same transaction as their own documents, so the ledger write cannot be a
+   * standalone `inTransaction` call.
+   */
+  private async recordMovementTx(
+    client: PoolClient,
+    tenantId: string,
+    input: RecordScmAdvancedStockMovementInput,
+  ): Promise<{ movement: ScmAdvancedStockMovement; balance: ScmAdvancedStockBalance }> {
+    {
+      const stockCondition = input.stockCondition ?? "unrestricted";
+      const ownerType = input.ownerType ?? "own";
+      const ownerPartyId = input.ownerPartyId ?? null;
+
       const movRes = await client.query(
         `INSERT INTO scm_advanced_stock_movements (
            tenant_id, item_id, warehouse_id, location_id, batch_id, serial_id,
+           stock_condition, owner_type, owner_party_id,
            movement_type, quantity, unit_cost, total_cost, reference_type,
-           reference_id, reference_number, notes, occurred_at, created_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, now()), $16)
+           reference_id, reference_number, reversed_movement_id, accounting_ready_event_id,
+           notes, occurred_at, created_by
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6,
+           $7, $8, $9,
+           $10, $11, $12, $13, $14,
+           $15, $16, $17, $18,
+           $19, COALESCE($20, now()), $21
+         )
          RETURNING *`,
         [
           tenantId,
@@ -559,6 +645,9 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
           input.locationId ?? null,
           input.batchId ?? null,
           input.serialId ?? null,
+          stockCondition,
+          ownerType,
+          ownerPartyId,
           input.movementType,
           input.quantity,
           input.unitCost ?? null,
@@ -566,6 +655,8 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
           input.referenceType ?? null,
           input.referenceId ?? null,
           input.referenceNumber ?? null,
+          input.reversedMovementId ?? null,
+          input.accountingReadyEventId ?? null,
           input.notes ?? null,
           input.occurredAt ?? null,
           input.createdBy ?? null,
@@ -573,15 +664,17 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       );
       const movement = toStockMovement(movRes.rows[0]!);
 
-      // Calculate quantity delta: in/transfer_in/adjustment_in/opname_in are positive; others negative
       const isPositive =
         input.movementType === "in" ||
         input.movementType === "transfer_in" ||
         input.movementType === "adjustment_in" ||
-        input.movementType === "opname_in";
+        input.movementType === "opname_in" ||
+        input.movementType === "inspection_hold_in" ||
+        input.movementType === "inspection_release_in" ||
+        input.movementType === "receipt_reversal_in" ||
+        input.movementType === "consignment_in";
       const delta = isPositive ? input.quantity : -input.quantity;
 
-      // 2. Fetch balance with FOR UPDATE
       const balRes = await client.query(
         `SELECT * FROM scm_advanced_stock_balances
           WHERE tenant_id = $1
@@ -589,8 +682,20 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
             AND warehouse_id = $3
             AND (location_id IS NOT DISTINCT FROM $4)
             AND (batch_id IS NOT DISTINCT FROM $5)
+            AND stock_condition = $6
+            AND owner_type = $7
+            AND (owner_party_id IS NOT DISTINCT FROM $8)
           FOR UPDATE`,
-        [tenantId, input.itemId, input.warehouseId, input.locationId ?? null, input.batchId ?? null],
+        [
+          tenantId,
+          input.itemId,
+          input.warehouseId,
+          input.locationId ?? null,
+          input.batchId ?? null,
+          stockCondition,
+          ownerType,
+          ownerPartyId,
+        ],
       );
 
       let balance: ScmAdvancedStockBalance;
@@ -628,15 +733,27 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         }
         const insRes = await client.query(
           `INSERT INTO scm_advanced_stock_balances (
-             tenant_id, item_id, warehouse_id, location_id, batch_id, quantity, reserved_qty, updated_at
-           ) VALUES ($1, $2, $3, $4, $5, $6, 0, now())
+             tenant_id, item_id, warehouse_id, location_id, batch_id,
+             stock_condition, owner_type, owner_party_id, condition_since,
+             quantity, reserved_qty, updated_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, now()), $10, 0, now())
            RETURNING *`,
-          [tenantId, input.itemId, input.warehouseId, input.locationId ?? null, input.batchId ?? null, input.quantity],
+          [
+            tenantId,
+            input.itemId,
+            input.warehouseId,
+            input.locationId ?? null,
+            input.batchId ?? null,
+            stockCondition,
+            ownerType,
+            ownerPartyId,
+            input.occurredAt ?? null,
+            input.quantity,
+          ],
         );
         balance = toStockBalance(insRes.rows[0]!);
       }
 
-      // 3. If serialId provided, update serial status
       if (input.serialId) {
         let newStatus = "in_stock";
         if (input.movementType === "out" || input.movementType === "adjustment_out") {
@@ -659,7 +776,7 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       }
 
       return { movement, balance };
-    });
+    }
   }
 
   async listAdvancedStockMovements(
@@ -681,6 +798,34 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       params.push(filter.warehouseIds);
       conditions.push(`warehouse_id = ANY($${params.length})`);
     }
+    if (filter.locationId !== undefined) {
+      params.push(filter.locationId);
+      conditions.push(`location_id IS NOT DISTINCT FROM $${params.length}`);
+    }
+    if (filter.batchId !== undefined) {
+      params.push(filter.batchId);
+      conditions.push(`batch_id IS NOT DISTINCT FROM $${params.length}`);
+    }
+    if (filter.stockCondition) {
+      params.push(filter.stockCondition);
+      conditions.push(`stock_condition = $${params.length}`);
+    }
+    if (filter.ownerType) {
+      params.push(filter.ownerType);
+      conditions.push(`owner_type = $${params.length}`);
+    }
+    if (filter.ownerPartyId !== undefined) {
+      params.push(filter.ownerPartyId);
+      conditions.push(`owner_party_id IS NOT DISTINCT FROM $${params.length}`);
+    }
+    if (filter.referenceType) {
+      params.push(filter.referenceType);
+      conditions.push(`reference_type = $${params.length}`);
+    }
+    if (filter.referenceId) {
+      params.push(filter.referenceId);
+      conditions.push(`reference_id = $${params.length}`);
+    }
     if (filter.movementType) {
       params.push(filter.movementType);
       conditions.push(`movement_type = $${params.length}`);
@@ -700,7 +845,7 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     const r = await this.pool.query(
       `SELECT * FROM scm_advanced_stock_movements
         WHERE ${conditions.join(" AND ")}
-        ORDER BY occurred_at DESC
+        ORDER BY occurred_at DESC, created_at DESC
         LIMIT $${params.length}`,
       params,
     );
@@ -1317,25 +1462,42 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
   // =========================================================================
 
   async createValuationLayer(tenantId: string, input: CreateScmValuationLayerInput): Promise<ScmValuationLayer> {
+    const originalQty = input.originalQuantity;
+    const remainingQty = input.remainingQuantity ?? originalQty;
+    const landedCostAdded = input.landedCostAdded ?? 0;
+    const effectiveUnitCost = input.effectiveUnitCost ?? (input.unitCost + (originalQty > 0 ? landedCostAdded / originalQty : 0));
+    const totalValue = input.totalValue ?? (remainingQty * effectiveUnitCost);
+    const stockCondition = input.stockCondition ?? "unrestricted";
+    const ownerType = input.ownerType ?? "own";
+    const ownerPartyId = input.ownerPartyId ?? null;
+    const layerStatus = input.layerStatus ?? (remainingQty > 0 ? "open" : "consumed");
+
     const r = await this.pool.query(
       `INSERT INTO scm_valuation_layers (
-         tenant_id, item_id, warehouse_id, receipt_movement_id, received_date,
+         tenant_id, item_id, warehouse_id, receipt_movement_id, receiving_line_id, source_inspection_id,
+         stock_condition, owner_type, owner_party_id, layer_status, received_date,
          original_quantity, remaining_quantity, unit_cost, landed_cost_added,
          effective_unit_cost, total_value
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING *`,
       [
         tenantId,
         input.itemId,
         input.warehouseId ?? null,
         input.receiptMovementId ?? null,
+        input.receivingLineId ?? null,
+        input.sourceInspectionId ?? null,
+        stockCondition,
+        ownerType,
+        ownerPartyId,
+        layerStatus,
         input.receivedDate,
-        input.originalQuantity,
-        input.remainingQuantity,
+        originalQty,
+        remainingQty,
         input.unitCost,
-        input.landedCostAdded ?? 0,
-        input.effectiveUnitCost,
-        input.totalValue,
+        landedCostAdded,
+        effectiveUnitCost,
+        totalValue,
       ],
     );
     return toValuationLayer(r.rows[0]!);
@@ -1347,8 +1509,13 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
   ): Promise<ScmValuationLayer | null> {
     const r = await this.pool.query(
       `UPDATE scm_valuation_layers
-          SET remaining_quantity = $3,
-              total_value = $3 * effective_unit_cost
+          SET remaining_quantity = $3::numeric,
+              layer_status = CASE
+                WHEN layer_status IN ('reversed', 'closed') THEN layer_status
+                WHEN $3::numeric <= 0 THEN 'consumed'
+                ELSE 'open'
+              END,
+              total_value = $3::numeric * effective_unit_cost
         WHERE tenant_id = $1 AND id = $2
         RETURNING *`,
       [tenantId, input.layerId, input.remainingQuantity],
@@ -1379,12 +1546,16 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       params.push(filter.warehouseId);
       conditions.push(`warehouse_id = $${params.length}`);
     }
+    if (filter.warehouseIds && filter.warehouseIds.length > 0) {
+      params.push(filter.warehouseIds);
+      conditions.push(`warehouse_id = ANY($${params.length})`);
+    }
     if (filter.onlyWithRemaining) {
       conditions.push(`remaining_quantity > 0`);
     }
 
     const r = await this.pool.query(
-      `SELECT * FROM scm_valuation_layers WHERE ${conditions.join(" AND ")} ORDER BY received_date ASC`,
+      `SELECT * FROM scm_valuation_layers WHERE ${conditions.join(" AND ")} ORDER BY received_date ASC, created_at ASC`,
       params,
     );
     return r.rows.map(toValuationLayer);
@@ -2245,6 +2416,937 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
   }
 
   // =========================================================================
+  // Wave A5.1 Stage 1: Account Assignment, Receiving, Inspection, Events & Returns
+  // =========================================================================
+
+  async listAccountAssignmentConfigs(tenantId: string, activeOnly = false): Promise<ScmAccountAssignmentConfig[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+    if (activeOnly) {
+      conditions.push("is_active = true");
+    }
+    const r = await this.pool.query(
+      `SELECT * FROM scm_account_assignment_configs WHERE ${conditions.join(" AND ")} ORDER BY assignment_type ASC`,
+      params,
+    );
+    return r.rows.map(toAccountAssignmentConfig);
+  }
+
+  async findAccountAssignmentConfig(
+    tenantId: string,
+    assignmentType: ScmAccountAssignmentType,
+  ): Promise<ScmAccountAssignmentConfig | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM scm_account_assignment_configs WHERE tenant_id = $1 AND assignment_type = $2`,
+      [tenantId, assignmentType],
+    );
+    return r.rows[0] ? toAccountAssignmentConfig(r.rows[0]) : null;
+  }
+
+  async updateAccountAssignmentConfig(
+    tenantId: string,
+    input: UpdateScmAccountAssignmentConfigInput,
+  ): Promise<ScmAccountAssignmentConfig | null> {
+    const r = await this.pool.query(
+      `UPDATE scm_account_assignment_configs
+          SET required_dimensions = CASE WHEN $3::boolean THEN $4::jsonb ELSE required_dimensions END,
+              inventory_relevant = COALESCE($5, inventory_relevant),
+              is_active = COALESCE($6, is_active),
+              updated_by = $7,
+              updated_at = now()
+        WHERE tenant_id = $1 AND assignment_type = $2
+        RETURNING *`,
+      [
+        tenantId,
+        input.assignmentType,
+        input.requiredDimensions !== undefined,
+        input.requiredDimensions !== undefined ? JSON.stringify(input.requiredDimensions) : null,
+        input.inventoryRelevant ?? null,
+        input.isActive ?? null,
+        input.updatedBy ?? null,
+      ],
+    );
+    return r.rows[0] ? toAccountAssignmentConfig(r.rows[0]) : null;
+  }
+
+  async createReceivingRecord(
+    tenantId: string,
+    input: CreateScmReceivingRecordInput,
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] }> {
+    return this.inTransaction(async (client) => {
+      const recRes = await client.query(
+        `INSERT INTO scm_receiving_records (
+           tenant_id, receipt_number, idempotency_key, purchase_order_id, supplier_id,
+           warehouse_id, location_id, received_at, received_by, status, notes,
+           created_by, updated_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, now()), $9, 'received', $10, $11, $11)
+         RETURNING *`,
+        [
+          tenantId,
+          input.receiptNumber,
+          input.idempotencyKey,
+          input.purchaseOrderId,
+          input.supplierId,
+          input.warehouseId,
+          input.locationId ?? null,
+          input.receivedAt ?? null,
+          input.receivedBy ?? null,
+          input.notes ?? null,
+          input.createdBy ?? null,
+        ],
+      );
+      const receiving = toReceivingRecord(recRes.rows[0]!);
+
+      const lines: ScmReceivingLine[] = [];
+      let sort = 0;
+      for (const line of input.lines) {
+        const lRes = await client.query(
+          `INSERT INTO scm_receiving_lines (
+             tenant_id, receiving_record_id, purchase_order_line_id, item_id,
+             warehouse_id, location_id, batch_id, stock_condition, owner_type, owner_party_id,
+             quantity_received, quantity_accepted, quantity_rejected, quantity_quarantined,
+             quantity_returned, quantity_reversed, unit_cost, currency,
+             account_assignment_type, account_assignment_dimensions, frozen_account_assignment_at,
+             inspection_required, hold_movement_id, notes, sort_order
+           ) VALUES (
+             $1, $2, $3, $4,
+             $5, $6, $7, $8, $9, $10,
+             $11, 0, 0, 0,
+             0, 0, $12, $13,
+             $14, $15::jsonb, now(),
+             $16, $17, $18, $19
+           )
+           RETURNING *`,
+          [
+            tenantId,
+            receiving.id,
+            line.purchaseOrderLineId,
+            line.itemId,
+            line.warehouseId ?? input.warehouseId,
+            line.locationId ?? input.locationId ?? null,
+            line.batchId ?? null,
+            line.stockCondition ?? "quality_hold",
+            line.ownerType ?? "own",
+            line.ownerPartyId ?? null,
+            line.quantityReceived,
+            line.unitCost ?? null,
+            line.currency ?? "IDR",
+            line.accountAssignmentType,
+            JSON.stringify(line.accountAssignmentDimensions ?? {}),
+            line.inspectionRequired ?? true,
+            line.holdMovementId ?? null,
+            line.notes ?? null,
+            line.sortOrder ?? sort++,
+          ],
+        );
+        const holdingLine = toReceivingLine(lRes.rows[0]!);
+        const holdCondition = holdingLine.stockCondition;
+        const holdOwnerType = holdingLine.ownerType;
+        const holdOwnerPartyId = holdingLine.ownerPartyId;
+
+        // Stage 1 keeps the stock ledger append-only. Every received quantity
+        // enters as an inspection hold-in movement into the receiving line's
+        // stock position, so a later receipt reversal can deterministically
+        // compensate exactly that position.
+        const hold = await this.recordMovementTx(client, tenantId, {
+          itemId: holdingLine.itemId,
+          warehouseId: holdingLine.warehouseId,
+          locationId: holdingLine.locationId,
+          batchId: holdingLine.batchId,
+          stockCondition: holdCondition,
+          ownerType: holdOwnerType,
+          ownerPartyId: holdOwnerPartyId,
+          movementType: "inspection_hold_in",
+          quantity: holdingLine.quantityReceived,
+          unitCost: holdingLine.unitCost,
+          totalCost: num(holdingLine.quantityReceived) * (holdingLine.unitCost ?? 0),
+          referenceType: "scm_receiving_record",
+          referenceId: receiving.id,
+          referenceNumber: input.receiptNumber,
+          notes: `Goods received holding ${holdingLine.quantityReceived} for inspection`,
+          occurredAt: input.receivedAt,
+          createdBy: input.createdBy ?? null,
+        });
+
+        const updRes = await client.query(
+          `UPDATE scm_receiving_lines
+              SET hold_movement_id = $3
+            WHERE tenant_id = $1 AND id = $2
+            RETURNING *`,
+          [tenantId, holdingLine.id, hold.movement.id],
+        );
+        lines.push(toReceivingLine(updRes.rows[0]!));
+      }
+
+      return { receiving, lines };
+    });
+  }
+
+  async updateReceivingRecordStatus(
+    tenantId: string,
+    input: UpdateScmReceivingRecordStatusInput,
+  ): Promise<ScmReceivingRecord | null> {
+    const r = await this.pool.query(
+      `UPDATE scm_receiving_records
+          SET status = $3,
+              updated_by = $4,
+              updated_at = now()
+        WHERE tenant_id = $1 AND id = $2
+        RETURNING *`,
+      [tenantId, input.receivingRecordId, input.status, input.updatedBy ?? null],
+    );
+    return r.rows[0] ? toReceivingRecord(r.rows[0]) : null;
+  }
+
+  async updateReceivingLineInspectionProjection(
+    tenantId: string,
+    input: UpdateScmReceivingLineInspectionProjectionInput,
+  ): Promise<ScmReceivingLine | null> {
+    const r = await this.pool.query(
+      `UPDATE scm_receiving_lines
+          SET quantity_accepted = COALESCE($3, quantity_accepted),
+              quantity_rejected = COALESCE($4, quantity_rejected),
+              quantity_quarantined = COALESCE($5, quantity_quarantined),
+              stock_condition = COALESCE($6, stock_condition),
+              acceptance_movement_id = CASE WHEN $7::boolean THEN $8 ELSE acceptance_movement_id END,
+              valuation_layer_id = CASE WHEN $9::boolean THEN $10 ELSE valuation_layer_id END
+        WHERE tenant_id = $1 AND id = $2
+        RETURNING *`,
+      [
+        tenantId,
+        input.receivingLineId,
+        input.quantityAccepted ?? null,
+        input.quantityRejected ?? null,
+        input.quantityQuarantined ?? null,
+        input.stockCondition ?? null,
+        input.acceptanceMovementId !== undefined,
+        input.acceptanceMovementId ?? null,
+        input.valuationLayerId !== undefined,
+        input.valuationLayerId ?? null,
+      ],
+    );
+    return r.rows[0] ? toReceivingLine(r.rows[0]) : null;
+  }
+
+  async findReceivingRecordById(
+    tenantId: string,
+    receivingRecordId: string,
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] } | null> {
+    const recRes = await this.pool.query(
+      `SELECT * FROM scm_receiving_records WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, receivingRecordId],
+    );
+    if (!recRes.rows[0]) return null;
+
+    const linesRes = await this.pool.query(
+      `SELECT * FROM scm_receiving_lines WHERE tenant_id = $1 AND receiving_record_id = $2 ORDER BY sort_order ASC, id ASC`,
+      [tenantId, receivingRecordId],
+    );
+    return {
+      receiving: toReceivingRecord(recRes.rows[0]),
+      lines: linesRes.rows.map(toReceivingLine),
+    };
+  }
+
+  async findReceivingRecordByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] } | null> {
+    const recRes = await this.pool.query(
+      `SELECT id FROM scm_receiving_records WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    if (!recRes.rows[0]) return null;
+    return this.findReceivingRecordById(tenantId, recRes.rows[0].id);
+  }
+
+  async listReceivingRecords(
+    tenantId: string,
+    filter: ScmReceivingRecordFilter = {},
+  ): Promise<ScmReceivingRecord[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+
+    if (filter.purchaseOrderId) {
+      params.push(filter.purchaseOrderId);
+      conditions.push(`purchase_order_id = $${params.length}`);
+    }
+    if (filter.supplierId) {
+      params.push(filter.supplierId);
+      conditions.push(`supplier_id = $${params.length}`);
+    }
+    if (filter.warehouseId) {
+      params.push(filter.warehouseId);
+      conditions.push(`warehouse_id = $${params.length}`);
+    }
+    if (filter.warehouseIds && filter.warehouseIds.length > 0) {
+      params.push(filter.warehouseIds);
+      conditions.push(`warehouse_id = ANY($${params.length})`);
+    }
+    if (filter.status) {
+      params.push(filter.status);
+      conditions.push(`status = $${params.length}`);
+    }
+    if (filter.receivedFrom) {
+      params.push(filter.receivedFrom);
+      conditions.push(`received_at >= $${params.length}`);
+    }
+    if (filter.receivedTo) {
+      params.push(filter.receivedTo);
+      conditions.push(`received_at <= $${params.length}`);
+    }
+
+    const limit = filter.limit && filter.limit > 0 ? filter.limit : 100;
+    params.push(limit);
+
+    const r = await this.pool.query(
+      `SELECT * FROM scm_receiving_records
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY received_at DESC, created_at DESC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return r.rows.map(toReceivingRecord);
+  }
+
+  async createInspection(tenantId: string, input: CreateScmInspectionInput): Promise<ScmInspection> {
+    const r = await this.pool.query(
+      `INSERT INTO scm_inspections (
+         tenant_id, receiving_line_id, inspection_number, idempotency_key,
+         inspected_at, inspected_by, quantity_accepted, quantity_rejected,
+         quantity_quarantined, result, reason, created_by
+       ) VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6, $7, $8, $9, $10, $11, $12)
+       RETURNING *`,
+      [
+        tenantId,
+        input.receivingLineId,
+        input.inspectionNumber,
+        input.idempotencyKey,
+        input.inspectedAt ?? null,
+        input.inspectedBy ?? null,
+        input.quantityAccepted ?? 0,
+        input.quantityRejected ?? 0,
+        input.quantityQuarantined ?? 0,
+        input.result,
+        input.reason ?? null,
+        input.createdBy ?? null,
+      ],
+    );
+    return toInspection(r.rows[0]!);
+  }
+
+  async findInspectionByReceivingLineId(tenantId: string, receivingLineId: string): Promise<ScmInspection | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM scm_inspections WHERE tenant_id = $1 AND receiving_line_id = $2`,
+      [tenantId, receivingLineId],
+    );
+    return r.rows[0] ? toInspection(r.rows[0]) : null;
+  }
+
+  async findInspectionByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<ScmInspection | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM scm_inspections WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    return r.rows[0] ? toInspection(r.rows[0]) : null;
+  }
+
+  async createDiscrepancyRecord(tenantId: string, input: CreateScmDiscrepancyRecordInput): Promise<ScmDiscrepancyRecord> {
+    const r = await this.pool.query(
+      `INSERT INTO scm_discrepancy_records (
+         tenant_id, receiving_line_id, discrepancy_type, quantity, description, status, created_by
+       ) VALUES ($1, $2, $3, $4, $5, 'open', $6)
+       RETURNING *`,
+      [
+        tenantId,
+        input.receivingLineId,
+        input.discrepancyType,
+        input.quantity ?? null,
+        input.description,
+        input.createdBy ?? null,
+      ],
+    );
+    return toDiscrepancyRecord(r.rows[0]!);
+  }
+
+  async resolveDiscrepancyRecord(
+    tenantId: string,
+    input: ResolveScmDiscrepancyRecordInput,
+  ): Promise<ScmDiscrepancyRecord | null> {
+    const r = await this.pool.query(
+      `UPDATE scm_discrepancy_records
+          SET status = $3,
+              resolved_at = COALESCE($4, now()),
+              resolved_by = $5,
+              resolution_notes = $6
+        WHERE tenant_id = $1 AND id = $2
+        RETURNING *`,
+      [
+        tenantId,
+        input.discrepancyId,
+        input.status,
+        input.resolvedAt ?? null,
+        input.resolvedBy ?? null,
+        input.resolutionNotes ?? null,
+      ],
+    );
+    return r.rows[0] ? toDiscrepancyRecord(r.rows[0]) : null;
+  }
+
+  async listDiscrepancyRecords(
+    tenantId: string,
+    filter: ScmDiscrepancyRecordFilter = {},
+  ): Promise<ScmDiscrepancyRecord[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+
+    if (filter.receivingLineId) {
+      params.push(filter.receivingLineId);
+      conditions.push(`receiving_line_id = $${params.length}`);
+    }
+    if (filter.status) {
+      params.push(filter.status);
+      conditions.push(`status = $${params.length}`);
+    }
+    if (filter.discrepancyType) {
+      params.push(filter.discrepancyType);
+      conditions.push(`discrepancy_type = $${params.length}`);
+    }
+
+    const r = await this.pool.query(
+      `SELECT * FROM scm_discrepancy_records WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`,
+      params,
+    );
+    return r.rows.map(toDiscrepancyRecord);
+  }
+
+  async createAccountingReadyEvent(
+    tenantId: string,
+    input: CreateScmAccountingReadyEventInput,
+  ): Promise<ScmAccountingReadyEvent> {
+    const r = await this.pool.query(
+      `INSERT INTO scm_accounting_ready_events (
+         tenant_id, event_type, source_document_type, source_document_id,
+         source_document_line_id, source_movement_id, source_document_revision,
+         effective_at, currency, amount, quantity, unit_cost,
+         account_assignment_type, account_assignment_dimensions, idempotency_key,
+         reversal_of_event_id, outbox_state, reconciliation_state, payload, created_by
+       ) VALUES (
+         $1, $2, $3, $4,
+         $5, $6, $7,
+         COALESCE($8, now()), $9, $10, $11, $12,
+         $13, $14::jsonb, $15,
+         $16, 'pending', 'unmatched', $17::jsonb, $18
+       )
+       RETURNING *`,
+      [
+        tenantId,
+        input.eventType,
+        input.sourceDocumentType,
+        input.sourceDocumentId,
+        input.sourceDocumentLineId ?? null,
+        input.sourceMovementId ?? null,
+        input.sourceDocumentRevision ?? 1,
+        input.effectiveAt ?? null,
+        input.currency ?? "IDR",
+        input.amount ?? 0,
+        input.quantity ?? null,
+        input.unitCost ?? null,
+        input.accountAssignmentType ?? null,
+        JSON.stringify(input.accountAssignmentDimensions ?? {}),
+        input.idempotencyKey,
+        input.reversalOfEventId ?? null,
+        JSON.stringify(input.payload ?? {}),
+        input.createdBy ?? null,
+      ],
+    );
+    return toAccountingReadyEvent(r.rows[0]!);
+  }
+
+  async updateAccountingReadyEventState(
+    tenantId: string,
+    input: UpdateScmAccountingReadyEventStateInput,
+  ): Promise<{ event: ScmAccountingReadyEvent; transition: ScmAccountingReadyEventStateTransition } | null> {
+    return this.inTransaction(async (client) => {
+      const lockRes = await client.query(
+        `SELECT * FROM scm_accounting_ready_events WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, input.accountingEventId],
+      );
+      if (!lockRes.rows[0]) return null;
+      const current = lockRes.rows[0]!;
+      const fromState = input.stateKind === "outbox" ? (current.outbox_state as string) : (current.reconciliation_state as string);
+
+      let upSql = "";
+      if (input.stateKind === "outbox") {
+        upSql = `UPDATE scm_accounting_ready_events SET outbox_state = $3 WHERE tenant_id = $1 AND id = $2 RETURNING *`;
+      } else {
+        upSql = `UPDATE scm_accounting_ready_events SET reconciliation_state = $3 WHERE tenant_id = $1 AND id = $2 RETURNING *`;
+      }
+
+      const upRes = await client.query(upSql, [tenantId, input.accountingEventId, input.toState]);
+      const event = toAccountingReadyEvent(upRes.rows[0]!);
+
+      const trRes = await client.query(
+        `INSERT INTO scm_accounting_ready_event_state_transitions (
+           tenant_id, accounting_event_id, state_kind, from_state, to_state, reason, occurred_at, occurred_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, now()), $8)
+         RETURNING *`,
+        [
+          tenantId,
+          input.accountingEventId,
+          input.stateKind,
+          fromState,
+          input.toState,
+          input.reason ?? null,
+          input.occurredAt ?? null,
+          input.occurredBy ?? null,
+        ],
+      );
+      const transition = toAccountingReadyEventStateTransition(trRes.rows[0]!);
+
+      return { event, transition };
+    });
+  }
+
+  async findAccountingReadyEventById(tenantId: string, eventId: string): Promise<ScmAccountingReadyEvent | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM scm_accounting_ready_events WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, eventId],
+    );
+    return r.rows[0] ? toAccountingReadyEvent(r.rows[0]) : null;
+  }
+
+  async findAccountingReadyEventByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<ScmAccountingReadyEvent | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM scm_accounting_ready_events WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    return r.rows[0] ? toAccountingReadyEvent(r.rows[0]) : null;
+  }
+
+  async listAccountingReadyEvents(
+    tenantId: string,
+    filter: ScmAccountingReadyEventFilter = {},
+  ): Promise<ScmAccountingReadyEvent[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+
+    if (filter.eventType) {
+      params.push(filter.eventType);
+      conditions.push(`event_type = $${params.length}`);
+    }
+    if (filter.sourceDocumentType) {
+      params.push(filter.sourceDocumentType);
+      conditions.push(`source_document_type = $${params.length}`);
+    }
+    if (filter.sourceDocumentId) {
+      params.push(filter.sourceDocumentId);
+      conditions.push(`source_document_id = $${params.length}`);
+    }
+    if (filter.outboxState) {
+      params.push(filter.outboxState);
+      conditions.push(`outbox_state = $${params.length}`);
+    }
+    if (filter.reconciliationState) {
+      params.push(filter.reconciliationState);
+      conditions.push(`reconciliation_state = $${params.length}`);
+    }
+    if (filter.createdFrom) {
+      params.push(filter.createdFrom);
+      conditions.push(`created_at >= $${params.length}`);
+    }
+    if (filter.createdTo) {
+      params.push(filter.createdTo);
+      conditions.push(`created_at <= $${params.length}`);
+    }
+
+    const limit = filter.limit && filter.limit > 0 ? filter.limit : 100;
+    params.push(limit);
+
+    const r = await this.pool.query(
+      `SELECT * FROM scm_accounting_ready_events
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY created_at DESC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return r.rows.map(toAccountingReadyEvent);
+  }
+
+  async createReturnToVendor(
+    tenantId: string,
+    input: CreateScmReturnToVendorInput,
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] }> {
+    return this.inTransaction(async (client) => {
+      const rtvRes = await client.query(
+        `INSERT INTO scm_return_to_vendors (
+           tenant_id, return_number, idempotency_key, supplier_id, purchase_order_id,
+           warehouse_id, returned_at, returned_by, reason, status, notes, created_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, now()), $8, $9, 'executed', $10, $11)
+         RETURNING *`,
+        [
+          tenantId,
+          input.returnNumber,
+          input.idempotencyKey,
+          input.supplierId,
+          input.purchaseOrderId ?? null,
+          input.warehouseId,
+          input.returnedAt ?? null,
+          input.returnedBy ?? null,
+          input.reason,
+          input.notes ?? null,
+          input.createdBy ?? null,
+        ],
+      );
+      const returnToVendor = toReturnToVendor(rtvRes.rows[0]!);
+
+      const lines: ScmReturnToVendorLine[] = [];
+      let sort = 0;
+      for (const line of input.lines) {
+        const lRes = await client.query(
+          `INSERT INTO scm_return_to_vendor_lines (
+             tenant_id, return_to_vendor_id, receiving_line_id, item_id,
+             warehouse_id, location_id, batch_id, stock_condition, owner_type, owner_party_id,
+             quantity, movement_id, accounting_ready_event_id, notes, sort_order
+           ) VALUES (
+             $1, $2, $3, $4,
+             $5, $6, $7, $8, $9, $10,
+             $11, $12, $13, $14, $15
+           )
+           RETURNING *`,
+          [
+            tenantId,
+            returnToVendor.id,
+            line.receivingLineId ?? null,
+            line.itemId,
+            line.warehouseId,
+            line.locationId ?? null,
+            line.batchId ?? null,
+            line.stockCondition ?? "unrestricted",
+            line.ownerType ?? "own",
+            line.ownerPartyId ?? null,
+            line.quantity,
+            line.movementId ?? null,
+            line.accountingReadyEventId ?? null,
+            line.notes ?? null,
+            line.sortOrder ?? sort++,
+          ],
+        );
+        lines.push(toReturnToVendorLine(lRes.rows[0]!));
+      }
+
+      return { returnToVendor, lines };
+    });
+  }
+
+  async findReturnToVendorById(
+    tenantId: string,
+    returnToVendorId: string,
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] } | null> {
+    const rtvRes = await this.pool.query(
+      `SELECT * FROM scm_return_to_vendors WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, returnToVendorId],
+    );
+    if (!rtvRes.rows[0]) return null;
+
+    const linesRes = await this.pool.query(
+      `SELECT * FROM scm_return_to_vendor_lines WHERE tenant_id = $1 AND return_to_vendor_id = $2 ORDER BY sort_order ASC, id ASC`,
+      [tenantId, returnToVendorId],
+    );
+    return {
+      returnToVendor: toReturnToVendor(rtvRes.rows[0]),
+      lines: linesRes.rows.map(toReturnToVendorLine),
+    };
+  }
+
+  async findReturnToVendorByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] } | null> {
+    const rtvRes = await this.pool.query(
+      `SELECT id FROM scm_return_to_vendors WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    if (!rtvRes.rows[0]) return null;
+    return this.findReturnToVendorById(tenantId, rtvRes.rows[0].id);
+  }
+
+  async listReturnToVendors(tenantId: string, filter: ScmReturnToVendorFilter = {}): Promise<ScmReturnToVendor[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+
+    if (filter.supplierId) {
+      params.push(filter.supplierId);
+      conditions.push(`supplier_id = $${params.length}`);
+    }
+    if (filter.purchaseOrderId) {
+      params.push(filter.purchaseOrderId);
+      conditions.push(`purchase_order_id = $${params.length}`);
+    }
+    if (filter.warehouseId) {
+      params.push(filter.warehouseId);
+      conditions.push(`warehouse_id = $${params.length}`);
+    }
+    if (filter.warehouseIds && filter.warehouseIds.length > 0) {
+      params.push(filter.warehouseIds);
+      conditions.push(`warehouse_id = ANY($${params.length})`);
+    }
+    if (filter.status) {
+      params.push(filter.status);
+      conditions.push(`status = $${params.length}`);
+    }
+    if (filter.returnedFrom) {
+      params.push(filter.returnedFrom);
+      conditions.push(`returned_at >= $${params.length}`);
+    }
+    if (filter.returnedTo) {
+      params.push(filter.returnedTo);
+      conditions.push(`returned_at <= $${params.length}`);
+    }
+
+    const limit = filter.limit && filter.limit > 0 ? filter.limit : 100;
+    params.push(limit);
+
+    const r = await this.pool.query(
+      `SELECT * FROM scm_return_to_vendors
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY returned_at DESC, created_at DESC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return r.rows.map(toReturnToVendor);
+  }
+
+  async createReceiptReversal(
+    tenantId: string,
+    input: CreateScmReceiptReversalInput,
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] }> {
+    return this.inTransaction(async (client) => {
+      // Lock the receiving record header so two concurrent reversals of the
+      // same receipt cannot both pass the "already reversed" check.
+      const recRes = await client.query(
+        `SELECT * FROM scm_receiving_records
+          WHERE tenant_id = $1 AND id = $2
+          FOR UPDATE`,
+        [tenantId, input.receivingRecordId],
+      );
+      if (!recRes.rows[0] || recRes.rows[0].status === "reversed") {
+        throw new ConflictError(`Receiving record ${input.receivingRecordId} cannot be reversed`);
+      }
+      const receiving = toReceivingRecord(recRes.rows[0]!);
+
+      const lineRes = await client.query(
+        `SELECT * FROM scm_receiving_lines
+          WHERE tenant_id = $1 AND receiving_record_id = $2
+          ORDER BY sort_order ASC, id ASC`,
+        [tenantId, input.receivingRecordId],
+      );
+      const receivingLines = lineRes.rows.map(toReceivingLine);
+
+      // Compute the effective reversible quantity for each line. The original
+      // receipt inserted the full quantity_received as an inspection hold-in
+      // movement; a reversal removes exactly the still-unreversed remainder.
+      const reversals: Array<{ line: ScmReceivingLine; quantity: number }> = [];
+      for (const line of receivingLines) {
+        const reversibleQty = num(line.quantityReceived) - num(line.quantityReversed);
+        if (reversibleQty <= 0) {
+          continue;
+        }
+        reversals.push({ line, quantity: reversibleQty });
+      }
+      if (reversals.length === 0) {
+        throw new ConflictError(`Receiving record ${input.receivingRecordId} has nothing left to reverse`);
+      }
+
+      const revRes = await client.query(
+        `INSERT INTO scm_receipt_reversals (
+           tenant_id, reversal_number, idempotency_key, receiving_record_id,
+           reason, reversed_at, reversed_by, created_by
+         ) VALUES ($1, $2, $3, $4, $5, COALESCE($6, now()), $7, $8)
+         RETURNING *`,
+        [
+          tenantId,
+          input.reversalNumber,
+          input.idempotencyKey,
+          input.receivingRecordId,
+          input.reason,
+          input.reversedAt ?? null,
+          input.reversedBy ?? null,
+          input.createdBy ?? null,
+        ],
+      );
+      const reversal = toReceiptReversal(revRes.rows[0]!);
+
+      const lines: ScmReceiptReversalLine[] = [];
+      let sort = 0;
+      for (const { line, quantity } of reversals) {
+        // Compensate the stock position that the receipt populated. The
+        // movement is created from the receiving line's stock position so the
+        // exact balance that holds the goods is depleted deterministically.
+        const compRes = await this.recordMovementTx(client, tenantId, {
+          itemId: line.itemId,
+          warehouseId: line.warehouseId,
+          locationId: line.locationId,
+          batchId: line.batchId,
+          stockCondition: line.stockCondition,
+          ownerType: line.ownerType,
+          ownerPartyId: line.ownerPartyId,
+          movementType: "receipt_reversal_out",
+          quantity,
+          unitCost: line.unitCost,
+          totalCost: quantity * (line.unitCost ?? 0),
+          referenceType: "scm_receipt_reversal",
+          referenceId: input.receivingRecordId,
+          referenceNumber: input.reversalNumber,
+          notes: `Reverse ${receiving.receiptNumber} line ${quantity}`,
+          occurredAt: input.reversedAt,
+          createdBy: input.createdBy ?? null,
+        });
+
+        await client.query(
+          `UPDATE scm_receiving_lines
+              SET quantity_reversed = quantity_reversed + $3
+            WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, line.id, quantity],
+        );
+
+        const lRes = await client.query(
+          `INSERT INTO scm_receipt_reversal_lines (
+             tenant_id, reversal_id, receiving_line_id, quantity, movement_id, restored_layer_id, sort_order
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING *`,
+          [
+            tenantId,
+            reversal.id,
+            line.id,
+            quantity,
+            compRes.movement.id,
+            line.valuationLayerId ?? null,
+            sort,
+          ],
+        );
+        lines.push(toReceiptReversalLine(lRes.rows[0]!));
+        sort++;
+      }
+
+      // The receiving record header moves to `reversed` once every line has
+      // been fully compensated. `stock_condition` on the line stays within its
+      // allowed CHECK values — the header carries the terminal state.
+      await client.query(
+        `UPDATE scm_receiving_records
+            SET status = $3,
+                updated_by = COALESCE($4, updated_by),
+                updated_at = now()
+          WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, input.receivingRecordId, "reversed", input.reversedBy ?? null],
+      );
+
+      return { reversal, lines };
+    });
+  }
+
+  async findReceiptReversalByReceivingRecordId(
+    tenantId: string,
+    receivingRecordId: string,
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] } | null> {
+    const revRes = await this.pool.query(
+      `SELECT * FROM scm_receipt_reversals WHERE tenant_id = $1 AND receiving_record_id = $2`,
+      [tenantId, receivingRecordId],
+    );
+    if (!revRes.rows[0]) return null;
+
+    const linesRes = await this.pool.query(
+      `SELECT * FROM scm_receipt_reversal_lines WHERE tenant_id = $1 AND reversal_id = $2 ORDER BY sort_order ASC, id ASC`,
+      [tenantId, revRes.rows[0].id],
+    );
+    return {
+      reversal: toReceiptReversal(revRes.rows[0]),
+      lines: linesRes.rows.map(toReceiptReversalLine),
+    };
+  }
+
+  async findReceiptReversalByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] } | null> {
+    const revRes = await this.pool.query(
+      `SELECT * FROM scm_receipt_reversals WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    if (!revRes.rows[0]) return null;
+
+    const linesRes = await this.pool.query(
+      `SELECT * FROM scm_receipt_reversal_lines WHERE tenant_id = $1 AND reversal_id = $2 ORDER BY sort_order ASC, id ASC`,
+      [tenantId, revRes.rows[0].id],
+    );
+    return {
+      reversal: toReceiptReversal(revRes.rows[0]),
+      lines: linesRes.rows.map(toReceiptReversalLine),
+    };
+  }
+
+  async createValuationLayerAllocation(
+    tenantId: string,
+    input: CreateScmValuationLayerAllocationInput,
+  ): Promise<ScmValuationLayerAllocation> {
+    const r = await this.pool.query(
+      `INSERT INTO scm_valuation_layer_allocations (
+         tenant_id, valuation_layer_id, movement_id, allocation_type,
+         quantity, unit_cost, amount, reverses_allocation_id, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        tenantId,
+        input.valuationLayerId,
+        input.movementId,
+        input.allocationType,
+        input.quantity,
+        input.unitCost,
+        input.amount,
+        input.reversesAllocationId ?? null,
+        input.createdBy ?? null,
+      ],
+    );
+    return toValuationLayerAllocation(r.rows[0]!);
+  }
+
+  async listValuationLayerAllocations(
+    tenantId: string,
+    filter: ScmValuationLayerAllocationFilter = {},
+  ): Promise<ScmValuationLayerAllocation[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+
+    if (filter.valuationLayerId) {
+      params.push(filter.valuationLayerId);
+      conditions.push(`valuation_layer_id = $${params.length}`);
+    }
+    if (filter.movementId) {
+      params.push(filter.movementId);
+      conditions.push(`movement_id = $${params.length}`);
+    }
+    if (filter.allocationType) {
+      params.push(filter.allocationType);
+      conditions.push(`allocation_type = $${params.length}`);
+    }
+
+    const limit = filter.limit && filter.limit > 0 ? filter.limit : 100;
+    params.push(limit);
+
+    const r = await this.pool.query(
+      `SELECT * FROM scm_valuation_layer_allocations
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY created_at DESC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return r.rows.map(toValuationLayerAllocation);
+  }
+
+  // =========================================================================
   // Reference checks
   // =========================================================================
 
@@ -2375,6 +3477,8 @@ function toItemSerial(r: QueryResultRow): ScmItemSerial {
 function toStockBalance(r: QueryResultRow): ScmAdvancedStockBalance {
   const qty = num(r.quantity);
   const reserved = num(r.reserved_qty);
+  const stockCondition = r.stock_condition as ScmStockCondition;
+  const ownerType = r.owner_type as ScmStockOwnerType;
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -2382,11 +3486,18 @@ function toStockBalance(r: QueryResultRow): ScmAdvancedStockBalance {
     warehouseId: r.warehouse_id,
     locationId: r.location_id,
     batchId: r.batch_id,
+    stockCondition,
+    ownerType,
+    ownerPartyId: r.owner_party_id,
+    conditionSince: r.condition_since,
     quantity: qty,
     reservedQty: reserved,
     onHandQuantity: qty,
     reservedQuantity: reserved,
-    availableQuantity: Math.max(0, qty - reserved),
+    availableQuantity:
+      stockCondition === "unrestricted" && ownerType === "own"
+        ? Math.max(0, qty - reserved)
+        : 0,
     updatedAt: r.updated_at,
   };
 }
@@ -2400,6 +3511,9 @@ function toStockMovement(r: QueryResultRow): ScmAdvancedStockMovement {
     locationId: r.location_id,
     batchId: r.batch_id,
     serialId: r.serial_id,
+    stockCondition: r.stock_condition,
+    ownerType: r.owner_type,
+    ownerPartyId: r.owner_party_id,
     movementType: r.movement_type,
     quantity: num(r.quantity),
     unitCost: numOrNull(r.unit_cost),
@@ -2407,6 +3521,8 @@ function toStockMovement(r: QueryResultRow): ScmAdvancedStockMovement {
     referenceType: r.reference_type,
     referenceId: r.reference_id,
     referenceNumber: r.reference_number,
+    reversedMovementId: r.reversed_movement_id,
+    accountingReadyEventId: r.accounting_ready_event_id,
     notes: r.notes,
     occurredAt: r.occurred_at,
     createdBy: r.created_by,
@@ -2538,6 +3654,12 @@ function toValuationLayer(r: QueryResultRow): ScmValuationLayer {
     itemId: r.item_id,
     warehouseId: r.warehouse_id,
     receiptMovementId: r.receipt_movement_id,
+    receivingLineId: r.receiving_line_id,
+    sourceInspectionId: r.source_inspection_id,
+    stockCondition: r.stock_condition,
+    ownerType: r.owner_type,
+    ownerPartyId: r.owner_party_id,
+    layerStatus: r.layer_status,
     receivedDate: toDateString(r.received_date)!,
     originalQuantity: num(r.original_quantity),
     remainingQuantity: num(r.remaining_quantity),
@@ -2747,6 +3869,257 @@ function toSpendAnalyticsSnapshot(r: QueryResultRow): ScmSpendAnalyticsSnapshot 
     poCount: num(r.po_count),
     itemsPurchasedCount: num(r.items_purchased_count),
     avgPoValue: num(r.avg_po_value),
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  };
+}
+
+function toAccountAssignmentConfig(r: QueryResultRow): ScmAccountAssignmentConfig {
+  const reqDims = Array.isArray(r.required_dimensions)
+    ? r.required_dimensions
+    : typeof r.required_dimensions === "string"
+      ? JSON.parse(r.required_dimensions)
+      : [];
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    assignmentType: r.assignment_type as ScmAccountAssignmentType,
+    requiredDimensions: reqDims as string[],
+    inventoryRelevant: r.inventory_relevant,
+    isActive: r.is_active,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+    updatedAt: r.updated_at,
+    updatedBy: r.updated_by,
+  };
+}
+
+function toReceivingRecord(r: QueryResultRow): ScmReceivingRecord {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    receiptNumber: r.receipt_number,
+    idempotencyKey: r.idempotency_key,
+    purchaseOrderId: r.purchase_order_id,
+    supplierId: r.supplier_id,
+    warehouseId: r.warehouse_id,
+    locationId: r.location_id,
+    receivedAt: r.received_at,
+    receivedBy: r.received_by,
+    status: r.status as ScmReceivingStatus,
+    notes: r.notes,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+    updatedAt: r.updated_at,
+    updatedBy: r.updated_by,
+  };
+}
+
+function toReceivingLine(r: QueryResultRow): ScmReceivingLine {
+  const dims = typeof r.account_assignment_dimensions === "object" && r.account_assignment_dimensions !== null
+    ? r.account_assignment_dimensions
+    : typeof r.account_assignment_dimensions === "string"
+      ? JSON.parse(r.account_assignment_dimensions)
+      : {};
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    receivingRecordId: r.receiving_record_id,
+    purchaseOrderLineId: r.purchase_order_line_id,
+    itemId: r.item_id,
+    warehouseId: r.warehouse_id,
+    locationId: r.location_id,
+    batchId: r.batch_id,
+    stockCondition: r.stock_condition as ScmStockCondition,
+    ownerType: r.owner_type as ScmStockOwnerType,
+    ownerPartyId: r.owner_party_id,
+    quantityReceived: num(r.quantity_received),
+    quantityAccepted: num(r.quantity_accepted),
+    quantityRejected: num(r.quantity_rejected),
+    quantityQuarantined: num(r.quantity_quarantined),
+    quantityReturned: num(r.quantity_returned),
+    quantityReversed: num(r.quantity_reversed),
+    unitCost: numOrNull(r.unit_cost),
+    currency: r.currency,
+    accountAssignmentType: r.account_assignment_type as ScmAccountAssignmentType,
+    accountAssignmentDimensions: dims,
+    frozenAccountAssignmentAt: r.frozen_account_assignment_at,
+    inspectionRequired: r.inspection_required,
+    holdMovementId: r.hold_movement_id,
+    acceptanceMovementId: r.acceptance_movement_id,
+    valuationLayerId: r.valuation_layer_id,
+    notes: r.notes,
+    sortOrder: num(r.sort_order),
+  };
+}
+
+function toInspection(r: QueryResultRow): ScmInspection {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    receivingLineId: r.receiving_line_id,
+    inspectionNumber: r.inspection_number,
+    idempotencyKey: r.idempotency_key,
+    inspectedAt: r.inspected_at,
+    inspectedBy: r.inspected_by,
+    quantityAccepted: num(r.quantity_accepted),
+    quantityRejected: num(r.quantity_rejected),
+    quantityQuarantined: num(r.quantity_quarantined),
+    result: r.result,
+    reason: r.reason,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  };
+}
+
+function toDiscrepancyRecord(r: QueryResultRow): ScmDiscrepancyRecord {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    receivingLineId: r.receiving_line_id,
+    discrepancyType: r.discrepancy_type,
+    quantity: numOrNull(r.quantity),
+    description: r.description,
+    status: r.status,
+    resolvedAt: r.resolved_at,
+    resolvedBy: r.resolved_by,
+    resolutionNotes: r.resolution_notes,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  };
+}
+
+function toAccountingReadyEvent(r: QueryResultRow): ScmAccountingReadyEvent {
+  const dims = typeof r.account_assignment_dimensions === "object" && r.account_assignment_dimensions !== null
+    ? r.account_assignment_dimensions
+    : typeof r.account_assignment_dimensions === "string"
+      ? JSON.parse(r.account_assignment_dimensions)
+      : {};
+  const payload = typeof r.payload === "object" && r.payload !== null
+    ? r.payload
+    : typeof r.payload === "string"
+      ? JSON.parse(r.payload)
+      : {};
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    eventType: r.event_type,
+    sourceDocumentType: r.source_document_type,
+    sourceDocumentId: r.source_document_id,
+    sourceDocumentLineId: r.source_document_line_id,
+    sourceMovementId: r.source_movement_id,
+    sourceDocumentRevision: num(r.source_document_revision) || 1,
+    effectiveAt: r.effective_at,
+    currency: r.currency,
+    amount: num(r.amount),
+    quantity: numOrNull(r.quantity),
+    unitCost: numOrNull(r.unit_cost),
+    accountAssignmentType: r.account_assignment_type as ScmAccountAssignmentType | null,
+    accountAssignmentDimensions: dims,
+    idempotencyKey: r.idempotency_key,
+    reversalOfEventId: r.reversal_of_event_id,
+    outboxState: r.outbox_state as ScmAccountingOutboxState,
+    reconciliationState: r.reconciliation_state as ScmAccountingReconciliationState,
+    payload,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  };
+}
+
+function toAccountingReadyEventStateTransition(r: QueryResultRow): ScmAccountingReadyEventStateTransition {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    accountingEventId: r.accounting_event_id,
+    stateKind: r.state_kind,
+    fromState: r.from_state,
+    toState: r.to_state,
+    reason: r.reason,
+    occurredAt: r.occurred_at,
+    occurredBy: r.occurred_by,
+  };
+}
+
+function toReturnToVendor(r: QueryResultRow): ScmReturnToVendor {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    returnNumber: r.return_number,
+    idempotencyKey: r.idempotency_key,
+    supplierId: r.supplier_id,
+    purchaseOrderId: r.purchase_order_id,
+    warehouseId: r.warehouse_id,
+    returnedAt: r.returned_at,
+    returnedBy: r.returned_by,
+    reason: r.reason,
+    status: r.status,
+    notes: r.notes,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  };
+}
+
+function toReturnToVendorLine(r: QueryResultRow): ScmReturnToVendorLine {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    returnToVendorId: r.return_to_vendor_id,
+    receivingLineId: r.receiving_line_id,
+    itemId: r.item_id,
+    warehouseId: r.warehouse_id,
+    locationId: r.location_id,
+    batchId: r.batch_id,
+    stockCondition: r.stock_condition as ScmStockCondition,
+    ownerType: r.owner_type as ScmStockOwnerType,
+    ownerPartyId: r.owner_party_id,
+    quantity: num(r.quantity),
+    movementId: r.movement_id,
+    accountingReadyEventId: r.accounting_ready_event_id,
+    notes: r.notes,
+    sortOrder: num(r.sort_order),
+  };
+}
+
+function toReceiptReversal(r: QueryResultRow): ScmReceiptReversal {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    reversalNumber: r.reversal_number,
+    idempotencyKey: r.idempotency_key,
+    receivingRecordId: r.receiving_record_id,
+    reason: r.reason,
+    reversedAt: r.reversed_at,
+    reversedBy: r.reversed_by,
+    reversalEventId: r.reversal_event_id,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  };
+}
+
+function toReceiptReversalLine(r: QueryResultRow): ScmReceiptReversalLine {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    reversalId: r.reversal_id,
+    receivingLineId: r.receiving_line_id,
+    quantity: num(r.quantity),
+    movementId: r.movement_id,
+    restoredLayerId: r.restored_layer_id,
+    sortOrder: num(r.sort_order),
+  };
+}
+
+function toValuationLayerAllocation(r: QueryResultRow): ScmValuationLayerAllocation {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    valuationLayerId: r.valuation_layer_id,
+    movementId: r.movement_id,
+    allocationType: r.allocation_type,
+    quantity: num(r.quantity),
+    unitCost: num(r.unit_cost),
+    amount: num(r.amount),
+    reversesAllocationId: r.reverses_allocation_id,
     createdAt: r.created_at,
     createdBy: r.created_by,
   };

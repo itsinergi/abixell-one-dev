@@ -1,7 +1,10 @@
-import "dotenv/config";
+import { config } from "dotenv";
+import { resolve } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
+
+config({ path: resolve(__dirname, "../../.env") });
 
 /**
  * Test helpers mirror the REAL bootstrap flow for a brand-new dedicated
@@ -14,10 +17,11 @@ import { hashPassword } from "../../src/infrastructure/security/password.js";
  */
 
 export async function bootstrapTenant(app: FastifyInstance, code: string, name: string) {
+  const bootstrapKey = process.env.PLATFORM_BOOTSTRAP_KEY || "dev-only-change-me-bootstrap";
   const response = await app.inject({
     method: "POST",
     url: "/tenants",
-    headers: { "x-bootstrap-key": process.env.PLATFORM_BOOTSTRAP_KEY! },
+    headers: { "x-bootstrap-key": bootstrapKey },
     payload: { code, name },
   });
   if (response.statusCode !== 201) {

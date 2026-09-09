@@ -432,9 +432,10 @@ export class PgSupplyChainRepository implements SupplyChainRepository {
       const order = toOrder(r.rows[0]);
       for (const line of input.lines) {
         await client.query(
-          `INSERT INTO purchase_order_lines (purchase_order_id, item_id, quantity_ordered, unit_price, sort_order)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [order.id, line.itemId, line.quantityOrdered, line.unitPrice, line.sortOrder],
+          `INSERT INTO purchase_order_lines (
+             tenant_id, purchase_order_id, item_id, quantity_ordered, unit_price, sort_order
+           ) VALUES ($1,$2,$3,$4,$5,$6)`,
+          [input.tenantId, order.id, line.itemId, line.quantityOrdered, line.unitPrice, line.sortOrder],
         );
       }
       return order;

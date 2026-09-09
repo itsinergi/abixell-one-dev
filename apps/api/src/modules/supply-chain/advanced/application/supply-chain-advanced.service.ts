@@ -37,9 +37,15 @@ import type {
   ApplyScmLandedCostInput,
   AwardScmSupplierBidInput,
   ConsumeScmValuationLayerInput,
+  CreateScmAccountingReadyEventInput,
+  CreateScmDiscrepancyRecordInput,
+  CreateScmInspectionInput,
   CreateScmItemBatchInput,
   CreateScmItemSerialInput,
   CreateScmLandedCostInput,
+  CreateScmReceiptReversalInput,
+  CreateScmReceivingRecordInput,
+  CreateScmReturnToVendorInput,
   CreateScmRfqInput,
   CreateScmSpendAnalyticsSnapshotInput,
   CreateScmStockOpnameInput,
@@ -48,6 +54,7 @@ import type {
   CreateScmSupplierBidInput,
   CreateScmSupplierContractInput,
   CreateScmSupplierEvaluationInput,
+  CreateScmValuationLayerAllocationInput,
   CreateScmValuationLayerInput,
   CreateScmWarehouseInput,
   CreateScmWarehouseLocationInput,
@@ -56,10 +63,26 @@ import type {
   RecordScmStockTransferReceiptInput,
   RecordScmStockTransferShipmentInput,
   RecordScmSupplierContractSpendInput,
+  ResolveScmDiscrepancyRecordInput,
+  ScmAccountAssignmentConfig,
+  ScmAccountAssignmentType,
+  ScmAccountingEventStateKind,
+  ScmAccountingOutboxState,
+  ScmAccountingReadyEvent,
+  ScmAccountingReadyEventFilter,
+  ScmAccountingReadyEventStateTransition,
+  ScmAccountingReadyEventType,
+  ScmAccountingReconciliationState,
   ScmAdvancedStockBalance,
   ScmAdvancedStockBalanceFilter,
   ScmAdvancedStockMovement,
   ScmAdvancedStockMovementFilter,
+  ScmDiscrepancyRecord,
+  ScmDiscrepancyRecordFilter,
+  ScmDiscrepancyStatus,
+  ScmDiscrepancyType,
+  ScmInspection,
+  ScmInspectionResult,
   ScmItemBatch,
   ScmItemBatchListFilter,
   ScmItemSerial,
@@ -67,17 +90,29 @@ import type {
   ScmLandedCost,
   ScmLandedCostAllocation,
   ScmLandedCostFilter,
+  ScmReceiptReversal,
+  ScmReceiptReversalLine,
+  ScmReceivingLine,
+  ScmReceivingRecord,
+  ScmReceivingRecordFilter,
+  ScmReceivingStatus,
   ScmReorderPolicy,
   ScmReorderPolicyFilter,
+  ScmReturnToVendor,
+  ScmReturnToVendorFilter,
+  ScmReturnToVendorLine,
+  ScmReturnToVendorStatus,
   ScmRfq,
   ScmRfqFilter,
   ScmRfqInvitedSupplier,
   ScmRfqItem,
   ScmSpendAnalyticsSnapshot,
   ScmSpendAnalyticsSnapshotFilter,
+  ScmStockCondition,
   ScmStockOpname,
   ScmStockOpnameFilter,
   ScmStockOpnameLine,
+  ScmStockOwnerType,
   ScmStockReservation,
   ScmStockReservationFilter,
   ScmStockTransfer,
@@ -91,14 +126,21 @@ import type {
   ScmSupplierContractItem,
   ScmSupplierEvaluation,
   ScmSupplierEvaluationFilter,
+  ScmValuationAllocationType,
   ScmValuationLayer,
+  ScmValuationLayerAllocation,
+  ScmValuationLayerAllocationFilter,
   ScmValuationLayerFilter,
   ScmWarehouse,
   ScmWarehouseListFilter,
   ScmWarehouseLocation,
   ScmWarehouseLocationListFilter,
   SupplyChainAdvancedRepository,
+  UpdateScmAccountAssignmentConfigInput,
+  UpdateScmAccountingReadyEventStateInput,
   UpdateScmItemSerialInput,
+  UpdateScmReceivingLineInspectionProjectionInput,
+  UpdateScmReceivingRecordStatusInput,
   UpdateScmRfqProjectionInput,
   UpdateScmStockOpnameProjectionInput,
   UpdateScmStockTransferProjectionInput,
@@ -126,6 +168,10 @@ export const SCM_SUPPLIER_EVALUATION_NUMBERING_CODE = "scm_supplier_evaluation";
 export const SCM_SUPPLIER_CONTRACT_NUMBERING_CODE = "scm_supplier_contract";
 export const SCM_LANDED_COST_NUMBERING_CODE = "scm_landed_cost";
 export const SCM_ITEM_BATCH_NUMBERING_CODE = "scm_item_batch";
+export const SCM_RECEIVING_RECORD_NUMBERING_CODE = "scm_receiving_record";
+export const SCM_INSPECTION_NUMBERING_CODE = "scm_inspection";
+export const SCM_RETURN_TO_VENDOR_NUMBERING_CODE = "scm_return_to_vendor";
+export const SCM_RECEIPT_REVERSAL_NUMBERING_CODE = "scm_receipt_reversal";
 
 /** Workflow definition codes for Supply Chain Advanced. */
 export const SCM_STOCK_TRANSFER_WORKFLOW_DEFINITION_CODE = "scm_stock_transfer";
@@ -2111,6 +2157,528 @@ export class SupplyChainAdvancedService {
   }
 
   // =========================================================================
+  // 10. Wave A5.1 Stage 1: Account Assignment, Receiving, Inspection,
+  //     Discrepancies, Returns, Reversals & Accounting-Ready Events
+  // =========================================================================
+
+  // --- Account Assignment Governance ---
+
+  async listAccountAssignmentConfigs(actor: ActorContext): Promise<ScmAccountAssignmentConfig[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    return this.repo.listAccountAssignmentConfigs(actor.tenantId);
+  }
+
+  async getAccountAssignmentConfig(
+    actor: ActorContext,
+    assignmentType: ScmAccountAssignmentType,
+  ): Promise<ScmAccountAssignmentConfig> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    const cfg = await this.repo.findAccountAssignmentConfig(actor.tenantId, assignmentType);
+    if (!cfg) {
+      throw new NotFoundError("ScmAccountAssignmentConfig", assignmentType);
+    }
+    return cfg;
+  }
+
+  async updateAccountAssignmentConfig(
+    actor: ActorContext,
+    input: UpdateScmAccountAssignmentConfigInput,
+  ): Promise<ScmAccountAssignmentConfig> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    if (!hasTenant) {
+      throw new ForbiddenError("Tenant-wide scope required to update account assignment configuration");
+    }
+
+    const updated = await this.repo.updateAccountAssignmentConfig(actor.tenantId, {
+      ...input,
+      updatedBy: actor.userId,
+    });
+    if (!updated) {
+      throw new NotFoundError("ScmAccountAssignmentConfig", input.assignmentType);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.account_assignment_config.updated",
+      entityType: "scm_account_assignment_config",
+      entityId: updated.id,
+      metadata: { assignmentType: input.assignmentType, input },
+    });
+
+    return updated;
+  }
+
+  // --- Receiving & Receiving Lines ---
+
+  async createReceivingRecord(
+    actor: ActorContext,
+    input: Omit<CreateScmReceivingRecordInput, "receiptNumber" | "createdBy"> & { receiptNumber?: string },
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    // Idempotent replay (ADR-0023): a retried receipt must not book a second
+    // stock movement. The pre-check runs before number generation so a replay
+    // does not burn a sequence number either.
+    const replayed = await this.repo.findReceivingRecordByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const receiptNumber =
+      input.receiptNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_RECEIVING_RECORD_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createReceivingRecord(actor.tenantId, {
+          ...input,
+          receiptNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findReceivingRecordByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Receiving record with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.receiving.created",
+      entityType: "scm_receiving_record",
+      entityId: result.receiving.id,
+      metadata: {
+        receiptNumber: result.receiving.receiptNumber,
+        purchaseOrderId: input.purchaseOrderId,
+        lineCount: result.lines.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getReceivingRecord(
+    actor: ActorContext,
+    receivingRecordId: string,
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const result = await this.repo.findReceivingRecordById(actor.tenantId, receivingRecordId);
+    if (!result) {
+      throw new NotFoundError("ScmReceivingRecord", receivingRecordId);
+    }
+    await this.assertWarehouseInScope(actor, result.receiving.warehouseId);
+    return result;
+  }
+
+  async listReceivingRecords(
+    actor: ActorContext,
+    filter: ScmReceivingRecordFilter = {},
+  ): Promise<ScmReceivingRecord[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listReceivingRecords(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // --- Quality Inspections ---
+
+  async createInspection(
+    actor: ActorContext,
+    input: Omit<CreateScmInspectionInput, "inspectionNumber" | "createdBy"> & { inspectionNumber?: string },
+  ): Promise<ScmInspection> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+
+    // Idempotent replay (ADR-0023).
+    const replayed = await this.repo.findInspectionByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const inspectionNumber =
+      input.inspectionNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_INSPECTION_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const inspection = await this.runIdempotent(
+      () =>
+        this.repo.createInspection(actor.tenantId, {
+          ...input,
+          inspectionNumber,
+          inspectedBy: input.inspectedBy ?? actor.userId,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findInspectionByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Inspection with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.inspection.created",
+      entityType: "scm_inspection",
+      entityId: inspection.id,
+      metadata: {
+        inspectionNumber,
+        receivingLineId: input.receivingLineId,
+        result: input.result,
+        quantityAccepted: input.quantityAccepted,
+      },
+    });
+
+    return inspection;
+  }
+
+  async getInspectionByReceivingLine(
+    actor: ActorContext,
+    receivingLineId: string,
+  ): Promise<ScmInspection | null> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    return this.repo.findInspectionByReceivingLineId(actor.tenantId, receivingLineId);
+  }
+
+  // --- Discrepancies ---
+
+  async createDiscrepancyRecord(
+    actor: ActorContext,
+    input: Omit<CreateScmDiscrepancyRecordInput, "createdBy">,
+  ): Promise<ScmDiscrepancyRecord> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+
+    const discrepancy = await this.repo.createDiscrepancyRecord(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.discrepancy.created",
+      entityType: "scm_discrepancy_record",
+      entityId: discrepancy.id,
+      metadata: {
+        receivingLineId: input.receivingLineId,
+        discrepancyType: input.discrepancyType,
+        quantity: input.quantity,
+      },
+    });
+
+    return discrepancy;
+  }
+
+  async resolveDiscrepancyRecord(
+    actor: ActorContext,
+    input: Omit<ResolveScmDiscrepancyRecordInput, "resolvedBy"> & { resolvedBy?: string | null },
+  ): Promise<ScmDiscrepancyRecord> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+
+    const resolved = await this.repo.resolveDiscrepancyRecord(actor.tenantId, {
+      ...input,
+      resolvedBy: input.resolvedBy ?? actor.userId,
+    });
+    if (!resolved) {
+      throw new NotFoundError("ScmDiscrepancyRecord", input.discrepancyId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.discrepancy.resolved",
+      entityType: "scm_discrepancy_record",
+      entityId: input.discrepancyId,
+      metadata: { status: input.status, notes: input.resolutionNotes },
+    });
+
+    return resolved;
+  }
+
+  async listDiscrepancyRecords(
+    actor: ActorContext,
+    filter: ScmDiscrepancyRecordFilter = {},
+  ): Promise<ScmDiscrepancyRecord[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    return this.repo.listDiscrepancyRecords(actor.tenantId, filter);
+  }
+
+  // --- Return To Vendor ---
+
+  async createReturnToVendor(
+    actor: ActorContext,
+    input: Omit<CreateScmReturnToVendorInput, "returnNumber" | "createdBy"> & { returnNumber?: string },
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    // Idempotent replay (ADR-0023).
+    const replayed = await this.repo.findReturnToVendorByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const returnNumber =
+      input.returnNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_RETURN_TO_VENDOR_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createReturnToVendor(actor.tenantId, {
+          ...input,
+          returnNumber,
+          returnedBy: input.returnedBy ?? actor.userId,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findReturnToVendorByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Return to vendor with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.return_to_vendor.created",
+      entityType: "scm_return_to_vendor",
+      entityId: result.returnToVendor.id,
+      metadata: {
+        returnNumber: result.returnToVendor.returnNumber,
+        supplierId: input.supplierId,
+        reason: input.reason,
+        lineCount: result.lines.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getReturnToVendor(
+    actor: ActorContext,
+    returnToVendorId: string,
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const result = await this.repo.findReturnToVendorById(actor.tenantId, returnToVendorId);
+    if (!result) {
+      throw new NotFoundError("ScmReturnToVendor", returnToVendorId);
+    }
+    await this.assertWarehouseInScope(actor, result.returnToVendor.warehouseId);
+    return result;
+  }
+
+  async listReturnToVendors(
+    actor: ActorContext,
+    filter: ScmReturnToVendorFilter = {},
+  ): Promise<ScmReturnToVendor[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listReturnToVendors(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // --- Receipt Reversal ---
+
+  async createReceiptReversal(
+    actor: ActorContext,
+    input: Omit<CreateScmReceiptReversalInput, "reversalNumber" | "createdBy"> & { reversalNumber?: string },
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+
+    const recResult = await this.repo.findReceivingRecordById(actor.tenantId, input.receivingRecordId);
+    if (!recResult) {
+      throw new NotFoundError("ScmReceivingRecord", input.receivingRecordId);
+    }
+    await this.assertWarehouseInScope(actor, recResult.receiving.warehouseId);
+
+    // Idempotent replay (ADR-0023): a retried reversal must return the
+    // original compensating reversal, not raise a conflict and not book a
+    // second compensating movement.
+    const replayed = await this.repo.findReceiptReversalByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const existingReversal = await this.repo.findReceiptReversalByReceivingRecordId(
+      actor.tenantId,
+      input.receivingRecordId,
+    );
+    if (existingReversal) {
+      throw new ConflictError(`Receiving record ${input.receivingRecordId} is already reversed`);
+    }
+
+    const reversalNumber =
+      input.reversalNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_RECEIPT_REVERSAL_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createReceiptReversal(actor.tenantId, {
+          ...input,
+          reversalNumber,
+          reversedBy: input.reversedBy ?? actor.userId,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findReceiptReversalByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Receipt reversal with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    // NOTE: `createReceiptReversal` sets the receiving record status to
+    // `reversed` inside the same transaction that creates the reversal, the
+    // compensating movements, and the reversal lines. A second `update`
+    // call here would run in a separate transaction and could race the
+    // reverse/status invariant, so it is intentionally not issued.
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.receipt_reversal.created",
+      entityType: "scm_receipt_reversal",
+      entityId: result.reversal.id,
+      metadata: {
+        reversalNumber: result.reversal.reversalNumber,
+        receivingRecordId: input.receivingRecordId,
+        reason: input.reason,
+      },
+    });
+
+    return result;
+  }
+
+  async getReceiptReversalByReceivingRecord(
+    actor: ActorContext,
+    receivingRecordId: string,
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] } | null> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const recResult = await this.repo.findReceivingRecordById(actor.tenantId, receivingRecordId);
+    if (recResult) {
+      await this.assertWarehouseInScope(actor, recResult.receiving.warehouseId);
+    }
+    return this.repo.findReceiptReversalByReceivingRecordId(actor.tenantId, receivingRecordId);
+  }
+
+  // --- Accounting-Ready Events ---
+
+  async createAccountingReadyEvent(
+    actor: ActorContext,
+    input: Omit<CreateScmAccountingReadyEventInput, "createdBy">,
+  ): Promise<ScmAccountingReadyEvent> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+
+    // Idempotent replay (ADR-0023): "re-delivering an event must not create a
+    // second accounting effect downstream".
+    const replayed = await this.repo.findAccountingReadyEventByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const event = await this.runIdempotent(
+      () =>
+        this.repo.createAccountingReadyEvent(actor.tenantId, {
+          ...input,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findAccountingReadyEventByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Accounting-ready event with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.accounting_ready_event.created",
+      entityType: "scm_accounting_ready_event",
+      entityId: event.id,
+      metadata: {
+        eventType: event.eventType,
+        sourceDocumentType: event.sourceDocumentType,
+        sourceDocumentId: event.sourceDocumentId,
+        amount: event.amount,
+        currency: event.currency,
+      },
+    });
+
+    return event;
+  }
+
+  async getAccountingReadyEvent(
+    actor: ActorContext,
+    eventId: string,
+  ): Promise<ScmAccountingReadyEvent> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const event = await this.repo.findAccountingReadyEventById(actor.tenantId, eventId);
+    if (!event) {
+      throw new NotFoundError("ScmAccountingReadyEvent", eventId);
+    }
+    return event;
+  }
+
+  async listAccountingReadyEvents(
+    actor: ActorContext,
+    filter: ScmAccountingReadyEventFilter = {},
+  ): Promise<ScmAccountingReadyEvent[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    return this.repo.listAccountingReadyEvents(actor.tenantId, filter);
+  }
+
+  async updateAccountingReadyEventState(
+    actor: ActorContext,
+    input: Omit<UpdateScmAccountingReadyEventStateInput, "occurredBy">,
+  ): Promise<{ event: ScmAccountingReadyEvent; transition: ScmAccountingReadyEventStateTransition }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+
+    const result = await this.repo.updateAccountingReadyEventState(actor.tenantId, {
+      ...input,
+      occurredBy: actor.userId,
+    });
+    if (!result) {
+      throw new NotFoundError("ScmAccountingReadyEvent", input.accountingEventId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.accounting_ready_event.state_updated",
+      entityType: "scm_accounting_ready_event",
+      entityId: input.accountingEventId,
+      metadata: {
+        stateKind: input.stateKind,
+        toState: input.toState,
+        reason: input.reason,
+      },
+    });
+
+    return result;
+  }
+
+  // =========================================================================
   // Data Scope & Hierarchy Authorization Helpers
   // =========================================================================
 
@@ -2181,6 +2749,37 @@ export class SupplyChainAdvancedService {
       organizationUnitIds: scopedOrgUnitIds ?? undefined,
     });
     return warehouses.map((w) => w.id);
+  }
+
+  /**
+   * Race-safe idempotent write. The caller has already re-read by idempotency
+   * key, but two concurrent retries can both pass that check before either
+   * inserts; the `UNIQUE (tenant_id, idempotency_key)` constraint then rejects
+   * the loser with Postgres error code 23505. That is not a server fault, so it
+   * must not surface as a 500 — return the row that won, or, if the conflict
+   * came from a different unique constraint (e.g. a duplicate document number),
+   * raise a deterministic `ConflictError`.
+   */
+  private async runIdempotent<T>(
+    write: () => Promise<T>,
+    reread: () => Promise<T | null>,
+    conflictMessage: string,
+  ): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "23505"
+      ) {
+        const winner = await reread();
+        if (winner) return winner;
+        throw new ConflictError(conflictMessage);
+      }
+      throw error;
+    }
   }
 
   private async withWorkflowStatus<T, R>(
@@ -2260,6 +2859,30 @@ export class SupplyChainAdvancedService {
       await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
       const hasTenant = await this.rbac.hasTenantScope(actor.userId);
       return hasTenant;
+    } catch {
+      return false;
+    }
+  }
+
+  async canAccessReceivingRecordForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
+    const recResult = await this.repo.findReceivingRecordById(actor.tenantId, entityId);
+    if (!recResult) return false;
+    try {
+      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.assertWarehouseInScope(actor, recResult.receiving.warehouseId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async canAccessReturnToVendorForDocument(actor: ActorContext, entityId: string): Promise<boolean> {
+    const retResult = await this.repo.findReturnToVendorById(actor.tenantId, entityId);
+    if (!retResult) return false;
+    try {
+      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.assertWarehouseInScope(actor, retResult.returnToVendor.warehouseId);
+      return true;
     } catch {
       return false;
     }

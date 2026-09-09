@@ -35,6 +35,27 @@ Core is **operational cash reality**, not accounting. Everything requiring accou
 | **FIN-ADV-007** | Consolidation across legal entities. | DEFERRED |
 | **FIN-ADV-008** | Financial statements. | DEFERRED |
 
+## Pre-Wave A6 proposed architecture gates
+
+The following records are review drafts only. They define architecture and
+authorization gates for a possible Wave A6 implementation; they do not mark
+any `FIN-ADV-*` requirement delivered, authorize runtime work, or change the
+21-point Wave A6 weight or the 353-point roadmap denominator:
+
+- [ADR-0015: Finance COA and Accounting Schema Governance](../../../adr/0015-finance-coa-and-accounting-schema-governance.md)
+- [ADR-0016: Finance Posting, Reversal, and Fiscal Close](../../../adr/0016-finance-posting-reversal-and-fiscal-close.md)
+- [ADR-0017: Finance AP/AR Open-Item Settlement](../../../adr/0017-finance-ap-ar-open-item-settlement.md)
+- [ADR-0018: Finance Bank Reconciliation Readiness Gate](../../../adr/0018-finance-bank-reconciliation-readiness-gate.md)
+- [ADR-0019: Indonesia Taxation Policy and Scope](../../../adr/0019-indonesia-taxation-policy-and-scope.md)
+- [ADR-0020: Finance Budget Control and Accounting Dimensions](../../../adr/0020-finance-budget-control-and-accounting-dimensions.md)
+- [ADR-0021: Finance Fixed-Asset Accounting and Depreciation](../../../adr/0021-finance-fixed-asset-accounting-and-depreciation.md)
+- [ADR-0022: Finance Consolidation and Financial Statements](../../../adr/0022-finance-consolidation-and-financial-statements.md)
+
+All eight ADRs incorporate the Founder interview choices but remain
+`PROPOSED` pending final document review. Final Founder approval is required
+before Wave A6 runtime authorization, and ADR-0019 additionally requires
+Indonesian tax-specialist sign-off before active tax-rule implementation.
+
 ## Client Configuration
 
 Transaction categories · cash/bank accounts · cost centers · approval matrix and thresholds · currency · numbering patterns.

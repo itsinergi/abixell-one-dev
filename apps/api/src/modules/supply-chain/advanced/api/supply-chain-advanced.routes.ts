@@ -1,6 +1,34 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Container } from "../../../../composition-root.js";
+import type { SupplyChainAdvancedService } from "../application/supply-chain-advanced.service.js";
+import type {
+  CreateScmAccountingReadyEventInput,
+  CreateScmInspectionInput,
+  CreateScmReceivingRecordInput,
+  CreateScmReceiptReversalInput,
+  CreateScmReturnToVendorInput,
+  ScmAccountAssignmentType,
+  ScmAccountingOutboxState,
+  ScmAccountingReadyEventType,
+  ScmAccountingReconciliationState,
+  ScmAdvancedStockMovementType,
+  ScmDiscrepancyStatus,
+  ScmDiscrepancyType,
+  ScmLandedCostStatus,
+  ScmOpnameStatus,
+  ScmProcurementType,
+  ScmReceivingStatus,
+  ScmReservationStatus,
+  ScmReturnToVendorStatus,
+  ScmRfqStatus,
+  ScmSerialStatus,
+  ScmSpendAnalyticsPeriodType,
+  ScmSupplierContractStatus,
+  ScmSupplierContractType,
+  ScmSupplierEvaluationStatus,
+  ScmSupplierRatingGrade,
+  ScmTransferStatus,
+} from "../domain/supply-chain-advanced.entity.js";
 
 /**
  * Supply Chain Advanced HTTP routes (Wave A5: SCM-ADV-001…008).
@@ -358,15 +386,179 @@ const computeSpendSnapshotSchema = z.object({
   organizationUnitId: z.string().uuid().optional(),
 });
 
+// Wave A5.1 Stage 1: Account Assignment, Receiving, Inspection, Discrepancies, Returns, Reversals, Accounting Events
+const updateAccountAssignmentConfigSchema = z.object({
+  assignmentType: z.enum([
+    "stock",
+    "expense",
+    "asset",
+    "project",
+    "work_order",
+    "service",
+  ]),
+  requiredDimensions: z.array(z.string()).optional(),
+  inventoryRelevant: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+});
+
+const createReceivingLineSchema = z.object({
+  purchaseOrderLineId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  warehouseId: z.string().uuid().nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(),
+  batchId: z.string().uuid().nullable().optional(),
+  stockCondition: z.enum(["unrestricted", "quality_hold", "rejected", "quarantined", "blocked", "in_transit", "in_repair"]).optional(),
+  ownerType: z.enum(["own", "supplier", "customer"]).optional(),
+  ownerPartyId: z.string().uuid().nullable().optional(),
+  quantityReceived: z.number().positive(),
+  unitCost: z.number().nonnegative().nullable().optional(),
+  currency: z.string().optional(),
+  accountAssignmentType: z.enum([
+    "stock",
+    "expense",
+    "asset",
+    "project",
+    "work_order",
+    "service",
+  ]),
+  accountAssignmentDimensions: z.record(z.unknown()).optional(),
+  inspectionRequired: z.boolean().optional(),
+  holdMovementId: z.string().uuid().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+const createReceivingRecordSchema = z.object({
+  idempotencyKey: z.string().min(1),
+  purchaseOrderId: z.string().uuid(),
+  supplierId: z.string().uuid(),
+  warehouseId: z.string().uuid(),
+  locationId: z.string().uuid().nullable().optional(),
+  receiptNumber: z.string().optional(),
+  receivedAt: z.string().datetime().optional().transform((d) => (d ? new Date(d) : undefined)),
+  receivedBy: z.string().uuid().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  lines: z.array(createReceivingLineSchema).min(1),
+});
+
+const createInspectionSchema = z.object({
+  receivingLineId: z.string().uuid(),
+  idempotencyKey: z.string().min(1),
+  inspectionNumber: z.string().optional(),
+  inspectedAt: z.string().datetime().optional().transform((d) => (d ? new Date(d) : undefined)),
+  inspectedBy: z.string().uuid().nullable().optional(),
+  quantityAccepted: z.number().nonnegative().optional(),
+  quantityRejected: z.number().nonnegative().optional(),
+  quantityQuarantined: z.number().nonnegative().optional(),
+  result: z.enum(["accepted", "rejected", "mixed", "quarantined"]),
+  reason: z.string().nullable().optional(),
+});
+
+const createDiscrepancyRecordSchema = z.object({
+  receivingLineId: z.string().uuid(),
+  discrepancyType: z.enum(["shortage", "overage", "damage", "quality", "document"]),
+  quantity: z.number().nonnegative().nullable().optional(),
+  description: z.string().min(1),
+});
+
+const resolveDiscrepancyRecordSchema = z.object({
+  status: z.enum(["resolved", "cancelled"]),
+  resolvedAt: z.string().datetime().optional().transform((d) => (d ? new Date(d) : undefined)),
+  resolvedBy: z.string().uuid().nullable().optional(),
+  resolutionNotes: z.string().nullable().optional(),
+});
+
+const createReturnToVendorLineSchema = z.object({
+  receivingLineId: z.string().uuid().nullable().optional(),
+  itemId: z.string().uuid(),
+  warehouseId: z.string().uuid(),
+  locationId: z.string().uuid().nullable().optional(),
+  batchId: z.string().uuid().nullable().optional(),
+  stockCondition: z.enum(["unrestricted", "quality_hold", "rejected", "quarantined", "blocked", "in_transit", "in_repair"]),
+  ownerType: z.enum(["own", "supplier", "customer"]),
+  ownerPartyId: z.string().uuid().nullable().optional(),
+  quantity: z.number().positive(),
+  movementId: z.string().uuid().nullable().optional(),
+  accountingReadyEventId: z.string().uuid().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+const createReturnToVendorSchema = z.object({
+  idempotencyKey: z.string().min(1),
+  returnNumber: z.string().optional(),
+  supplierId: z.string().uuid(),
+  purchaseOrderId: z.string().uuid().nullable().optional(),
+  warehouseId: z.string().uuid(),
+  returnedAt: z.string().datetime().optional().transform((d) => (d ? new Date(d) : undefined)),
+  returnedBy: z.string().uuid().nullable().optional(),
+  reason: z.string().min(1),
+  notes: z.string().nullable().optional(),
+  lines: z.array(createReturnToVendorLineSchema).min(1),
+});
+
+const createReceiptReversalSchema = z.object({
+  idempotencyKey: z.string().min(1),
+  reversalNumber: z.string().optional(),
+  receivingRecordId: z.string().uuid(),
+  reason: z.string().min(1),
+  reversedAt: z.string().datetime().optional().transform((d) => (d ? new Date(d) : undefined)),
+  reversedBy: z.string().uuid().nullable().optional(),
+});
+
+const createAccountingReadyEventSchema = z.object({
+  eventType: z.enum([
+    "inventory.goods_received",
+    "inventory.goods_issued",
+    "inventory.transferred",
+    "inventory.adjusted",
+    "inventory.returned_to_vendor",
+    "inventory.receipt_reversed",
+    "inventory.landed_cost_applied",
+    "inventory.consignment_consumed",
+    "service.accepted",
+    "inventory.disposed",
+  ]),
+  sourceDocumentType: z.string().min(1),
+  sourceDocumentId: z.string().uuid(),
+  sourceDocumentLineId: z.string().uuid().nullable().optional(),
+  sourceMovementId: z.string().uuid().nullable().optional(),
+  sourceDocumentRevision: z.number().int().optional(),
+  effectiveAt: z.string().datetime().optional().transform((d) => (d ? new Date(d) : undefined)),
+  currency: z.string().optional(),
+  amount: z.number().nonnegative().optional(),
+  quantity: z.number().nullable().optional(),
+  unitCost: z.number().nullable().optional(),
+  accountAssignmentType: z.enum([
+    "stock",
+    "expense",
+    "asset",
+    "project",
+    "work_order",
+    "service",
+  ]).nullable().optional(),
+  accountAssignmentDimensions: z.record(z.unknown()).optional(),
+  idempotencyKey: z.string().min(1),
+  reversalOfEventId: z.string().uuid().nullable().optional(),
+  payload: z.record(z.unknown()).optional(),
+});
+
+const updateAccountingReadyEventStateSchema = z.object({
+  stateKind: z.enum(["outbox", "reconciliation"]),
+  toState: z.string().min(1),
+  reason: z.string().nullable().optional(),
+  occurredAt: z.string().datetime().optional().transform((d) => (d ? new Date(d) : undefined)),
+});
+
 function query(q: unknown): Record<string, string | undefined> {
   return (q ?? {}) as Record<string, string | undefined>;
 }
 
 export function registerSupplyChainAdvancedRoutes(
   app: FastifyInstance,
-  container: Container,
+  deps: { supplyChainAdvanced: SupplyChainAdvancedService },
 ): void {
-  const svc = () => container.supplyChainAdvanced;
+  const svc = () => deps.supplyChainAdvanced;
 
   // =========================================================================
   // 1. Multi-Warehouse & Storage Locations (SCM-ADV-001)
@@ -473,7 +665,7 @@ export function registerSupplyChainAdvancedRoutes(
         warehouseId: q.warehouseId,
         locationId: q.locationId,
         batchId: q.batchId,
-        status: q.status as any,
+        status: q.status as ScmSerialStatus | undefined,
       }),
     );
   });
@@ -505,7 +697,7 @@ export function registerSupplyChainAdvancedRoutes(
       await svc().listStockMovements(req.actor!, {
         itemId: q.itemId,
         warehouseId: q.warehouseId,
-        movementType: q.movementType as any,
+        movementType: q.movementType as ScmAdvancedStockMovementType | undefined,
         limit: q.limit ? Number(q.limit) : undefined,
       }),
     );
@@ -557,7 +749,7 @@ export function registerSupplyChainAdvancedRoutes(
       await svc().listStockReservations(req.actor!, {
         itemId: q.itemId,
         warehouseId: q.warehouseId,
-        status: q.status as any,
+        status: q.status as ScmReservationStatus | undefined,
         reservedForType: q.reservedForType,
       }),
     );
@@ -583,7 +775,7 @@ export function registerSupplyChainAdvancedRoutes(
       await svc().listStockTransfers(req.actor!, {
         fromWarehouseId: q.fromWarehouseId,
         toWarehouseId: q.toWarehouseId,
-        status: q.status as any,
+        status: q.status as ScmTransferStatus | undefined,
       }),
     );
   });
@@ -619,7 +811,7 @@ export function registerSupplyChainAdvancedRoutes(
     return reply.send(
       await svc().listStockOpnames(req.actor!, {
         warehouseId: q.warehouseId,
-        status: q.status as any,
+        status: q.status as ScmOpnameStatus | undefined,
       }),
     );
   });
@@ -679,7 +871,7 @@ export function registerSupplyChainAdvancedRoutes(
     return reply.send(
       await svc().listLandedCosts(req.actor!, {
         purchaseOrderId: q.purchaseOrderId,
-        status: q.status as any,
+        status: q.status as ScmLandedCostStatus | undefined,
       }),
     );
   });
@@ -702,8 +894,8 @@ export function registerSupplyChainAdvancedRoutes(
     const q = query(req.query);
     return reply.send(
       await svc().listRfqs(req.actor!, {
-        procurementType: q.procurementType as any,
-        status: q.status as any,
+        procurementType: q.procurementType as ScmProcurementType | undefined,
+        status: q.status as ScmRfqStatus | undefined,
         organizationUnitIds: q.organizationUnitId ? [q.organizationUnitId] : undefined,
       }),
     );
@@ -755,8 +947,8 @@ export function registerSupplyChainAdvancedRoutes(
     return reply.send(
       await svc().listSupplierEvaluations(req.actor!, {
         supplierId: q.supplierId,
-        status: q.status as any,
-        ratingGrade: q.ratingGrade as any,
+        status: q.status as ScmSupplierEvaluationStatus | undefined,
+        ratingGrade: q.ratingGrade as ScmSupplierRatingGrade | undefined,
       }),
     );
   });
@@ -782,8 +974,8 @@ export function registerSupplyChainAdvancedRoutes(
     return reply.send(
       await svc().listSupplierContracts(req.actor!, {
         supplierId: q.supplierId,
-        contractType: q.contractType as any,
-        status: q.status as any,
+        contractType: q.contractType as ScmSupplierContractType | undefined,
+        status: q.status as ScmSupplierContractStatus | undefined,
       }),
     );
   });
@@ -813,8 +1005,175 @@ export function registerSupplyChainAdvancedRoutes(
     const q = query(req.query);
     return reply.send(
       await svc().listSpendSnapshots(req.actor!, {
-        periodType: q.periodType as any,
+        periodType: q.periodType as ScmSpendAnalyticsPeriodType | undefined,
         organizationUnitIds: q.organizationUnitId ? [q.organizationUnitId] : undefined,
+      }),
+    );
+  });
+
+  // =========================================================================
+  // 10. Wave A5.1 Stage 1: Account Assignment, Receiving, Inspection,
+  //     Discrepancies, Returns, Reversals & Accounting-Ready Events
+  // =========================================================================
+
+  // Account Assignment Config
+  app.get("/supply-chain/advanced/account-assignment-configs", { preHandler: app.authenticate }, async (req, reply) => {
+    return reply.send(await svc().listAccountAssignmentConfigs(req.actor!));
+  });
+
+  app.get("/supply-chain/advanced/account-assignment-configs/:assignmentType", { preHandler: app.authenticate }, async (req, reply) => {
+    const { assignmentType } = z.object({ assignmentType: z.string() }).parse(req.params);
+    return reply.send(await svc().getAccountAssignmentConfig(req.actor!, assignmentType as ScmAccountAssignmentType));
+  });
+
+  app.put("/supply-chain/advanced/account-assignment-configs", { preHandler: app.authenticate }, async (req, reply) => {
+    const body = updateAccountAssignmentConfigSchema.parse(req.body);
+    return reply.send(await svc().updateAccountAssignmentConfig(req.actor!, body));
+  });
+
+  // Receiving Records & Lines
+  app.post("/supply-chain/advanced/receiving-records", { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createReceivingRecordSchema.parse(req.body);
+    return reply.status(201).send(
+      await svc().createReceivingRecord(req.actor!, body as unknown as CreateScmReceivingRecordInput),
+    );
+  });
+
+  app.get("/supply-chain/advanced/receiving-records/:id", { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    return reply.send(await svc().getReceivingRecord(req.actor!, id));
+  });
+
+  app.get("/supply-chain/advanced/receiving-records", { preHandler: app.authenticate }, async (req, reply) => {
+    const q = query(req.query);
+    return reply.send(
+      await svc().listReceivingRecords(req.actor!, {
+        purchaseOrderId: q.purchaseOrderId,
+        supplierId: q.supplierId,
+        warehouseId: q.warehouseId,
+        status: q.status as ScmReceivingStatus | undefined,
+      }),
+    );
+  });
+
+  // Quality Inspection
+  app.post("/supply-chain/advanced/inspections", { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createInspectionSchema.parse(req.body);
+    return reply.status(201).send(
+      await svc().createInspection(req.actor!, body as unknown as CreateScmInspectionInput),
+    );
+  });
+
+  app.get("/supply-chain/advanced/inspections/by-receiving-line/:receivingLineId", { preHandler: app.authenticate }, async (req, reply) => {
+    const { receivingLineId } = z.object({ receivingLineId: z.string().uuid() }).parse(req.params);
+    const result = await svc().getInspectionByReceivingLine(req.actor!, receivingLineId);
+    if (!result) {
+      return reply.status(404).send({ statusCode: 404, message: "Inspection not found for line" });
+    }
+    return reply.send(result);
+  });
+
+  // Discrepancies
+  app.post("/supply-chain/advanced/discrepancies", { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createDiscrepancyRecordSchema.parse(req.body);
+    return reply.status(201).send(await svc().createDiscrepancyRecord(req.actor!, body));
+  });
+
+  app.patch("/supply-chain/advanced/discrepancies/:id/resolve", { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = resolveDiscrepancyRecordSchema.parse(req.body);
+    return reply.send(await svc().resolveDiscrepancyRecord(req.actor!, { discrepancyId: id, ...body }));
+  });
+
+  app.get("/supply-chain/advanced/discrepancies", { preHandler: app.authenticate }, async (req, reply) => {
+    const q = query(req.query);
+    return reply.send(
+      await svc().listDiscrepancyRecords(req.actor!, {
+        receivingLineId: q.receivingLineId,
+        discrepancyType: q.discrepancyType as ScmDiscrepancyType | undefined,
+        status: q.status as ScmDiscrepancyStatus | undefined,
+      }),
+    );
+  });
+
+  // Return To Vendor
+  app.post("/supply-chain/advanced/returns-to-vendor", { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createReturnToVendorSchema.parse(req.body);
+    return reply.status(201).send(
+      await svc().createReturnToVendor(req.actor!, body as unknown as CreateScmReturnToVendorInput),
+    );
+  });
+
+  app.get("/supply-chain/advanced/returns-to-vendor/:id", { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    return reply.send(await svc().getReturnToVendor(req.actor!, id));
+  });
+
+  app.get("/supply-chain/advanced/returns-to-vendor", { preHandler: app.authenticate }, async (req, reply) => {
+    const q = query(req.query);
+    return reply.send(
+      await svc().listReturnToVendors(req.actor!, {
+        supplierId: q.supplierId,
+        purchaseOrderId: q.purchaseOrderId,
+        warehouseId: q.warehouseId,
+        status: q.status as ScmReturnToVendorStatus | undefined,
+      }),
+    );
+  });
+
+  // Receipt Reversal
+  app.post("/supply-chain/advanced/receipt-reversals", { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createReceiptReversalSchema.parse(req.body);
+    return reply.status(201).send(
+      await svc().createReceiptReversal(req.actor!, body as unknown as CreateScmReceiptReversalInput),
+    );
+  });
+
+  app.get("/supply-chain/advanced/receipt-reversals/by-receiving-record/:receivingRecordId", { preHandler: app.authenticate }, async (req, reply) => {
+    const { receivingRecordId } = z.object({ receivingRecordId: z.string().uuid() }).parse(req.params);
+    const result = await svc().getReceiptReversalByReceivingRecord(req.actor!, receivingRecordId);
+    if (!result) {
+      return reply.status(404).send({ statusCode: 404, message: "Receipt reversal not found for receiving record" });
+    }
+    return reply.send(result);
+  });
+
+  // Accounting-Ready Events
+  app.post("/supply-chain/advanced/accounting-ready-events", { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createAccountingReadyEventSchema.parse(req.body);
+    return reply.status(201).send(
+      await svc().createAccountingReadyEvent(req.actor!, body as unknown as CreateScmAccountingReadyEventInput),
+    );
+  });
+
+  app.get("/supply-chain/advanced/accounting-ready-events/:id", { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    return reply.send(await svc().getAccountingReadyEvent(req.actor!, id));
+  });
+
+  app.get("/supply-chain/advanced/accounting-ready-events", { preHandler: app.authenticate }, async (req, reply) => {
+    const q = query(req.query);
+    return reply.send(
+      await svc().listAccountingReadyEvents(req.actor!, {
+        eventType: q.eventType as ScmAccountingReadyEventType | undefined,
+        sourceDocumentType: q.sourceDocumentType,
+        sourceDocumentId: q.sourceDocumentId,
+        outboxState: q.outboxState as ScmAccountingOutboxState | undefined,
+        reconciliationState: q.reconciliationState as ScmAccountingReconciliationState | undefined,
+      }),
+    );
+  });
+
+  app.patch("/supply-chain/advanced/accounting-ready-events/:id/state", { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = updateAccountingReadyEventStateSchema.parse(req.body);
+    return reply.send(
+      await svc().updateAccountingReadyEventState(req.actor!, {
+        accountingEventId: id,
+        stateKind: body.stateKind,
+        toState: body.toState as ScmAccountingOutboxState | ScmAccountingReconciliationState,
+        reason: body.reason,
+        occurredAt: body.occurredAt,
       }),
     );
   });

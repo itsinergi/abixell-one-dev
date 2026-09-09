@@ -39,7 +39,48 @@ export type ScmAdvancedStockMovementType =
   | "adjustment_in"
   | "adjustment_out"
   | "opname_in"
-  | "opname_out";
+  | "opname_out"
+  | "inspection_hold_in"
+  | "inspection_hold_out"
+  | "inspection_release_in"
+  | "inspection_release_out"
+  | "return_to_vendor_out"
+  | "receipt_reversal_out"
+  | "receipt_reversal_in"
+  | "consignment_in"
+  | "consignment_out";
+
+export type ScmStockCondition =
+  | "unrestricted"
+  | "quality_hold"
+  | "rejected"
+  | "quarantined"
+  | "blocked"
+  | "in_transit"
+  | "in_repair";
+export type ScmStockOwnerType = "own" | "supplier" | "customer";
+export type ScmAccountAssignmentType = "stock" | "expense" | "asset" | "project" | "work_order" | "service";
+export type ScmReceivingStatus = "received" | "partially_inspected" | "accepted" | "rejected" | "reversed";
+export type ScmInspectionResult = "accepted" | "rejected" | "mixed" | "quarantined";
+export type ScmDiscrepancyType = "shortage" | "overage" | "damage" | "quality" | "document";
+export type ScmDiscrepancyStatus = "open" | "resolved" | "cancelled";
+export type ScmAccountingReadyEventType =
+  | "inventory.goods_received"
+  | "inventory.goods_issued"
+  | "inventory.transferred"
+  | "inventory.adjusted"
+  | "inventory.returned_to_vendor"
+  | "inventory.receipt_reversed"
+  | "inventory.landed_cost_applied"
+  | "inventory.consignment_consumed"
+  | "service.accepted"
+  | "inventory.disposed";
+export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
+export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
+export type ScmAccountingEventStateKind = "outbox" | "reconciliation";
+export type ScmReturnToVendorStatus = "executed" | "cancelled";
+export type ScmValuationLayerStatus = "open" | "consumed" | "reversed" | "closed";
+export type ScmValuationAllocationType = "consume" | "return_to_vendor" | "receipt_reversal" | "restore";
 
 export type ScmReservationStatus = "active" | "fulfilled" | "cancelled" | "expired";
 export type ScmTransferStatus = "draft" | "approved" | "in_transit" | "received" | "cancelled";
@@ -196,7 +237,7 @@ export interface UpdateScmItemSerialInput {
   updatedBy?: string | null;
 }
 
-/** `availableQuantity` is always `quantity - reservedQty`, computed at read time. */
+/** Only unrestricted company-owned stock contributes to `availableQuantity`. */
 export interface ScmAdvancedStockBalance {
   id: string;
   tenantId: string;
@@ -204,6 +245,10 @@ export interface ScmAdvancedStockBalance {
   warehouseId: string;
   locationId: string | null;
   batchId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  conditionSince: Date;
   quantity: number;
   reservedQty: number;
   onHandQuantity?: number;
@@ -222,23 +267,34 @@ export interface ScmAdvancedStockMovement {
   batchId: string | null;
   serialId: string | null;
   movementType: ScmAdvancedStockMovementType;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
   quantity: number;
   unitCost: number | null;
   totalCost: number | null;
   referenceType: string | null;
   referenceId: string | null;
   referenceNumber: string | null;
+  reversedMovementId: string | null;
+  accountingReadyEventId: string | null;
   notes: string | null;
   occurredAt: Date;
   createdBy: string | null;
   createdAt: Date;
 }
 
-export interface RecordScmAdvancedStockMovementInput {
+export interface ScmStockPositionKey {
   itemId: string;
   warehouseId: string;
   locationId?: string | null;
   batchId?: string | null;
+  stockCondition?: ScmStockCondition;
+  ownerType?: ScmStockOwnerType;
+  ownerPartyId?: string | null;
+}
+
+export interface RecordScmAdvancedStockMovementInput extends ScmStockPositionKey {
   serialId?: string | null;
   movementType: ScmAdvancedStockMovementType;
   quantity: number;
@@ -247,6 +303,8 @@ export interface RecordScmAdvancedStockMovementInput {
   referenceType?: string | null;
   referenceId?: string | null;
   referenceNumber?: string | null;
+  reversedMovementId?: string | null;
+  accountingReadyEventId?: string | null;
   notes?: string | null;
   occurredAt?: Date;
   createdBy?: string | null;
@@ -469,6 +527,12 @@ export interface ScmValuationLayer {
   itemId: string;
   warehouseId: string | null;
   receiptMovementId: string | null;
+  receivingLineId: string | null;
+  sourceInspectionId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  layerStatus: ScmValuationLayerStatus;
   receivedDate: string;
   originalQuantity: number;
   remainingQuantity: number;
@@ -483,6 +547,12 @@ export interface CreateScmValuationLayerInput {
   itemId: string;
   warehouseId?: string | null;
   receiptMovementId?: string | null;
+  receivingLineId?: string | null;
+  sourceInspectionId?: string | null;
+  stockCondition?: ScmStockCondition;
+  ownerType?: ScmStockOwnerType;
+  ownerPartyId?: string | null;
+  layerStatus?: ScmValuationLayerStatus;
   receivedDate: string;
   originalQuantity: number;
   remainingQuantity?: number;
@@ -858,6 +928,389 @@ export interface CreateScmSpendAnalyticsSnapshotInput {
   createdBy?: string | null;
 }
 
+// === 7. Wave A5.1 Stage 1: Receiving, Returns & Accounting Readiness ========
+
+export type ScmAccountAssignmentDimensions = Record<string, unknown>;
+export type ScmAccountingReadyPayload = Record<string, unknown>;
+
+export interface ScmAccountAssignmentConfig {
+  id: string;
+  tenantId: string;
+  assignmentType: ScmAccountAssignmentType;
+  requiredDimensions: string[];
+  inventoryRelevant: boolean;
+  isActive: boolean;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface UpdateScmAccountAssignmentConfigInput {
+  assignmentType: ScmAccountAssignmentType;
+  requiredDimensions?: string[];
+  inventoryRelevant?: boolean;
+  isActive?: boolean;
+  updatedBy?: string | null;
+}
+
+export interface ScmReceivingRecord {
+  id: string;
+  tenantId: string;
+  receiptNumber: string;
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  warehouseId: string;
+  locationId: string | null;
+  receivedAt: Date;
+  receivedBy: string | null;
+  status: ScmReceivingStatus;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface ScmReceivingLine {
+  id: string;
+  tenantId: string;
+  receivingRecordId: string;
+  purchaseOrderLineId: string;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  quantityReceived: number;
+  quantityAccepted: number;
+  quantityRejected: number;
+  quantityQuarantined: number;
+  quantityReturned: number;
+  quantityReversed: number;
+  unitCost: number | null;
+  currency: string;
+  accountAssignmentType: ScmAccountAssignmentType;
+  accountAssignmentDimensions: ScmAccountAssignmentDimensions;
+  frozenAccountAssignmentAt: Date;
+  inspectionRequired: boolean;
+  holdMovementId: string | null;
+  acceptanceMovementId: string | null;
+  valuationLayerId: string | null;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmReceivingRecordInput {
+  receiptNumber: string;
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  warehouseId: string;
+  locationId?: string | null;
+  receivedAt?: Date;
+  receivedBy?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmReceivingLineInput[];
+}
+
+export interface CreateScmReceivingLineInput {
+  purchaseOrderLineId: string;
+  itemId: string;
+  warehouseId?: string | null;
+  locationId?: string | null;
+  batchId?: string | null;
+  stockCondition?: ScmStockCondition;
+  ownerType?: ScmStockOwnerType;
+  ownerPartyId?: string | null;
+  quantityReceived: number;
+  unitCost?: number | null;
+  currency?: string;
+  accountAssignmentType: ScmAccountAssignmentType;
+  accountAssignmentDimensions?: ScmAccountAssignmentDimensions;
+  inspectionRequired?: boolean;
+  holdMovementId?: string | null;
+  notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateScmReceivingLineInspectionProjectionInput {
+  receivingLineId: string;
+  quantityAccepted?: number;
+  quantityRejected?: number;
+  quantityQuarantined?: number;
+  stockCondition?: ScmStockCondition;
+  acceptanceMovementId?: string | null;
+  valuationLayerId?: string | null;
+}
+
+export interface UpdateScmReceivingRecordStatusInput {
+  receivingRecordId: string;
+  status: ScmReceivingStatus;
+  updatedBy?: string | null;
+}
+
+export interface ScmInspection {
+  id: string;
+  tenantId: string;
+  receivingLineId: string;
+  inspectionNumber: string;
+  idempotencyKey: string;
+  inspectedAt: Date;
+  inspectedBy: string | null;
+  quantityAccepted: number;
+  quantityRejected: number;
+  quantityQuarantined: number;
+  result: ScmInspectionResult;
+  reason: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+}
+
+export interface CreateScmInspectionInput {
+  receivingLineId: string;
+  inspectionNumber: string;
+  idempotencyKey: string;
+  inspectedAt?: Date;
+  inspectedBy?: string | null;
+  quantityAccepted?: number;
+  quantityRejected?: number;
+  quantityQuarantined?: number;
+  result: ScmInspectionResult;
+  reason?: string | null;
+  createdBy?: string | null;
+}
+
+export interface ScmDiscrepancyRecord {
+  id: string;
+  tenantId: string;
+  receivingLineId: string;
+  discrepancyType: ScmDiscrepancyType;
+  quantity: number | null;
+  description: string;
+  status: ScmDiscrepancyStatus;
+  resolvedAt: Date | null;
+  resolvedBy: string | null;
+  resolutionNotes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+}
+
+export interface CreateScmDiscrepancyRecordInput {
+  receivingLineId: string;
+  discrepancyType: ScmDiscrepancyType;
+  quantity?: number | null;
+  description: string;
+  createdBy?: string | null;
+}
+
+export interface ResolveScmDiscrepancyRecordInput {
+  discrepancyId: string;
+  status: ScmDiscrepancyStatus;
+  resolvedAt?: Date | null;
+  resolvedBy?: string | null;
+  resolutionNotes?: string | null;
+}
+
+export interface ScmAccountingReadyEvent {
+  id: string;
+  tenantId: string;
+  eventType: ScmAccountingReadyEventType;
+  sourceDocumentType: string;
+  sourceDocumentId: string;
+  sourceDocumentLineId: string | null;
+  sourceMovementId: string | null;
+  sourceDocumentRevision: number;
+  effectiveAt: Date;
+  currency: string;
+  amount: number;
+  quantity: number | null;
+  unitCost: number | null;
+  accountAssignmentType: ScmAccountAssignmentType | null;
+  accountAssignmentDimensions: ScmAccountAssignmentDimensions;
+  idempotencyKey: string;
+  reversalOfEventId: string | null;
+  outboxState: ScmAccountingOutboxState;
+  reconciliationState: ScmAccountingReconciliationState;
+  payload: ScmAccountingReadyPayload;
+  createdAt: Date;
+  createdBy: string | null;
+}
+
+export interface CreateScmAccountingReadyEventInput {
+  eventType: ScmAccountingReadyEventType;
+  sourceDocumentType: string;
+  sourceDocumentId: string;
+  sourceDocumentLineId?: string | null;
+  sourceMovementId?: string | null;
+  sourceDocumentRevision?: number;
+  effectiveAt?: Date;
+  currency?: string;
+  amount?: number;
+  quantity?: number | null;
+  unitCost?: number | null;
+  accountAssignmentType?: ScmAccountAssignmentType | null;
+  accountAssignmentDimensions?: ScmAccountAssignmentDimensions;
+  idempotencyKey: string;
+  reversalOfEventId?: string | null;
+  payload?: ScmAccountingReadyPayload;
+  createdBy?: string | null;
+}
+
+export interface ScmAccountingReadyEventStateTransition {
+  id: string;
+  tenantId: string;
+  accountingEventId: string;
+  stateKind: ScmAccountingEventStateKind;
+  fromState: string | null;
+  toState: string;
+  reason: string | null;
+  occurredAt: Date;
+  occurredBy: string | null;
+}
+
+export interface UpdateScmAccountingReadyEventStateInput {
+  accountingEventId: string;
+  stateKind: ScmAccountingEventStateKind;
+  toState: ScmAccountingOutboxState | ScmAccountingReconciliationState;
+  reason?: string | null;
+  occurredAt?: Date;
+  occurredBy?: string | null;
+}
+
+export interface ScmReturnToVendor {
+  id: string;
+  tenantId: string;
+  returnNumber: string;
+  idempotencyKey: string;
+  supplierId: string;
+  purchaseOrderId: string | null;
+  warehouseId: string;
+  returnedAt: Date;
+  returnedBy: string | null;
+  reason: string;
+  status: ScmReturnToVendorStatus;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+}
+
+export interface ScmReturnToVendorLine {
+  id: string;
+  tenantId: string;
+  returnToVendorId: string;
+  receivingLineId: string | null;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  quantity: number;
+  movementId: string | null;
+  accountingReadyEventId: string | null;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmReturnToVendorInput {
+  returnNumber: string;
+  idempotencyKey: string;
+  supplierId: string;
+  purchaseOrderId?: string | null;
+  warehouseId: string;
+  returnedAt?: Date;
+  returnedBy?: string | null;
+  reason: string;
+  notes?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmReturnToVendorLineInput[];
+}
+
+export interface CreateScmReturnToVendorLineInput extends ScmStockPositionKey {
+  receivingLineId?: string | null;
+  quantity: number;
+  movementId?: string | null;
+  accountingReadyEventId?: string | null;
+  notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface ScmReceiptReversal {
+  id: string;
+  tenantId: string;
+  reversalNumber: string;
+  idempotencyKey: string;
+  receivingRecordId: string;
+  reason: string;
+  reversedAt: Date;
+  reversedBy: string | null;
+  reversalEventId: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+}
+
+export interface ScmReceiptReversalLine {
+  id: string;
+  tenantId: string;
+  reversalId: string;
+  receivingLineId: string;
+  quantity: number;
+  movementId: string | null;
+  restoredLayerId: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmReceiptReversalInput {
+  reversalNumber: string;
+  idempotencyKey: string;
+  receivingRecordId: string;
+  reason: string;
+  reversedAt?: Date;
+  reversedBy?: string | null;
+  reversalEventId?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmReceiptReversalLineInput[];
+}
+
+export interface CreateScmReceiptReversalLineInput {
+  receivingLineId: string;
+  quantity: number;
+  movementId?: string | null;
+  restoredLayerId?: string | null;
+  sortOrder?: number;
+}
+
+export interface ScmValuationLayerAllocation {
+  id: string;
+  tenantId: string;
+  valuationLayerId: string;
+  movementId: string;
+  allocationType: ScmValuationAllocationType;
+  quantity: number;
+  unitCost: number;
+  amount: number;
+  reversesAllocationId: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+}
+
+export interface CreateScmValuationLayerAllocationInput {
+  valuationLayerId: string;
+  movementId: string;
+  allocationType: ScmValuationAllocationType;
+  quantity: number;
+  unitCost: number;
+  amount: number;
+  reversesAllocationId?: string | null;
+  createdBy?: string | null;
+}
+
 // === List filters ============================================================
 
 export interface ScmWarehouseListFilter {
@@ -890,6 +1343,9 @@ export interface ScmAdvancedStockBalanceFilter {
   warehouseId?: string;
   locationId?: string | null;
   batchId?: string | null;
+  stockCondition?: ScmStockCondition;
+  ownerType?: ScmStockOwnerType;
+  ownerPartyId?: string | null;
   warehouseIds?: string[] | null;
 }
 
@@ -897,7 +1353,14 @@ export interface ScmAdvancedStockMovementFilter {
   itemId?: string;
   warehouseId?: string;
   warehouseIds?: string[] | null;
+  locationId?: string | null;
+  batchId?: string | null;
   movementType?: ScmAdvancedStockMovementType;
+  stockCondition?: ScmStockCondition;
+  ownerType?: ScmStockOwnerType;
+  ownerPartyId?: string | null;
+  referenceType?: string;
+  referenceId?: string;
   occurredFrom?: Date;
   occurredTo?: Date;
   limit?: number;
@@ -980,6 +1443,52 @@ export interface ScmSpendAnalyticsSnapshotFilter {
   limit?: number;
 }
 
+export interface ScmReceivingRecordFilter {
+  purchaseOrderId?: string;
+  supplierId?: string;
+  warehouseId?: string;
+  warehouseIds?: string[] | null;
+  status?: ScmReceivingStatus;
+  receivedFrom?: Date;
+  receivedTo?: Date;
+  limit?: number;
+}
+
+export interface ScmDiscrepancyRecordFilter {
+  receivingLineId?: string;
+  status?: ScmDiscrepancyStatus;
+  discrepancyType?: ScmDiscrepancyType;
+}
+
+export interface ScmAccountingReadyEventFilter {
+  eventType?: ScmAccountingReadyEventType;
+  sourceDocumentType?: string;
+  sourceDocumentId?: string;
+  outboxState?: ScmAccountingOutboxState;
+  reconciliationState?: ScmAccountingReconciliationState;
+  createdFrom?: Date;
+  createdTo?: Date;
+  limit?: number;
+}
+
+export interface ScmReturnToVendorFilter {
+  supplierId?: string;
+  purchaseOrderId?: string;
+  warehouseId?: string;
+  warehouseIds?: string[] | null;
+  status?: ScmReturnToVendorStatus;
+  returnedFrom?: Date;
+  returnedTo?: Date;
+  limit?: number;
+}
+
+export interface ScmValuationLayerAllocationFilter {
+  valuationLayerId?: string;
+  movementId?: string;
+  allocationType?: ScmValuationAllocationType;
+  limit?: number;
+}
+
 // === Repository port ==========================================================
 
 export interface SupplyChainAdvancedRepository {
@@ -1016,6 +1525,9 @@ export interface SupplyChainAdvancedRepository {
     warehouseId: string,
     locationId?: string | null,
     batchId?: string | null,
+    stockCondition?: ScmStockCondition,
+    ownerType?: ScmStockOwnerType,
+    ownerPartyId?: string | null,
   ): Promise<ScmAdvancedStockBalance | null>;
   listAdvancedStockBalances(tenantId: string, filter?: ScmAdvancedStockBalanceFilter): Promise<ScmAdvancedStockBalance[]>;
 
@@ -1025,6 +1537,100 @@ export interface SupplyChainAdvancedRepository {
     input: RecordScmAdvancedStockMovementInput,
   ): Promise<{ movement: ScmAdvancedStockMovement; balance: ScmAdvancedStockBalance }>;
   listAdvancedStockMovements(tenantId: string, filter?: ScmAdvancedStockMovementFilter): Promise<ScmAdvancedStockMovement[]>;
+
+  // Account assignment readiness
+  listAccountAssignmentConfigs(tenantId: string, activeOnly?: boolean): Promise<ScmAccountAssignmentConfig[]>;
+  findAccountAssignmentConfig(
+    tenantId: string,
+    assignmentType: ScmAccountAssignmentType,
+  ): Promise<ScmAccountAssignmentConfig | null>;
+  updateAccountAssignmentConfig(
+    tenantId: string,
+    input: UpdateScmAccountAssignmentConfigInput,
+  ): Promise<ScmAccountAssignmentConfig | null>;
+
+  // Receiving, inspection & discrepancy tracking
+  createReceivingRecord(
+    tenantId: string,
+    input: CreateScmReceivingRecordInput,
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] }>;
+  updateReceivingRecordStatus(
+    tenantId: string,
+    input: UpdateScmReceivingRecordStatusInput,
+  ): Promise<ScmReceivingRecord | null>;
+  updateReceivingLineInspectionProjection(
+    tenantId: string,
+    input: UpdateScmReceivingLineInspectionProjectionInput,
+  ): Promise<ScmReceivingLine | null>;
+  findReceivingRecordById(
+    tenantId: string,
+    receivingRecordId: string,
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] } | null>;
+  findReceivingRecordByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] } | null>;
+  listReceivingRecords(tenantId: string, filter?: ScmReceivingRecordFilter): Promise<ScmReceivingRecord[]>;
+  createInspection(tenantId: string, input: CreateScmInspectionInput): Promise<ScmInspection>;
+  findInspectionByReceivingLineId(tenantId: string, receivingLineId: string): Promise<ScmInspection | null>;
+  findInspectionByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<ScmInspection | null>;
+  createDiscrepancyRecord(tenantId: string, input: CreateScmDiscrepancyRecordInput): Promise<ScmDiscrepancyRecord>;
+  resolveDiscrepancyRecord(
+    tenantId: string,
+    input: ResolveScmDiscrepancyRecordInput,
+  ): Promise<ScmDiscrepancyRecord | null>;
+  listDiscrepancyRecords(tenantId: string, filter?: ScmDiscrepancyRecordFilter): Promise<ScmDiscrepancyRecord[]>;
+
+  // Accounting-ready events (SCM facts only; no Finance posting)
+  createAccountingReadyEvent(tenantId: string, input: CreateScmAccountingReadyEventInput): Promise<ScmAccountingReadyEvent>;
+  updateAccountingReadyEventState(
+    tenantId: string,
+    input: UpdateScmAccountingReadyEventStateInput,
+  ): Promise<{
+    event: ScmAccountingReadyEvent;
+    transition: ScmAccountingReadyEventStateTransition;
+  } | null>;
+  findAccountingReadyEventById(tenantId: string, eventId: string): Promise<ScmAccountingReadyEvent | null>;
+  findAccountingReadyEventByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<ScmAccountingReadyEvent | null>;
+  listAccountingReadyEvents(tenantId: string, filter?: ScmAccountingReadyEventFilter): Promise<ScmAccountingReadyEvent[]>;
+
+  // Return to vendor & receipt reversal
+  createReturnToVendor(
+    tenantId: string,
+    input: CreateScmReturnToVendorInput,
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] }>;
+  findReturnToVendorById(
+    tenantId: string,
+    returnToVendorId: string,
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] } | null>;
+  findReturnToVendorByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] } | null>;
+  listReturnToVendors(tenantId: string, filter?: ScmReturnToVendorFilter): Promise<ScmReturnToVendor[]>;
+  createReceiptReversal(
+    tenantId: string,
+    input: CreateScmReceiptReversalInput,
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] }>;
+  findReceiptReversalByReceivingRecordId(
+    tenantId: string,
+    receivingRecordId: string,
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] } | null>;
+  findReceiptReversalByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] } | null>;
+  createValuationLayerAllocation(
+    tenantId: string,
+    input: CreateScmValuationLayerAllocationInput,
+  ): Promise<ScmValuationLayerAllocation>;
+  listValuationLayerAllocations(
+    tenantId: string,
+    filter?: ScmValuationLayerAllocationFilter,
+  ): Promise<ScmValuationLayerAllocation[]>;
 
   // Reorder policies
   upsertReorderPolicy(tenantId: string, input: UpsertScmReorderPolicyInput): Promise<ScmReorderPolicy>;

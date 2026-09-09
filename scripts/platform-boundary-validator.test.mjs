@@ -414,8 +414,12 @@ test("current repository has no blocking platform-boundary findings", async () =
   // eight governed Service Operations / Asset Advanced permissions; SO-ADV-006
   // remains deferred and contributes no offline-sync permission. Wave A4 adds
   // exactly fifteen governed Workforce Advanced permissions.
+  // Wave A5 adds the remaining SCM Advanced permissions. Wave A5.1 Stage 1 adds
+  // exactly ten governed Stage 1 permissions: `supply_chain.receiving.*` (4),
+  // `supply_chain.return.*` (3), `supply_chain.account_assignment.*` (2), and
+  // `supply_chain.accounting_event.read` (1).
   // Pinned deliberately: an unexplained change means a permission was
   // introduced or removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 114);
+  assert.equal(result.permissionCount, 138);
   assert.equal(result.advisoryCount, 1);
 });
