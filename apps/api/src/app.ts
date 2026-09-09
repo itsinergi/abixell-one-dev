@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
@@ -52,13 +53,16 @@ import { getAllowedCorsOrigins, getGlobalRateLimitConfig, isCorsOriginAllowed } 
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({
-    // Production requests pass through the approved TLS ingress and then the
-    // deployment-local Web proxy. The hop count is explicit so per-IP controls
-    // use the client address without accepting an unbounded forwarded chain.
-    trustProxy:
-      (process.env.NODE_ENV === "production"
-        ? (productionProxyHops() as unknown as boolean)
-        : false) as unknown as boolean,
+    // Client-IP security: trust X-Forwarded-For/X-Forwarded-Proto only from
+    // explicitly configured, deployment-controlled proxies. Default is fail-closed
+    // (trustProxy: false) so direct clients cannot spoof forwarded headers.
+    // Deprecated hop-count (TRUST_PROXY_HOPS) is rejected at startup because
+    // Fastify 5.12 treats numeric trust as always-untrusted and hop-count-only
+    // trust would allow a client to spoof by supplying enough hops.
+    // Valid production trust must be an explicit address/CIDR allowlist in
+    // TRUST_PROXY (e.g. "10.0.0.1" or "10.0.0.0/28,172.16.0.5"). Invalid values
+    // fail startup. See infrastructure/security/http-hardening.ts.
+    trustProxy: resolveTrustProxy(),
     logger: {
       // Observability (Checkpoint 0F): `LOG_LEVEL` can override the
       // default per-environment level (e.g. temporarily set `debug` in
@@ -189,11 +193,32 @@ export function buildApp(): FastifyInstance {
   return app;
 }
 
-function productionProxyHops(): number {
-  const raw = process.env.TRUST_PROXY_HOPS ?? "2";
-  const hops = Number(raw);
-  if (!Number.isInteger(hops) || hops < 1 || hops > 2) {
-    throw new Error("TRUST_PROXY_HOPS must be 1 or 2");
+function resolveTrustProxy(): false | string | boolean {
+  // Deployment explicitly allows proxy-trusted forwarded headers by setting
+  // TRUST_PROXY. Anything else is secure-by-default (false).
+  const trusted = process.env.TRUST_PROXY?.trim();
+  if (process.env.TRUST_PROXY_HOPS !== undefined) {
+    throw new Error(
+      "TRUST_PROXY_HOPS is no longer supported: set explicit TRUST_PROXY address/CIDR allowlist or leave unset for secure default (false) — see infrastructure/security/http-hardening.ts",
+    );
   }
-  return hops;
+  if (trusted === undefined || trusted === "") return false;
+  if (trusted === "false" || trusted === "0") return false;
+  if (trusted === "true" || trusted === "1") return true;
+  // Validate each entry is a plausible IP/CIDR so misconfiguration fails startup
+  // instead of silently becoming overly trusted. Fastify will re-compile the
+  // same string; this is only a startup-time guard.
+  const entries = trusted.split(",").map((s) => s.trim()).filter(Boolean);
+  if (entries.length === 0) return false;
+  for (const entry of entries) {
+    if (entry === "loopback" || entry === "uniqueloopback" || entry === "linklocal" || entry === "uniquelinklocal") continue;
+    const slash = entry.indexOf("/");
+    const ip = slash === -1 ? entry : entry.slice(0, slash);
+    const mask = slash === -1 ? null : entry.slice(slash + 1);
+    if (!isIP(ip)) throw new Error(`Invalid TRUST_PROXY value: ${JSON.stringify(trusted)}`);
+    if (mask !== null && (!/^d+$/.test(mask) || Number(mask) < 0 || Number(mask) > (ip.includes(":") ? 128 : 32))) {
+      throw new Error(`Invalid TRUST_PROXY value: ${JSON.stringify(trusted)}`);
+    }
+  }
+  return trusted;
 }

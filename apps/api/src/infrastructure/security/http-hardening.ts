@@ -26,6 +26,19 @@ export function isCorsOriginAllowed(origin: string | undefined, allowedOrigins =
   return allowedOrigins.includes(normalizeOrigin(origin));
 }
 
+
+/**
+ * Client-IP trust configuration (Fastify trustProxy).
+ *
+ * Fastify 5.12 treats a numeric trustProxy as fail-closed (always false) so a
+ * hop-count-only value would silently ignore forwarded headers while also
+ * being insufficient to validate the immediate peer. This project therefore:
+ * - defaults to trustProxy: false (so X-Forwarded-* is ignored),
+ * - only trusts forwarded headers when TRUST_PROXY is an explicit, deployment-
+ *   controlled address/CIDR allowlist, and
+ * - rejects TRUST_PROXY_HOPS at startup and any unparseable TRUST_PROXY value.
+ * Actual resolution lives in src/app.ts:resolveTrustProxy().
+ */
 function readPositiveIntegerEnv(name: string, fallback: number): number {
   const value = process.env[name];
   if (!value) return fallback;
