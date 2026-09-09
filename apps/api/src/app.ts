@@ -56,9 +56,9 @@ export function buildApp(): FastifyInstance {
     // deployment-local Web proxy. The hop count is explicit so per-IP controls
     // use the client address without accepting an unbounded forwarded chain.
     trustProxy:
-      process.env.NODE_ENV === "production"
-        ? productionProxyHops()
-        : false,
+      (process.env.NODE_ENV === "production"
+        ? (productionProxyHops() as unknown as boolean)
+        : false) as unknown as boolean,
     logger: {
       // Observability (Checkpoint 0F): `LOG_LEVEL` can override the
       // default per-environment level (e.g. temporarily set `debug` in
