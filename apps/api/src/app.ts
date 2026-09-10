@@ -1,4 +1,3 @@
-import { isIP } from "node:net";
 import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
@@ -49,7 +48,7 @@ import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/a
 import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
 import { registerReportingAdvancedRoutes } from "./interfaces/http/routes/reporting-advanced.js";
 import { buildContainer } from "./composition-root.js";
-import { getAllowedCorsOrigins, getGlobalRateLimitConfig, isCorsOriginAllowed } from "./infrastructure/security/http-hardening.js";
+import { getAllowedCorsOrigins, getGlobalRateLimitConfig, isCorsOriginAllowed, resolveTrustProxy } from "./infrastructure/security/http-hardening.js";
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({
@@ -193,32 +192,3 @@ export function buildApp(): FastifyInstance {
   return app;
 }
 
-function resolveTrustProxy(): false | string | boolean {
-  // Deployment explicitly allows proxy-trusted forwarded headers by setting
-  // TRUST_PROXY. Anything else is secure-by-default (false).
-  const trusted = process.env.TRUST_PROXY?.trim();
-  if (process.env.TRUST_PROXY_HOPS !== undefined) {
-    throw new Error(
-      "TRUST_PROXY_HOPS is no longer supported: set explicit TRUST_PROXY address/CIDR allowlist or leave unset for secure default (false) — see infrastructure/security/http-hardening.ts",
-    );
-  }
-  if (trusted === undefined || trusted === "") return false;
-  if (trusted === "false" || trusted === "0") return false;
-  if (trusted === "true" || trusted === "1") return true;
-  // Validate each entry is a plausible IP/CIDR so misconfiguration fails startup
-  // instead of silently becoming overly trusted. Fastify will re-compile the
-  // same string; this is only a startup-time guard.
-  const entries = trusted.split(",").map((s) => s.trim()).filter(Boolean);
-  if (entries.length === 0) return false;
-  for (const entry of entries) {
-    if (entry === "loopback" || entry === "uniqueloopback" || entry === "linklocal" || entry === "uniquelinklocal") continue;
-    const slash = entry.indexOf("/");
-    const ip = slash === -1 ? entry : entry.slice(0, slash);
-    const mask = slash === -1 ? null : entry.slice(slash + 1);
-    if (!isIP(ip)) throw new Error(`Invalid TRUST_PROXY value: ${JSON.stringify(trusted)}`);
-    if (mask !== null && (!/^d+$/.test(mask) || Number(mask) < 0 || Number(mask) > (ip.includes(":") ? 128 : 32))) {
-      throw new Error(`Invalid TRUST_PROXY value: ${JSON.stringify(trusted)}`);
-    }
-  }
-  return trusted;
-}
