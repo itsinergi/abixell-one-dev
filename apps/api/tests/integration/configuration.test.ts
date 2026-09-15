@@ -82,10 +82,15 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     });
     expect(response.statusCode).toBe(200);
     const modules = response.json();
-    expect(modules.some((m: { moduleCode: string }) => m.moduleCode === "customer_complaint")).toBe(
-      true,
-    );
+    const moduleCodes = modules.map((m: { moduleCode: string }) => m.moduleCode);
+    expect(moduleCodes).toContain("customer_complaint");
+    expect(moduleCodes).toContain("warehouse_management");
+    expect(moduleCodes).toContain("procurement_management");
     expect(modules.every((m: { isActive: boolean }) => m.isActive === false)).toBe(true);
+
+    const me = await app.inject({ method: "GET", url: "/me", headers: authHeader(adminToken) });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().activeModuleCodes).toEqual([]);
   });
 
   it("activates a Module for this Tenant only and persists it in tenant_module_activations", async () => {
@@ -105,6 +110,15 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     );
     expect(row.rows).toHaveLength(1);
     expect(row.rows[0].is_active).toBe(true);
+
+    // GET /me exposes activeModuleCodes safely for client-side navigation capability gating
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/me",
+      headers: authHeader(adminToken),
+    });
+    expect(meRes.statusCode).toBe(200);
+    expect(meRes.json().activeModuleCodes).toContain("customer_complaint");
   });
 
   it("resolves Feature Flags with Configuration Scope precedence: Organization Unit overrides Tenant overrides catalog default", async () => {
@@ -296,6 +310,67 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
       [tenantId],
     );
     expect(row.rows).toHaveLength(0); // nothing was written despite the attempt
+  });
+
+  it("exposes only this tenant's active module codes without granting config.read", async () => {
+    await createReadOnlyRole(tenantId, "NAVIGATION_USER", ["tenant.read"]);
+    const created = await app.inject({
+      method: "POST",
+      url: "/users",
+      headers: authHeader(adminToken),
+      payload: {
+        email: "navigation@test-0c.local",
+        fullName: "Navigation User",
+        password: "NavigationPass123!",
+        roleCode: "NAVIGATION_USER",
+        scopeType: "tenant",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const user = await login(app, TENANT_CODE, "navigation@test-0c.local", "NavigationPass123!");
+    expect(user.statusCode).toBe(200);
+    const headers = authHeader(user.body.accessToken);
+    const me = await app.inject({ method: "GET", url: "/me", headers });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().activeModuleCodes).toEqual(["customer_complaint"]);
+    expect(me.json().permissions).not.toContain("config.read");
+    expect((await app.inject({ method: "GET", url: "/config/modules", headers })).statusCode).toBe(403);
+
+    const otherTenant = await bootstrapTenant(app, `${TENANT_CODE}-other`, "Other Navigation Tenant");
+    try {
+      await provisionFirstAdmin({
+        tenantId: otherTenant.id,
+        email: "other@test-0c.local",
+        password: "OtherAdminPass123!",
+      });
+      const otherAdmin = await login(app, `${TENANT_CODE}-other`, "other@test-0c.local", "OtherAdminPass123!");
+      expect(otherAdmin.statusCode).toBe(200);
+      const otherHeaders = authHeader(otherAdmin.body.accessToken);
+      const activated = await app.inject({
+        method: "PUT", url: "/config/modules/survey_assessment", headers: otherHeaders,
+        payload: { isActive: true },
+      });
+      expect(activated.statusCode).toBe(200);
+      const otherMe = await app.inject({ method: "GET", url: "/me", headers: otherHeaders });
+      expect(otherMe.statusCode).toBe(200);
+      expect(otherMe.json().activeModuleCodes).toEqual(["survey_assessment"]);
+      expect((await app.inject({ method: "GET", url: "/me", headers })).json().activeModuleCodes)
+        .toEqual(["customer_complaint"]);
+
+      const disabled = await app.inject({
+        method: "PUT", url: "/config/modules/customer_complaint", headers: authHeader(adminToken),
+        payload: { isActive: false },
+      });
+      expect(disabled.statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/me", headers })).json().activeModuleCodes).toEqual([]);
+      expect((await app.inject({ method: "GET", url: "/me" })).statusCode).toBe(401);
+    } finally {
+      await pool.query(`DELETE FROM tenants WHERE id = $1`, [otherTenant.id]);
+      await app.inject({
+        method: "PUT", url: "/config/modules/customer_complaint", headers: authHeader(adminToken),
+        payload: { isActive: true },
+      });
+    }
   });
 
   it("records a Configuration Audit entry for every mutating action performed above", async () => {

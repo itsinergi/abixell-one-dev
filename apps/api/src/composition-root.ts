@@ -72,6 +72,27 @@ import { PgSupplyChainRepository } from "./modules/supply-chain/core/infrastruct
 import { SupplyChainService } from "./modules/supply-chain/core/application/supply-chain.service.js";
 import { PgSupplyChainAdvancedRepository } from "./modules/supply-chain/advanced/infrastructure/supply-chain-advanced.repository.pg.js";
 import { SupplyChainAdvancedService } from "./modules/supply-chain/advanced/application/supply-chain-advanced.service.js";
+import {
+  WarehouseTopologyService,
+  ItemTrackingService,
+  StockLedgerService,
+  ReorderReservationService,
+  TransferOpnameService,
+  ValuationService,
+  ReceivingInspectionService,
+  ReturnsReversalsService,
+  ConsignmentService,
+  DisposalService,
+  WarehouseTaskService,
+  AccountingEventService,
+} from "./modules/supply-chain/warehouse/index.js";
+import {
+  RfqBiddingService,
+  SupplierGovernanceService,
+  SupplierContractService,
+  ServiceAcceptanceService,
+  SpendAnalyticsService,
+} from "./modules/supply-chain/procurement/index.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
 import { PgServiceOperationsAdvancedRepository } from "./modules/service-operations/advanced/infrastructure/service-operations-advanced.repository.pg.js";
@@ -285,6 +306,30 @@ export function buildContainer() {
     eventBus,
     configuration,
   );
+
+  // Decomposed WMS & Procurement bounded context application services
+  const wms = {
+    topology: new WarehouseTopologyService(supplyChainAdvanced),
+    tracking: new ItemTrackingService(supplyChainAdvanced),
+    ledger: new StockLedgerService(supplyChainAdvanced),
+    reorder: new ReorderReservationService(supplyChainAdvanced),
+    transferOpname: new TransferOpnameService(supplyChainAdvanced),
+    valuation: new ValuationService(supplyChainAdvanced),
+    receiving: new ReceivingInspectionService(supplyChainAdvanced),
+    returns: new ReturnsReversalsService(supplyChainAdvanced),
+    consignment: new ConsignmentService(supplyChainAdvanced),
+    disposal: new DisposalService(supplyChainAdvanced),
+    task: new WarehouseTaskService(supplyChainAdvanced),
+    accountingEvent: new AccountingEventService(supplyChainAdvanced),
+  };
+
+  const procurement = {
+    rfq: new RfqBiddingService(supplyChainAdvanced),
+    supplierGovernance: new SupplierGovernanceService(supplyChainAdvanced),
+    supplierContract: new SupplierContractService(supplyChainAdvanced),
+    serviceAcceptance: new ServiceAcceptanceService(supplyChainAdvanced),
+    spendAnalytics: new SpendAnalyticsService(supplyChainAdvanced),
+  };
 
   // Phase 5 — Asset Core. Built before DocumentService so its `asset` Entity
   // Authorization Resolver can close over `asset.canAccessForDocument`
@@ -662,6 +707,8 @@ export function buildContainer() {
     workforceAdvanced,
     supplyChain,
     supplyChainAdvanced,
+    wms,
+    procurement,
     asset,
     assetAdvanced,
     finance,

@@ -48,7 +48,9 @@ export type ScmAdvancedStockMovementType =
   | "receipt_reversal_out"
   | "receipt_reversal_in"
   | "consignment_in"
-  | "consignment_out";
+  | "consignment_out"
+  | "replacement_in"
+  | "disposal_out";
 
 export type ScmStockCondition =
   | "unrestricted"
@@ -80,7 +82,7 @@ export type ScmAccountingReconciliationState = "unmatched" | "matched" | "revers
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";
 export type ScmReturnToVendorStatus = "executed" | "cancelled";
 export type ScmValuationLayerStatus = "open" | "consumed" | "reversed" | "closed";
-export type ScmValuationAllocationType = "consume" | "return_to_vendor" | "receipt_reversal" | "restore";
+export type ScmValuationAllocationType = "consume" | "return_to_vendor" | "receipt_reversal" | "restore" | "disposal" | "consignment_consumption";
 
 export type ScmReservationStatus = "active" | "fulfilled" | "cancelled" | "expired";
 export type ScmTransferStatus = "draft" | "approved" | "in_transit" | "received" | "cancelled";
@@ -251,6 +253,7 @@ export interface ScmAdvancedStockBalance {
   conditionSince: Date;
   quantity: number;
   reservedQty: number;
+  quantityOnHand?: number;
   onHandQuantity?: number;
   reservedQuantity?: number;
   availableQuantity: number;
@@ -1489,6 +1492,505 @@ export interface ScmValuationLayerAllocationFilter {
   limit?: number;
 }
 
+// === Stage 2: status types ===================================================
+
+export type ScmReplacementDeliveryStatus = "received" | "partially_inspected" | "accepted" | "cancelled";
+export type ScmServiceAcceptanceStatus = "draft" | "submitted" | "approved" | "rejected" | "cancelled";
+export type ScmConsignmentSettlementStatus = "settled" | "cancelled";
+export type ScmDisposalType = "write_off" | "scrap" | "donation" | "destruction" | "expired";
+export type ScmDisposalStatus = "draft" | "submitted" | "approved" | "rejected" | "executed" | "cancelled";
+export type ScmWarehouseTaskType = "putaway" | "pick" | "pack" | "cycle_count" | "replenishment" | "relocation";
+export type ScmWarehouseTaskPriority = "low" | "normal" | "high" | "urgent";
+export type ScmWarehouseTaskStatus = "open" | "assigned" | "in_progress" | "completed" | "cancelled";
+export type ScmWarehouseTaskItemStatus = "pending" | "in_progress" | "completed" | "skipped";
+
+// === Stage 2: Replacement Delivery ===========================================
+
+export interface ScmReplacementDelivery {
+  id: string;
+  tenantId: string;
+  replacementNumber: string;
+  idempotencyKey: string;
+  returnToVendorId: string;
+  purchaseOrderId: string | null;
+  supplierId: string;
+  warehouseId: string;
+  locationId: string | null;
+  receivedAt: Date;
+  receivedBy: string | null;
+  status: ScmReplacementDeliveryStatus;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface ScmReplacementDeliveryLine {
+  id: string;
+  tenantId: string;
+  replacementDeliveryId: string;
+  returnToVendorLineId: string | null;
+  purchaseOrderLineId: string | null;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  quantity: number;
+  unitCost: number | null;
+  currency: string;
+  accountAssignmentType: ScmAccountAssignmentType;
+  accountAssignmentDimensions: ScmAccountAssignmentDimensions;
+  movementId: string | null;
+  accountingReadyEventId: string | null;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmReplacementDeliveryInput {
+  replacementNumber: string;
+  idempotencyKey: string;
+  returnToVendorId: string;
+  purchaseOrderId?: string | null;
+  supplierId: string;
+  warehouseId: string;
+  locationId?: string | null;
+  receivedAt?: Date;
+  receivedBy?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmReplacementDeliveryLineInput[];
+}
+
+export interface CreateScmReplacementDeliveryLineInput extends ScmStockPositionKey {
+  returnToVendorLineId?: string | null;
+  purchaseOrderLineId?: string | null;
+  quantity: number;
+  unitCost?: number | null;
+  currency?: string;
+  accountAssignmentType?: ScmAccountAssignmentType;
+  accountAssignmentDimensions?: ScmAccountAssignmentDimensions;
+  movementId?: string | null;
+  accountingReadyEventId?: string | null;
+  notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface ScmReplacementDeliveryFilter {
+  returnToVendorId?: string;
+  supplierId?: string;
+  warehouseId?: string;
+  warehouseIds?: string[] | null;
+  status?: ScmReplacementDeliveryStatus;
+  receivedFrom?: Date;
+  receivedTo?: Date;
+  limit?: number;
+}
+
+// === Stage 2: Service Acceptance (Service Entry Sheet) =======================
+
+export interface ScmServiceAcceptance {
+  id: string;
+  tenantId: string;
+  acceptanceNumber: string;
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  organizationUnitId: string | null;
+  status: ScmServiceAcceptanceStatus;
+  workflowInstanceId: string | null;
+  submittedAt: Date | null;
+  submittedBy: string | null;
+  approvedAt: Date | null;
+  approvedBy: string | null;
+  rejectedAt: Date | null;
+  rejectedBy: string | null;
+  rejectionReason: string | null;
+  servicePeriodStart: string | null;
+  servicePeriodEnd: string | null;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface ScmServiceAcceptanceLine {
+  id: string;
+  tenantId: string;
+  serviceAcceptanceId: string;
+  purchaseOrderLineId: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  currency: string;
+  amount: number;
+  accountAssignmentType: ScmAccountAssignmentType;
+  accountAssignmentDimensions: ScmAccountAssignmentDimensions;
+  frozenAccountAssignmentAt: Date | null;
+  accountingReadyEventId: string | null;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmServiceAcceptanceInput {
+  acceptanceNumber: string;
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  organizationUnitId?: string | null;
+  servicePeriodStart?: string | null;
+  servicePeriodEnd?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmServiceAcceptanceLineInput[];
+}
+
+export interface CreateScmServiceAcceptanceLineInput {
+  purchaseOrderLineId: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  currency?: string;
+  amount: number;
+  accountAssignmentType?: ScmAccountAssignmentType;
+  accountAssignmentDimensions?: ScmAccountAssignmentDimensions;
+  notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateScmServiceAcceptanceStatusInput {
+  serviceAcceptanceId: string;
+  status: ScmServiceAcceptanceStatus;
+  workflowInstanceId?: string | null;
+  submittedAt?: Date | null;
+  submittedBy?: string | null;
+  approvedAt?: Date | null;
+  approvedBy?: string | null;
+  rejectedAt?: Date | null;
+  rejectedBy?: string | null;
+  rejectionReason?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface ScmServiceAcceptanceFilter {
+  purchaseOrderId?: string;
+  supplierId?: string;
+  organizationUnitIds?: string[] | null;
+  status?: ScmServiceAcceptanceStatus;
+  createdFrom?: Date;
+  createdTo?: Date;
+  limit?: number;
+}
+
+// === Stage 2: Consignment Settlement =========================================
+
+export interface ScmConsignmentSettlement {
+  id: string;
+  tenantId: string;
+  settlementNumber: string;
+  idempotencyKey: string;
+  supplierId: string;
+  warehouseId: string;
+  settledAt: Date;
+  settledBy: string | null;
+  status: ScmConsignmentSettlementStatus;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+}
+
+export interface ScmConsignmentSettlementLine {
+  id: string;
+  tenantId: string;
+  consignmentSettlementId: string;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  quantity: number;
+  unitCost: number;
+  currency: string;
+  amount: number;
+  supplierOutMovementId: string | null;
+  ownInMovementId: string | null;
+  valuationLayerId: string | null;
+  accountingReadyEventId: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmConsignmentSettlementInput {
+  settlementNumber: string;
+  idempotencyKey: string;
+  supplierId: string;
+  warehouseId: string;
+  settledAt?: Date;
+  settledBy?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmConsignmentSettlementLineInput[];
+}
+
+export interface CreateScmConsignmentSettlementLineInput {
+  itemId: string;
+  warehouseId: string;
+  locationId?: string | null;
+  batchId?: string | null;
+  quantity: number;
+  unitCost: number;
+  currency?: string;
+  amount: number;
+  supplierOutMovementId?: string | null;
+  ownInMovementId?: string | null;
+  valuationLayerId?: string | null;
+  accountingReadyEventId?: string | null;
+  sortOrder?: number;
+}
+
+export interface ScmConsignmentSettlementFilter {
+  supplierId?: string;
+  warehouseId?: string;
+  warehouseIds?: string[] | null;
+  status?: ScmConsignmentSettlementStatus;
+  settledFrom?: Date;
+  settledTo?: Date;
+  limit?: number;
+}
+
+// === Stage 2: Inventory Disposal =============================================
+
+export interface ScmInventoryDisposal {
+  id: string;
+  tenantId: string;
+  disposalNumber: string;
+  idempotencyKey: string;
+  warehouseId: string;
+  organizationUnitId: string | null;
+  disposalType: ScmDisposalType;
+  reason: string;
+  status: ScmDisposalStatus;
+  workflowInstanceId: string | null;
+  submittedAt: Date | null;
+  submittedBy: string | null;
+  approvedAt: Date | null;
+  approvedBy: string | null;
+  executedAt: Date | null;
+  executedBy: string | null;
+  rejectedAt: Date | null;
+  rejectedBy: string | null;
+  rejectionReason: string | null;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface ScmInventoryDisposalLine {
+  id: string;
+  tenantId: string;
+  disposalId: string;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  serialId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  quantity: number;
+  unitCost: number | null;
+  currency: string;
+  amount: number | null;
+  movementId: string | null;
+  valuationLayerAllocationId: string | null;
+  accountingReadyEventId: string | null;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmInventoryDisposalInput {
+  disposalNumber: string;
+  idempotencyKey: string;
+  warehouseId: string;
+  organizationUnitId?: string | null;
+  disposalType?: ScmDisposalType;
+  reason: string;
+  notes?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmInventoryDisposalLineInput[];
+}
+
+export interface CreateScmInventoryDisposalLineInput extends ScmStockPositionKey {
+  serialId?: string | null;
+  quantity: number;
+  unitCost?: number | null;
+  currency?: string;
+  notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateScmInventoryDisposalStatusInput {
+  disposalId: string;
+  status: ScmDisposalStatus;
+  workflowInstanceId?: string | null;
+  submittedAt?: Date | null;
+  submittedBy?: string | null;
+  approvedAt?: Date | null;
+  approvedBy?: string | null;
+  executedAt?: Date | null;
+  executedBy?: string | null;
+  rejectedAt?: Date | null;
+  rejectedBy?: string | null;
+  rejectionReason?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface ScmInventoryDisposalFilter {
+  warehouseId?: string;
+  warehouseIds?: string[] | null;
+  organizationUnitIds?: string[] | null;
+  disposalType?: ScmDisposalType;
+  status?: ScmDisposalStatus;
+  createdFrom?: Date;
+  createdTo?: Date;
+  limit?: number;
+}
+
+// === Stage 2: Inventory Aging ================================================
+
+export interface ScmInventoryAgingBucket {
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  quantity: number;
+  totalValue: number;
+  agingDays: number;
+  bucket: "0-30" | "31-60" | "61-90" | "91-180" | "180+";
+}
+
+export interface ScmInventoryAgingFilter {
+  warehouseId?: string;
+  warehouseIds?: string[] | null;
+  itemId?: string;
+  stockCondition?: ScmStockCondition;
+  ownerType?: ScmStockOwnerType;
+}
+
+// === Stage 2: Warehouse Task =================================================
+
+export interface ScmWarehouseTask {
+  id: string;
+  tenantId: string;
+  taskNumber: string;
+  idempotencyKey: string;
+  warehouseId: string;
+  taskType: ScmWarehouseTaskType;
+  priority: ScmWarehouseTaskPriority;
+  status: ScmWarehouseTaskStatus;
+  sourceDocumentType: string | null;
+  sourceDocumentId: string | null;
+  assignedTo: string | null;
+  assignedAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  completedBy: string | null;
+  cancelledAt: Date | null;
+  cancelledBy: string | null;
+  cancellationReason: string | null;
+  dueAt: Date | null;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface ScmWarehouseTaskItem {
+  id: string;
+  tenantId: string;
+  warehouseTaskId: string;
+  itemId: string;
+  fromLocationId: string | null;
+  toLocationId: string | null;
+  batchId: string | null;
+  serialId: string | null;
+  expectedQuantity: number;
+  actualQuantity: number | null;
+  movementId: string | null;
+  status: ScmWarehouseTaskItemStatus;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmWarehouseTaskInput {
+  taskNumber: string;
+  idempotencyKey: string;
+  warehouseId: string;
+  taskType: ScmWarehouseTaskType;
+  priority?: ScmWarehouseTaskPriority;
+  sourceDocumentType?: string | null;
+  sourceDocumentId?: string | null;
+  assignedTo?: string | null;
+  dueAt?: Date | null;
+  notes?: string | null;
+  createdBy?: string | null;
+  items: CreateScmWarehouseTaskItemInput[];
+}
+
+export interface CreateScmWarehouseTaskItemInput {
+  itemId: string;
+  fromLocationId?: string | null;
+  toLocationId?: string | null;
+  batchId?: string | null;
+  serialId?: string | null;
+  expectedQuantity: number;
+  notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateScmWarehouseTaskStatusInput {
+  warehouseTaskId: string;
+  status: ScmWarehouseTaskStatus;
+  assignedTo?: string | null;
+  assignedAt?: Date | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  completedBy?: string | null;
+  cancelledAt?: Date | null;
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface UpdateScmWarehouseTaskItemInput {
+  taskItemId: string;
+  actualQuantity?: number | null;
+  movementId?: string | null;
+  status?: ScmWarehouseTaskItemStatus;
+}
+
+export interface ScmWarehouseTaskFilter {
+  warehouseId?: string;
+  warehouseIds?: string[] | null;
+  taskType?: ScmWarehouseTaskType;
+  priority?: ScmWarehouseTaskPriority;
+  status?: ScmWarehouseTaskStatus;
+  assignedTo?: string | null;
+  sourceDocumentType?: string;
+  sourceDocumentId?: string;
+  createdFrom?: Date;
+  createdTo?: Date;
+  limit?: number;
+}
+
 // === Repository port ==========================================================
 
 export interface SupplyChainAdvancedRepository {
@@ -1631,6 +2133,119 @@ export interface SupplyChainAdvancedRepository {
     tenantId: string,
     filter?: ScmValuationLayerAllocationFilter,
   ): Promise<ScmValuationLayerAllocation[]>;
+
+  // Stage 2: Replacement deliveries
+  createReplacementDelivery(
+    tenantId: string,
+    input: CreateScmReplacementDeliveryInput,
+  ): Promise<{ replacement: ScmReplacementDelivery; lines: ScmReplacementDeliveryLine[] }>;
+  findReplacementDeliveryById(
+    tenantId: string,
+    replacementDeliveryId: string,
+  ): Promise<{ replacement: ScmReplacementDelivery; lines: ScmReplacementDeliveryLine[] } | null>;
+  findReplacementDeliveryByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ replacement: ScmReplacementDelivery; lines: ScmReplacementDeliveryLine[] } | null>;
+  listReplacementDeliveries(tenantId: string, filter?: ScmReplacementDeliveryFilter): Promise<ScmReplacementDelivery[]>;
+
+  // Stage 2: Service acceptances (Service Entry Sheets)
+  createServiceAcceptance(
+    tenantId: string,
+    input: CreateScmServiceAcceptanceInput,
+  ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }>;
+  /** Compensating delete when workflow instance creation fails right after createServiceAcceptance. */
+  deleteServiceAcceptanceWithoutWorkflow(tenantId: string, serviceAcceptanceId: string): Promise<void>;
+  updateServiceAcceptanceStatus(
+    tenantId: string,
+    input: UpdateScmServiceAcceptanceStatusInput,
+  ): Promise<ScmServiceAcceptance | null>;
+  freezeServiceAcceptanceLineAssignment(
+    tenantId: string,
+    lineId: string,
+    frozenAt: Date,
+    accountingReadyEventId?: string | null,
+  ): Promise<ScmServiceAcceptanceLine | null>;
+  findServiceAcceptanceById(
+    tenantId: string,
+    serviceAcceptanceId: string,
+  ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] } | null>;
+  findServiceAcceptanceByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] } | null>;
+  listServiceAcceptances(tenantId: string, filter?: ScmServiceAcceptanceFilter): Promise<ScmServiceAcceptance[]>;
+
+  // Stage 2: Consignment settlements
+  createConsignmentSettlement(
+    tenantId: string,
+    input: CreateScmConsignmentSettlementInput,
+  ): Promise<{ settlement: ScmConsignmentSettlement; lines: ScmConsignmentSettlementLine[] }>;
+  findConsignmentSettlementById(
+    tenantId: string,
+    settlementId: string,
+  ): Promise<{ settlement: ScmConsignmentSettlement; lines: ScmConsignmentSettlementLine[] } | null>;
+  findConsignmentSettlementByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ settlement: ScmConsignmentSettlement; lines: ScmConsignmentSettlementLine[] } | null>;
+  listConsignmentSettlements(tenantId: string, filter?: ScmConsignmentSettlementFilter): Promise<ScmConsignmentSettlement[]>;
+
+  // Stage 2: Inventory disposal
+  createInventoryDisposal(
+    tenantId: string,
+    input: CreateScmInventoryDisposalInput,
+  ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }>;
+  /** Compensating delete when workflow instance creation fails right after createInventoryDisposal. */
+  deleteInventoryDisposalWithoutWorkflow(tenantId: string, disposalId: string): Promise<void>;
+  updateInventoryDisposalStatus(
+    tenantId: string,
+    input: UpdateScmInventoryDisposalStatusInput,
+  ): Promise<ScmInventoryDisposal | null>;
+  updateInventoryDisposalLineExecution(
+    tenantId: string,
+    lineId: string,
+    movementId: string,
+    valuationLayerAllocationId: string | null,
+    accountingReadyEventId: string | null,
+    unitCost: number | null,
+    amount: number | null,
+  ): Promise<ScmInventoryDisposalLine | null>;
+  findInventoryDisposalById(
+    tenantId: string,
+    disposalId: string,
+  ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] } | null>;
+  findInventoryDisposalByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] } | null>;
+  listInventoryDisposals(tenantId: string, filter?: ScmInventoryDisposalFilter): Promise<ScmInventoryDisposal[]>;
+
+  // Stage 2: Inventory aging
+  getInventoryAgingBuckets(tenantId: string, filter?: ScmInventoryAgingFilter): Promise<ScmInventoryAgingBucket[]>;
+
+  // Stage 2: Warehouse tasks
+  createWarehouseTask(
+    tenantId: string,
+    input: CreateScmWarehouseTaskInput,
+  ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }>;
+  updateWarehouseTaskStatus(
+    tenantId: string,
+    input: UpdateScmWarehouseTaskStatusInput,
+  ): Promise<ScmWarehouseTask | null>;
+  updateWarehouseTaskItem(
+    tenantId: string,
+    input: UpdateScmWarehouseTaskItemInput,
+  ): Promise<ScmWarehouseTaskItem | null>;
+  findWarehouseTaskById(
+    tenantId: string,
+    warehouseTaskId: string,
+  ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] } | null>;
+  findWarehouseTaskByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] } | null>;
+  listWarehouseTasks(tenantId: string, filter?: ScmWarehouseTaskFilter): Promise<ScmWarehouseTask[]>;
 
   // Reorder policies
   upsertReorderPolicy(tenantId: string, input: UpsertScmReorderPolicyInput): Promise<ScmReorderPolicy>;

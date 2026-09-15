@@ -234,6 +234,11 @@ export function ProcurementPage() {
 
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="success">{notice}</Alert>}
+      {loading && (
+        <div className="flex justify-center py-6">
+          <Spinner />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">

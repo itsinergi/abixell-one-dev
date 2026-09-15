@@ -9,13 +9,11 @@ import {
   type ScmItem,
   type ScmItemBatch,
   type ScmItemSerial,
-  type ScmSerialStatus,
   type ScmWarehouse,
   type ScmWarehouseLocation,
   type ScmAdvancedStockBalance,
   type ScmAdvancedStockMovement,
   type ScmAdvancedStockMovementType,
-  type SiteRecord,
 } from "../../lib/api";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
@@ -65,7 +63,6 @@ export function WarehousesPage() {
   const [balances, setBalances] = useState<ScmAdvancedStockBalance[]>([]);
   const [movements, setMovements] = useState<ScmAdvancedStockMovement[]>([]);
   const [items, setItems] = useState<ScmItem[]>([]);
-  const [sites, setSites] = useState<SiteRecord[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -75,7 +72,6 @@ export function WarehousesPage() {
   // Form states - Warehouse
   const [whCode, setWhCode] = useState("");
   const [whName, setWhName] = useState("");
-  const [whSiteId, setWhSiteId] = useState("");
   const [whAddress, setWhAddress] = useState("");
 
   // Form states - Location
@@ -98,15 +94,11 @@ export function WarehousesPage() {
   const [serialItemId, setSerialItemId] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const [serialWhId, setSerialWhId] = useState("");
-  const [serialLocId, setSerialLocId] = useState("");
-  const [serialBatchId, setSerialBatchId] = useState("");
   const [serialWarranty, setSerialWarranty] = useState("");
 
   // Form states - Movement
   const [movItemId, setMovItemId] = useState("");
   const [movWhId, setMovWhId] = useState("");
-  const [movLocId, setMovLocId] = useState("");
-  const [movBatchId, setMovBatchId] = useState("");
   const [movType, setMovType] = useState<ScmAdvancedStockMovementType>("in");
   const [movQty, setMovQty] = useState("10");
   const [movUnitCost, setMovUnitCost] = useState("0");
@@ -164,7 +156,7 @@ export function WarehousesPage() {
       await api.createScmWarehouse(token, {
         code: whCode.trim(),
         name: whName.trim(),
-        siteId: whSiteId || null,
+        siteId: null,
         address: whAddress.trim() || null,
       });
       setNotice(`Warehouse ${whCode} created.`);
@@ -248,8 +240,8 @@ export function WarehousesPage() {
         itemId: serialItemId,
         serialNumber: serialNumber.trim(),
         warehouseId: serialWhId || null,
-        locationId: serialLocId || null,
-        batchId: serialBatchId || null,
+        locationId: null,
+        batchId: null,
         warrantyExpiryDate: serialWarranty || null,
       });
       setNotice(`Serial ${serialNumber} registered.`);
@@ -273,8 +265,8 @@ export function WarehousesPage() {
       await api.recordScmAdvancedStockMovement(token, {
         itemId: movItemId,
         warehouseId: movWhId,
-        locationId: movLocId || null,
-        batchId: movBatchId || null,
+        locationId: null,
+        batchId: null,
         movementType: movType,
         quantity: Number(movQty),
         unitCost: Number(movUnitCost) || 0,

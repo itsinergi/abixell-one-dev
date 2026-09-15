@@ -478,7 +478,7 @@ export function validateImportBoundaries(files, options = {}) {
         }
 
         if (!sourceModule && targetModule) {
-          const isAppRoute = sourcePath === "apps/api/src/app.ts" && /\/(?:core|advanced)\/api\/.+\.routes\.ts$/.test(target);
+          const isAppRoute = sourcePath === "apps/api/src/app.ts" && /^apps\/api\/src\/modules\/(?:[^/]+\/){1,2}api\/[^/]+\.routes\.ts$/.test(target);
           const isComposition = sourcePath === "apps/api/src/composition-root.ts";
           if (!isAppRoute && !isComposition) {
             apiFindings.push(finding(

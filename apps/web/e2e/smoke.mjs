@@ -156,7 +156,7 @@ try {
   for (const group of ["Operations", "Enterprise Core", "Governance & Platform"]) {
     await assertVisible(desktopNav.getByRole("heading", { name: group, exact: true }), `Missing ${group} group`);
   }
-  for (const destination of ["Overview", "HSE", "Administration", "Admin Console"]) {
+  for (const destination of ["Overview", "Administration", "Admin Console"]) {
     await assertVisible(
       desktopNav.getByRole("link", { name: destination, exact: true }),
       `Missing ${destination} navigation link`,
@@ -166,6 +166,16 @@ try {
     await page.getByRole("button", { name: "Open navigation" }).isVisible(),
     false,
     "Desktop should use the persistent sidebar",
+  );
+
+  const hseDisclosure = desktopNav.getByRole("button", { name: /Health, Safety & Environment/i });
+  await assertVisible(hseDisclosure, "Missing HSE module disclosure button");
+  assert.equal(await hseDisclosure.getAttribute("aria-expanded"), "false", "HSE module should be collapsed by default");
+  await hseDisclosure.click();
+  assert.equal(await hseDisclosure.getAttribute("aria-expanded"), "true", "HSE module did not expand after click");
+  await assertVisible(
+    desktopNav.getByRole("link", { name: "HSE", exact: true }),
+    "Missing HSE navigation link after expanding module",
   );
 
   await desktopNav.getByLabel("Filter navigation").fill("Admin Console");

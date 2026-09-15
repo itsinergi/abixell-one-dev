@@ -20,7 +20,6 @@ import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
   Alert,
-  Badge,
   Button,
   Card,
   DataTable,
@@ -44,7 +43,6 @@ export function StockOperationsPage() {
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.supplyChainInventoryManage);
-  const canApprove = permissions.includes(PERMISSIONS.supplyChainInventoryApprove);
 
   const [tab, setTab] = useState<"alerts" | "policies" | "reservations" | "transfers" | "opnames">("alerts");
   const [items, setItems] = useState<ScmItem[]>([]);

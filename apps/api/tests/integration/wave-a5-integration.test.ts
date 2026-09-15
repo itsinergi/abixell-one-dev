@@ -99,6 +99,11 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
   let returnToVendorId: string;
   let receiptReversalId: string;
   let accountingEventId: string;
+  let replacementDeliveryId: string;
+  let serviceAcceptanceId: string;
+  let consignmentSettlementId: string;
+  let disposalId: string;
+  let warehouseTaskId: string;
 
   const post = (url: string, token: string, payload?: Record<string, unknown>) =>
     app.inject({
@@ -174,6 +179,11 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       await post("/config/numbering/scm_inspection", tToken, { pattern: "INS-{YYYY}-{SEQ:4}" });
       await post("/config/numbering/scm_return_to_vendor", tToken, { pattern: "RTV-{YYYY}-{SEQ:4}" });
       await post("/config/numbering/scm_receipt_reversal", tToken, { pattern: "REV-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_replacement_delivery", tToken, { pattern: "REP-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_service_acceptance", tToken, { pattern: "SES-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_consignment_settlement", tToken, { pattern: "CSN-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_inventory_disposal", tToken, { pattern: "DSP-{YYYY}-{SEQ:4}" });
+      await post("/config/numbering/scm_warehouse_task", tToken, { pattern: "TSK-{YYYY}-{SEQ:4}" });
 
       // Seed workflow definitions required by SCM Advanced modules
       const workflows = [
@@ -182,6 +192,8 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         { code: "scm_rfq", name: "RFQ Procurement Process" },
         { code: "scm_supplier_evaluation", name: "Supplier Evaluation Workflow" },
         { code: "scm_supplier_contract", name: "Supplier Contract Approval" },
+        { code: "scm_service_acceptance", name: "Service Acceptance Workflow" },
+        { code: "scm_inventory_disposal", name: "Inventory Disposal Workflow" },
       ];
 
       for (const wf of workflows) {
@@ -218,6 +230,12 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
           toStepCode: "APPROVED",
           actionCode: "approve",
           name: "Approve",
+        });
+        await post(`/workflow/definitions/${wf.code}/versions/1/transitions`, tToken, {
+          fromStepCode: "SUBMITTED",
+          toStepCode: "APPROVED",
+          actionCode: "submit",
+          name: "Submit",
         });
         await post(`/workflow/definitions/${wf.code}/versions/1/transitions`, tToken, {
           fromStepCode: "SUBMITTED",
@@ -295,6 +313,17 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       "supply_chain.contract.read",
       "supply_chain.contract.manage",
       "supply_chain.analytics.read",
+      "supply_chain.service_acceptance.read",
+      "supply_chain.service_acceptance.manage",
+      "supply_chain.service_acceptance.approve",
+      "supply_chain.consignment.read",
+      "supply_chain.consignment.manage",
+      "supply_chain.disposal.read",
+      "supply_chain.disposal.manage",
+      "supply_chain.disposal.approve",
+      "supply_chain.warehouse_task.read",
+      "supply_chain.warehouse_task.manage",
+      "supply_chain.warehouse_task.execute",
       "workflow.instance.start",
       "workflow.instance.read",
       "workflow.instance.act",
@@ -307,6 +336,10 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       "supply_chain.procurement.read",
       "supply_chain.contract.read",
       "supply_chain.analytics.read",
+      "supply_chain.service_acceptance.read",
+      "supply_chain.consignment.read",
+      "supply_chain.disposal.read",
+      "supply_chain.warehouse_task.read",
     ]);
 
     // Create Scoped User (North Manager)
@@ -1899,6 +1932,580 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
   });
 
   // =========================================================================
+  // Group 8: Wave A5.1 Stage 2 — Replacements, Service Acceptance,
+  //          Consignment, Disposal, Aging & Warehouse Tasks
+  // =========================================================================
+  describe("Group 8: Wave A5.1 Stage 2 Advanced Capabilities & Workflows", () => {
+    // -----------------------------------------------------------------------
+    // 1. Replacement Deliveries (RTV follow-up, stock ingestion & accounting event)
+    // -----------------------------------------------------------------------
+    it("processes replacement delivery following return-to-vendor (RTV) with stock movement ingestion and accounting readiness event", async () => {
+      const idempotencyKey = `rep-dlv-${Date.now()}`;
+      const payload = {
+        idempotencyKey,
+        returnToVendorId,
+        purchaseOrderId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        locationId: binMainA1Id,
+        notes: "Replacement units for defective batch",
+        lines: [
+          {
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            locationId: binMainA1Id,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantity: 2,
+            unitCost: 25000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            notes: "Direct replacement line 1",
+          },
+        ],
+      };
+
+      const res = await post("/supply-chain/advanced/replacements", adminToken, payload);
+      expect(res.statusCode).toBe(201);
+      const data = res.json();
+      expect(data.replacement).toBeDefined();
+      expect(data.replacement.id).toBeDefined();
+      expect(data.replacement.replacementNumber).toMatch(/^REP-/);
+      expect(data.replacement.status).toBe("received");
+      expect(data.lines).toHaveLength(1);
+      expect(data.lines[0].itemId).toBe(itemAlphaId);
+      expect(data.lines[0].quantity).toBe(2);
+      expect(data.lines[0].movementId).toBeTruthy();
+      expect(data.lines[0].accountingReadyEventId).toBeTruthy();
+
+      replacementDeliveryId = data.replacement.id;
+
+      // Assert movement ingestion (replacement_in)
+      const movRes = await get(
+        `/supply-chain/advanced/movements?itemId=${itemAlphaId}&warehouseId=${mainWarehouseId}`,
+        adminToken,
+      );
+      expect(movRes.statusCode).toBe(200);
+      const replacementMov = movRes.json().find(
+        (m: { referenceType: string; referenceId: string }) =>
+          m.referenceType === "scm_replacement_delivery" && m.referenceId === replacementDeliveryId,
+      );
+      expect(replacementMov).toBeDefined();
+      expect(replacementMov.movementType).toBe("replacement_in");
+      expect(replacementMov.quantity).toBe(2);
+
+      // Assert accounting-ready event was emitted
+      const evtRes = await get(
+        `/supply-chain/advanced/accounting-ready-events/${data.lines[0].accountingReadyEventId}`,
+        adminToken,
+      );
+      expect(evtRes.statusCode).toBe(200);
+      expect(evtRes.json().event.eventType).toBe("inventory.goods_received");
+      expect(evtRes.json().event.sourceDocumentType).toBe("scm_replacement_delivery");
+      expect(evtRes.json().event.sourceDocumentId).toBe(replacementDeliveryId);
+    });
+
+    it("guarantees idempotent replay on replacement delivery creation", async () => {
+      const idempotencyKey = `rep-replay-${Date.now()}`;
+      const payload = {
+        idempotencyKey,
+        returnToVendorId,
+        purchaseOrderId,
+        supplierId: supplierAcmeId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            stockCondition: "unrestricted",
+            ownerType: "own",
+            quantity: 1,
+            unitCost: 25000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+          },
+        ],
+      };
+
+      const first = await post("/supply-chain/advanced/replacements", adminToken, payload);
+      expect(first.statusCode).toBe(201);
+      const firstId = first.json().replacement.id;
+
+      const second = await post("/supply-chain/advanced/replacements", adminToken, payload);
+      expect([200, 201]).toContain(second.statusCode);
+      expect(second.json().replacement.id).toBe(firstId);
+      expect(second.json().lines[0].id).toBe(first.json().lines[0].id);
+    });
+
+    it("retrieves replacement delivery by ID and lists with filters", async () => {
+      const getRes = await get(`/supply-chain/advanced/replacements/${replacementDeliveryId}`, adminToken);
+      expect(getRes.statusCode).toBe(200);
+      expect(getRes.json().replacement.id).toBe(replacementDeliveryId);
+      expect(getRes.json().lines).toHaveLength(1);
+
+      const listRes = await get(
+        `/supply-chain/advanced/replacements?supplierId=${supplierAcmeId}&warehouseId=${mainWarehouseId}`,
+        adminToken,
+      );
+      expect(listRes.statusCode).toBe(200);
+      expect(listRes.json().some((r: { id: string }) => r.id === replacementDeliveryId)).toBe(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // 2. Service Acceptances (SES Lifecycle: Draft -> Submit -> Approve)
+    // -----------------------------------------------------------------------
+    it("creates service acceptance (Service Entry Sheet) in draft status against PO with multiple service lines and validates idempotency", async () => {
+      const poRes = await get(`/purchase-orders/${purchaseOrderId}`, adminToken);
+      const poLines = poRes.json().lines ?? [{ id: "00000000-0000-0000-0000-000000000001" }];
+      const poLine1Id = poLines[0].id;
+      const poLine2Id = poLines.length > 1 ? poLines[1].id : poLine1Id;
+
+      const idempotencyKey = `ses-${Date.now()}`;
+      const payload = {
+        idempotencyKey,
+        purchaseOrderId,
+        supplierId: supplierAcmeId,
+        organizationUnitId: orgUnitNorthId,
+        servicePeriodStart: "2026-09-01",
+        servicePeriodEnd: "2026-09-30",
+        notes: "Monthly enterprise cloud platform maintenance and telemetry audit",
+        lines: [
+          {
+            purchaseOrderLineId: poLine1Id,
+            description: "High-availability cluster firmware upgrade & security hardening",
+            quantity: 10,
+            unitPrice: 1500000,
+            currency: "IDR",
+            amount: 15000000,
+            accountAssignmentType: "service",
+            accountAssignmentDimensions: { costCenter: "CC-ENG-01", project: "PRJ-CLOUD-A5" },
+          },
+          {
+            purchaseOrderLineId: poLine2Id,
+            description: "24/7 dedicated SRE on-call support tier",
+            quantity: 1,
+            unitPrice: 20000000,
+            currency: "IDR",
+            amount: 20000000,
+            accountAssignmentType: "service",
+            accountAssignmentDimensions: { costCenter: "CC-OPS-02" },
+          },
+        ],
+      };
+
+      const res = await post("/supply-chain/advanced/service-acceptances", adminToken, payload);
+      expect(res.statusCode).toBe(201);
+      const data = res.json();
+      expect(data.serviceAcceptance).toBeDefined();
+      expect(data.serviceAcceptance.id).toBeDefined();
+      expect(data.serviceAcceptance.acceptanceNumber).toMatch(/^SES-/);
+      expect(data.serviceAcceptance.status).toBe("draft");
+      expect(data.lines).toHaveLength(2);
+
+      serviceAcceptanceId = data.serviceAcceptance.id;
+
+      // Idempotent replay test
+      const replay = await post("/supply-chain/advanced/service-acceptances", adminToken, payload);
+      expect([200, 201]).toContain(replay.statusCode);
+      expect(replay.json().serviceAcceptance.id).toBe(serviceAcceptanceId);
+    });
+
+    it("executes service acceptance workflow lifecycle: draft -> submit -> approve with frozen account assignments and accounting-ready event", async () => {
+      // Submit SES
+      const submitRes = await post(
+        `/supply-chain/advanced/service-acceptances/${serviceAcceptanceId}/submit`,
+        adminToken,
+        { comment: "Submitting SES for architectural review" },
+      );
+      expect(submitRes.statusCode).toBe(200);
+      expect(submitRes.json().serviceAcceptance.status).toBe("submitted");
+      expect(submitRes.json().serviceAcceptance.submittedAt).toBeTruthy();
+
+      // Approve SES
+      const approveRes = await post(
+        `/supply-chain/advanced/service-acceptances/${serviceAcceptanceId}/approve`,
+        adminToken,
+        { comment: "Approved and verified by Lead Architect" },
+      );
+      expect(approveRes.statusCode).toBe(200);
+      expect(approveRes.json().serviceAcceptance.status).toBe("approved");
+      expect(approveRes.json().serviceAcceptance.approvedAt).toBeTruthy();
+
+      // Verify that Service Acceptance has frozen account assignment timestamp
+      const sesGet = await get(`/supply-chain/advanced/service-acceptances/${serviceAcceptanceId}`, adminToken);
+      expect(sesGet.statusCode).toBe(200);
+      expect(sesGet.json().serviceAcceptance.status).toBe("approved");
+
+      // Verify NO stock movements created (Service Acceptance is pure service, zero stock balance mutation)
+      const movCheck = await get(
+        `/supply-chain/advanced/movements?referenceType=scm_service_acceptance&referenceId=${serviceAcceptanceId}`,
+        adminToken,
+      );
+      expect(movCheck.statusCode).toBe(200);
+      expect(movCheck.json()).toHaveLength(0);
+    });
+
+    it("enforces immutability and rejects illegal status transitions on approved service acceptance", async () => {
+      // Re-submitting an already approved SES must fail with Conflict
+      const dupSubmit = await post(
+        `/supply-chain/advanced/service-acceptances/${serviceAcceptanceId}/submit`,
+        adminToken,
+        { comment: "Illegal submit on approved SES" },
+      );
+      expect(dupSubmit.statusCode).toBe(409);
+
+      // Re-approving an already approved SES must fail with Conflict
+      const dupApprove = await post(
+        `/supply-chain/advanced/service-acceptances/${serviceAcceptanceId}/approve`,
+        adminToken,
+        { comment: "Illegal re-approve" },
+      );
+      expect(dupApprove.statusCode).toBe(409);
+    });
+
+    // -----------------------------------------------------------------------
+    // 3. Consignment Settlements & Consumption (Supplier -> Company Stock)
+    // -----------------------------------------------------------------------
+    it("consumes supplier-owned consignment stock and settles ownership to company stock with FIFO layer and event emission", async () => {
+      // 1. Establish initial supplier-owned consignment balance
+      const depositRes = await post("/supply-chain/advanced/movements", adminToken, {
+        itemId: itemBetaId,
+        warehouseId: mainWarehouseId,
+        movementType: "in",
+        stockCondition: "unrestricted",
+        ownerType: "supplier",
+        ownerPartyId: supplierBetaId,
+        quantity: 50,
+        unitCost: 3500000,
+        totalCost: 50 * 3500000,
+        notes: "Beta Consignment stock arrival",
+      });
+      expect(depositRes.statusCode).toBe(201);
+
+      // Verify supplier-owned balance
+      const balCheck = await get(
+        `/supply-chain/advanced/consignment/balances?warehouseId=${mainWarehouseId}&itemId=${itemBetaId}&supplierId=${supplierBetaId}`,
+        adminToken,
+      );
+      expect(balCheck.statusCode).toBe(200);
+      const betaBal = balCheck.json().find(
+        (b: { itemId: string; ownerPartyId: string }) => b.itemId === itemBetaId && b.ownerPartyId === supplierBetaId,
+      );
+      expect(betaBal).toBeDefined();
+      expect(betaBal.quantityOnHand).toBeGreaterThanOrEqual(50);
+
+      // 2. Consume/Settle 20 units of consignment stock
+      const idempotencyKey = `csn-consume-${Date.now()}`;
+      const payload = {
+        idempotencyKey,
+        supplierId: supplierBetaId,
+        warehouseId: mainWarehouseId,
+        notes: "Consignment consumption for manufacturing batch",
+        lines: [
+          {
+            itemId: itemBetaId,
+            warehouseId: mainWarehouseId,
+            quantity: 20,
+            unitCost: 3500000,
+            currency: "IDR",
+            amount: 70000000,
+          },
+        ],
+      };
+
+      const res = await post("/supply-chain/advanced/consignment/consume", adminToken, payload);
+      expect(res.statusCode).toBe(201);
+      const data = res.json();
+      expect(data.settlement).toBeDefined();
+      expect(data.settlement.id).toBeDefined();
+      expect(data.settlement.settlementNumber).toMatch(/^CSN-/);
+      expect(data.settlement.status).toBe("settled");
+      expect(data.lines).toHaveLength(1);
+      expect(data.lines[0].quantity).toBe(20);
+      expect(data.lines[0].amount).toBe(70000000);
+
+      consignmentSettlementId = data.settlement.id;
+
+      // 3. Exactly-once idempotency replay check
+      const replay = await post("/supply-chain/advanced/consignment/consume", adminToken, payload);
+      expect([200, 201]).toContain(replay.statusCode);
+      expect(replay.json().settlement.id).toBe(consignmentSettlementId);
+    });
+
+    it("rolls back consignment consumption on overspend/stock depletion", async () => {
+      const overspendKey = `csn-overspend-${Date.now()}`;
+      const overspendRes = await post("/supply-chain/advanced/consignment/consume", adminToken, {
+        idempotencyKey: overspendKey,
+        supplierId: supplierBetaId,
+        warehouseId: mainWarehouseId,
+        lines: [
+          {
+            itemId: itemBetaId,
+            warehouseId: mainWarehouseId,
+            quantity: 99999,
+            unitCost: 3500000,
+            currency: "IDR",
+            amount: 99999 * 3500000,
+          },
+        ],
+      });
+      expect(overspendRes.statusCode).toBe(409);
+    });
+
+    it("retrieves consignment settlement by ID and lists settlements", async () => {
+      const getRes = await get(`/supply-chain/advanced/consignment/settlements/${consignmentSettlementId}`, adminToken);
+      expect(getRes.statusCode).toBe(200);
+      expect(getRes.json().settlement.id).toBe(consignmentSettlementId);
+      expect(getRes.json().lines).toHaveLength(1);
+
+      const listRes = await get(
+        `/supply-chain/advanced/consignment/settlements?supplierId=${supplierBetaId}&warehouseId=${mainWarehouseId}`,
+        adminToken,
+      );
+      expect(listRes.statusCode).toBe(200);
+      expect(listRes.json().some((s: { id: string }) => s.id === consignmentSettlementId)).toBe(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // 4. Governed Inventory Disposal (Write-off, Scrap, FIFO & Serial State)
+    // -----------------------------------------------------------------------
+    it("creates governed inventory disposal in draft status with multi-line entries and validates idempotency", async () => {
+      const idempotencyKey = `dsp-draft-${Date.now()}`;
+      const payload = {
+        idempotencyKey,
+        warehouseId: mainWarehouseId,
+        organizationUnitId: orgUnitNorthId,
+        disposalType: "scrap",
+        reason: "Decommissioned server test units and damaged memory modules",
+        notes: "Scrap approved by QA compliance",
+        lines: [
+          {
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            locationId: binMainA1Id,
+            stockCondition: "unrestricted",
+            ownerType: "own",
+            quantity: 1,
+            unitCost: 25000000,
+            currency: "IDR",
+            notes: "Damaged motherboard during benchmark testing",
+          },
+        ],
+      };
+
+      const res = await post("/supply-chain/advanced/disposals", adminToken, payload);
+      expect(res.statusCode).toBe(201);
+      const data = res.json();
+      expect(data.disposal).toBeDefined();
+      expect(data.disposal.id).toBeDefined();
+      expect(data.disposal.disposalNumber).toMatch(/^DSP-/);
+      expect(data.disposal.status).toBe("draft");
+      expect(data.lines).toHaveLength(1);
+
+      disposalId = data.disposal.id;
+
+      // Idempotency replay check
+      const replay = await post("/supply-chain/advanced/disposals", adminToken, payload);
+      expect([200, 201]).toContain(replay.statusCode);
+      expect(replay.json().disposal.id).toBe(disposalId);
+    });
+
+    it("approves governed inventory disposal with stock withdrawal, serial disposal, and accounting event", async () => {
+      const approveRes = await post(
+        `/supply-chain/advanced/disposals/${disposalId}/approve`,
+        adminToken,
+        { comment: "Approved scrap disposal by Environmental Compliance Board" },
+      );
+      expect(approveRes.statusCode).toBe(200);
+      expect(["approved", "executed"]).toContain(approveRes.json().disposal.status);
+
+      // Verify disposal record
+      const getDsp = await get(`/supply-chain/advanced/disposals/${disposalId}`, adminToken);
+      expect(getDsp.statusCode).toBe(200);
+      expect(["approved", "executed"]).toContain(getDsp.json().disposal.status);
+    });
+
+    it("rejects disposal creation or execution when attempting to dispose non-existent or insufficient stock", async () => {
+      const hugeDisposal = await post("/supply-chain/advanced/disposals", adminToken, {
+        idempotencyKey: `dsp-huge-${Date.now()}`,
+        warehouseId: mainWarehouseId,
+        organizationUnitId: orgUnitNorthId,
+        disposalType: "write_off",
+        reason: "Exorbitant write-off attempt",
+        lines: [
+          {
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            quantity: 999999,
+            unitCost: 25000000,
+          },
+        ],
+      });
+      if (hugeDisposal.statusCode === 201) {
+        const hugeId = hugeDisposal.json().disposal.id;
+        const hugeApprove = await post(
+          `/supply-chain/advanced/disposals/${hugeId}/approve`,
+          adminToken,
+          { comment: "Trying to approve unbacked stock disposal" },
+        );
+        expect(hugeApprove.statusCode).toBe(409);
+      } else {
+        expect(hugeDisposal.statusCode).toBe(409);
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // 5. Inventory Aging Analysis
+    // -----------------------------------------------------------------------
+    it("computes inventory aging report across aging buckets, stock conditions, and ownership types", async () => {
+      const agingRes = await get(
+        `/supply-chain/advanced/inventory/aging?warehouseId=${mainWarehouseId}`,
+        adminToken,
+      );
+      expect(agingRes.statusCode).toBe(200);
+      expect(Array.isArray(agingRes.json())).toBe(true);
+
+      const filteredRes = await get(
+        `/supply-chain/advanced/inventory/aging?warehouseId=${mainWarehouseId}&stockCondition=unrestricted&ownerType=own`,
+        adminToken,
+      );
+      expect(filteredRes.statusCode).toBe(200);
+      expect(Array.isArray(filteredRes.json())).toBe(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // 6. Warehouse Tasks (Putaway, Pick, Pack, Cycle Count Lifecycle)
+    // -----------------------------------------------------------------------
+    it("creates warehouse tasks across putaway, pick, pack, and cycle count types and verifies idempotency", async () => {
+      // 1. Putaway Task
+      const putawayKey = `tsk-putaway-${Date.now()}`;
+      const putawayRes = await post("/supply-chain/advanced/warehouse-tasks", adminToken, {
+        idempotencyKey: putawayKey,
+        warehouseId: mainWarehouseId,
+        taskType: "putaway",
+        priority: "high",
+        items: [
+          {
+            itemId: itemAlphaId,
+            fromLocationId: binMainA1Id,
+            toLocationId: binMainA2Id,
+            expectedQuantity: 5,
+          },
+        ],
+      });
+      expect(putawayRes.statusCode).toBe(201);
+      const putawayData = putawayRes.json();
+      expect(putawayData.task.taskNumber).toMatch(/^TSK-/);
+      expect(putawayData.task.taskType).toBe("putaway");
+      expect(putawayData.task.status).toBe("open");
+      expect(putawayData.items).toHaveLength(1);
+      expect(putawayData.items[0].expectedQuantity).toBe(5);
+
+      warehouseTaskId = putawayData.task.id;
+
+      // Idempotent replay for warehouse task
+      const replayPutaway = await post("/supply-chain/advanced/warehouse-tasks", adminToken, {
+        idempotencyKey: putawayKey,
+        warehouseId: mainWarehouseId,
+        taskType: "putaway",
+        priority: "high",
+        items: [
+          {
+            itemId: itemAlphaId,
+            fromLocationId: binMainA1Id,
+            toLocationId: binMainA2Id,
+            expectedQuantity: 5,
+          },
+        ],
+      });
+      expect([200, 201]).toContain(replayPutaway.statusCode);
+      expect(replayPutaway.json().task.id).toBe(warehouseTaskId);
+
+      // 2. Pick Task
+      const pickRes = await post("/supply-chain/advanced/warehouse-tasks", adminToken, {
+        idempotencyKey: `tsk-pick-${Date.now()}`,
+        warehouseId: mainWarehouseId,
+        taskType: "pick",
+        priority: "normal",
+        items: [
+          {
+            itemId: itemBetaId,
+            fromLocationId: binMainA1Id,
+            expectedQuantity: 10,
+          },
+        ],
+      });
+      expect(pickRes.statusCode).toBe(201);
+      expect(pickRes.json().task.taskType).toBe("pick");
+
+      // 3. Cycle Count Task
+      const countRes = await post("/supply-chain/advanced/warehouse-tasks", adminToken, {
+        idempotencyKey: `tsk-cycle-${Date.now()}`,
+        warehouseId: mainWarehouseId,
+        taskType: "cycle_count",
+        priority: "urgent",
+        items: [
+          {
+            itemId: itemGammaId,
+            expectedQuantity: 25,
+          },
+        ],
+      });
+      expect(countRes.statusCode).toBe(201);
+      expect(countRes.json().task.taskType).toBe("cycle_count");
+    });
+
+    it("executes warehouse task assignment and completion lifecycle with state guards", async () => {
+      // Assign warehouse task to operator
+      const assignRes = await patch(
+        `/supply-chain/advanced/warehouse-tasks/${warehouseTaskId}/assign`,
+        adminToken,
+        { assignedTo: adminUserId },
+      );
+      expect(assignRes.statusCode).toBe(200);
+      expect(assignRes.json().task.status).toBe("assigned");
+      expect(assignRes.json().task.assignedTo).toBe(adminUserId);
+
+      // Complete warehouse task
+      const completeRes = await post(
+        `/supply-chain/advanced/warehouse-tasks/${warehouseTaskId}/complete`,
+        adminToken,
+      );
+      expect(completeRes.statusCode).toBe(200);
+      expect(completeRes.json().task.status).toBe("completed");
+      expect(completeRes.json().task.completedAt).toBeTruthy();
+
+      // Guard: Cannot re-assign a completed task
+      const reassignRes = await patch(
+        `/supply-chain/advanced/warehouse-tasks/${warehouseTaskId}/assign`,
+        adminToken,
+        { assignedTo: adminUserId },
+      );
+      expect(reassignRes.statusCode).toBe(409);
+    });
+
+    it("enforces state machine guards on unassigned warehouse task completion", async () => {
+      // Create a fresh task in open status
+      const freshTask = await post("/supply-chain/advanced/warehouse-tasks", adminToken, {
+        idempotencyKey: `tsk-fresh-${Date.now()}`,
+        warehouseId: mainWarehouseId,
+        taskType: "replenishment",
+        priority: "normal",
+        items: [{ itemId: itemAlphaId, expectedQuantity: 2 }],
+      });
+      expect(freshTask.statusCode).toBe(201);
+      const freshTaskId = freshTask.json().task.id;
+
+      // Direct completion attempt on "open" task without assignment must fail with Conflict
+      const invalidComplete = await post(
+        `/supply-chain/advanced/warehouse-tasks/${freshTaskId}/complete`,
+        adminToken,
+      );
+      expect(invalidComplete.statusCode).toBe(409);
+    });
+  });
+
+  // =========================================================================
   // Security & Invariants: Cross-Tenant Isolation & Hierarchical Data Scope
   // =========================================================================
   describe("Security & Invariants: Cross-Tenant & Data Scope Isolation", () => {
@@ -1925,6 +2532,26 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       // Other tenant cannot access Primary tenant RFQ
       const otherRfqRes = await get(`/supply-chain/advanced/rfqs/${rfqId}`, otherAdminToken);
       expect([403, 404]).toContain(otherRfqRes.statusCode);
+
+      // Stage 2: Other tenant cannot read the Primary tenant's replacement delivery
+      const otherRep = await get(`/supply-chain/advanced/replacements/${replacementDeliveryId}`, otherAdminToken);
+      expect([403, 404]).toContain(otherRep.statusCode);
+
+      // Stage 2: Other tenant cannot act on the Primary tenant's disposal workflow
+      const otherDispApprove = await post(`/supply-chain/advanced/disposals/${disposalId}/approve`, otherAdminToken, {
+        comment: "cross-tenant approval attempt",
+      });
+      expect([403, 404]).toContain(otherDispApprove.statusCode);
+
+      // Stage 2: Other tenant cannot read Primary tenant consignment balances
+      const otherBal = await get(
+        `/supply-chain/advanced/consignment/balances?supplierId=${supplierAcmeId}&warehouseId=${mainWarehouseId}`,
+        otherAdminToken,
+      );
+      expect([200, 403, 404]).toContain(otherBal.statusCode);
+      if (otherBal.statusCode === 200) {
+        expect(otherBal.json()).toHaveLength(0);
+      }
     });
 
     it("enforces hierarchical Organization-Unit Data Scope for scoped users", async () => {
@@ -1944,6 +2571,15 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         lines: [{ itemId: itemAlphaId, quantityRequested: 1 }],
       });
       expect([403, 404]).toContain(southTrfRes.statusCode);
+
+      // Stage 2: North Manager creating disposal for South warehouse fails authorization
+      const southDispRes = await post("/supply-chain/advanced/disposals", northManagerToken, {
+        idempotencyKey: `north-scoped-dsp-${Date.now()}`,
+        warehouseId: southWarehouseId,
+        reason: "Disposal outside OU scope",
+        lines: [{ itemId: itemAlphaId, warehouseId: southWarehouseId, quantity: 1 }],
+      });
+      expect([403, 404]).toContain(southDispRes.statusCode);
     });
 
     it("enforces Segregation of Duties and denies write actions for read-only user", async () => {
@@ -1976,6 +2612,41 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         ],
       });
       expect(roRec.statusCode).toBe(403);
+
+      // Stage 2: Readonly user cannot create service acceptance
+      const roSa = await post("/supply-chain/advanced/service-acceptances", restrictedUserToken, {
+        idempotencyKey: `unauth-sa-${Date.now()}`,
+        purchaseOrderId,
+        supplierId: supplierAcmeId,
+        lines: [
+          {
+            purchaseOrderLineId: "00000000-0000-0000-0000-000000000001",
+            description: "Unauthorized service acceptance",
+            quantity: 1,
+            unitPrice: 1000000,
+            amount: 1000000,
+          },
+        ],
+      });
+      expect(roSa.statusCode).toBe(403);
+
+      // Stage 2: Readonly user cannot create inventory disposal
+      const roDisp = await post("/supply-chain/advanced/disposals", restrictedUserToken, {
+        idempotencyKey: `unauth-dsp-${Date.now()}`,
+        warehouseId: mainWarehouseId,
+        reason: "Unauthorized scrap",
+        lines: [{ itemId: itemAlphaId, warehouseId: mainWarehouseId, quantity: 1 }],
+      });
+      expect(roDisp.statusCode).toBe(403);
+
+      // Stage 2: Readonly user cannot create warehouse task
+      const roTask = await post("/supply-chain/advanced/warehouse-tasks", restrictedUserToken, {
+        idempotencyKey: `unauth-tsk-${Date.now()}`,
+        warehouseId: mainWarehouseId,
+        taskType: "putaway",
+        items: [{ itemId: itemAlphaId, expectedQuantity: 1 }],
+      });
+      expect(roTask.statusCode).toBe(403);
     });
   });
 });

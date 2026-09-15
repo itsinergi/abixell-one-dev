@@ -56,9 +56,10 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
 
   app.get("/me", { preHandler: app.authenticate }, async (request, reply) => {
     const actor = request.actor!;
-    const [permissions, assignments] = await Promise.all([
+    const [permissions, assignments, activeModuleCodes] = await Promise.all([
       container.rbac.getEffectivePermissions(actor.userId),
       container.rbac.getAssignments(actor.userId),
+      container.configuration.listActiveModuleCodesForTenant(actor.tenantId),
     ]);
     // Checkpoint 1C.3 — expose the distinct Data-Scope types the actor holds
     // ("customer" vs "organization_unit"/"tenant"). This is what lets the
@@ -72,6 +73,7 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
       tenantId: actor.tenantId,
       permissions: Array.from(permissions),
       scopeTypes,
+      activeModuleCodes,
     });
   });
 }

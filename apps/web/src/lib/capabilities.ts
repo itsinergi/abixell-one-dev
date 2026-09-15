@@ -145,7 +145,41 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+export type ModuleCode =
+  | "customer_complaint"
+  | "survey_assessment"
+  | "service_operations"
+  | "customer_commercial"
+  | "workforce"
+  | "supply_chain"
+  | "warehouse_management"
+  | "procurement_management"
+  | "asset"
+  | "finance"
+  | "hse"
+  | "project_delivery"
+  | "reporting_insight";
+
+/** Real module catalog codes, not page names or permission prefixes. */
+export const MODULE_METADATA: Record<ModuleCode, { label: string; group: NavGroupKey }> = {
+  customer_complaint: { label: "Customer Complaints", group: "operations" },
+  survey_assessment: { label: "Surveys & Assessments", group: "operations" },
+  service_operations: { label: "Service Operations", group: "operations" },
+  customer_commercial: { label: "Customers & Commercial", group: "enterprise-core" },
+  workforce: { label: "Workforce & HR", group: "enterprise-core" },
+  supply_chain: { label: "Supply Chain", group: "enterprise-core" },
+  warehouse_management: { label: "Warehouse Management", group: "enterprise-core" },
+  procurement_management: { label: "Procurement Management", group: "enterprise-core" },
+  asset: { label: "Asset Management", group: "enterprise-core" },
+  finance: { label: "Finance", group: "enterprise-core" },
+  hse: { label: "Health, Safety & Environment", group: "enterprise-core" },
+  project_delivery: { label: "Project Delivery", group: "enterprise-core" },
+  reporting_insight: { label: "Reporting & Insights", group: "governance" },
+};
+
 export interface NavSection {
+  /** Omitted only for global workspace and platform administration links. */
+  moduleCode?: ModuleCode;
   /** Stable key, also used for testing hooks. */
   key: string;
   /** Static information-architecture group. */
@@ -193,6 +227,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "complaints",
+    moduleCode: "customer_complaint",
     group: "operations",
     path: "/complaints",
     label: "Complaints",
@@ -202,6 +237,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "queue",
+    moduleCode: "customer_complaint",
     group: "operations",
     path: "/queue",
     label: "Queue",
@@ -211,6 +247,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "verification",
+    moduleCode: "customer_complaint",
     group: "operations",
     path: "/verification",
     label: "Verification",
@@ -225,6 +262,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "management",
+    moduleCode: "customer_complaint",
     group: "operations",
     path: "/management",
     label: "Management",
@@ -236,6 +274,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "my-surveys",
+    moduleCode: "survey_assessment",
     group: "operations",
     path: "/my-surveys",
     label: "My Surveys",
@@ -244,6 +283,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "surveys",
+    moduleCode: "survey_assessment",
     group: "operations",
     path: "/surveys",
     label: "Surveys",
@@ -253,6 +293,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "my-work",
+    moduleCode: "service_operations",
     group: "operations",
     path: "/my-work",
     label: "My Work",
@@ -262,6 +303,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "work-orders",
+    moduleCode: "service_operations",
     group: "operations",
     path: "/work-orders",
     label: "Work Orders",
@@ -271,6 +313,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "service-types",
+    moduleCode: "service_operations",
     group: "operations",
     path: "/service-types",
     label: "Service Types",
@@ -280,6 +323,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "service-packs",
+    moduleCode: "service_operations",
     group: "operations",
     path: "/service-packs",
     label: "Service Packs",
@@ -289,6 +333,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "service-optimization",
+    moduleCode: "service_operations",
     group: "operations",
     path: "/service-optimization",
     label: "Service Optimization",
@@ -301,6 +346,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "customer-commercial",
+    moduleCode: "customer_commercial",
     group: "enterprise-core",
     path: "/customer-commercial",
     label: "Customers",
@@ -310,6 +356,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "sales-pipeline",
+    moduleCode: "customer_commercial",
     group: "enterprise-core",
     path: "/sales",
     label: "Sales & Pipeline",
@@ -319,6 +366,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "service-quality",
+    moduleCode: "customer_complaint",
     group: "operations",
     path: "/service-quality",
     label: "Service Quality",
@@ -328,6 +376,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "employees",
+    moduleCode: "workforce",
     group: "enterprise-core",
     path: "/employees",
     label: "Employees",
@@ -337,6 +386,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "workforce-attendance",
+    moduleCode: "workforce",
     group: "enterprise-core",
     path: "/workforce/attendance",
     label: "Attendance & Rosters",
@@ -346,6 +396,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "workforce-leave-overtime",
+    moduleCode: "workforce",
     group: "enterprise-core",
     path: "/workforce/leave-overtime",
     label: "Leave & Overtime",
@@ -355,6 +406,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "workforce-payroll",
+    moduleCode: "workforce",
     group: "enterprise-core",
     path: "/workforce/payroll",
     label: "Payroll",
@@ -364,6 +416,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "workforce-recruitment",
+    moduleCode: "workforce",
     group: "enterprise-core",
     path: "/workforce/recruitment",
     label: "Recruitment",
@@ -373,6 +426,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "workforce-performance",
+    moduleCode: "workforce",
     group: "enterprise-core",
     path: "/workforce/performance",
     label: "Talent & Performance",
@@ -382,6 +436,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "workforce-planning",
+    moduleCode: "workforce",
     group: "enterprise-core",
     path: "/workforce/planning",
     label: "Workforce Planning",
@@ -391,6 +446,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "items",
+    moduleCode: "supply_chain",
     group: "enterprise-core",
     path: "/items",
     label: "Items & Stock",
@@ -400,8 +456,9 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "scm-warehouses",
+    moduleCode: "warehouse_management",
     group: "enterprise-core",
-    path: "/supply-chain/warehouses",
+    path: "/wms/warehouses",
     label: "Warehouses & Tracking",
     description: "Multi-warehouse topology, bin locations, batch/lot, and serial tracking.",
     requiresAnyOf: [PERMISSIONS.supplyChainWarehouseRead, PERMISSIONS.supplyChainWarehouseManage],
@@ -409,8 +466,9 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "scm-operations",
+    moduleCode: "warehouse_management",
     group: "enterprise-core",
-    path: "/supply-chain/operations",
+    path: "/wms/operations",
     label: "Stock Operations",
     description: "Reorder alerts, stock reservations, warehouse transfers, and stock opname.",
     requiresAnyOf: [
@@ -422,8 +480,9 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "scm-valuation",
+    moduleCode: "warehouse_management",
     group: "enterprise-core",
-    path: "/supply-chain/valuation",
+    path: "/wms/valuation",
     label: "Valuation & Landed Cost",
     description: "FIFO/moving average layers, landed cost vouchers, and landed cost allocations.",
     requiresAnyOf: [PERMISSIONS.supplyChainValuationRead, PERMISSIONS.supplyChainValuationManage],
@@ -431,8 +490,9 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "scm-procurement",
+    moduleCode: "procurement_management",
     group: "enterprise-core",
-    path: "/supply-chain/procurement",
+    path: "/procurement/rfqs",
     label: "RFQ & Tendering",
     description: "RFQs, tenders, supplier quotations, bid comparisons, and awarding.",
     requiresAnyOf: [
@@ -444,8 +504,9 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "scm-contracts",
+    moduleCode: "procurement_management",
     group: "enterprise-core",
-    path: "/supply-chain/contracts",
+    path: "/procurement/contracts",
     label: "Supplier Contracts & Scorecards",
     description: "Supplier performance evaluations, rating scorecards, and blanket purchasing contracts.",
     requiresAnyOf: [
@@ -457,8 +518,9 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "scm-spend",
+    moduleCode: "procurement_management",
     group: "enterprise-core",
-    path: "/supply-chain/spend-analytics",
+    path: "/procurement/spend-analytics",
     label: "Spend Analytics",
     description: "Procurement spend analytics, vendor breakdown, PO metrics, and purchasing trends.",
     requiresAnyOf: [PERMISSIONS.supplyChainAnalyticsRead],
@@ -466,6 +528,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "suppliers",
+    moduleCode: "supply_chain",
     group: "enterprise-core",
     path: "/suppliers",
     label: "Suppliers",
@@ -475,6 +538,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "purchasing",
+    moduleCode: "supply_chain",
     group: "enterprise-core",
     path: "/purchasing",
     label: "Purchasing",
@@ -484,6 +548,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "assets",
+    moduleCode: "asset",
     group: "enterprise-core",
     path: "/assets",
     label: "Assets",
@@ -493,6 +558,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "asset-maintenance",
+    moduleCode: "asset",
     group: "enterprise-core",
     path: "/asset-maintenance",
     label: "Asset Maintenance",
@@ -508,6 +574,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "finance-transactions",
+    moduleCode: "finance",
     group: "enterprise-core",
     path: "/finance/transactions",
     label: "Transactions",
@@ -517,6 +584,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "finance-cashflow",
+    moduleCode: "finance",
     group: "enterprise-core",
     path: "/finance/cashflow",
     label: "Cashflow",
@@ -526,6 +594,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "finance-accounts",
+    moduleCode: "finance",
     group: "enterprise-core",
     path: "/finance/accounts",
     label: "Cash & Bank",
@@ -535,6 +604,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "hse",
+    moduleCode: "hse",
     group: "enterprise-core",
     path: "/hse",
     label: "HSE",
@@ -544,6 +614,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "project-delivery",
+    moduleCode: "project_delivery",
     group: "enterprise-core",
     path: "/project-delivery",
     label: "Project Delivery",
@@ -553,6 +624,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "reporting-insight",
+    moduleCode: "reporting_insight",
     group: "governance",
     path: "/reporting",
     label: "Reporting",
@@ -588,12 +660,16 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-/** True if the user (permissions + scope types) satisfies the section's gate. */
+/** True if the user (permissions + scope types + active modules) satisfies the section's gate. */
 export function canSeeSection(
   section: NavSection,
   permissions: string[],
   scopeTypes: string[],
+  activeModuleCodes: string[] = [],
 ): boolean {
+  if (section.moduleCode && !activeModuleCodes.includes(section.moduleCode)) {
+    return false;
+  }
   if (section.requiresAnyOf && !section.requiresAnyOf.some((p) => permissions.includes(p))) {
     return false;
   }
@@ -603,22 +679,104 @@ export function canSeeSection(
 }
 
 /** The sections a user may see, in nav order. */
-export function visibleSections(permissions: string[], scopeTypes: string[]): NavSection[] {
-  return NAV_SECTIONS.filter((section) => canSeeSection(section, permissions, scopeTypes));
+export function visibleSections(
+  permissions: string[],
+  scopeTypes: string[],
+  activeModuleCodes: string[] = [],
+): NavSection[] {
+  return NAV_SECTIONS.filter((section) =>
+    canSeeSection(section, permissions, scopeTypes, activeModuleCodes),
+  );
 }
 
 export interface VisibleNavGroup extends NavGroup {
   sections: NavSection[];
 }
 
+export type VisibleNavNode =
+  | { type: "section"; section: NavSection }
+  | { type: "module"; moduleCode: ModuleCode; label: string; sections: NavSection[] };
+
+export interface VisibleNavTreeGroup extends NavGroup {
+  nodes: VisibleNavNode[];
+}
+
 /** Visible sections grouped by the approved Platform Experience information architecture. */
 export function visibleSectionGroups(
   permissions: string[],
   scopeTypes: string[],
+  activeModuleCodes: string[] = [],
 ): VisibleNavGroup[] {
-  const sections = visibleSections(permissions, scopeTypes);
+  const sections = visibleSections(permissions, scopeTypes, activeModuleCodes);
   return NAV_GROUPS.map((group) => ({
     ...group,
     sections: sections.filter((section) => section.group === group.key),
   })).filter((group) => group.sections.length > 0);
+}
+
+/** Visible navigation rendered as standalone global links and module-owned trees. */
+export function visibleNavTree(
+  permissions: string[],
+  scopeTypes: string[],
+  activeModuleCodes: string[] = [],
+): VisibleNavTreeGroup[] {
+  const sections = visibleSections(permissions, scopeTypes, activeModuleCodes);
+  return NAV_GROUPS.map((group) => {
+    const nodes: VisibleNavNode[] = [];
+    const modules = new Map<ModuleCode, Extract<VisibleNavNode, { type: "module" }>>();
+
+    for (const section of sections) {
+      if (section.group !== group.key) continue;
+      if (!section.moduleCode) {
+        nodes.push({ type: "section", section });
+        continue;
+      }
+      const existing = modules.get(section.moduleCode);
+      if (existing) {
+        existing.sections.push(section);
+        continue;
+      }
+      const moduleNode: Extract<VisibleNavNode, { type: "module" }> = {
+        type: "module",
+        moduleCode: section.moduleCode,
+        label: MODULE_METADATA[section.moduleCode].label,
+        sections: [section],
+      };
+      modules.set(section.moduleCode, moduleNode);
+      nodes.push(moduleNode);
+    }
+
+    return { ...group, nodes };
+  }).filter((group) => group.nodes.length > 0);
+}
+
+/** Search only already-visible nodes; a module-label match retains all its children. */
+export function filterNavTree(groups: VisibleNavTreeGroup[], query: string): VisibleNavTreeGroup[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return groups;
+  const matches = (section: NavSection) =>
+    `${section.label} ${section.description}`.toLocaleLowerCase().includes(normalizedQuery);
+
+  return groups.map((group) => ({
+    ...group,
+    nodes: group.nodes.flatMap((node): VisibleNavNode[] => {
+      if (node.type === "section") return matches(node.section) ? [node] : [];
+      const sections = node.label.toLocaleLowerCase().includes(normalizedQuery)
+        ? node.sections
+        : node.sections.filter(matches);
+      return sections.length > 0 ? [{ ...node, sections }] : [];
+    }),
+  })).filter((group) => group.nodes.length > 0);
+}
+
+/** Same case-insensitive segment boundary as NavLink; /assets-old is not /assets. */
+export function activeNavModuleCodes(groups: VisibleNavTreeGroup[], pathname: string): ModuleCode[] {
+  const current = pathname.toLocaleLowerCase();
+  return groups.flatMap((group) => group.nodes.flatMap((node) => {
+    if (node.type !== "module") return [];
+    return node.sections.some(({ path }) => {
+      const destination = path.toLocaleLowerCase();
+      return current === destination || (destination !== "/" && current.startsWith(`${destination}/`));
+    }) ? [node.moduleCode] : [];
+  }));
 }

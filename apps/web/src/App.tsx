@@ -36,12 +36,8 @@ import { WorkforcePlanningPage } from "./pages/workforce-advanced/WorkforcePlann
 import { ItemsPage } from "./modules/supply-chain/ItemsPage";
 import { SuppliersPage } from "./modules/supply-chain/SuppliersPage";
 import { PurchasingPage } from "./modules/supply-chain/PurchasingPage";
-import { WarehousesPage } from "./pages/supply-chain-advanced/WarehousesPage";
-import { StockOperationsPage } from "./pages/supply-chain-advanced/StockOperationsPage";
-import { ValuationPage } from "./pages/supply-chain-advanced/ValuationPage";
-import { ProcurementPage } from "./pages/supply-chain-advanced/ProcurementPage";
-import { SupplierContractsPage } from "./pages/supply-chain-advanced/SupplierContractsPage";
-import { SpendAnalyticsPage } from "./pages/supply-chain-advanced/SpendAnalyticsPage";
+import { WarehousesPage, StockOperationsPage, ValuationPage } from "./pages/wms";
+import { ProcurementPage, SupplierContractsPage, SpendAnalyticsPage } from "./pages/procurement";
 import { AssetsPage } from "./modules/asset/AssetsPage";
 import { AssetDetailPage } from "./modules/asset/AssetDetailPage";
 import { ServicePacksPage } from "./pages/service-operations/ServicePacksPage";
@@ -143,13 +139,20 @@ export default function App() {
           <Route path="items" element={<ItemsPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="purchasing" element={<PurchasingPage />} />
-          {/* Wave A5 — Supply Chain Advanced */}
-          <Route path="supply-chain/warehouses" element={<WarehousesPage />} />
-          <Route path="supply-chain/operations" element={<StockOperationsPage />} />
-          <Route path="supply-chain/valuation" element={<ValuationPage />} />
-          <Route path="supply-chain/procurement" element={<ProcurementPage />} />
-          <Route path="supply-chain/contracts" element={<SupplierContractsPage />} />
-          <Route path="supply-chain/spend-analytics" element={<SpendAnalyticsPage />} />
+          {/* Wave A5 — Supply Chain Advanced (decomposed bounded contexts) */}
+          <Route path="wms/warehouses" element={<WarehousesPage />} />
+          <Route path="wms/operations" element={<StockOperationsPage />} />
+          <Route path="wms/valuation" element={<ValuationPage />} />
+          <Route path="procurement/rfqs" element={<ProcurementPage />} />
+          <Route path="procurement/contracts" element={<SupplierContractsPage />} />
+          <Route path="procurement/spend-analytics" element={<SpendAnalyticsPage />} />
+          {/* Backward-compatibility redirects for legacy deep links */}
+          <Route path="supply-chain/warehouses" element={<Navigate to="/wms/warehouses" replace />} />
+          <Route path="supply-chain/operations" element={<Navigate to="/wms/operations" replace />} />
+          <Route path="supply-chain/valuation" element={<Navigate to="/wms/valuation" replace />} />
+          <Route path="supply-chain/procurement" element={<Navigate to="/procurement/rfqs" replace />} />
+          <Route path="supply-chain/contracts" element={<Navigate to="/procurement/contracts" replace />} />
+          <Route path="supply-chain/spend-analytics" element={<Navigate to="/procurement/spend-analytics" replace />} />
           {/* Phase 5 — Asset */}
           <Route path="assets" element={<AssetsPage />} />
           <Route path="assets/:assetId" element={<AssetDetailPage />} />

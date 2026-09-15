@@ -17,6 +17,7 @@
  * - Enforces the 14 Wave A5 RBAC permissions and centralized Organization Unit Data Scope (RbacService).
  */
 
+import crypto from "node:crypto";
 import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
 import {
   ConflictError,
@@ -38,15 +39,19 @@ import type {
   AwardScmSupplierBidInput,
   ConsumeScmValuationLayerInput,
   CreateScmAccountingReadyEventInput,
+  CreateScmConsignmentSettlementInput,
   CreateScmDiscrepancyRecordInput,
   CreateScmInspectionInput,
+  CreateScmInventoryDisposalInput,
   CreateScmItemBatchInput,
   CreateScmItemSerialInput,
   CreateScmLandedCostInput,
   CreateScmReceiptReversalInput,
   CreateScmReceivingRecordInput,
+  CreateScmReplacementDeliveryInput,
   CreateScmReturnToVendorInput,
   CreateScmRfqInput,
+  CreateScmServiceAcceptanceInput,
   CreateScmSpendAnalyticsSnapshotInput,
   CreateScmStockOpnameInput,
   CreateScmStockReservationInput,
@@ -58,6 +63,7 @@ import type {
   CreateScmValuationLayerInput,
   CreateScmWarehouseInput,
   CreateScmWarehouseLocationInput,
+  CreateScmWarehouseTaskInput,
   RecordScmAdvancedStockMovementInput,
   RecordScmStockOpnameCountInput,
   RecordScmStockTransferReceiptInput,
@@ -65,6 +71,7 @@ import type {
   RecordScmSupplierContractSpendInput,
   ResolveScmDiscrepancyRecordInput,
   ScmAccountAssignmentConfig,
+  ScmAccountAssignmentDimensions,
   ScmAccountAssignmentType,
   ScmAccountingEventStateKind,
   ScmAccountingOutboxState,
@@ -77,12 +84,22 @@ import type {
   ScmAdvancedStockBalanceFilter,
   ScmAdvancedStockMovement,
   ScmAdvancedStockMovementFilter,
+  ScmConsignmentSettlement,
+  ScmConsignmentSettlementFilter,
+  ScmConsignmentSettlementLine,
   ScmDiscrepancyRecord,
   ScmDiscrepancyRecordFilter,
   ScmDiscrepancyStatus,
   ScmDiscrepancyType,
+  ScmDisposalStatus,
+  ScmDisposalType,
   ScmInspection,
   ScmInspectionResult,
+  ScmInventoryAgingBucket,
+  ScmInventoryAgingFilter,
+  ScmInventoryDisposal,
+  ScmInventoryDisposalFilter,
+  ScmInventoryDisposalLine,
   ScmItemBatch,
   ScmItemBatchListFilter,
   ScmItemSerial,
@@ -98,6 +115,10 @@ import type {
   ScmReceivingStatus,
   ScmReorderPolicy,
   ScmReorderPolicyFilter,
+  ScmReplacementDelivery,
+  ScmReplacementDeliveryFilter,
+  ScmReplacementDeliveryLine,
+  ScmReplacementDeliveryStatus,
   ScmReturnToVendor,
   ScmReturnToVendorFilter,
   ScmReturnToVendorLine,
@@ -106,6 +127,10 @@ import type {
   ScmRfqFilter,
   ScmRfqInvitedSupplier,
   ScmRfqItem,
+  ScmServiceAcceptance,
+  ScmServiceAcceptanceFilter,
+  ScmServiceAcceptanceLine,
+  ScmServiceAcceptanceStatus,
   ScmSpendAnalyticsSnapshot,
   ScmSpendAnalyticsSnapshotFilter,
   ScmStockCondition,
@@ -135,13 +160,22 @@ import type {
   ScmWarehouseListFilter,
   ScmWarehouseLocation,
   ScmWarehouseLocationListFilter,
+  ScmWarehouseTask,
+  ScmWarehouseTaskFilter,
+  ScmWarehouseTaskItem,
+  ScmWarehouseTaskItemStatus,
+  ScmWarehouseTaskPriority,
+  ScmWarehouseTaskStatus,
+  ScmWarehouseTaskType,
   SupplyChainAdvancedRepository,
   UpdateScmAccountAssignmentConfigInput,
   UpdateScmAccountingReadyEventStateInput,
+  UpdateScmInventoryDisposalStatusInput,
   UpdateScmItemSerialInput,
   UpdateScmReceivingLineInspectionProjectionInput,
   UpdateScmReceivingRecordStatusInput,
   UpdateScmRfqProjectionInput,
+  UpdateScmServiceAcceptanceStatusInput,
   UpdateScmStockOpnameProjectionInput,
   UpdateScmStockTransferProjectionInput,
   UpdateScmSupplierBidScoreInput,
@@ -149,6 +183,8 @@ import type {
   UpdateScmSupplierEvaluationProjectionInput,
   UpdateScmWarehouseInput,
   UpdateScmWarehouseLocationInput,
+  UpdateScmWarehouseTaskItemInput,
+  UpdateScmWarehouseTaskStatusInput,
   UpsertScmReorderPolicyInput,
 } from "../domain/supply-chain-advanced.entity.js";
 import {
@@ -172,6 +208,11 @@ export const SCM_RECEIVING_RECORD_NUMBERING_CODE = "scm_receiving_record";
 export const SCM_INSPECTION_NUMBERING_CODE = "scm_inspection";
 export const SCM_RETURN_TO_VENDOR_NUMBERING_CODE = "scm_return_to_vendor";
 export const SCM_RECEIPT_REVERSAL_NUMBERING_CODE = "scm_receipt_reversal";
+export const SCM_REPLACEMENT_DELIVERY_NUMBERING_CODE = "scm_replacement_delivery";
+export const SCM_SERVICE_ACCEPTANCE_NUMBERING_CODE = "scm_service_acceptance";
+export const SCM_CONSIGNMENT_SETTLEMENT_NUMBERING_CODE = "scm_consignment_settlement";
+export const SCM_INVENTORY_DISPOSAL_NUMBERING_CODE = "scm_inventory_disposal";
+export const SCM_WAREHOUSE_TASK_NUMBERING_CODE = "scm_warehouse_task";
 
 /** Workflow definition codes for Supply Chain Advanced. */
 export const SCM_STOCK_TRANSFER_WORKFLOW_DEFINITION_CODE = "scm_stock_transfer";
@@ -2676,6 +2717,948 @@ export class SupplyChainAdvancedService {
     });
 
     return result;
+  }
+
+  // =========================================================================
+  // Stage 2: Replacement Deliveries (RTV Follow-On)
+  // =========================================================================
+
+  async createReplacementDelivery(
+    actor: ActorContext,
+    input: Omit<CreateScmReplacementDeliveryInput, "replacementNumber" | "createdBy"> & { replacementNumber?: string },
+  ): Promise<{ replacement: ScmReplacementDelivery; lines: ScmReplacementDeliveryLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    const replayed = await this.repo.findReplacementDeliveryByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const replacementNumber =
+      input.replacementNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_REPLACEMENT_DELIVERY_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createReplacementDelivery(actor.tenantId, {
+          ...input,
+          replacementNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findReplacementDeliveryByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Replacement delivery with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.replacement_delivery.created",
+      entityType: "scm_replacement_delivery",
+      entityId: result.replacement.id,
+      metadata: {
+        replacementNumber: result.replacement.replacementNumber,
+        returnToVendorId: input.returnToVendorId,
+        supplierId: input.supplierId,
+        lineCount: result.lines.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getReplacementDelivery(
+    actor: ActorContext,
+    replacementDeliveryId: string,
+  ): Promise<{ replacement: ScmReplacementDelivery; lines: ScmReplacementDeliveryLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const result = await this.repo.findReplacementDeliveryById(actor.tenantId, replacementDeliveryId);
+    if (!result) {
+      throw new NotFoundError("ScmReplacementDelivery", replacementDeliveryId);
+    }
+    await this.assertWarehouseInScope(actor, result.replacement.warehouseId);
+    return result;
+  }
+
+  async listReplacementDeliveries(
+    actor: ActorContext,
+    filter: ScmReplacementDeliveryFilter = {},
+  ): Promise<ScmReplacementDelivery[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listReplacementDeliveries(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // =========================================================================
+  // Stage 2: Service Acceptance (Service Entry Sheets with Workflow)
+  // =========================================================================
+
+  async createServiceAcceptance(
+    actor: ActorContext,
+    input: Omit<CreateScmServiceAcceptanceInput, "acceptanceNumber" | "createdBy"> & { acceptanceNumber?: string },
+  ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.manage");
+    if (input.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
+    }
+
+    const replayed = await this.repo.findServiceAcceptanceByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const acceptanceNumber =
+      input.acceptanceNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_SERVICE_ACCEPTANCE_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createServiceAcceptance(actor.tenantId, {
+          ...input,
+          acceptanceNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findServiceAcceptanceByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Service acceptance with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: "scm_service_acceptance",
+        entityId: result.serviceAcceptance.id,
+        contextData: {
+          acceptanceNumber: result.serviceAcceptance.acceptanceNumber,
+          purchaseOrderId: input.purchaseOrderId,
+          supplierId: input.supplierId,
+          organizationUnitId: input.organizationUnitId ?? null,
+        },
+      });
+      workflowInstanceId = instance.id;
+      const updated = await this.repo.updateServiceAcceptanceStatus(actor.tenantId, {
+        serviceAcceptanceId: result.serviceAcceptance.id,
+        status: "draft",
+        workflowInstanceId,
+        updatedBy: actor.userId,
+      });
+      if (updated) {
+        result.serviceAcceptance = updated;
+      }
+    } catch (err) {
+      await this.repo.deleteServiceAcceptanceWithoutWorkflow(actor.tenantId, result.serviceAcceptance.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.service_acceptance.created",
+      entityType: "scm_service_acceptance",
+      entityId: result.serviceAcceptance.id,
+      metadata: {
+        acceptanceNumber: result.serviceAcceptance.acceptanceNumber,
+        purchaseOrderId: input.purchaseOrderId,
+        lineCount: result.lines.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getServiceAcceptance(
+    actor: ActorContext,
+    serviceAcceptanceId: string,
+  ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.read");
+    const result = await this.repo.findServiceAcceptanceById(actor.tenantId, serviceAcceptanceId);
+    if (!result) {
+      throw new NotFoundError("ScmServiceAcceptance", serviceAcceptanceId);
+    }
+    if (result.serviceAcceptance.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, result.serviceAcceptance.organizationUnitId);
+    }
+    return result;
+  }
+
+  async listServiceAcceptances(
+    actor: ActorContext,
+    filter: ScmServiceAcceptanceFilter = {},
+  ): Promise<Array<{ serviceAcceptance: ScmServiceAcceptance; status: EntityWorkflowStatus | null }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.read");
+    const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitIds?.[0]);
+
+    const acceptances = await this.repo.listServiceAcceptances(actor.tenantId, {
+      ...filter,
+      organizationUnitIds: scopedOrgUnitIds ?? undefined,
+    });
+
+    return this.withWorkflowStatus(
+      actor,
+      acceptances,
+      (a) => a.workflowInstanceId,
+      (serviceAcceptance, status) => ({ serviceAcceptance, status }),
+    );
+  }
+
+  async submitServiceAcceptance(
+    actor: ActorContext,
+    serviceAcceptanceId: string,
+    comment?: string,
+  ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.approve");
+    const result = await this.repo.findServiceAcceptanceById(actor.tenantId, serviceAcceptanceId);
+    if (!result) {
+      throw new NotFoundError("ScmServiceAcceptance", serviceAcceptanceId);
+    }
+    if (result.serviceAcceptance.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, result.serviceAcceptance.organizationUnitId);
+    }
+
+    if (result.serviceAcceptance.status !== "draft") {
+      throw new ConflictError(`Service acceptance must be in draft status to submit (current: ${result.serviceAcceptance.status})`);
+    }
+
+    if (!result.serviceAcceptance.workflowInstanceId) {
+      throw new ValidationError(`Service acceptance ${serviceAcceptanceId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.serviceAcceptance.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending submit action exists on this service acceptance");
+    }
+
+    // Keep the workflow assignment pending until the explicit approve action.
+    // This preserves the governed two-step SES lifecycle even when a tenant's
+    // workflow definition exposes a direct submit transition.
+
+    await this.repo.updateServiceAcceptanceStatus(actor.tenantId, {
+      serviceAcceptanceId,
+      status: "submitted",
+      submittedAt: new Date(),
+      submittedBy: actor.userId,
+      updatedBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.service_acceptance.submitted",
+      entityType: "scm_service_acceptance",
+      entityId: serviceAcceptanceId,
+      metadata: { comment },
+    });
+
+    return this.getServiceAcceptance(actor, serviceAcceptanceId);
+  }
+
+  async approveServiceAcceptance(
+    actor: ActorContext,
+    serviceAcceptanceId: string,
+    comment?: string,
+  ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.approve");
+    const result = await this.repo.findServiceAcceptanceById(actor.tenantId, serviceAcceptanceId);
+    if (!result) {
+      throw new NotFoundError("ScmServiceAcceptance", serviceAcceptanceId);
+    }
+    if (result.serviceAcceptance.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, result.serviceAcceptance.organizationUnitId);
+    }
+
+    if (result.serviceAcceptance.status !== "submitted") {
+      throw new ConflictError(`Service acceptance must be in submitted status to approve (current: ${result.serviceAcceptance.status})`);
+    }
+
+    if (!result.serviceAcceptance.workflowInstanceId) {
+      throw new ValidationError(`Service acceptance ${serviceAcceptanceId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.serviceAcceptance.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending approve action exists on this service acceptance");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, "approve", comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, result.serviceAcceptance.workflowInstanceId);
+
+    let projectedStatus: ScmServiceAcceptanceStatus = result.serviceAcceptance.status;
+    let approvedAt: Date | undefined;
+    let approvedBy: string | undefined;
+    let rejectedAt: Date | undefined;
+    let rejectedBy: string | undefined;
+    let rejectionReason: string | undefined;
+
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "approved";
+      approvedAt = new Date();
+      approvedBy = actor.userId;
+    } else if (workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "rejected";
+      rejectedAt = new Date();
+      rejectedBy = actor.userId;
+      rejectionReason = comment;
+    } else if (workflowStatus.instanceStatus === "cancelled") {
+      projectedStatus = "cancelled";
+    }
+
+    await this.repo.updateServiceAcceptanceStatus(actor.tenantId, {
+      serviceAcceptanceId,
+      status: projectedStatus,
+      approvedAt,
+      approvedBy,
+      rejectedAt,
+      rejectedBy,
+      rejectionReason,
+      updatedBy: actor.userId,
+    });
+
+    if (projectedStatus === "approved" && approvedAt) {
+      for (let idx = 0; idx < result.lines.length; idx++) {
+        const line = result.lines[idx]!;
+        const event = await this.repo.createAccountingReadyEvent(actor.tenantId, {
+          eventType: "service.accepted",
+          sourceDocumentType: "scm_service_acceptance",
+          sourceDocumentId: serviceAcceptanceId,
+          sourceDocumentLineId: line.id,
+          effectiveAt: approvedAt,
+          currency: line.currency,
+          amount: line.amount,
+          quantity: line.quantity,
+          unitCost: line.unitPrice,
+          accountAssignmentType: line.accountAssignmentType,
+          accountAssignmentDimensions: line.accountAssignmentDimensions,
+          idempotencyKey: `${result.serviceAcceptance.idempotencyKey}:line:${line.sortOrder ?? idx}`,
+          payload: {
+            acceptanceNumber: result.serviceAcceptance.acceptanceNumber,
+            purchaseOrderId: result.serviceAcceptance.purchaseOrderId,
+            purchaseOrderLineId: line.purchaseOrderLineId,
+            supplierId: result.serviceAcceptance.supplierId,
+          },
+          createdBy: actor.userId,
+        });
+
+        await this.repo.freezeServiceAcceptanceLineAssignment(
+          actor.tenantId,
+          line.id,
+          approvedAt,
+          event.id,
+        );
+      }
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.service_acceptance.approved",
+      entityType: "scm_service_acceptance",
+      entityId: serviceAcceptanceId,
+      metadata: { status: projectedStatus, comment },
+    });
+
+    return this.getServiceAcceptance(actor, serviceAcceptanceId);
+  }
+
+  // =========================================================================
+  // Stage 2: Consignment Stock Consumption & Settlement
+  // =========================================================================
+
+  async createConsignmentSettlement(
+    actor: ActorContext,
+    input: Omit<CreateScmConsignmentSettlementInput, "settlementNumber" | "createdBy"> & { settlementNumber?: string },
+  ): Promise<{ settlement: ScmConsignmentSettlement; lines: ScmConsignmentSettlementLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.consignment.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    const replayed = await this.repo.findConsignmentSettlementByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const settlementNumber =
+      input.settlementNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_CONSIGNMENT_SETTLEMENT_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createConsignmentSettlement(actor.tenantId, {
+          ...input,
+          settlementNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findConsignmentSettlementByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Consignment settlement with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.consignment_settlement.created",
+      entityType: "scm_consignment_settlement",
+      entityId: result.settlement.id,
+      metadata: {
+        settlementNumber: result.settlement.settlementNumber,
+        supplierId: input.supplierId,
+        warehouseId: input.warehouseId,
+        lineCount: result.lines.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getConsignmentSettlement(
+    actor: ActorContext,
+    settlementId: string,
+  ): Promise<{ settlement: ScmConsignmentSettlement; lines: ScmConsignmentSettlementLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.consignment.read");
+    const result = await this.repo.findConsignmentSettlementById(actor.tenantId, settlementId);
+    if (!result) {
+      throw new NotFoundError("ScmConsignmentSettlement", settlementId);
+    }
+    await this.assertWarehouseInScope(actor, result.settlement.warehouseId);
+    return result;
+  }
+
+  async listConsignmentSettlements(
+    actor: ActorContext,
+    filter: ScmConsignmentSettlementFilter = {},
+  ): Promise<ScmConsignmentSettlement[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.consignment.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listConsignmentSettlements(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // =========================================================================
+  // Stage 2: Inventory Aging Report
+  // =========================================================================
+
+  async getInventoryAgingReport(
+    actor: ActorContext,
+    filter: ScmInventoryAgingFilter = {},
+  ): Promise<ScmInventoryAgingBucket[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.getInventoryAgingBuckets(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  // =========================================================================
+  // Stage 2: Inventory Disposal (Workflow-Governed Write-Off)
+  // =========================================================================
+
+  async createInventoryDisposal(
+    actor: ActorContext,
+    input: Omit<CreateScmInventoryDisposalInput, "disposalNumber" | "createdBy"> & { disposalNumber?: string },
+  ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+    if (input.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
+    }
+
+    const replayed = await this.repo.findInventoryDisposalByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const disposalNumber =
+      input.disposalNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_INVENTORY_DISPOSAL_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const { disposal, lines } = await this.runIdempotent(
+      () =>
+        this.repo.createInventoryDisposal(actor.tenantId, {
+          ...input,
+          disposalNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findInventoryDisposalByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Inventory disposal with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: "scm_inventory_disposal",
+        entityId: disposal.id,
+        contextData: {
+          disposalNumber,
+          warehouseId: input.warehouseId,
+          disposalType: input.disposalType ?? "write_off",
+        },
+      });
+      workflowInstanceId = instance.id;
+      await this.repo.updateInventoryDisposalStatus(actor.tenantId, {
+        disposalId: disposal.id,
+        status: "draft",
+        workflowInstanceId,
+        updatedBy: actor.userId,
+      });
+    } catch (err) {
+      await this.repo.deleteInventoryDisposalWithoutWorkflow(actor.tenantId, disposal.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.inventory_disposal.created",
+      entityType: "scm_inventory_disposal",
+      entityId: disposal.id,
+      metadata: {
+        disposalNumber: disposal.disposalNumber,
+        warehouseId: input.warehouseId,
+        disposalType: input.disposalType ?? "write_off",
+        reason: input.reason,
+        lineCount: lines.length,
+      },
+    });
+
+    return { disposal, lines };
+  }
+
+  async getInventoryDisposal(
+    actor: ActorContext,
+    disposalId: string,
+  ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.read");
+    const result = await this.repo.findInventoryDisposalById(actor.tenantId, disposalId);
+    if (!result) {
+      throw new NotFoundError("ScmInventoryDisposal", disposalId);
+    }
+    await this.assertWarehouseInScope(actor, result.disposal.warehouseId);
+    if (result.disposal.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, result.disposal.organizationUnitId);
+    }
+    return result;
+  }
+
+  async listInventoryDisposals(
+    actor: ActorContext,
+    filter: ScmInventoryDisposalFilter = {},
+  ): Promise<Array<{ disposal: ScmInventoryDisposal; status: EntityWorkflowStatus | null }>> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+    const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitIds?.[0]);
+
+    const disposals = await this.repo.listInventoryDisposals(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+      organizationUnitIds: scopedOrgUnitIds ?? undefined,
+    });
+
+    return this.withWorkflowStatus(
+      actor,
+      disposals,
+      (d) => d.workflowInstanceId,
+      (disposal, status) => ({ disposal, status }),
+    );
+  }
+
+  async submitInventoryDisposal(
+    actor: ActorContext,
+    disposalId: string,
+    comment?: string,
+  ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.approve");
+    const result = await this.repo.findInventoryDisposalById(actor.tenantId, disposalId);
+    if (!result) {
+      throw new NotFoundError("ScmInventoryDisposal", disposalId);
+    }
+    await this.assertWarehouseInScope(actor, result.disposal.warehouseId);
+    if (result.disposal.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, result.disposal.organizationUnitId);
+    }
+
+    if (result.disposal.status !== "draft") {
+      throw new ConflictError(`Disposal must be in draft status to submit (current: ${result.disposal.status})`);
+    }
+
+    if (!result.disposal.workflowInstanceId) {
+      throw new ValidationError(`Disposal ${disposalId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.disposal.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending submit action exists on this disposal");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, "submit", comment ?? null);
+
+    await this.repo.updateInventoryDisposalStatus(actor.tenantId, {
+      disposalId,
+      status: "submitted",
+      submittedAt: new Date(),
+      submittedBy: actor.userId,
+      updatedBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.inventory_disposal.submitted",
+      entityType: "scm_inventory_disposal",
+      entityId: disposalId,
+      metadata: { comment },
+    });
+
+    return this.getInventoryDisposal(actor, disposalId);
+  }
+
+  async approveInventoryDisposal(
+    actor: ActorContext,
+    disposalId: string,
+    comment?: string,
+  ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.approve");
+    const result = await this.repo.findInventoryDisposalById(actor.tenantId, disposalId);
+    if (!result) {
+      throw new NotFoundError("ScmInventoryDisposal", disposalId);
+    }
+    await this.assertWarehouseInScope(actor, result.disposal.warehouseId);
+    if (result.disposal.organizationUnitId) {
+      await this.assertOrganizationUnitInScope(actor, result.disposal.organizationUnitId);
+    }
+
+    if (result.disposal.status !== "submitted" && result.disposal.status !== "draft") {
+      throw new ConflictError(
+        `Disposal must be in draft or submitted status to approve (current: ${result.disposal.status})`,
+      );
+    }
+
+    if (!result.disposal.workflowInstanceId) {
+      throw new ValidationError(`Disposal ${disposalId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.disposal.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending approve action exists on this disposal");
+    }
+
+    // A draft disposal has the initial submit assignment; the workflow definition
+    // may transition submit directly to its terminal approval step.
+    const workflowAction = result.disposal.status === "draft" ? "submit" : "approve";
+    await this.workflow.actOnAssignment(actor, pending.id, workflowAction, comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, result.disposal.workflowInstanceId);
+
+    let projectedStatus: ScmDisposalStatus = result.disposal.status;
+    let approvedAt: Date | undefined;
+    let approvedBy: string | undefined;
+    let executedAt: Date | undefined;
+    let executedBy: string | undefined;
+    let rejectedAt: Date | undefined;
+    let rejectedBy: string | undefined;
+    let rejectionReason: string | undefined;
+
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "approved";
+      approvedAt = new Date();
+      approvedBy = actor.userId;
+      executedAt = approvedAt;
+      executedBy = actor.userId;
+
+      for (const line of result.lines) {
+        const lineUnitCost = line.unitCost ?? 0;
+        const lineAmount = line.amount ?? (line.quantity * lineUnitCost);
+
+        const movResult = await this.repo.recordAdvancedStockMovement(actor.tenantId, {
+          itemId: line.itemId,
+          warehouseId: line.warehouseId,
+          locationId: line.locationId ?? undefined,
+          batchId: line.batchId ?? undefined,
+          serialId: line.serialId ?? undefined,
+          stockCondition: line.stockCondition ?? "unrestricted",
+          ownerType: line.ownerType ?? "own",
+          ownerPartyId: line.ownerPartyId ?? undefined,
+          movementType: "disposal_out",
+          quantity: line.quantity,
+          unitCost: line.unitCost ?? undefined,
+          totalCost: lineAmount,
+          referenceType: "scm_inventory_disposal",
+          referenceId: disposalId,
+          referenceNumber: result.disposal.disposalNumber,
+          notes: line.notes ?? undefined,
+          createdBy: actor.userId,
+        });
+
+        let eventId: string | null = null;
+        if (line.ownerType === "own" || !line.ownerType) {
+          const event = await this.repo.createAccountingReadyEvent(actor.tenantId, {
+            eventType: "inventory.disposed",
+            sourceDocumentType: "scm_inventory_disposal",
+            sourceDocumentId: disposalId,
+            sourceDocumentLineId: line.id,
+            sourceMovementId: movResult.movement.id,
+            effectiveAt: approvedAt,
+            currency: line.currency ?? "IDR",
+            amount: lineAmount,
+            quantity: line.quantity,
+            unitCost: line.unitCost ?? undefined,
+            accountAssignmentType: "expense",
+            accountAssignmentDimensions: {},
+            idempotencyKey: `${result.disposal.idempotencyKey}:line:${line.sortOrder ?? 0}:${line.id}`,
+            payload: {
+              disposalNumber: result.disposal.disposalNumber,
+              disposalType: result.disposal.disposalType,
+              reason: result.disposal.reason,
+            },
+          });
+          eventId = event.id;
+        }
+
+        await this.repo.updateInventoryDisposalLineExecution(
+          actor.tenantId,
+          line.id,
+          movResult.movement.id,
+          null,
+          eventId,
+          line.unitCost ?? null,
+          lineAmount,
+        );
+      }
+    } else if (workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "rejected";
+      rejectedAt = new Date();
+      rejectedBy = actor.userId;
+      rejectionReason = comment;
+    } else if (workflowStatus.instanceStatus === "cancelled") {
+      projectedStatus = "cancelled";
+    }
+
+    await this.repo.updateInventoryDisposalStatus(actor.tenantId, {
+      disposalId,
+      status: projectedStatus,
+      approvedAt,
+      approvedBy,
+      executedAt,
+      executedBy,
+      rejectedAt,
+      rejectedBy,
+      rejectionReason,
+      updatedBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.inventory_disposal.approved",
+      entityType: "scm_inventory_disposal",
+      entityId: disposalId,
+      metadata: { status: projectedStatus, comment },
+    });
+
+    return this.getInventoryDisposal(actor, disposalId);
+  }
+
+  // =========================================================================
+  // Stage 2: Warehouse Tasks (Putaway, Pick, Pack, Cycle Count)
+  // =========================================================================
+
+  async createWarehouseTask(
+    actor: ActorContext,
+    input: Omit<CreateScmWarehouseTaskInput, "taskNumber" | "createdBy"> & { taskNumber?: string },
+  ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.manage");
+    await this.assertWarehouseInScope(actor, input.warehouseId);
+
+    const replayed = await this.repo.findWarehouseTaskByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey,
+    );
+    if (replayed) return replayed;
+
+    const taskNumber =
+      input.taskNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_WAREHOUSE_TASK_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createWarehouseTask(actor.tenantId, {
+          ...input,
+          taskNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findWarehouseTaskByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Warehouse task with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.warehouse_task.created",
+      entityType: "scm_warehouse_task",
+      entityId: result.task.id,
+      metadata: {
+        taskNumber: result.task.taskNumber,
+        warehouseId: input.warehouseId,
+        taskType: input.taskType,
+        priority: input.priority ?? "normal",
+        itemCount: result.items.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getWarehouseTask(
+    actor: ActorContext,
+    taskId: string,
+  ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.read");
+    const result = await this.repo.findWarehouseTaskById(actor.tenantId, taskId);
+    if (!result) {
+      throw new NotFoundError("ScmWarehouseTask", taskId);
+    }
+    await this.assertWarehouseInScope(actor, result.task.warehouseId);
+    return result;
+  }
+
+  async listWarehouseTasks(
+    actor: ActorContext,
+    filter: ScmWarehouseTaskFilter = {},
+  ): Promise<ScmWarehouseTask[]> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.read");
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
+
+    return this.repo.listWarehouseTasks(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
+  }
+
+  async assignWarehouseTask(
+    actor: ActorContext,
+    taskId: string,
+    assignedTo: string,
+  ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.manage");
+    const result = await this.repo.findWarehouseTaskById(actor.tenantId, taskId);
+    if (!result) {
+      throw new NotFoundError("ScmWarehouseTask", taskId);
+    }
+    await this.assertWarehouseInScope(actor, result.task.warehouseId);
+
+    if (result.task.status !== "open") {
+      throw new ConflictError(`Task must be in open status to assign (current: ${result.task.status})`);
+    }
+
+    const updated = await this.repo.updateWarehouseTaskStatus(actor.tenantId, {
+      warehouseTaskId: taskId,
+      status: "assigned",
+      assignedTo,
+      assignedAt: new Date(),
+      updatedBy: actor.userId,
+    });
+    if (!updated) {
+      throw new NotFoundError("ScmWarehouseTask", taskId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.warehouse_task.assigned",
+      entityType: "scm_warehouse_task",
+      entityId: taskId,
+      metadata: { assignedTo, taskNumber: result.task.taskNumber },
+    });
+
+    return this.getWarehouseTask(actor, taskId);
+  }
+
+  async completeWarehouseTask(
+    actor: ActorContext,
+    taskId: string,
+  ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
+    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.execute");
+    const result = await this.repo.findWarehouseTaskById(actor.tenantId, taskId);
+    if (!result) {
+      throw new NotFoundError("ScmWarehouseTask", taskId);
+    }
+    await this.assertWarehouseInScope(actor, result.task.warehouseId);
+
+    if (result.task.status !== "in_progress" && result.task.status !== "assigned") {
+      throw new ConflictError(`Task must be assigned or in progress to complete (current: ${result.task.status})`);
+    }
+
+    await this.repo.updateWarehouseTaskStatus(actor.tenantId, {
+      warehouseTaskId: taskId,
+      status: "completed",
+      completedAt: new Date(),
+      completedBy: actor.userId,
+      updatedBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.warehouse_task.completed",
+      entityType: "scm_warehouse_task",
+      entityId: taskId,
+      metadata: { taskNumber: result.task.taskNumber },
+    });
+
+    return this.getWarehouseTask(actor, taskId);
   }
 
   // =========================================================================

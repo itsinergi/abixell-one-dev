@@ -11,8 +11,8 @@ import { visibleSectionGroups } from "../lib/capabilities";
 import { EmptyState, PageHeader } from "../shell/components/ui";
 
 export function OverviewPage() {
-  const { permissions, scopeTypes, tenantName } = useShell();
-  const groups = visibleSectionGroups(permissions, scopeTypes)
+  const { permissions, scopeTypes, activeModuleCodes, tenantName } = useShell();
+  const groups = visibleSectionGroups(permissions, scopeTypes, activeModuleCodes)
     .map((group) => ({
       ...group,
       sections: group.sections.filter((section) => section.key !== "overview"),

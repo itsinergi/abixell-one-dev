@@ -32,8 +32,11 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError } from "../../lib/api";
 import {
-  visibleSectionGroups,
-  type VisibleNavGroup,
+  activeNavModuleCodes,
+  filterNavTree,
+  visibleNavTree,
+  type ModuleCode,
+  type VisibleNavTreeGroup,
 } from "../../lib/capabilities";
 import { Alert, Button, Spinner } from "../components/ui";
 import { useOnlineStatus } from "../useOnlineStatus";
@@ -43,6 +46,8 @@ interface ShellContextValue {
   permissions: string[];
   /** Data-Scope types the actor holds (customer / organization_unit / tenant). */
   scopeTypes: string[];
+  /** Active module codes reported by the tenant-scoped `GET /me`. */
+  activeModuleCodes: string[];
   userId: string;
   tenantName: string;
 }
@@ -70,31 +75,24 @@ function NavigationContent({
   groups,
   query,
   onQueryChange,
+  expandedModules,
+  onToggleModule,
   onNavigate,
   filterId,
 }: {
-  groups: VisibleNavGroup[];
+  groups: VisibleNavTreeGroup[];
   query: string;
   onQueryChange: (query: string) => void;
+  expandedModules: Record<string, boolean>;
+  onToggleModule: (moduleCode: ModuleCode) => void;
   onNavigate?: () => void;
   filterId: string;
 }) {
   const filterInputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredGroups = useMemo(
-    () =>
-      groups
-        .map((group) => ({
-          ...group,
-          sections: group.sections.filter((section) => {
-            if (!normalizedQuery) return true;
-            return `${section.label} ${section.description}`
-              .toLocaleLowerCase()
-              .includes(normalizedQuery);
-          }),
-        }))
-        .filter((group) => group.sections.length > 0),
-    [groups, normalizedQuery],
+    () => filterNavTree(groups, query),
+    [groups, query],
   );
 
   return (
@@ -142,30 +140,103 @@ function NavigationContent({
                 >
                   {group.label}
                 </h2>
-                <div className="mt-1 space-y-0.5">
-                  {group.sections.map((section) => (
-                    <NavLink
-                      key={section.key}
-                      to={section.path}
-                      end={section.path === "/"}
-                      onClick={onNavigate}
-                      className={({ isActive }) =>
-                        `flex min-h-[44px] items-center rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 lg:min-h-[36px] ${
-                          isActive
-                            ? "bg-slate-900 font-medium text-white shadow-sm"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                        }`
-                      }
-                    >
-                      {section.label}
-                    </NavLink>
-                  ))}
+                <div className="mt-1 space-y-1">
+                  {group.nodes.map((node) => {
+                    if (node.type === "section") {
+                      return (
+                        <NavLink
+                          key={node.section.key}
+                          to={node.section.path}
+                          end={node.section.path === "/"}
+                          onClick={onNavigate}
+                          className={({ isActive }) =>
+                            `flex min-h-[44px] items-center rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 lg:min-h-[36px] ${
+                              isActive
+                                ? "bg-slate-900 font-medium text-white shadow-sm"
+                                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                            }`
+                          }
+                        >
+                          {node.section.label}
+                        </NavLink>
+                      );
+                    }
+
+                    const isExpanded = Boolean(
+                      normalizedQuery || expandedModules[node.moduleCode],
+                    );
+                    const triggerId = `${filterId}-module-${node.moduleCode}-trigger`;
+                    const contentId = `${filterId}-module-${node.moduleCode}-content`;
+
+                    return (
+                      <div key={node.moduleCode} className="space-y-0.5">
+                        <button
+                          id={triggerId}
+                          type="button"
+                          aria-expanded={isExpanded}
+                          aria-controls={contentId}
+                          onClick={() => onToggleModule(node.moduleCode)}
+                          className="flex min-h-[44px] w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 lg:min-h-[36px]"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <svg
+                              aria-hidden="true"
+                              className={`h-4 w-4 shrink-0 transition-transform duration-150 ${
+                                isExpanded ? "rotate-90 text-slate-700" : "text-slate-400"
+                              }`}
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            <span className="truncate">{node.label}</span>
+                          </span>
+                          <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                            {node.sections.length}
+                          </span>
+                        </button>
+
+                        <div
+                          id={contentId}
+                          role="region"
+                          aria-labelledby={triggerId}
+                          hidden={!isExpanded}
+                          className="ml-4 space-y-0.5 border-l border-slate-200 pl-2"
+                        >
+                          {node.sections.map((section) => (
+                            <NavLink
+                              key={section.key}
+                              to={section.path}
+                              end={section.path === "/"}
+                              onClick={onNavigate}
+                              className={({ isActive }) =>
+                                `flex min-h-[44px] items-center rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 lg:min-h-[32px] ${
+                                  isActive
+                                    ? "bg-slate-900 font-medium text-white shadow-sm"
+                                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                }`
+                              }
+                            >
+                              {section.label}
+                            </NavLink>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             ))}
           </div>
         ) : (
-          <div className="mx-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-500" role="status">
+          <div
+            className="mx-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-500"
+            role="status"
+          >
             No visible areas match “{query.trim()}”.
             <button
               type="button"
@@ -260,6 +331,8 @@ export function AppShell() {
 
   const [permissions, setPermissions] = useState<string[]>([]);
   const [scopeTypes, setScopeTypes] = useState<string[]>([]);
+  const [activeModuleCodes, setActiveModuleCodes] = useState<string[]>([]);
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [tenantName, setTenantName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -270,6 +343,13 @@ export function AppShell() {
   const online = useOnlineStatus();
 
   const closeMobileNavigation = useCallback(() => setMobileNavOpen(false), []);
+  const toggleModule = useCallback((moduleCode: ModuleCode) => {
+    setExpandedModules((prev) => ({
+      ...prev,
+      [moduleCode]: !prev[moduleCode],
+    }));
+  }, []);
+
   useNavigationDrawer(
     mobileNavOpen,
     setMobileNavOpen,
@@ -281,10 +361,11 @@ export function AppShell() {
     setLoading(true);
     setError(null);
     try {
-      // `/me` (permissions) is required — it drives the whole navigation.
+      // `/me` (permissions + active modules) is required — it drives navigation.
       const me = await api.me(token);
       setPermissions(me.permissions);
       setScopeTypes(me.scopeTypes);
+      setActiveModuleCodes(me.activeModuleCodes ?? []);
       // The Tenant name is only the workspace title, and reading it needs
       // `tenant.read` — a permission a Customer User does NOT hold. Fetch it
       // best-effort so its absence never blocks the shell; fall back to the
@@ -323,7 +404,27 @@ export function AppShell() {
     };
   }, [closeMobileNavigation]);
 
-  const groups = visibleSectionGroups(permissions, scopeTypes);
+  const groups = useMemo(
+    () => visibleNavTree(permissions, scopeTypes, activeModuleCodes),
+    [permissions, scopeTypes, activeModuleCodes],
+  );
+
+  useEffect(() => {
+    const activeCodes = activeNavModuleCodes(groups, location.pathname);
+    if (activeCodes.length === 0) return;
+    setExpandedModules((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const code of activeCodes) {
+        if (!next[code]) {
+          next[code] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [groups, location.pathname]);
+
   // Client-neutral fallback while the Tenant name loads (ADR-0003).
   const workspaceTitle = tenantName || "Enterprise Management System";
   const currentScopeSummary = scopeSummary(scopeTypes);
@@ -349,6 +450,8 @@ export function AppShell() {
           groups={groups}
           query={navigationQuery}
           onQueryChange={setNavigationQuery}
+          expandedModules={expandedModules}
+          onToggleModule={toggleModule}
           filterId="desktop-navigation-filter"
         />
         <div className="border-t border-slate-200 p-3">
@@ -401,6 +504,8 @@ export function AppShell() {
                 groups={groups}
                 query={navigationQuery}
                 onQueryChange={setNavigationQuery}
+                expandedModules={expandedModules}
+                onToggleModule={toggleModule}
                 onNavigate={closeMobileNavigation}
                 filterId="drawer-navigation-filter"
               />
@@ -474,7 +579,13 @@ export function AppShell() {
               </div>
             ) : (
               <ShellContext.Provider
-                value={{ permissions, scopeTypes, userId: session!.userId, tenantName }}
+                value={{
+                  permissions,
+                  scopeTypes,
+                  activeModuleCodes,
+                  userId: session!.userId,
+                  tenantName,
+                }}
               >
                 <Outlet />
               </ShellContext.Provider>

@@ -71,7 +71,7 @@ export const api = {
     }>("/auth/login", { method: "POST", body: payload }),
 
   me: (token: string) =>
-    request<{ userId: string; tenantId: string; permissions: string[]; scopeTypes: string[] }>("/me", {
+    request<{ userId: string; tenantId: string; permissions: string[]; scopeTypes: string[]; activeModuleCodes: string[] }>("/me", {
       token,
     }),
 
@@ -1120,192 +1120,207 @@ export const api = {
   // 1. Warehouses & Storage Locations
   scmWarehouses: (token: string, query: { siteId?: string; organizationUnitId?: string; activeOnly?: boolean } = {}) => {
     const qs = queryString(query);
-    return request<ScmWarehouse[]>(`/supply-chain/advanced/warehouses${qs}`, { token });
+    return request<ScmWarehouse[]>(`/wms/warehouses${qs}`, { token });
   },
   scmWarehouse: (token: string, id: string) =>
-    request<ScmWarehouse>(`/supply-chain/advanced/warehouses/${id}`, { token }),
+    request<ScmWarehouse>(`/wms/warehouses/${id}`, { token }),
   createScmWarehouse: (token: string, body: CreateScmWarehouseBody) =>
-    request<ScmWarehouse>("/supply-chain/advanced/warehouses", { method: "POST", token, body }),
+    request<ScmWarehouse>("/wms/warehouses", { method: "POST", token, body }),
   updateScmWarehouse: (token: string, id: string, body: UpdateScmWarehouseBody) =>
-    request<ScmWarehouse>(`/supply-chain/advanced/warehouses/${id}`, { method: "PATCH", token, body }),
+    request<ScmWarehouse>(`/wms/warehouses/${id}`, { method: "PATCH", token, body }),
 
   scmWarehouseLocations: (token: string, query: { warehouseId?: string; activeOnly?: boolean } = {}) => {
     const qs = queryString(query);
-    return request<ScmWarehouseLocation[]>(`/supply-chain/advanced/warehouse-locations${qs}`, { token });
+    return request<ScmWarehouseLocation[]>(`/wms/warehouse-locations${qs}`, { token });
   },
   scmWarehouseLocation: (token: string, id: string) =>
-    request<ScmWarehouseLocation>(`/supply-chain/advanced/warehouse-locations/${id}`, { token }),
+    request<ScmWarehouseLocation>(`/wms/warehouse-locations/${id}`, { token }),
   createScmWarehouseLocation: (token: string, body: CreateScmWarehouseLocationBody) =>
-    request<ScmWarehouseLocation>("/supply-chain/advanced/warehouse-locations", { method: "POST", token, body }),
+    request<ScmWarehouseLocation>("/wms/warehouse-locations", { method: "POST", token, body }),
   updateScmWarehouseLocation: (token: string, id: string, body: UpdateScmWarehouseLocationBody) =>
-    request<ScmWarehouseLocation>(`/supply-chain/advanced/warehouse-locations/${id}`, { method: "PATCH", token, body }),
+    request<ScmWarehouseLocation>(`/wms/warehouse-locations/${id}`, { method: "PATCH", token, body }),
 
   // 2. Batches & Serials
   scmBatches: (token: string, query: { itemId?: string; includeExpired?: boolean } = {}) => {
     const qs = queryString(query);
-    return request<ScmItemBatch[]>(`/supply-chain/advanced/batches${qs}`, { token });
+    return request<ScmItemBatch[]>(`/wms/batches${qs}`, { token });
   },
   scmBatch: (token: string, id: string) =>
-    request<ScmItemBatch>(`/supply-chain/advanced/batches/${id}`, { token }),
+    request<ScmItemBatch>(`/wms/batches/${id}`, { token }),
   createScmBatch: (token: string, body: CreateScmItemBatchBody) =>
-    request<ScmItemBatch>("/supply-chain/advanced/batches", { method: "POST", token, body }),
+    request<ScmItemBatch>("/wms/batches", { method: "POST", token, body }),
 
   scmSerials: (token: string, query: { itemId?: string; warehouseId?: string; locationId?: string; batchId?: string; status?: ScmSerialStatus } = {}) => {
     const qs = queryString(query);
-    return request<ScmItemSerial[]>(`/supply-chain/advanced/serials${qs}`, { token });
+    return request<ScmItemSerial[]>(`/wms/serials${qs}`, { token });
   },
   scmSerial: (token: string, id: string) =>
-    request<ScmItemSerial>(`/supply-chain/advanced/serials/${id}`, { token }),
+    request<ScmItemSerial>(`/wms/serials/${id}`, { token }),
   createScmSerial: (token: string, body: CreateScmItemSerialBody) =>
-    request<ScmItemSerial>("/supply-chain/advanced/serials", { method: "POST", token, body }),
+    request<ScmItemSerial>("/wms/serials", { method: "POST", token, body }),
   updateScmSerial: (token: string, id: string, body: UpdateScmItemSerialBody) =>
-    request<ScmItemSerial>(`/supply-chain/advanced/serials/${id}`, { method: "PATCH", token, body }),
+    request<ScmItemSerial>(`/wms/serials/${id}`, { method: "PATCH", token, body }),
 
   // 3. Stock Balances & Immutable Ledger Movements
   scmAdvancedStockBalances: (token: string, query: { itemId?: string; warehouseId?: string; locationId?: string; batchId?: string } = {}) => {
     const qs = queryString(query);
-    return request<ScmAdvancedStockBalance[]>(`/supply-chain/advanced/balances${qs}`, { token });
+    return request<ScmAdvancedStockBalance[]>(`/wms/balances${qs}`, { token });
   },
   recordScmAdvancedStockMovement: (token: string, body: RecordScmAdvancedStockMovementBody) =>
-    request<ScmAdvancedStockMovement>("/supply-chain/advanced/movements", { method: "POST", token, body }),
+    request<ScmAdvancedStockMovement>("/wms/movements", { method: "POST", token, body }),
   scmAdvancedStockMovements: (token: string, query: { itemId?: string; warehouseId?: string; movementType?: ScmAdvancedStockMovementType; limit?: number } = {}) => {
     const qs = queryString(query);
-    return request<ScmAdvancedStockMovement[]>(`/supply-chain/advanced/movements${qs}`, { token });
+    return request<ScmAdvancedStockMovement[]>(`/wms/movements${qs}`, { token });
   },
 
   // 4. Reorder Policies & Reservations
   scmReorderPolicies: (token: string, query: { itemId?: string; warehouseId?: string; activeOnly?: boolean } = {}) => {
     const qs = queryString(query);
-    return request<ScmReorderPolicy[]>(`/supply-chain/advanced/reorder-policies${qs}`, { token });
+    return request<ScmReorderPolicy[]>(`/wms/reorder-policies${qs}`, { token });
   },
   upsertScmReorderPolicy: (token: string, body: UpsertScmReorderPolicyBody) =>
-    request<ScmReorderPolicy>("/supply-chain/advanced/reorder-policies", { method: "PUT", token, body }),
+    request<ScmReorderPolicy>("/wms/reorder-policies", { method: "PUT", token, body }),
   scmReorderAlerts: (token: string, warehouseId?: string) => {
     const qs = warehouseId ? `?warehouseId=${encodeURIComponent(warehouseId)}` : "";
-    return request<ScmReorderAlert[]>(`/supply-chain/advanced/reorder-alerts${qs}`, { token });
+    return request<ScmReorderAlert[]>(`/wms/reorder-alerts${qs}`, { token });
   },
   scmStockReservations: (token: string, query: { itemId?: string; warehouseId?: string; status?: ScmReservationStatus; reservedForType?: string } = {}) => {
     const qs = queryString(query);
-    return request<ScmStockReservation[]>(`/supply-chain/advanced/reservations${qs}`, { token });
+    return request<ScmStockReservation[]>(`/wms/reservations${qs}`, { token });
   },
   createScmStockReservation: (token: string, body: CreateScmStockReservationBody) =>
-    request<ScmStockReservation>("/supply-chain/advanced/reservations", { method: "POST", token, body }),
+    request<ScmStockReservation>("/wms/reservations", { method: "POST", token, body }),
   fulfillScmStockReservation: (token: string, id: string) =>
-    request<ScmStockReservation>(`/supply-chain/advanced/reservations/${id}/fulfill`, { method: "POST", token }),
+    request<ScmStockReservation>(`/wms/reservations/${id}/fulfill`, { method: "POST", token }),
   cancelScmStockReservation: (token: string, id: string) =>
-    request<ScmStockReservation>(`/supply-chain/advanced/reservations/${id}/cancel`, { method: "POST", token }),
+    request<ScmStockReservation>(`/wms/reservations/${id}/cancel`, { method: "POST", token }),
 
   // 5. Stock Transfers & Opnames
-  scmStockTransfers: (token: string, query: { fromWarehouseId?: string; toWarehouseId?: string; status?: ScmTransferStatus } = {}) => {
+  scmStockTransfers: async (token: string, query: { fromWarehouseId?: string; toWarehouseId?: string; status?: ScmTransferStatus } = {}) => {
     const qs = queryString(query);
-    return request<ScmStockTransfer[]>(`/supply-chain/advanced/transfers${qs}`, { token });
+    const res = await request<Array<{ transfer?: ScmStockTransfer } & ScmStockTransfer>>(`/wms/transfers${qs}`, { token });
+    return res.map((t) => (t && typeof t === "object" && "transfer" in t ? t.transfer! : t));
   },
   scmStockTransfer: (token: string, id: string) =>
-    request<ScmStockTransferDetail>(`/supply-chain/advanced/transfers/${id}`, { token }),
-  createScmStockTransfer: (token: string, body: CreateScmStockTransferBody) =>
-    request<ScmStockTransfer>("/supply-chain/advanced/transfers", { method: "POST", token, body }),
+    request<ScmStockTransferDetail>(`/wms/transfers/${id}`, { token }),
+  createScmStockTransfer: async (token: string, body: CreateScmStockTransferBody) => {
+    const res = await request<{ transfer?: ScmStockTransfer } & ScmStockTransfer>("/wms/transfers", { method: "POST", token, body });
+    return res?.transfer ?? res;
+  },
   actOnScmStockTransfer: (token: string, id: string, actionCode: string, comment?: string | null) =>
-    request<{ transfer: ScmStockTransfer; workflowResult: unknown }>(`/supply-chain/advanced/transfers/${id}/act`, {
+    request<{ transfer: ScmStockTransfer; workflowResult: unknown }>(`/wms/transfers/${id}/act`, {
       method: "POST", token, body: { actionCode, comment: comment ?? null },
     }),
   recordScmStockTransferShipment: (token: string, body: RecordScmStockTransferShipmentBody) =>
-    request<ScmStockTransferDetail>("/supply-chain/advanced/transfers/shipments", { method: "POST", token, body }),
+    request<ScmStockTransferDetail>("/wms/transfers/shipments", { method: "POST", token, body }),
   recordScmStockTransferReceipt: (token: string, body: RecordScmStockTransferReceiptBody) =>
-    request<ScmStockTransferDetail>("/supply-chain/advanced/transfers/receipts", { method: "POST", token, body }),
+    request<ScmStockTransferDetail>("/wms/transfers/receipts", { method: "POST", token, body }),
 
-  scmStockOpnames: (token: string, query: { warehouseId?: string; status?: ScmOpnameStatus } = {}) => {
+  scmStockOpnames: async (token: string, query: { warehouseId?: string; status?: ScmOpnameStatus } = {}) => {
     const qs = queryString(query);
-    return request<ScmStockOpname[]>(`/supply-chain/advanced/opnames${qs}`, { token });
+    const res = await request<Array<{ opname?: ScmStockOpname } & ScmStockOpname>>(`/wms/opnames${qs}`, { token });
+    return res.map((o) => (o && typeof o === "object" && "opname" in o ? o.opname! : o));
   },
   scmStockOpname: (token: string, id: string) =>
-    request<ScmStockOpnameDetail>(`/supply-chain/advanced/opnames/${id}`, { token }),
-  createScmStockOpname: (token: string, body: CreateScmStockOpnameBody) =>
-    request<ScmStockOpname>("/supply-chain/advanced/opnames", { method: "POST", token, body }),
+    request<ScmStockOpnameDetail>(`/wms/opnames/${id}`, { token }),
+  createScmStockOpname: async (token: string, body: CreateScmStockOpnameBody) => {
+    const res = await request<{ opname?: ScmStockOpname } & ScmStockOpname>("/wms/opnames", { method: "POST", token, body });
+    return res?.opname ?? res;
+  },
   recordScmStockOpnameCount: (token: string, body: RecordScmStockOpnameCountBody) =>
-    request<ScmStockOpnameLine>("/supply-chain/advanced/opnames/counts", { method: "POST", token, body }),
+    request<ScmStockOpnameLine>("/wms/opnames/counts", { method: "POST", token, body }),
   actOnScmStockOpname: (token: string, id: string, actionCode: string, comment?: string | null) =>
-    request<{ opname: ScmStockOpname; workflowResult: unknown }>(`/supply-chain/advanced/opnames/${id}/act`, {
+    request<{ opname: ScmStockOpname; workflowResult: unknown }>(`/wms/opnames/${id}/act`, {
       method: "POST", token, body: { actionCode, comment: comment ?? null },
     }),
 
   // 6. Valuation & Landed Cost
   scmValuationLayers: (token: string, query: { itemId?: string; warehouseId?: string } = {}) => {
     const qs = queryString(query);
-    return request<ScmValuationLayer[]>(`/supply-chain/advanced/valuation-layers${qs}`, { token });
+    return request<ScmValuationLayer[]>(`/wms/valuation-layers${qs}`, { token });
   },
   createScmValuationLayer: (token: string, body: CreateScmValuationLayerBody) =>
-    request<ScmValuationLayer>("/supply-chain/advanced/valuation-layers", { method: "POST", token, body }),
+    request<ScmValuationLayer>("/wms/valuation-layers", { method: "POST", token, body }),
   consumeScmValuationLayer: (token: string, body: { layerId: string; remainingQuantity: number }) =>
-    request<ScmValuationLayer>("/supply-chain/advanced/valuation-layers/consume", { method: "POST", token, body }),
+    request<ScmValuationLayer>("/wms/valuation-layers/consume", { method: "POST", token, body }),
   scmLandedCosts: (token: string, query: { purchaseOrderId?: string; status?: ScmLandedCostStatus } = {}) => {
     const qs = queryString(query);
-    return request<ScmLandedCost[]>(`/supply-chain/advanced/landed-costs${qs}`, { token });
+    return request<ScmLandedCost[]>(`/wms/landed-costs${qs}`, { token });
   },
   scmLandedCost: (token: string, id: string) =>
-    request<ScmLandedCostDetail>(`/supply-chain/advanced/landed-costs/${id}`, { token }),
+    request<ScmLandedCostDetail>(`/wms/landed-costs/${id}`, { token }),
   createScmLandedCost: (token: string, body: CreateScmLandedCostBody) =>
-    request<ScmLandedCost>("/supply-chain/advanced/landed-costs", { method: "POST", token, body }),
+    request<ScmLandedCost>("/wms/landed-costs", { method: "POST", token, body }),
   applyScmLandedCost: (token: string, id: string) =>
-    request<ScmLandedCostDetail>(`/supply-chain/advanced/landed-costs/${id}/apply`, { method: "POST", token }),
+    request<ScmLandedCostDetail>(`/wms/landed-costs/${id}/apply`, { method: "POST", token }),
 
   // 7. RFQs, Tenders & Bid Comparisons
-  scmRfqs: (token: string, query: { procurementType?: ScmProcurementType; status?: ScmRfqStatus; organizationUnitId?: string } = {}) => {
+  scmRfqs: async (token: string, query: { procurementType?: ScmProcurementType; status?: ScmRfqStatus; organizationUnitId?: string } = {}) => {
     const qs = queryString(query);
-    return request<ScmRfq[]>(`/supply-chain/advanced/rfqs${qs}`, { token });
+    const res = await request<Array<{ rfq?: ScmRfq } & ScmRfq>>(`/procurement/rfqs${qs}`, { token });
+    return res.map((r) => (r && typeof r === "object" && "rfq" in r ? r.rfq! : r));
   },
   scmRfq: (token: string, id: string) =>
-    request<ScmRfqDetail>(`/supply-chain/advanced/rfqs/${id}`, { token }),
-  createScmRfq: (token: string, body: CreateScmRfqBody) =>
-    request<ScmRfq>("/supply-chain/advanced/rfqs", { method: "POST", token, body }),
+    request<ScmRfqDetail>(`/procurement/rfqs/${id}`, { token }),
+  createScmRfq: async (token: string, body: CreateScmRfqBody) => {
+    const res = await request<{ rfq?: ScmRfq } & ScmRfq>("/procurement/rfqs", { method: "POST", token, body });
+    return res?.rfq ?? res;
+  },
   actOnScmRfq: (token: string, id: string, actionCode: string, comment?: string | null) =>
-    request<{ rfq: ScmRfq; workflowResult: unknown }>(`/supply-chain/advanced/rfqs/${id}/act`, {
+    request<{ rfq: ScmRfq; workflowResult: unknown }>(`/procurement/rfqs/${id}/act`, {
       method: "POST", token, body: { actionCode, comment: comment ?? null },
     }),
   submitScmSupplierBid: (token: string, body: SubmitScmSupplierBidBody) =>
-    request<ScmSupplierBid>("/supply-chain/advanced/bids", { method: "POST", token, body }),
+    request<ScmSupplierBid>("/procurement/bids", { method: "POST", token, body }),
   scmSupplierBid: (token: string, id: string) =>
-    request<ScmSupplierBidDetail>(`/supply-chain/advanced/bids/${id}`, { token }),
+    request<ScmSupplierBidDetail>(`/procurement/bids/${id}`, { token }),
   scoreScmSupplierBid: (token: string, id: string, body: ScoreScmSupplierBidBody) =>
-    request<ScmSupplierBid>(`/supply-chain/advanced/bids/${id}/score`, { method: "PATCH", token, body }),
+    request<ScmSupplierBid>(`/procurement/bids/${id}/score`, { method: "PATCH", token, body }),
   awardScmSupplierBid: (token: string, body: { bidId: string; resultingPurchaseOrderId?: string | null }) =>
-    request<ScmSupplierBid>("/supply-chain/advanced/bids/award", { method: "POST", token, body }),
+    request<ScmSupplierBid>("/procurement/bids/award", { method: "POST", token, body }),
 
   // 8. Supplier Evaluations & Contracts
-  scmSupplierEvaluations: (token: string, query: { supplierId?: string; status?: ScmSupplierEvaluationStatus; ratingGrade?: ScmSupplierRatingGrade } = {}) => {
+  scmSupplierEvaluations: async (token: string, query: { supplierId?: string; status?: ScmSupplierEvaluationStatus; ratingGrade?: ScmSupplierRatingGrade } = {}) => {
     const qs = queryString(query);
-    return request<ScmSupplierEvaluation[]>(`/supply-chain/advanced/evaluations${qs}`, { token });
+    const res = await request<Array<{ evaluation?: ScmSupplierEvaluation } & ScmSupplierEvaluation>>(`/procurement/evaluations${qs}`, { token });
+    return res.map((e) => (e && typeof e === "object" && "evaluation" in e ? e.evaluation! : e));
   },
   scmSupplierEvaluation: (token: string, id: string) =>
-    request<ScmSupplierEvaluationDetail>(`/supply-chain/advanced/evaluations/${id}`, { token }),
-  createScmSupplierEvaluation: (token: string, body: CreateScmSupplierEvaluationBody) =>
-    request<ScmSupplierEvaluation>("/supply-chain/advanced/evaluations", { method: "POST", token, body }),
+    request<ScmSupplierEvaluationDetail>(`/procurement/evaluations/${id}`, { token }),
+  createScmSupplierEvaluation: async (token: string, body: CreateScmSupplierEvaluationBody) => {
+    const res = await request<{ evaluation?: ScmSupplierEvaluation } & ScmSupplierEvaluation>("/procurement/evaluations", { method: "POST", token, body });
+    return res?.evaluation ?? res;
+  },
   actOnScmSupplierEvaluation: (token: string, id: string, actionCode: string, comment?: string | null) =>
-    request<{ evaluation: ScmSupplierEvaluation; workflowResult: unknown }>(`/supply-chain/advanced/evaluations/${id}/act`, {
+    request<{ evaluation: ScmSupplierEvaluation; workflowResult: unknown }>(`/procurement/evaluations/${id}/act`, {
       method: "POST", token, body: { actionCode, comment: comment ?? null },
     }),
-  scmSupplierContracts: (token: string, query: { supplierId?: string; contractType?: ScmSupplierContractType; status?: ScmSupplierContractStatus } = {}) => {
+  scmSupplierContracts: async (token: string, query: { supplierId?: string; contractType?: ScmSupplierContractType; status?: ScmSupplierContractStatus } = {}) => {
     const qs = queryString(query);
-    return request<ScmSupplierContract[]>(`/supply-chain/advanced/contracts${qs}`, { token });
+    const res = await request<Array<{ contract?: ScmSupplierContract } & ScmSupplierContract>>(`/procurement/contracts${qs}`, { token });
+    return res.map((c) => (c && typeof c === "object" && "contract" in c ? c.contract! : c));
   },
   scmSupplierContract: (token: string, id: string) =>
-    request<ScmSupplierContractDetail>(`/supply-chain/advanced/contracts/${id}`, { token }),
-  createScmSupplierContract: (token: string, body: CreateScmSupplierContractBody) =>
-    request<ScmSupplierContract>("/supply-chain/advanced/contracts", { method: "POST", token, body }),
+    request<ScmSupplierContractDetail>(`/procurement/contracts/${id}`, { token }),
+  createScmSupplierContract: async (token: string, body: CreateScmSupplierContractBody) => {
+    const res = await request<{ contract?: ScmSupplierContract } & ScmSupplierContract>("/procurement/contracts", { method: "POST", token, body });
+    return res?.contract ?? res;
+  },
   recordScmSupplierContractSpend: (token: string, id: string, additionalSpentAmount: number) =>
-    request<ScmSupplierContract>(`/supply-chain/advanced/contracts/${id}/spend`, {
+    request<ScmSupplierContract>(`/procurement/contracts/${id}/spend`, {
       method: "POST", token, body: { additionalSpentAmount },
     }),
   actOnScmSupplierContract: (token: string, id: string, actionCode: string, comment?: string | null) =>
-    request<{ contract: ScmSupplierContract; workflowResult: unknown }>(`/supply-chain/advanced/contracts/${id}/act`, {
+    request<{ contract: ScmSupplierContract; workflowResult: unknown }>(`/procurement/contracts/${id}/act`, {
       method: "POST", token, body: { actionCode, comment: comment ?? null },
     }),
 
   // 9. Spend Analytics
   computeScmSpendSnapshot: (token: string, body: ComputeScmSpendSnapshotBody) =>
-    request<ScmSpendAnalyticsSnapshot[]>("/supply-chain/advanced/spend-analytics/compute", { method: "POST", token, body }),
+    request<ScmSpendAnalyticsSnapshot[]>("/procurement/spend-analytics/compute", { method: "POST", token, body }),
   scmSpendSnapshots: (token: string, query: { periodType?: ScmSpendAnalyticsPeriodType; organizationUnitId?: string } = {}) => {
     const qs = queryString(query);
-    return request<ScmSpendAnalyticsSnapshot[]>(`/supply-chain/advanced/spend-analytics${qs}`, { token });
+    return request<ScmSpendAnalyticsSnapshot[]>(`/procurement/spend-analytics${qs}`, { token });
   },
 
   // --- Asset (Phase 5) --------------------------------------------------

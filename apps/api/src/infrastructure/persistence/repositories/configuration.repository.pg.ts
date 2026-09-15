@@ -62,6 +62,20 @@ export class PgConfigurationRepository implements ConfigurationRepository {
     }));
   }
 
+  /** Privacy-safe projection used to shape tenant navigation. */
+  async listActiveModuleCodes(tenantId: string): Promise<string[]> {
+    const result = await this.pool.query(
+      `SELECT m.code
+         FROM modules m
+         JOIN tenant_module_activations tma
+           ON tma.module_id = m.id AND tma.tenant_id = $1
+        WHERE tma.is_active = true
+        ORDER BY m.code`,
+      [tenantId],
+    );
+    return result.rows.map((r: { code: string }) => r.code);
+  }
+
   async setModuleActivation(
     tenantId: string,
     moduleCode: string,

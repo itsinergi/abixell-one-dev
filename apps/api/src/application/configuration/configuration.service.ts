@@ -29,6 +29,10 @@ export class ConfigurationService {
     return this.repo.listModuleActivations(actor.tenantId);
   }
 
+  async listActiveModuleCodesForTenant(tenantId: string): Promise<string[]> {
+    return this.repo.listActiveModuleCodes(tenantId);
+  }
+
   async setModuleActivation(actor: ActorContext, moduleCode: string, isActive: boolean) {
     await this.rbac.requirePermission(actor.userId, "config.manage");
     const status = await this.repo.setModuleActivation(

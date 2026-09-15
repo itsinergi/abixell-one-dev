@@ -99,10 +99,16 @@ test("blocks API and Web cross-module implementation imports", () => {
 
 test("permits only exact API and Web composition roots", () => {
   const result = validateImportBoundaries(files({
-    "apps/api/src/app.ts": 'import { registerAlphaRoutes } from "./modules/alpha/core/api/alpha.routes.js";',
+    "apps/api/src/app.ts": [
+      'import { registerAlphaRoutes } from "./modules/alpha/core/api/alpha.routes.js";',
+      'import { registerWarehouseRoutes } from "./modules/supply-chain/warehouse/api/warehouse.routes.js";',
+      'import { registerIdentityRoutes } from "./modules/identity/api/identity.routes.js";',
+    ].join("\n"),
     "apps/api/src/composition-root.ts": 'import { AlphaService } from "./modules/alpha/core/application/alpha.service.js";',
     "apps/api/src/other.ts": 'import { AlphaService } from "./modules/alpha/core/application/alpha.service.js";',
     "apps/api/src/modules/alpha/core/api/alpha.routes.ts": "export const registerAlphaRoutes = () => {};",
+    "apps/api/src/modules/supply-chain/warehouse/api/warehouse.routes.ts": "export const registerWarehouseRoutes = () => {};",
+    "apps/api/src/modules/identity/api/identity.routes.ts": "export const registerIdentityRoutes = () => {};",
     "apps/api/src/modules/alpha/core/application/alpha.service.ts": "export class AlphaService {}",
     "apps/web/src/App.tsx": 'import { Alpha } from "./modules/alpha/Alpha";',
     "apps/web/src/shell/Shell.tsx": 'import { Alpha } from "../modules/alpha/Alpha";',
@@ -417,9 +423,12 @@ test("current repository has no blocking platform-boundary findings", async () =
   // Wave A5 adds the remaining SCM Advanced permissions. Wave A5.1 Stage 1 adds
   // exactly ten governed Stage 1 permissions: `supply_chain.receiving.*` (4),
   // `supply_chain.return.*` (3), `supply_chain.account_assignment.*` (2), and
-  // `supply_chain.accounting_event.read` (1).
+  // `supply_chain.accounting_event.read` (1). Wave A5.1 Stage 2 adds exactly
+  // eleven governed Stage 2 permissions: `supply_chain.service_acceptance.*`
+  // (3), `supply_chain.consignment.*` (2), `supply_chain.disposal.*` (3), and
+  // `supply_chain.warehouse_task.*` (3).
   // Pinned deliberately: an unexplained change means a permission was
   // introduced or removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 138);
+  assert.equal(result.permissionCount, 149);
   assert.equal(result.advisoryCount, 1);
 });

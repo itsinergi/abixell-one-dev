@@ -102,6 +102,7 @@ export interface ConfigurationRepository {
   // Module Activation
   listModuleCatalog(): Promise<ModuleCatalogItem[]>;
   listModuleActivations(tenantId: string): Promise<ModuleActivationStatus[]>;
+  listActiveModuleCodes(tenantId: string): Promise<string[]>;
   setModuleActivation(
     tenantId: string,
     moduleCode: string,
