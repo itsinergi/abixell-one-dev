@@ -145,7 +145,7 @@ export function WorkflowPanel({
 
   return (
     <div className="space-y-6">
-      <h2 className="text-sm font-semibold text-slate-500">Workflow &amp; Approval Engine (Checkpoint 0D)</h2>
+      <h2 className="text-sm font-semibold text-slate-500">Workflow &amp; Approval Engine</h2>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Start a new instance */}
@@ -295,9 +295,8 @@ export function WorkflowPanel({
           <section className="rounded border border-slate-200 bg-white p-4 lg:col-span-2">
             <h3 className="mb-2 text-sm font-semibold">Escalation Sweep</h3>
             <p className="mb-2 text-xs text-slate-500">
-              This sweep now also runs automatically every 2 minutes via the Scheduler (Checkpoint 0E) — see
-              the Shared Services panel below for job run history. This button triggers the exact same sweep
-              on demand.
+              This sweep also runs automatically every 2 minutes via the Scheduler — see the Shared Services
+              panel below for job run history. This button triggers the exact same sweep on demand.
             </p>
             <button onClick={handleEscalationSweep} className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
               Run Escalation Sweep

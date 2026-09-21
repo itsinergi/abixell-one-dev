@@ -151,7 +151,7 @@ export function SharedServicesPanel({
 
   return (
     <div className="space-y-6">
-      <h2 className="text-sm font-semibold text-slate-500">Enterprise Shared Services (Checkpoint 0E)</h2>
+      <h2 className="text-sm font-semibold text-slate-500">Enterprise Shared Services</h2>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Notifications */}

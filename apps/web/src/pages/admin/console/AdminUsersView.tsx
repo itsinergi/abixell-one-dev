@@ -134,8 +134,7 @@ function assignmentScopeId(assignment: AdminRoleAssignmentSummary): string | nul
 }
 
 function scopeLabel(assignment: AdminRoleAssignmentSummary): string {
-  const id = assignmentScopeId(assignment);
-  return `${assignmentScopeName(assignment)}${id ? ` (${id})` : ""}`;
+  return assignmentScopeName(assignment);
 }
 
 function roleSearchText(user: AdminUserAccessSummary): string {
@@ -181,9 +180,11 @@ export function AdminUsersView({
       "Failed to load users and access assignments",
     );
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<AdminUserAccessSummary | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const manageTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const PAGE_SIZE = 25;
 
   const filteredUsers = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -194,6 +195,18 @@ export function AdminUsersView({
         .includes(normalized),
     );
   }, [data, query]);
+
+  const totalPages = Math.ceil(filteredUsers.length / PAGE_SIZE);
+  const clampedPage = Math.max(1, Math.min(page, totalPages || 1));
+
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (clampedPage - 1) * PAGE_SIZE;
+    return filteredUsers.slice(start, start + PAGE_SIZE);
+  }, [filteredUsers, clampedPage]);
 
   function manage(
     user: AdminUserAccessSummary,
@@ -273,11 +286,38 @@ export function AdminUsersView({
               }
             />
           ) : (
-            <UserResults
-              users={filteredUsers}
-              canManageAccess={canManageAccess}
-              onManage={manage}
-            />
+            <div className="space-y-4">
+              <UserResults
+                users={paginatedUsers}
+                canManageAccess={canManageAccess}
+                onManage={manage}
+              />
+              <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p
+                  className="text-sm tabular-nums text-slate-500"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Page {clampedPage} of {totalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    disabled={clampedPage <= 1}
+                    onClick={() => setPage(Math.max(1, clampedPage - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={clampedPage >= totalPages}
+                    onClick={() => setPage(Math.min(totalPages, clampedPage + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
         </AdminPanel>
       </AdminSectionState>
@@ -493,7 +533,7 @@ function AccessDialog({
           scopeType: "organization_unit",
           id: unit.id,
           name: unit.name,
-          label: `Organization unit · ${unit.name} (${unit.id})`,
+          label: `Organization unit · ${unit.name}`,
         });
       }
     } else {
@@ -506,7 +546,7 @@ function AccessDialog({
           scopeType: "customer",
           id: customer.id,
           name: customer.name,
-          label: `Customer · ${customer.name} (${customer.id})`,
+          label: `Customer · ${customer.name}`,
         });
       }
     } else {

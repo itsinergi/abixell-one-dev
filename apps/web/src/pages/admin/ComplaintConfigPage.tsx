@@ -21,6 +21,7 @@ import {
   Badge,
   Button,
   Card,
+  Field,
   Input,
   PageHeader,
   Spinner,
@@ -165,8 +166,12 @@ export function ComplaintConfigPage() {
                     }}
                   >
                     <div className="text-xs font-medium text-slate-500">Add {rt.title.toLowerCase()}</div>
-                    <Input name="code" placeholder="code (e.g. billing)" required />
-                    <Input name="label" placeholder="Label (e.g. Billing)" required />
+                    <Field label={`${rt.title} code`} required>
+                      <Input name="code" placeholder="code (e.g. billing)" required />
+                    </Field>
+                    <Field label={`${rt.title} label`} required>
+                      <Input name="label" placeholder="Label (e.g. Billing)" required />
+                    </Field>
                     <Button type="submit" disabled={busy}>
                       Add
                     </Button>
@@ -239,6 +244,7 @@ export function ComplaintConfigPage() {
                   <span className="text-xs text-slate-400">Read-only — authored via the workflow engine.</span>
                 )}
               </div>
+              <p className="mb-1 text-xs text-slate-400 lg:hidden">Scroll to see all workflow columns →</p>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">

@@ -5,7 +5,7 @@ import { ConfigurationPanel } from "./ConfigurationPanel";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { SharedServicesPanel } from "./SharedServicesPanel";
 import { Link } from "react-router-dom";
-import { Button, PageHeader } from "../shell/components/ui";
+import { Button, Field, Input, PageHeader, Select } from "../shell/components/ui";
 
 type OrgUnit = { id: string; parentId: string | null; name: string; unitType: string; legalEntityId: string };
 type LegalEntity = { id: string; name: string };
@@ -139,7 +139,11 @@ export function DashboardPage() {
         title="Administration"
         subtitle={
           tenantName
-            ? `${tenantName} — permissions: ${permissions.join(", ") || "(none)"}`
+            ? `${tenantName} — ${
+                permissions.length === 0
+                  ? "no permissions"
+                  : `${permissions.length} permission${permissions.length !== 1 ? "s" : ""}`
+              }`
             : "Organization, users, configuration, and shared services."
         }
         actions={
@@ -167,24 +171,32 @@ export function DashboardPage() {
           <OrgUnitTree units={orgUnits} />
           <form onSubmit={handleCreateOrgUnit} className="mt-4 space-y-2 border-t border-slate-100 pt-3">
             <div className="text-xs font-medium text-slate-500">Create Organization Unit</div>
-            <select name="legalEntityId" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm">
-              <option value="">Legal Entity…</option>
-              {legalEntities.map((le) => (
-                <option key={le.id} value={le.id}>
-                  {le.name}
-                </option>
-              ))}
-            </select>
-            <select name="parentId" className="w-full rounded border border-slate-300 px-2 py-1 text-sm">
-              <option value="">(root — no parent)</option>
-              {orgUnits.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-            <input name="name" placeholder="Name" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-            <input name="unitType" placeholder="Type (e.g. Branch, Site)" className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
+            <Field label="Legal entity" required>
+              <Select name="legalEntityId" required>
+                <option value="">Select a legal entity…</option>
+                {legalEntities.map((le) => (
+                  <option key={le.id} value={le.id}>
+                    {le.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Parent organization unit">
+              <Select name="parentId">
+                <option value="">(root — no parent)</option>
+                {orgUnits.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Organization unit name" required>
+              <Input name="name" placeholder="Name" required />
+            </Field>
+            <Field label="Organization unit type">
+              <Input name="unitType" placeholder="Type (e.g. Branch, Site)" />
+            </Field>
             <button type="submit" className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
               Create
             </button>
@@ -200,7 +212,9 @@ export function DashboardPage() {
           </ul>
           <form onSubmit={handleCreateLegalEntity} className="mt-4 space-y-2 border-t border-slate-100 pt-3">
             <div className="text-xs font-medium text-slate-500">Create Legal Entity</div>
-            <input name="name" placeholder="Name" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
+            <Field label="Legal entity name" required>
+              <Input name="name" placeholder="Name" required />
+            </Field>
             <button type="submit" className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
               Create
             </button>
@@ -218,22 +232,34 @@ export function DashboardPage() {
           </ul>
           <form onSubmit={handleCreateUser} className="mt-4 space-y-2 border-t border-slate-100 pt-3">
             <div className="text-xs font-medium text-slate-500">Create User</div>
-            <input name="fullName" placeholder="Full name" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-            <input name="email" type="email" placeholder="Email" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-            <input name="password" type="password" placeholder="Password (min 8 chars)" required minLength={8} className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-            <input name="roleCode" placeholder="Role code (e.g. ADMIN, SUPERVISOR)" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-            <select name="scopeType" className="w-full rounded border border-slate-300 px-2 py-1 text-sm">
-              <option value="tenant">Tenant-wide scope</option>
-              <option value="organization_unit">Organization Unit scope</option>
-            </select>
-            <select name="scopeOrganizationUnitId" className="w-full rounded border border-slate-300 px-2 py-1 text-sm">
-              <option value="">(select Organization Unit if scoped)</option>
-              {orgUnits.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+            <Field label="Full name" required>
+              <Input name="fullName" placeholder="Full name" required />
+            </Field>
+            <Field label="Email address" required>
+              <Input name="email" type="email" placeholder="Email" required />
+            </Field>
+            <Field label="Password" required hint="Minimum 8 characters">
+              <Input name="password" type="password" placeholder="Password" required minLength={8} />
+            </Field>
+            <Field label="Role code" required hint="For example, ADMIN or SUPERVISOR">
+              <Input name="roleCode" placeholder="Role code" required />
+            </Field>
+            <Field label="Access scope">
+              <Select name="scopeType">
+                <option value="tenant">Tenant-wide scope</option>
+                <option value="organization_unit">Organization unit scope</option>
+              </Select>
+            </Field>
+            <Field label="Organization unit scope">
+              <Select name="scopeOrganizationUnitId">
+                <option value="">(select organization unit if scoped)</option>
+                {orgUnits.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <button type="submit" className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
               Create
             </button>

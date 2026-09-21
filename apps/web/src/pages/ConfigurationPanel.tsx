@@ -79,7 +79,7 @@ export function ConfigurationPanel({
     } catch {
       setNumberingInfo(null);
     }
-  }, [token]);
+  }, [token, onMessage]);
 
   useEffect(() => {
     refresh();
@@ -202,7 +202,7 @@ export function ConfigurationPanel({
   return (
     <div className="space-y-6">
       <h2 className="text-sm font-semibold text-slate-500">
-        Configuration &amp; Metadata (Checkpoint 0C)
+        Configuration &amp; Metadata
       </h2>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

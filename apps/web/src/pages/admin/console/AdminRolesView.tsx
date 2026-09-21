@@ -1,5 +1,5 @@
 /** Phase 11F — Tenant role summaries with on-demand permission inspection. */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../../auth/AuthContext";
 import {
   api,
@@ -12,6 +12,8 @@ import {
   Button,
   DataTable,
   EmptyState,
+  Field,
+  Input,
   Spinner,
   StatusPill,
   type Column,
@@ -34,28 +36,43 @@ export function AdminRolesView() {
     "idle" | "loading" | "ready" | "denied" | "session-expired" | "error"
   >("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [permissionQuery, setPermissionQuery] = useState("");
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // Guards against a slower earlier request resolving after a newer one and
+  // overwriting the permissions shown for the role currently on screen.
+  const detailRequestRef = useRef(0);
+
+  useEffect(() => () => {
+    detailRequestRef.current += 1;
+  }, []);
 
   const closeDetails = useCallback(() => {
     const trigger = detailTriggerRef.current;
+    detailRequestRef.current += 1;
     setSelectedRole(null);
     setDetails(null);
     setDetailState("idle");
     setDetailError(null);
+    setPermissionQuery("");
     window.setTimeout(() => trigger?.focus(), 0);
   }, []);
 
   const loadRoleDetails = useCallback(
     async (role: AdminRoleSummary) => {
+      const requestId = detailRequestRef.current + 1;
+      detailRequestRef.current = requestId;
       setSelectedRole(role);
       setDetails(null);
       setDetailState("loading");
       setDetailError(null);
+      setPermissionQuery("");
       try {
         const result = await api.adminRolePermissions(token, role.code);
+        if (detailRequestRef.current !== requestId) return;
         setDetails(result);
         setDetailState("ready");
       } catch (err) {
+        if (detailRequestRef.current !== requestId) return;
         if (err instanceof ApiError && err.status === 403) {
           setDetailState("denied");
         } else if (err instanceof ApiError && err.status === 401) {
@@ -68,6 +85,15 @@ export function AdminRolesView() {
     },
     [token],
   );
+
+  const filteredPermissions = useMemo(() => {
+    if (!details?.permissions) return [];
+    const normalized = permissionQuery.trim().toLocaleLowerCase();
+    if (!normalized) return details.permissions;
+    return details.permissions.filter((p) =>
+      `${p.code} ${p.description}`.toLocaleLowerCase().includes(normalized),
+    );
+  }, [details?.permissions, permissionQuery]);
 
   const columns: Column<AdminRoleSummary>[] = [
     {
@@ -207,16 +233,52 @@ export function AdminRolesView() {
                 description="This role currently has no listed permission grants."
               />
             ) : (
-              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
-                {details.permissions.map((permission) => (
-                  <li key={permission.code} className="px-3 py-3">
-                    <code className="break-all font-mono text-xs font-medium text-slate-800">
-                      {permission.code}
-                    </code>
-                    <p className="mt-1 text-sm text-slate-500">{permission.description}</p>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <Field label="Filter permissions">
+                    <Input
+                      type="search"
+                      value={permissionQuery}
+                      onChange={(e) => setPermissionQuery(e.target.value)}
+                      placeholder="Search by code or description"
+                      autoComplete="off"
+                      aria-label="Filter role permissions"
+                      className="sm:w-80"
+                    />
+                  </Field>
+                  <div className="flex items-center gap-3">
+                    <p
+                      className="text-sm tabular-nums text-slate-500"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Showing {filteredPermissions.length} of {details.permissions.length}
+                    </p>
+                    {permissionQuery.trim() !== "" && (
+                      <Button variant="ghost" onClick={() => setPermissionQuery("")}>
+                        Clear search
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {filteredPermissions.length === 0 ? (
+                  <EmptyState
+                    title="No matching permissions"
+                    description="Try a different search term or clear the filter."
+                  />
+                ) : (
+                  <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                    {filteredPermissions.map((permission) => (
+                      <li key={permission.code} className="px-3 py-3">
+                        <code className="break-all font-mono text-xs font-medium text-slate-800">
+                          {permission.code}
+                        </code>
+                        <p className="mt-1 text-sm text-slate-500">{permission.description}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
         )}
