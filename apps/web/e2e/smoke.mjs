@@ -135,13 +135,19 @@ try {
   await page.waitForURL(/\/login/, { timeout: 5000 });
   await shot("login-page");
 
-  const tenantInput = page.getByLabel("Tenant code");
   const emailInput = page.getByLabel("Email");
   const passwordInput = page.getByLabel("Password");
-  await tenantInput.fill("demo-gs");
   await emailInput.fill("admin@demo.local");
   await passwordInput.fill("Admin12345!");
   await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(`${BASE}/select-workspace`, { timeout: 8000 });
+  await assertVisible(
+    page.getByRole("heading", { name: "Choose how you want to work", exact: true }),
+    "Role and site selection did not render",
+  );
+  await assertVisible(page.getByLabel("Role"), "Role selection is missing");
+  await assertVisible(page.getByLabel("Site"), "Site selection is missing");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.waitForURL(`${BASE}/`, { timeout: 8000 });
   await assertVisible(page.getByRole("heading", { name: /Welcome to/i }), "Overview did not render");
   assert.ok(await page.evaluate(() => window.localStorage.getItem("abixell.session")), "Session was not persisted");
