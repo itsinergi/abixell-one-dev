@@ -4,6 +4,7 @@ import type {
   AdminUserAccessSummary,
   AssignRoleInput,
   GovernedRoleAssignmentInput,
+  MyRoleAssignment,
   Permission,
   RbacRepository,
   Role,
@@ -681,8 +682,51 @@ export class PgRbacRepository implements RbacRepository {
     }));
   }
 
-  async findRoleByCode(tenantId: string, code: string): Promise<Role | null> {
+  /** Phase 11F (self-service): the caller's OWN authorization-effective
+   * assignments with role and scope display names resolved, so a post-login
+   * "select role & site" screen can present them without holding any admin
+   * permission. Unlike `listAdminUserAccess` this uses the effective view,
+   * so invalidated/unavailable rows are already excluded — a user is never
+   * offered a context they cannot actually act in. */
+  async getMyAssignmentsWithScopeNames(
+    userId: string,
+  ): Promise<MyRoleAssignment[]> {
     const result = await this.pool.query(
+      `SELECT aura.id,
+              aura.role_id,
+              r.code AS role_code,
+              r.name AS role_name,
+              aura.scope_type,
+              aura.scope_organization_unit_id,
+              ou.name AS scope_organization_unit_name,
+              aura.scope_customer_id,
+              c.name AS scope_customer_name
+         FROM authorization_effective_user_role_assignments aura
+         JOIN roles r ON r.id = aura.role_id
+         LEFT JOIN organization_units ou
+           ON ou.id = aura.scope_organization_unit_id
+          AND ou.deleted_at IS NULL
+         LEFT JOIN customers c
+           ON c.id = aura.scope_customer_id
+          AND c.deleted_at IS NULL
+        WHERE aura.user_id = $1
+        ORDER BY r.name, aura.id`,
+      [userId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      roleId: row.role_id,
+      roleCode: row.role_code,
+      roleName: row.role_name,
+      scopeType: row.scope_type,
+      scopeOrganizationUnitId: row.scope_organization_unit_id,
+      scopeOrganizationUnitName: row.scope_organization_unit_name,
+      scopeCustomerId: row.scope_customer_id,
+      scopeCustomerName: row.scope_customer_name,
+    }));
+  }
+
+  async findRoleByCode(tenantId: string, code: string): Promise<Role | null> {    const result = await this.pool.query(
       `SELECT * FROM roles WHERE tenant_id = $1 AND code = $2`,
       [tenantId, code],
     );

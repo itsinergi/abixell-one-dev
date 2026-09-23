@@ -1,4 +1,8 @@
-import type { RbacRepository, UserRoleAssignment } from "../../domain/rbac/rbac.entity.js";
+import type {
+  MyRoleAssignment,
+  RbacRepository,
+  UserRoleAssignment,
+} from "../../domain/rbac/rbac.entity.js";
 import type { OrganizationUnitRepository } from "../../domain/organization-unit/organization-unit.entity.js";
 import { ForbiddenError } from "../../domain/shared-kernel/errors.js";
 
@@ -231,6 +235,26 @@ export class RbacService {
    * callers) instead of re-querying per item. */
   async getAssignments(userId: string): Promise<UserRoleAssignment[]> {
     return this.repo.getAssignments(userId);
+  }
+
+  /** The caller's own assignments with role/scope display names, for the
+   * post-login context picker. Passthrough — see
+   * `RbacRepository.getMyAssignmentsWithScopeNames`. */
+  async getMyAssignmentsWithScopeNames(userId: string): Promise<MyRoleAssignment[]> {
+    return this.repo.getMyAssignmentsWithScopeNames(userId);
+  }
+
+  /** The permission codes a single Role grants, used to narrow the caller's
+   * own effective set when they pick one context on the selection screen.
+   * Read-only metadata about a role the caller already holds — no admin
+   * permission required, and it cannot widen authority (the picked role is
+   * by definition already among the caller's assignments). */
+  async getPermissionsForRole(
+    tenantId: string,
+    roleCode: string,
+  ): Promise<Set<string>> {
+    const detail = await this.repo.getRolePermissionDetail(tenantId, roleCode);
+    return new Set(detail?.permissions.map((p) => p.code) ?? []);
   }
 
   /** Returns only assignments where the SAME role grants `permissionCode`.

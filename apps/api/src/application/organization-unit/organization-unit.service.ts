@@ -1,6 +1,7 @@
 import type {
   CreateOrganizationUnitInput,
   OrganizationUnitRepository,
+  UpdateOrganizationUnitInput,
 } from "../../domain/organization-unit/organization-unit.entity.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
@@ -50,6 +51,29 @@ export class OrganizationUnitService {
     });
 
     return unit;
+  }
+
+  async update(
+    actor: ActorContext,
+    id: string,
+    input: UpdateOrganizationUnitInput,
+  ) {
+    await this.rbac.requirePermission(actor.userId, "organization_unit.update");
+    const unit = await this.repo.findById(id);
+    if (!unit || unit.tenantId !== actor.tenantId) throw new NotFoundError("OrganizationUnit", id);
+    await this.rbac.requireOrganizationUnitScope(actor.userId, id);
+    return this.repo.update(id, input, actor);
+  }
+
+  async setActive(actor: ActorContext, id: string, isActive: boolean) {
+    await this.rbac.requirePermission(
+      actor.userId,
+      isActive ? "organization_unit.activate" : "organization_unit.deactivate",
+    );
+    const unit = await this.repo.findById(id);
+    if (!unit || unit.tenantId !== actor.tenantId) throw new NotFoundError("OrganizationUnit", id);
+    await this.rbac.requireOrganizationUnitScope(actor.userId, id);
+    return this.repo.setActive(id, isActive, actor);
   }
 
   async listForTenant(actor: ActorContext) {

@@ -9,6 +9,13 @@ const createSchema = z.object({
   unitType: z.string().optional(),
 });
 
+const updateSchema = z.object({
+  name: z.string().min(1),
+  unitType: z.string().min(1).optional(),
+});
+
+const idSchema = z.object({ id: z.string().uuid() });
+
 export function registerOrganizationUnitRoutes(app: FastifyInstance, container: Container) {
   app.post("/organization-units", { preHandler: app.authenticate }, async (request, reply) => {
     const body = createSchema.parse(request.body);
@@ -22,4 +29,35 @@ export function registerOrganizationUnitRoutes(app: FastifyInstance, container: 
     const list = await container.organizationUnit.listForTenant(actor);
     return reply.send(list);
   });
+
+  app.patch(
+    "/organization-units/:id",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = idSchema.parse(request.params);
+      const body = updateSchema.parse(request.body);
+      const unit = await container.organizationUnit.update(request.actor!, id, body);
+      return reply.send(unit);
+    },
+  );
+
+  app.post(
+    "/organization-units/:id/activate",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = idSchema.parse(request.params);
+      const unit = await container.organizationUnit.setActive(request.actor!, id, true);
+      return reply.send(unit);
+    },
+  );
+
+  app.post(
+    "/organization-units/:id/deactivate",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = idSchema.parse(request.params);
+      const unit = await container.organizationUnit.setActive(request.actor!, id, false);
+      return reply.send(unit);
+    },
+  );
 }

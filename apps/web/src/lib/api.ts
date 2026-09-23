@@ -61,19 +61,65 @@ function queryString(query: Record<string, string | number | boolean | null | un
   return encoded ? `?${encoded}` : "";
 }
 
+export type LoginSuccess = {
+  status: "authenticated";
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  tenantId: string;
+  tenantCode: string;
+  tenantName: string;
+};
+
+/** Returned instead of tokens when the verified email exists in more than
+ * one tenant — the user picks one, then re-submits with its `tenantId`. */
+export type TenantSelectionRequired = {
+  status: "tenant_selection_required";
+  tenants: { tenantId: string; tenantCode: string; tenantName: string }[];
+};
+
+export type LoginResult = LoginSuccess | TenantSelectionRequired;
+
+/** The caller's OWN role+scope pairs, with display names — drives the
+ * post-login "select role & site" screen. Mirrors the backend projection. */
+export type MyRoleAssignment = {
+  id: string;
+  roleId: string;
+  roleCode: string;
+  roleName: string;
+  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeOrganizationUnitId: string | null;
+  scopeOrganizationUnitName: string | null;
+  scopeCustomerId: string | null;
+  scopeCustomerName: string | null;
+};
+
 export const api = {
-  login: (payload: { tenantCode: string; email: string; password: string }) =>
+  login: (payload: {
+    email: string;
+    password: string;
+    tenantCode?: string;
+    tenantId?: string;
+  }) => request<LoginResult>("/auth/login", { method: "POST", body: payload }),
+
+  me: (
+    token: string,
+    options?: { assignmentId?: string },
+  ) =>
     request<{
-      accessToken: string;
-      refreshToken: string;
       userId: string;
       tenantId: string;
-    }>("/auth/login", { method: "POST", body: payload }),
-
-  me: (token: string) =>
-    request<{ userId: string; tenantId: string; permissions: string[]; scopeTypes: string[]; activeModuleCodes: string[] }>("/me", {
-      token,
-    }),
+      permissions: string[];
+      scopeTypes: string[];
+      activeModuleCodes: string[];
+      assignments: MyRoleAssignment[];
+      activeAssignmentId: string | null;
+    }>(
+      `/me${queryString({ assignmentId: options?.assignmentId })}`,
+      {
+        token,
+      },
+    ),
 
   // Frontend token/session persistence (Checkpoint 0F): `refresh` trades
   // the opaque refresh token for a new access token AND a rotated
@@ -102,6 +148,9 @@ export const api = {
         name: string;
         unitType: string;
         legalEntityId: string;
+        isActive: boolean;
+        deactivatedAt: string | null;
+        deactivatedBy: string | null;
       }>
     >("/organization-units", { token }),
 
@@ -111,15 +160,33 @@ export const api = {
   ) => request("/organization-units", { method: "POST", token, body: payload }),
 
   legalEntities: (token: string) =>
-    request<Array<{ id: string; name: string }>>("/legal-entities", { token }),
+    request<
+      Array<{
+        id: string;
+        name: string;
+        registrationNo: string | null;
+        isActive: boolean;
+        deactivatedAt: string | null;
+        deactivatedBy: string | null;
+      }>
+    >("/legal-entities", { token }),
 
-  createLegalEntity: (token: string, payload: { name: string }) =>
-    request("/legal-entities", { method: "POST", token, body: payload }),
+  createLegalEntity: (
+    token: string,
+    payload: { name: string; registrationNo?: string | null },
+  ) => request("/legal-entities", { method: "POST", token, body: payload }),
 
   users: (token: string) =>
-    request<Array<{ id: string; email: string; fullName: string; status: string }>>("/users", {
-      token,
-    }),
+    request<
+      Array<{
+        id: string;
+        email: string;
+        fullName: string;
+        status: string;
+        deactivatedAt: string | null;
+        deactivatedBy: string | null;
+      }>
+    >("/users", { token }),
 
   createUser: (
     token: string,
@@ -189,6 +256,72 @@ export const api = {
     typeCode: string,
     payload: { code: string; label: string; sortOrder?: number },
   ) => request(`/config/reference-data/${typeCode}`, { method: "POST", token, body: payload }),
+
+  setConfigReferenceDataItemActive: (token: string, typeCode: string, itemId: string, isActive: boolean) =>
+    request(`/config/reference-data/${typeCode}/${itemId}`, {
+      method: "PATCH",
+      token,
+      body: { isActive },
+    }),
+
+  // --- Organization Unit lifecycle ---
+  // `name` is required, not optional: the backend update schema requires it,
+  // and the repository writes `unit_type` unconditionally, so a partial
+  // payload would silently reset the type. `unitType` stays a plain string
+  // because the backend accepts any non-empty value and the entity's own
+  // `unitType` is `string` — a union here would be a client-side fiction.
+  updateOrganizationUnit: (
+    token: string,
+    id: string,
+    payload: { name: string; unitType?: string },
+  ) =>
+    request<{
+      id: string;
+      parentId: string | null;
+      name: string;
+      unitType: string;
+      legalEntityId: string;
+      isActive: boolean;
+      deactivatedAt: string | null;
+      deactivatedBy: string | null;
+    }>(`/organization-units/${id}`, { method: "PATCH", token, body: payload }),
+
+  activateOrganizationUnit: (token: string, id: string) =>
+    request(`/organization-units/${id}/activate`, { method: "POST", token }),
+
+  deactivateOrganizationUnit: (token: string, id: string) =>
+    request(`/organization-units/${id}/deactivate`, { method: "POST", token }),
+
+  // --- Legal Entity lifecycle ---
+  updateLegalEntity: (
+    token: string,
+    id: string,
+    payload: { name: string; registrationNo?: string | null },
+  ) =>
+    request<{
+      id: string;
+      name: string;
+      registrationNo: string | null;
+      isActive: boolean;
+      deactivatedAt: string | null;
+      deactivatedBy: string | null;
+    }>(`/legal-entities/${id}`, { method: "PATCH", token, body: payload }),
+
+  activateLegalEntity: (token: string, id: string) =>
+    request(`/legal-entities/${id}/activate`, { method: "POST", token }),
+
+  deactivateLegalEntity: (token: string, id: string) =>
+    request(`/legal-entities/${id}/deactivate`, { method: "POST", token }),
+
+  // --- User lifecycle ---
+  activateUser: (token: string, id: string) =>
+    request(`/users/${id}/activate`, { method: "POST", token }),
+
+  deactivateUser: (token: string, id: string) =>
+    request(`/users/${id}/deactivate`, { method: "POST", token }),
+
+  deleteUser: (token: string, id: string) =>
+    request(`/users/${id}`, { method: "DELETE", token }),
 
   configNumberingSequence: (token: string, code: string) =>
     request<{ code: string; pattern: string; currentSequence: number }>(

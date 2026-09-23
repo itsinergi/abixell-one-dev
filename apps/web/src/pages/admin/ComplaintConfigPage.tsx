@@ -7,7 +7,7 @@
  * require the versioning flow. No fake controls: the backend reports which
  * capabilities are editable.
  */
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -21,17 +21,27 @@ import {
   Badge,
   Button,
   Card,
+  DataTable,
+  type Column,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Spinner,
   StatusPill,
 } from "../../shell/components/ui";
+import { OverlayDialog } from "../../shell/components/OverlayDialog";
 
-const REF_TYPES: { typeCode: string; title: string; key: "categories" | "severities" | "priorities" }[] = [
-  { typeCode: "complaint_category", title: "Categories", key: "categories" },
-  { typeCode: "complaint_severity", title: "Severity", key: "severities" },
-  { typeCode: "priority_level", title: "Priority", key: "priorities" },
+function configErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.status === 401) return "Your session has expired. Sign in again to continue.";
+  if (err instanceof ApiError && err.status === 403) return "Access denied. This operation requires complaint.configure permission.";
+  return err instanceof ApiError ? err.message : fallback;
+}
+
+const REF_TYPES: { typeCode: string; title: string; singular: string; key: "categories" | "severities" | "priorities" }[] = [
+  { typeCode: "complaint_category", title: "Categories", singular: "category", key: "categories" },
+  { typeCode: "complaint_severity", title: "Severity", singular: "severity", key: "severities" },
+  { typeCode: "priority_level", title: "Priority", singular: "priority", key: "priorities" },
 ];
 
 export function ComplaintConfigPage() {
@@ -42,69 +52,135 @@ export function ComplaintConfigPage() {
   const [config, setConfig] = useState<ComplaintConfigView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [queries, setQueries] = useState<Record<string, string>>({});
+  const [dialog, setDialog] = useState<
+    | { kind: "create"; typeCode: string }
+    | { kind: "toggle"; typeCode: string; item: ReferenceItemView }
+    | null
+  >(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const loadRequestRef = useRef(0);
+  const dialogRequestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError(null);
     try {
-      setConfig(await api.complaintConfig(token));
+      const nextConfig = await api.complaintConfig(token);
+      if (loadRequestRef.current === requestId) setConfig(nextConfig);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load configuration");
+      if (loadRequestRef.current !== requestId) return;
+      setError(configErrorMessage(err, "Failed to load configuration."));
     } finally {
-      setLoading(false);
+      if (loadRequestRef.current === requestId) setLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    load();
+    setConfig(null);
+    setDialog(null);
+    setDialogError(null);
+    setNotice(null);
+    setQueries({});
+    pendingRef.current = false;
+    setPending(false);
+    void load();
+    // Existing API methods do not accept AbortSignal. Invalidate both read
+    // and mutation completions on unmount or session change instead.
+    return () => {
+      loadRequestRef.current += 1;
+      dialogRequestRef.current += 1;
+    };
   }, [load]);
 
-  async function addItem(typeCode: string, form: HTMLFormElement) {
-    const data = new FormData(form);
-    setBusy(true);
+  function openCreateDialog(typeCode: string, button: HTMLButtonElement) {
+    if (pendingRef.current || loading || error || !config?.capabilities.referenceDataCreate) return;
+    triggerRef.current = button;
+    dialogRequestRef.current += 1;
+    setDialog({ kind: "create", typeCode });
+    setDialogError(null);
+  }
+
+  function openToggleDialog(typeCode: string, item: ReferenceItemView, button: HTMLButtonElement) {
+    if (pendingRef.current || loading || error || !config?.capabilities.referenceDataToggleActive) return;
+    triggerRef.current = button;
+    dialogRequestRef.current += 1;
+    setDialog({ kind: "toggle", typeCode, item });
+    setDialogError(null);
+  }
+
+  function closeDialog() {
+    if (pendingRef.current) return;
+    dialogRequestRef.current += 1;
+    setDialog(null);
+    setDialogError(null);
+  }
+
+  async function submitDialog(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!dialog || pendingRef.current || loading || error || !config) return;
+    const allowed = dialog.kind === "create"
+      ? config.capabilities.referenceDataCreate
+      : config.capabilities.referenceDataToggleActive;
+    if (!allowed) return;
+    // Capture form values before awaiting; lock synchronously before React renders.
+    const data = new FormData(event.currentTarget);
+    const code = String(data.get("code") ?? "").trim();
+    const label = String(data.get("label") ?? "").trim();
+    if (dialog.kind === "create" && (!code || !label)) {
+      setDialogError("Code and label are required.");
+      return;
+    }
+    const requestId = ++dialogRequestRef.current;
+    pendingRef.current = true;
+    setPending(true);
+    setDialogError(null);
     setNotice(null);
     try {
-      await api.createComplaintRefItem(token, typeCode, {
-        code: String(data.get("code")).trim(),
-        label: String(data.get("label")).trim(),
-      });
-      setNotice({ tone: "success", text: "Item added." });
-      form.reset();
+      const item = dialog.kind === "create"
+        ? await api.createComplaintRefItem(token, dialog.typeCode, { code, label })
+        : await api.setComplaintRefItemActive(token, dialog.typeCode, dialog.item.id, !dialog.item.isActive);
+      if (dialogRequestRef.current !== requestId) return;
+      setNotice(dialog.kind === "create" ? "Item created." : `Item ${item.isActive ? "activated" : "deactivated"}.`);
+      // Refresh errors belong to the page, not the successful mutation dialog.
+      // Keep the trigger mounted while refreshing so OverlayDialog restores focus.
       await load();
+      if (dialogRequestRef.current !== requestId) return;
+      setDialog(null);
     } catch (err) {
-      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : "Failed to add item" });
+      if (dialogRequestRef.current === requestId) {
+        setDialogError(configErrorMessage(err, "Failed to save the item."));
+      }
     } finally {
-      setBusy(false);
+      if (dialogRequestRef.current === requestId) {
+        pendingRef.current = false;
+        setPending(false);
+      }
     }
   }
 
-  async function toggleActive(typeCode: string, item: ReferenceItemView) {
-    setBusy(true);
-    setNotice(null);
-    try {
-      await api.setComplaintRefItemActive(token, typeCode, item.id, !item.isActive);
-      setNotice({ tone: "success", text: item.isActive ? "Item deactivated." : "Item activated." });
-      await load();
-    } catch (err) {
-      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : "Failed to update item" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (loading) return <Spinner label="Loading configuration…" />;
-  if (error)
+  if (loading && !config) return <Spinner label="Loading configuration…" />;
+  if (!config) {
     return (
       <div className="space-y-3">
-        <Alert tone="error">{error}</Alert>
-        <Button variant="secondary" onClick={() => navigate("/administration")}>
-          Back to Administration
-        </Button>
+        <Alert tone="error">{error ?? "Configuration is unavailable."}</Alert>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => void load()}>Retry</Button>
+          <Button variant="secondary" onClick={() => navigate("/administration")}>
+            Back to Administration
+          </Button>
+        </div>
       </div>
     );
-  if (!config) return null;
+  }
+  const actionsDisabled = pending || loading || error !== null;
+  const selectedType = REF_TYPES.find((rt) => rt.typeCode === dialog?.typeCode);
+  const actionLabel = dialog?.kind === "toggle" ? (dialog.item.isActive ? "Deactivate" : "Activate") : "Create";
 
   return (
     <div>
@@ -118,65 +194,129 @@ export function ComplaintConfigPage() {
         }
       />
 
+      {error && (
+        <div className="mb-4">
+          <Alert tone="error">{error}</Alert>
+        </div>
+      )}
       {notice && (
         <div className="mb-4">
-          <Alert tone={notice.tone}>{notice.text}</Alert>
+          <Alert tone="success">{notice}</Alert>
         </div>
       )}
 
       {/* Reference Data */}
       <section className="mb-6">
         <h2 className="mb-3 text-sm font-semibold text-slate-700">Reference Data</h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="space-y-6">
           {REF_TYPES.map((rt) => {
             const items = config.referenceData[rt.key];
+            const query = queries[rt.typeCode] ?? "";
+            const normalizedQuery = query.trim().toLocaleLowerCase();
+            const visibleItems = normalizedQuery
+              ? items.filter((item) => `${item.code} ${item.label}`.toLocaleLowerCase().includes(normalizedQuery))
+              : items;
+            const columns: Column<ReferenceItemView>[] = [
+              {
+                header: "Code",
+                cell: (item) => <code className="font-mono text-xs text-slate-600">{item.code}</code>,
+                mobileRole: "title",
+              },
+              {
+                header: "Label",
+                cell: (item) => item.label,
+              },
+              {
+                header: "Status",
+                cell: (item) =>
+                  item.isActive ? (
+                    <StatusPill tone="success">Active</StatusPill>
+                  ) : (
+                    <StatusPill tone="neutral">Inactive</StatusPill>
+                  ),
+                mobileRole: "status",
+              },
+              {
+                header: "Action",
+                cell: (item) =>
+                  config.capabilities.referenceDataToggleActive ? (
+                    <Button
+                      variant="ghost"
+                      className="w-full sm:w-auto"
+                      disabled={actionsDisabled}
+                      onClick={(event) => {
+                        openToggleDialog(rt.typeCode, item, event.currentTarget);
+                      }}
+                    >
+                      {item.isActive ? "Deactivate" : "Activate"}
+                    </Button>
+                  ) : null,
+                className: "text-right",
+              },
+            ];
+
             return (
               <Card key={rt.typeCode}>
-                <h3 className="mb-2 text-sm font-medium text-slate-600">{rt.title}</h3>
-                {items.length === 0 ? (
-                  <p className="text-sm text-slate-400">No items configured.</p>
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm">
-                    {items.map((item) => (
-                      <li key={item.id} className="flex items-center justify-between py-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-slate-700">{item.label}</div>
-                          <div className="font-mono text-xs text-slate-400">{item.code}</div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <StatusPill tone={item.isActive ? "success" : "neutral"}>
-                            {item.isActive ? "Active" : "Inactive"}
-                          </StatusPill>
-                          {config.capabilities.referenceDataToggleActive && (
-                            <Button variant="ghost" disabled={busy} onClick={() => toggleActive(rt.typeCode, item)}>
-                              {item.isActive ? "Deactivate" : "Activate"}
-                            </Button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {config.capabilities.referenceDataCreate && (
-                  <form
-                    className="mt-3 space-y-2 border-t border-slate-100 pt-3"
-                    onSubmit={(e: FormEvent<HTMLFormElement>) => {
-                      e.preventDefault();
-                      addItem(rt.typeCode, e.currentTarget);
-                    }}
-                  >
-                    <div className="text-xs font-medium text-slate-500">Add {rt.title.toLowerCase()}</div>
-                    <Field label={`${rt.title} code`} required>
-                      <Input name="code" placeholder="code (e.g. billing)" required />
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">{rt.title}</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Showing {visibleItems.length} of {items.length} loaded item{items.length !== 1 ? "s" : ""}. Search is limited to this loaded configuration.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <Field label={`Search ${rt.title.toLowerCase()}`}>
+                      <Input
+                        type="search"
+                        placeholder="Search code or label"
+                        value={query}
+                        onChange={(event) => setQueries((prev) => ({ ...prev, [rt.typeCode]: event.target.value }))}
+                        disabled={loading}
+                        autoComplete="off"
+                      />
                     </Field>
-                    <Field label={`${rt.title} label`} required>
-                      <Input name="label" placeholder="Label (e.g. Billing)" required />
-                    </Field>
-                    <Button type="submit" disabled={busy}>
-                      Add
-                    </Button>
-                  </form>
-                )}
+                    {config.capabilities.referenceDataCreate && (
+                      <Button
+                        variant="primary"
+                        disabled={actionsDisabled}
+                        onClick={(event) => {
+                          openCreateDialog(rt.typeCode, event.currentTarget);
+                        }}
+                      >
+                        Create {rt.singular}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <DataTable
+                  columns={columns}
+                  rows={visibleItems}
+                  keyOf={(item) => item.id}
+                  mobileBreakpoint="md"
+                  empty={
+                    <EmptyState
+                      title={items.length === 0 ? `No ${rt.title.toLowerCase()} configured` : "No matching items"}
+                      description={
+                        items.length === 0
+                          ? `Create the first ${rt.singular} to get started.`
+                          : "Try a different search term or clear the filter."
+                      }
+                      action={
+                        items.length === 0 && config.capabilities.referenceDataCreate ? (
+                          <Button
+                            variant="primary"
+                            disabled={actionsDisabled}
+                            onClick={(event) => {
+                              openCreateDialog(rt.typeCode, event.currentTarget);
+                            }}
+                          >
+                            Create {rt.singular}
+                          </Button>
+                        ) : undefined
+                      }
+                    />
+                  }
+                />
               </Card>
             );
           })}
@@ -299,6 +439,52 @@ export function ComplaintConfigPage() {
           )}
         </Card>
       </section>
+
+      {loading && <Spinner label="Refreshing configuration…" />}
+      <OverlayDialog
+        open={dialog !== null}
+        title={dialog?.kind === "toggle" ? `${actionLabel} item` : `Create ${selectedType?.singular ?? "item"}`}
+        description={
+          dialog?.kind === "toggle"
+            ? `Are you sure you want to ${actionLabel.toLowerCase()} “${dialog.item.label}”?`
+            : "Add a new reference item to the catalog."
+        }
+        pending={pending}
+        onClose={closeDialog}
+        restoreFocusRef={triggerRef}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeDialog} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" form="complaint-config-item-form" disabled={actionsDisabled}>
+              {pending ? "Saving…" : actionLabel}
+            </Button>
+          </>
+        }
+      >
+        {dialogError && (
+          <div className="mb-4">
+            <Alert tone="error">{dialogError}</Alert>
+          </div>
+        )}
+        <form id="complaint-config-item-form" className="space-y-4" onSubmit={submitDialog}>
+          {dialog?.kind === "create" ? (
+            <>
+              <Field label="Code" required hint="Internal identifier (e.g., billing, urgent)">
+                <Input name="code" placeholder="Code" required disabled={pending} autoComplete="off" />
+              </Field>
+              <Field label="Label" required hint="Human-readable display name">
+                <Input name="label" placeholder="Label" required disabled={pending} autoComplete="off" />
+              </Field>
+            </>
+          ) : (
+            <p className="text-sm text-slate-600">
+              This changes the server-reported status for <strong>{dialog?.item.label}</strong>. The result will be refreshed from the server.
+            </p>
+          )}
+        </form>
+      </OverlayDialog>
     </div>
   );
 }

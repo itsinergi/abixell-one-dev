@@ -5,6 +5,9 @@ export interface OrganizationUnit {
   parentId: string | null;
   name: string;
   unitType: string;
+  isActive: boolean;
+  deactivatedAt: Date | null;
+  deactivatedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,6 +18,16 @@ export interface CreateOrganizationUnitInput {
   parentId?: string | null;
   name: string;
   unitType?: string;
+}
+
+export interface UpdateOrganizationUnitInput {
+  name: string;
+  unitType?: string;
+}
+
+export interface LifecycleActor {
+  userId: string;
+  tenantId: string;
 }
 
 export interface OrganizationUnitRepository {
@@ -34,4 +47,6 @@ export interface OrganizationUnitRepository {
    * (role+scope queue resolution) so the two can never drift.
    */
   listAncestorIds(id: string): Promise<string[]>;
+  update(id: string, input: UpdateOrganizationUnitInput, actor: LifecycleActor): Promise<OrganizationUnit>;
+  setActive(id: string, isActive: boolean, actor: LifecycleActor): Promise<OrganizationUnit>;
 }

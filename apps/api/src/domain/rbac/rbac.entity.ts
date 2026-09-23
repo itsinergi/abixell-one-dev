@@ -22,6 +22,22 @@ export interface UserRoleAssignment {
   scopeCustomerId: string | null;
 }
 
+/** Self-service projection of the CALLER's own assignment — same shape as
+ * `AdminRoleAssignmentSummary` but scoped to one user and read from the
+ * authorization-effective view, so every row is one the user can act in.
+ * Used by the post-login role & site selection screen. */
+export interface MyRoleAssignment {
+  id: string;
+  roleId: string;
+  roleCode: string;
+  roleName: string;
+  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeOrganizationUnitId: string | null;
+  scopeOrganizationUnitName: string | null;
+  scopeCustomerId: string | null;
+  scopeCustomerName: string | null;
+}
+
 export interface AssignRoleInput {
   userId: string;
   roleId: string;
@@ -95,6 +111,9 @@ export interface RbacRepository {
   /** Only authorization-effective assignments. Administrative reconciliation
    * uses listAdminUserAccess so retained unavailable rows remain visible. */
   getAssignments(userId: string): Promise<UserRoleAssignment[]>;
+  /** Same rows as `getAssignments`, plus role/scope display names, for the
+   * caller's own post-login context picker. */
+  getMyAssignmentsWithScopeNames(userId: string): Promise<MyRoleAssignment[]>;
   findRoleByCode(tenantId: string, code: string): Promise<Role | null>;
   assignRole(input: AssignRoleInput, createdBy: string | null): Promise<UserRoleAssignment>;
 

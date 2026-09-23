@@ -221,17 +221,10 @@ async function main() {
   // it is all rows created for THIS demo tenant against the Product Core
   // catalog seeded by the migration.
 
-  // Module Activation: activate "customer_complaint" for this tenant only.
-  const complaintModule = (
-    await pool.query(`SELECT id FROM modules WHERE code = 'customer_complaint'`)
-  ).rows[0];
-  if (complaintModule) {
-    await pool.query(
-      `INSERT INTO tenant_module_activations (tenant_id, module_id, is_active)
-       VALUES ($1, $2, true)`,
-      [tenant.id, complaintModule.id],
-    );
-  }
+  // Note: Module Activation is not seeded by default. Use the API
+  // (PUT /config/modules/<code> with {"isActive":true}) after a seed to
+  // activate modules on demand. This allows clean DB state and explicit
+  // per-session activation without durability gaps.
 
   // Feature Flag: set a tenant-wide value, then override it at Site A to
   // prove Configuration Scope precedence (Organization Unit > Tenant).

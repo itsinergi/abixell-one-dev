@@ -327,6 +327,7 @@ function useNavigationDrawer(
 export function AppShell() {
   const { session, logout } = useAuth();
   const token = session!.accessToken;
+  const assignmentId = session!.assignmentId;
   const location = useLocation();
 
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -362,7 +363,9 @@ export function AppShell() {
     setError(null);
     try {
       // `/me` (permissions + active modules) is required — it drives navigation.
-      const me = await api.me(token);
+      // Passing the chosen assignment narrows the reported set to that work
+      // context; it only ever hides navigation, never grants access.
+      const me = await api.me(token, { assignmentId });
       setPermissions(me.permissions);
       setScopeTypes(me.scopeTypes);
       setActiveModuleCodes(me.activeModuleCodes ?? []);
@@ -381,7 +384,7 @@ export function AppShell() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, assignmentId]);
 
   useEffect(() => {
     load();

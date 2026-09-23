@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.25 |
+| **Roadmap Baseline** | v1.26 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-09-01 |
-| **Measured at** | `master` after Wave A5 delivery & canonical closure · 495/495 full API regression across 35 files · additional focused valuation unit tests 14/14 in `valuation-policy.test.ts` executed separately · 165 application base tables (166 incl. `pgmigrations`; plus 1 public VIEW) · 33 migrations · 128 permissions · head `1781000000000_wave-a5-supply-chain-advanced` |
+| **Last Updated** | 2026-09-15 |
+| **Measured at** | `master @ 7b66c65` — Wave A5.1 completed and merged; handoff-reported 586/586 API tests across 39 files and 149 migration-owned permissions |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.24 |
+| Metric | Value | Δ since v1.25 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
-| **Full Approved Roadmap Progress** | **81.3 %** | +6.2 pts |
+| **Full Approved Roadmap Progress** | **81.3 %** | — 0.0 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -26,7 +26,11 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
 - **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, 11C, 11D, 11E, and 11F are recorded for governance traceability without moving either metric.
 
-The implementation measurement is pinned at `master` post Wave A5 delivery and canonical closure: 495/495 full API regression runs across 35 files, plus an additional focused valuation unit suite with 14/14 tests in `valuation-policy.test.ts` executed separately, 165 application base tables (166 including `pgmigrations`, plus one public VIEW), 33 migrations, 128 permissions, and migration head `1781000000000_wave-a5-supply-chain-advanced`. Relative to the recorded v1.24 runtime baseline, the current tree contains 20 additional API-regression tests in `wave-a5-integration.test.ts` (raising the full API regression suite to 495 across 35 files), 14 additional focused valuation unit tests in `valuation-policy.test.ts` executed separately, 24 additional application base tables, 1 additional migration, and 14 additional permissions.
+The current implementation baseline is `master @ 7b66c65`, following Wave A5.1 SCM decomposition. The latest development handoff reports 586/586 API tests across 39 files, 149 migration-owned permissions, 0 blocking boundary findings and 1 expected Manifest advisory; typecheck, production build, PWA validation, all 10 E2E smoke journeys and browser console checks passed; lint reported 0 errors and 45 warnings. These are recorded delivery results from [the latest handoff](../handoff.md#3-verification-results), not tests rerun during this documentation reconciliation.
+
+Wave A5.1 separates Warehouse Management (36 tables, 12 domain services, `/wms/*`) and Procurement Management (12 tables, 5 domain services, `/procurement/*`), with shared master-data ports, accounting-event ports, legacy route compatibility and frontend response normalization. These domain ownership counts are not a fresh count of the complete live database. The previous 165-table measurement belongs to Wave A5, not this baseline. Repository migration inventory is recorded in the roadmap; applied database state was not remeasured.
+
+**Reconciliation rule:** the handoff is the latest development record, but its v1.19 / 51.0% headline is stale relative to completed Waves A1–A5 in canonical v1.25. This update advances documentation to v1.26 without rolling back earned progress: Core remains 174/174 (100.0%), Advanced 113/179 (63.1%), and Full 287/353 (81.3%). A5.1 earns no additional roadmap weight. Its delivery evidence does not authorize Wave A6 or other pending work.
 
 Wave A5 delivers 22 weighted Advanced points across 6 completed capability groups:
 1. **Multi-warehouse, Storage Topology, Batch & Serial Tracking** (`SCM-ADV-001/002/003`, 5 pts): Hierarchical warehouses and location bins, batch/lot tracking with manufacturing/expiry dates and quarantine status, individual item serial tracking with warranty periods and movement audit.
@@ -166,6 +170,7 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 | PACK-001…004, SO-ADV-002…005, AST-ADV-001…007 | Wave A3 (revised); migration `1779000000000`; `wave-a3-integration.test.ts` (29); full test suite (442) across 32 files |
 | HR-ADV-001…009 | Wave A4; migration `1780000000000`; `payroll-policy.test.ts` (7) & `wave-a4-integration.test.ts` (26); full test suite (475) across 34 files |
 | SCM-ADV-001…008 | Wave A5; migration `1781000000000`; `wave-a5-integration.test.ts` (20) within the 495/495 full API regression across 35 files, plus separate focused valuation unit tests `valuation-policy.test.ts` (14/14) executed outside that full API regression |
+| SCM bounded-context decomposition | Wave A5.1 (unweighted); commits `5642284` through `7b66c65`; migrations `1782000000000`, `1783000000000`, `1784000000000`; explicit WMS and Procurement modules, canonical routes, compatibility shim, ports and frontend normalization; latest handoff reports 586/586 API tests across 39 files and 149 migration-owned permissions |
 
 ## 6. Pending roadmap units
 
@@ -173,9 +178,16 @@ All Advanced units except the delivered Survey-to-Action units (2), Wave A1 unit
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Wave A1, weighted Advanced Wave A2, weighted Advanced Wave A3 (revised), weighted Advanced Wave A4, and weighted Advanced Wave A5 are closed; all Core Product Readiness units and all Wave A1/A2/A3/A4/A5 units are complete.
+**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Waves A1–A5, and unweighted Wave A5.1 are closed. All Core Product Readiness units and all weighted Wave A1–A5 units are complete.
+
+Wave A5.1 is also **COMPLETED and MERGED** at `7b66c65`. No phase is active. Waves A6–A8, Phase 11G and deferred `SO-ADV-006` still require separate Founder authorization.
 
 ## 8. Progress change log
+
+### v1.26 — 2026-09-15: Wave A5.1 reconciliation
+
+Unweighted closure of accounting-readiness receiving/reversals and SCM decomposition into WMS and Procurement. Delivery source: [handoff](../handoff.md), sections 2–4; implementation commit `7b66c65`. Reported validation: 586/586 API tests, 39 files, 149 migration-owned permissions, 0 boundary blockers and 1 advisory, typecheck/build/PWA/E2E PASS, lint 0 errors and 45 warnings, browser console 0 errors. Core 100.0% and Full 81.3% remain unchanged; prior history below is preserved. No fresh live database count or runtime rerun is claimed. The handoff's v1.19/51.0% metadata is superseded by this reconciliation, not adopted as a progress regression.
+
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|

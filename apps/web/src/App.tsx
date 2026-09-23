@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "./shell/layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
+import { RoleSiteSelectionPage } from "./pages/RoleSiteSelectionPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ComplaintsListPage } from "./pages/complaints/ComplaintsListPage";
@@ -93,6 +94,10 @@ export default function App() {
           outside authentication and the internal workspace shell. */}
       <Route path="/public/surveys/:token" element={<PublicSurveyPage />} />
       <Route element={<ProtectedLayout />}>
+        {/* Post-login work-context picker — authenticated but deliberately
+            outside the shell: the shell's navigation is what the choice
+            shapes, so it cannot wrap the screen that makes the choice. */}
+        <Route path="/select-workspace" element={<RoleSiteSelectionPage />} />
         <Route path="/" element={<AppShell />}>
           <Route index element={<OverviewPage />} />
           <Route path="complaints" element={<ComplaintsListPage />} />

@@ -1,36 +1,51 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, type TenantSelectionRequired } from "../lib/api";
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [tenantCode, setTenantCode] = useState("demo-gs");
-  const [email, setEmail] = useState("admin@demo.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Set once the password verifies against more than one tenant: the form is
+  // replaced by a tenant list, and picking one re-submits the same
+  // credentials with that tenant. No credential is issued before this point.
+  const [tenantChoice, setTenantChoice] = useState<TenantSelectionRequired["tenants"] | null>(
+    null,
+  );
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function submit(tenantId?: string) {
     setError(null);
     setLoading(true);
     try {
-      const result = await api.login({ tenantCode, email, password });
+      const result = await api.login({ email, password, ...(tenantId ? { tenantId } : {}) });
+      if (result.status === "tenant_selection_required") {
+        setTenantChoice(result.tenants);
+        return;
+      }
       login({
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
         userId: result.userId,
         tenantId: result.tenantId,
-        tenantCode,
+        tenantCode: result.tenantCode,
       });
-      navigate("/");
+      // Always route through the role & site picker, even for a single
+      // assignment — the user's chosen work context is what shapes the shell.
+      navigate("/select-workspace", { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    void submit();
   }
 
   return (
@@ -44,53 +59,74 @@ export function LoginPage() {
           <p className="text-sm text-slate-500">Sign in to continue</p>
         </div>
 
-        <label className="block text-sm">
-          Tenant code
-          <input
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
-            value={tenantCode}
-            onChange={(e) => setTenantCode(e.target.value)}
-            required
-          />
-        </label>
+        {tenantChoice ? (
+          <fieldset disabled={loading} className="space-y-3">
+            <legend className="text-sm text-slate-600">
+              This email is registered in more than one organization. Choose one to continue.
+            </legend>
+            {tenantChoice.map((tenant) => (
+              <button
+                key={tenant.tenantId}
+                type="button"
+                onClick={() => void submit(tenant.tenantId)}
+                className="flex w-full items-center justify-between rounded border border-slate-300 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                <span className="font-medium text-slate-900">{tenant.tenantName}</span>
+                <span className="text-xs text-slate-500">{tenant.tenantCode}</span>
+              </button>
+            ))}
+          </fieldset>
+        ) : (
+          <>
+            <label className="block text-sm">
+              Email
+              <input
+                type="email"
+                autoComplete="username"
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </label>
 
-        <label className="block text-sm">
-          Email
-          <input
-            type="email"
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
-
-        <label className="block text-sm">
-          Password
-          <input
-            type="password"
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
+            <label className="block text-sm">
+              Password
+              <input
+                type="password"
+                autoComplete="current-password"
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </label>
+          </>
+        )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
-
-        <p className="text-xs text-slate-400">
-          Checkpoint 0B demo accounts (after <code>npm run seed -w apps/api</code>):
-          admin@demo.local / Admin12345! (tenant-wide) or supervisor@demo.local /
-          Supervisor12345! (Site A scope only, read-only).
-        </p>
+        {tenantChoice ? (
+          <button
+            type="button"
+            onClick={() => {
+              setTenantChoice(null);
+              setError(null);
+            }}
+            disabled={loading}
+            className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+          >
+            Use a different email
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        )}
       </form>
     </div>
   );

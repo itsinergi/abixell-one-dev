@@ -1,4 +1,7 @@
-import type { UserRepository } from "../../domain/identity/user.entity.js";
+import type {
+  UpdateUserProfileInput,
+  UserRepository,
+} from "../../domain/identity/user.entity.js";
 import type { RbacRepository } from "../../domain/rbac/rbac.entity.js";
 import type { CustomerRepository } from "../../domain/customer/customer.entity.js";
 import type { AuditService } from "../audit/audit.service.js";
@@ -114,5 +117,39 @@ export class UserService {
   async listForTenant(actor: ActorContext) {
     await this.rbac.requirePermission(actor.userId, "user.read");
     return this.repo.listByTenant(actor.tenantId);
+  }
+
+  async updateProfile(
+    actor: ActorContext,
+    id: string,
+    input: { fullName?: string; email?: string; password?: string },
+  ) {
+    const update: UpdateUserProfileInput = {};
+    if (input.fullName !== undefined) {
+      await this.rbac.requirePermission(actor.userId, "user.update");
+      update.fullName = input.fullName;
+    }
+    if (input.email !== undefined) {
+      await this.rbac.requirePermission(actor.userId, "user.email.update");
+      update.email = input.email;
+    }
+    if (input.password !== undefined) {
+      await this.rbac.requirePermission(actor.userId, "user.password.reset");
+      update.passwordHash = await hashPassword(input.password);
+    }
+    return this.repo.updateProfile(id, update, actor);
+  }
+
+  async setActive(actor: ActorContext, id: string, isActive: boolean) {
+    await this.rbac.requirePermission(
+      actor.userId,
+      isActive ? "user.activate" : "user.deactivate",
+    );
+    return this.repo.setActive(id, isActive, actor);
+  }
+
+  async softDelete(actor: ActorContext, id: string) {
+    await this.rbac.requirePermission(actor.userId, "user.delete");
+    return this.repo.softDelete(id, actor);
   }
 }

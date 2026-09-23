@@ -16,6 +16,10 @@ interface Session {
   userId: string;
   tenantId: string;
   tenantCode: string;
+  /** The role+scope pair chosen on the post-login selection screen. Set
+   * after login, before entering the workspace; absent on a session that
+   * has not yet passed through the picker. */
+  assignmentId?: string;
 }
 
 interface AuthContextValue {
@@ -27,6 +31,10 @@ interface AuthContextValue {
    * flash through the login page on every page reload. */
   initializing: boolean;
   login: (session: Session) => void;
+  /** Patch the current session in place (state + storage) — used by the
+   * role & site selection screen to record the chosen work context without
+   * re-running the login handshake. */
+  updateSession: (patch: Partial<Session>) => void;
   logout: () => void;
 }
 
@@ -90,6 +98,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     persistSession(s);
   }, []);
 
+  const updateSession = useCallback((patch: Partial<Session>) => {
+    setSession((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      persistSession(next);
+      return next;
+    });
+  }, []);
+
   const logout = useCallback(() => {
     const current = session;
     setSession(null);
@@ -150,8 +167,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ session, initializing, login, logout }),
-    [session, initializing, login, logout],
+    () => ({ session, initializing, login, updateSession, logout }),
+    [session, initializing, login, updateSession, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,4 +1,4 @@
-import type { Pool, QueryResultRow } from "pg";
+import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type {
   ConditionExpression,
   DemoTransaction,
@@ -22,6 +22,38 @@ import type {
   WorkflowVersion,
 } from "../../../domain/workflow/workflow.entity.js";
 import { NotFoundError } from "../../../domain/shared-kernel/errors.js";
+
+// The invariant guarded here ("no pending specific_user assignment may
+// outlive its assignee's activation") lives on the user row, so this locks
+// that row only. It deliberately skips the tenant lock inGovernedTransaction
+// takes, which would serialize every write in the tenant behind ordinary
+// workflow traffic. The lock set is a strict subset of that protocol's
+// (tenant -> user), so the two can never deadlock against each other.
+async function withLockedUser<T>(
+  pool: Pool,
+  tenantId: string,
+  userId: string,
+  run: (client: PoolClient, user: { status: string; deleted_at: Date | null }) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query<{ status: string; deleted_at: Date | null }>(
+      `SELECT status, deleted_at FROM users
+        WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+      [userId, tenantId],
+    );
+    if (!locked.rows[0]) throw new NotFoundError("User", userId);
+    const result = await run(client, locked.rows[0]);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 export class PgWorkflowRepository implements WorkflowRepository {
   constructor(private readonly pool: Pool) {}
@@ -418,23 +450,46 @@ export class PgWorkflowRepository implements WorkflowRepository {
     assignedUserId: string | null;
     dueAt: Date | null;
   }): Promise<WorkflowInstanceAssignment> {
-    const result = await this.pool.query(
-      `INSERT INTO workflow_instance_assignments
-         (workflow_instance_id, step_id, assignment_type, assigned_role_code,
-          assigned_organization_unit_id, assigned_user_id, due_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        input.workflowInstanceId,
-        input.stepId,
-        input.assignmentType,
-        input.assignedRoleCode,
-        input.assignedOrganizationUnitId,
-        input.assignedUserId,
-        input.dueAt,
-      ],
+    const insert = async (client: Pool | PoolClient) => {
+      const result = await client.query(
+        `INSERT INTO workflow_instance_assignments
+           (workflow_instance_id, step_id, assignment_type, assigned_role_code,
+            assigned_organization_unit_id, assigned_user_id, due_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          input.workflowInstanceId,
+          input.stepId,
+          input.assignmentType,
+          input.assignedRoleCode,
+          input.assignedOrganizationUnitId,
+          input.assignedUserId,
+          input.dueAt,
+        ],
+      );
+      return mapAssignment(result.rows[0]);
+    };
+
+    if (input.assignmentType !== "specific_user" || !input.assignedUserId) {
+      return insert(this.pool);
+    }
+
+    const userId = input.assignedUserId;
+
+    const instance = await this.pool.query<{ tenant_id: string }>(
+      `SELECT tenant_id FROM workflow_instances WHERE id = $1`,
+      [input.workflowInstanceId],
     );
-    return mapAssignment(result.rows[0]);
+    if (!instance.rows[0]) {
+      throw new NotFoundError("WorkflowInstance", input.workflowInstanceId);
+    }
+
+    return withLockedUser(this.pool, instance.rows[0].tenant_id, userId, async (client, user) => {
+      if (user.status !== "active" || user.deleted_at !== null) {
+        throw new NotFoundError("User", userId);
+      }
+      return insert(client);
+    });
   }
 
   async findAssignmentById(id: string): Promise<WorkflowInstanceAssignment | null> {
@@ -523,22 +578,37 @@ export class PgWorkflowRepository implements WorkflowRepository {
       comment?: string | null;
     },
   ): Promise<WorkflowInstanceAssignment> {
-    const result = await this.pool.query(
-      `UPDATE workflow_instance_assignments
-          SET status = $2, decided_by = $3, decided_at = $4, decision_action_code = $5, comment = $6
-        WHERE id = $1
-        RETURNING *`,
-      [
-        id,
-        fields.status,
-        fields.decidedBy ?? null,
-        fields.decidedAt ?? null,
-        fields.decisionActionCode ?? null,
-        fields.comment ?? null,
-      ],
+    const assignment = await this.pool.query<{ tenant_id: string; assigned_user_id: string | null }>(
+      `SELECT wi.tenant_id, wia.assigned_user_id
+         FROM workflow_instance_assignments wia
+         JOIN workflow_instances wi ON wi.id = wia.workflow_instance_id
+        WHERE wia.id = $1`,
+      [id],
     );
-    if (!result.rows[0]) throw new NotFoundError("WorkflowInstanceAssignment", id);
-    return mapAssignment(result.rows[0]);
+    if (!assignment.rows[0]) throw new NotFoundError("WorkflowInstanceAssignment", id);
+
+    const update = async (client: Pool | PoolClient) => {
+      const result = await client.query(
+        `UPDATE workflow_instance_assignments
+            SET status = $2, decided_by = $3, decided_at = $4, decision_action_code = $5, comment = $6
+          WHERE id = $1
+          RETURNING *`,
+        [
+          id,
+          fields.status,
+          fields.decidedBy ?? null,
+          fields.decidedAt ?? null,
+          fields.decisionActionCode ?? null,
+          fields.comment ?? null,
+        ],
+      );
+      if (!result.rows[0]) throw new NotFoundError("WorkflowInstanceAssignment", id);
+      return mapAssignment(result.rows[0]);
+    };
+
+    const assignedUserId = assignment.rows[0].assigned_user_id;
+    if (assignedUserId === null) return update(this.pool);
+    return withLockedUser(this.pool, assignment.rows[0].tenant_id, assignedUserId, (client) => update(client));
   }
 
   // --- History ---------------------------------------------------------------

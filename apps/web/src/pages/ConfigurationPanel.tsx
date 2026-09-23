@@ -1,383 +1,193 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, ApiError } from "../lib/api";
-
-/**
- * Checkpoint 0C — Configuration & Metadata panel.
- *
- * Proves, from the UI down to PostgreSQL, that Module Activation, Feature
- * Flags (with Configuration Scope precedence), Terminology, Reference Data,
- * and Numbering are genuine Tenant Configuration — nothing here is
- * hardcoded per client. Every label rendered from `terminology` comes from
- * the Configuration API, not from a literal string in this component.
- */
+import { OverlayDialog } from "../shell/components/OverlayDialog";
+import { Alert, Button, Card, DataTable, Field, Input, Select, type Column } from "../shell/components/ui";
+import { useAdminResource } from "./admin/console/useAdminResource";
+import { AdminSectionState } from "./admin/console/AdminSection";
 
 type OrgUnitOption = { id: string; name: string };
+type ModuleRow = Awaited<ReturnType<typeof api.configModules>>[number];
+type FlagRow = Awaited<ReturnType<typeof api.configFeatureFlags>>[number];
+type TermRow = Awaited<ReturnType<typeof api.configTerminology>>[number];
+type RefItemRow = Awaited<ReturnType<typeof api.configReferenceDataItems>>[number];
+type Dialog =
+  | { kind: "module"; row: ModuleRow; next: boolean }
+  | { kind: "flag"; row: FlagRow; scopeId: string | null; scopeName: string; next: boolean }
+  | { kind: "terminology"; row: TermRow }
+  | { kind: "reference"; typeCode: string; typeName: string }
+  | { kind: "number" };
+const numberingCode = "demo_ticket";
 
-type ModuleRow = {
-  moduleId: string;
-  moduleCode: string;
-  moduleName: string;
-  isActive: boolean;
-};
+function Panel({ title, count, action, children }: { title: string; count?: number; action?: ReactNode; children: ReactNode }) {
+  return <Card className="w-full"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="text-base font-semibold text-slate-900">{title}{count !== undefined && <span className="ml-2 text-sm font-normal text-slate-500">({count})</span>}</h3>{action}</div>{children}</Card>;
+}
 
-type FlagRow = { code: string; name: string; isEnabled: boolean; source: string };
-
-type TermRow = { code: string; defaultLabel: string; value: string; isOverridden: boolean };
-
-type RefTypeRow = { code: string; name: string };
-type RefItemRow = { id: string; code: string; label: string; sortOrder: number; isActive: boolean };
-
-export function ConfigurationPanel({
-  token,
-  orgUnits,
-  canManage,
-  onMessage,
-}: {
+export function ConfigurationPanel({ token, orgUnits, canManage, onMessage }: {
   token: string;
   orgUnits: OrgUnitOption[];
   canManage: boolean;
   onMessage: (m: { type: "error" | "success"; text: string }) => void;
 }) {
-  const [modules, setModules] = useState<ModuleRow[]>([]);
-  const [flags, setFlags] = useState<FlagRow[]>([]);
-  const [scopeOrgUnitId, setScopeOrgUnitId] = useState<string>("");
-  const [effectiveFlags, setEffectiveFlags] = useState<FlagRow[]>([]);
-  const [terminology, setTerminology] = useState<TermRow[]>([]);
-  const [refTypes, setRefTypes] = useState<RefTypeRow[]>([]);
-  const [refTypeCode, setRefTypeCode] = useState<string>("");
-  const [refItems, setRefItems] = useState<RefItemRow[]>([]);
-  const [numberingCode] = useState("demo_ticket");
-  const [numberingInfo, setNumberingInfo] = useState<{ pattern: string; currentSequence: number } | null>(
-    null,
-  );
-  const [lastGeneratedNumber, setLastGeneratedNumber] = useState<string | null>(null);
+  const modules = useAdminResource(api.configModules, "Failed to load modules.");
+  const flags = useAdminResource(api.configFeatureFlags, "Failed to load feature flags.");
+  const terms = useAdminResource(api.configTerminology, "Failed to load terminology.");
+  const types = useAdminResource(api.configReferenceDataTypes, "Failed to load reference types.");
+  const numbering = useAdminResource((accessToken) => api.configNumberingSequence(accessToken, numberingCode), "Failed to load numbering.");
+  const [scopeId, setScopeId] = useState("");
+  const [typeCode, setTypeCode] = useState("");
+  const selectedScope = orgUnits.find((unit) => unit.id === scopeId) ?? orgUnits[0];
+  const selectedType = types.data?.find((type) => type.code === typeCode) ?? types.data?.[0];
+  const effectiveScopeId = selectedScope?.id ?? "";
+  const effectiveTypeCode = selectedType?.code ?? "";
 
-  const orgUnitLabel =
-    terminology.find((t) => t.code === "organization_unit.label")?.value ?? "Organization Unit";
+  // Keyed loaders invalidate results when the selected scope/type changes.
+  const effectiveLoader = useCallback(() => effectiveScopeId ? api.configEffectiveFeatureFlags(token, effectiveScopeId) : Promise.resolve([]), [token, effectiveScopeId]);
+  const referenceLoader = useCallback(() => effectiveTypeCode ? api.configReferenceDataItems(token, effectiveTypeCode) : Promise.resolve([]), [token, effectiveTypeCode]);
+  const effective = useScopedResource(effectiveLoader);
+  const items = useScopedResource(referenceLoader);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [pending, setPending] = useState(false);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [lastNumber, setLastNumber] = useState<string | null>(null);
+  const busy = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const lifetime = useRef(0);
+  useEffect(() => { lifetime.current += 1; return () => { lifetime.current += 1; }; }, [token]);
 
-  const refresh = useCallback(async () => {
+  function open(next: Dialog, trigger: HTMLButtonElement) {
+    if (busy.current) return;
+    triggerRef.current = trigger;
+    setDialogError(null);
+    setDialog(next);
+  }
+  function close() {
+    if (busy.current) return;
+    setDialog(null);
+    setDialogError(null);
+  }
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!dialog || !canManage || busy.current) return;
+    const data = new FormData(event.currentTarget);
+    const target = dialog;
+    const generation = lifetime.current;
+    busy.current = true;
+    setPending(true);
+    setDialogError(null);
     try {
-      const [moduleList, flagList, termList, refTypeList] = await Promise.all([
-        api.configModules(token),
-        api.configFeatureFlags(token),
-        api.configTerminology(token),
-        api.configReferenceDataTypes(token),
-      ]);
-      setModules(moduleList);
-      setFlags(flagList);
-      setTerminology(termList);
-      setRefTypes(refTypeList);
-      if (!refTypeCode && refTypeList.length > 0) {
-        setRefTypeCode(refTypeList[0].code);
+      switch (target.kind) {
+        case "module":
+          await api.setConfigModuleActivation(token, target.row.moduleCode, target.next);
+          break;
+        case "flag":
+          await api.setConfigFeatureFlag(token, target.row.code, { isEnabled: target.next, scopeType: target.scopeId ? "organization_unit" : "tenant", ...(target.scopeId ? { scopeOrganizationUnitId: target.scopeId } : {}) });
+          break;
+        case "terminology":
+          await api.setConfigTerminology(token, target.row.code, String(data.get("value")));
+          break;
+        case "reference":
+          await api.createConfigReferenceDataItem(token, target.typeCode, { code: String(data.get("code")), label: String(data.get("label")), sortOrder: data.get("sortOrder") ? Number(data.get("sortOrder")) : undefined });
+          break;
+        case "number": {
+          const result = await api.generateConfigNumber(token, numberingCode);
+          if (generation === lifetime.current) setLastNumber(result.number);
+          break;
+        }
       }
-    } catch (err) {
-      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to load Configuration" });
+    } catch (error) {
+      if (generation === lifetime.current) setDialogError(error instanceof ApiError ? error.message : "The change could not be saved.");
+      return;
+    } finally {
+      busy.current = false;
+      if (generation === lifetime.current) setPending(false);
     }
-    try {
-      const info = await api.configNumberingSequence(token, numberingCode);
-      setNumberingInfo(info);
-    } catch {
-      setNumberingInfo(null);
-    }
-  }, [token, onMessage]);
+    if (generation !== lifetime.current) return;
+    setDialog(null);
+    onMessage({ type: "success", text: target.kind === "number" ? "Number generated." : "Configuration saved." });
+    // Each reload reports its own failure, independently of the successful write.
+    if (target.kind === "module") void modules.reload();
+    if (target.kind === "flag") { void flags.reload(); effective.reload(); }
+    if (target.kind === "terminology") void terms.reload();
+    if (target.kind === "reference") items.reload();
+    if (target.kind === "number") void numbering.reload();
+  }
 
+  const moduleColumns: Column<ModuleRow>[] = [
+    { header: "Module", mobileRole: "title", cell: (row) => row.moduleName },
+    { header: "Code", cell: (row) => row.moduleCode },
+    { header: "Status", mobileRole: "status", cell: (row) => row.isActive ? "Active" : "Inactive" },
+    { header: "Action", cell: (row) => canManage && <Button variant="ghost" onClick={(event) => open({ kind: "module", row, next: !row.isActive }, event.currentTarget)}>{row.isActive ? "Deactivate" : "Activate"}</Button> },
+  ];
+  const flagColumns: Column<FlagRow>[] = [
+    { header: "Feature", mobileRole: "title", cell: (row) => row.name },
+    { header: "Tenant value", cell: (row) => row.isEnabled ? "Enabled" : "Disabled" },
+    { header: "Effective at unit", cell: (row) => { const value = effective.data?.find((flag) => flag.code === row.code); return effective.loading ? "Loading…" : value ? `${value.isEnabled ? "Enabled" : "Disabled"} (${value.source})` : "Unavailable"; } },
+    { header: "Actions", cell: (row) => {
+      const value = effective.data?.find((flag) => flag.code === row.code);
+      return canManage && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={(event) => open({ kind: "flag", row, scopeId: null, scopeName: "Entire tenant", next: !row.isEnabled }, event.currentTarget)}>{row.isEnabled ? "Disable" : "Enable"} tenant-wide</Button><Button variant="secondary" disabled={!selectedScope || !value || effective.loading || !!effective.error} onClick={(event) => { if (selectedScope && value) open({ kind: "flag", row, scopeId: selectedScope.id, scopeName: selectedScope.name, next: !value.isEnabled }, event.currentTarget); }}>Override at unit</Button></div>;
+    } },
+  ];
+  const termColumns: Column<TermRow>[] = [
+    { header: "Key", mobileRole: "title", cell: (row) => row.code },
+    { header: "Label", cell: (row) => row.value },
+    { header: "Source", cell: (row) => row.isOverridden ? "Tenant override" : "Default" },
+    { header: "Action", cell: (row) => canManage && <Button variant="ghost" onClick={(event) => open({ kind: "terminology", row }, event.currentTarget)}>Edit label</Button> },
+  ];
+  const itemColumns: Column<RefItemRow>[] = [
+    { header: "Label", mobileRole: "title", cell: (row) => row.label },
+    { header: "Code", cell: (row) => row.code },
+    { header: "Sort order", cell: (row) => row.sortOrder },
+    { header: "Status", mobileRole: "status", cell: (row) => row.isActive ? "Active" : "Inactive" },
+  ];
+  const title = dialog?.kind === "module" ? `${dialog.next ? "Activate" : "Deactivate"} module` : dialog?.kind === "flag" ? "Override feature flag" : dialog?.kind === "terminology" ? "Edit terminology" : dialog?.kind === "reference" ? "Create reference item" : "Generate next number";
+
+  return <section className="space-y-6" aria-label="Configuration and Metadata">
+    <h2 className="text-lg font-semibold text-slate-900">Configuration &amp; Metadata</h2>
+    <Panel title="Modules" count={modules.data?.length}><AdminSectionState {...modules} onRetry={modules.reload}><DataTable columns={moduleColumns} rows={modules.data ?? []} keyOf={(row) => row.moduleId} /></AdminSectionState></Panel>
+    <Panel title="Feature Flags" count={flags.data?.length}>
+      <Field label="Organization unit scope" hint="Unit overrides take precedence over tenant values."><Select value={effectiveScopeId} onChange={(event) => setScopeId(event.target.value)} disabled={!orgUnits.length}><option value="">Select a unit</option>{orgUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</Select></Field>
+      {effective.error && <Alert tone="error">{effective.error}</Alert>}
+      <AdminSectionState {...flags} onRetry={flags.reload}><DataTable columns={flagColumns} rows={flags.data ?? []} keyOf={(row) => row.code} /></AdminSectionState>
+    </Panel>
+    <Panel title="Terminology" count={terms.data?.length}><AdminSectionState {...terms} onRetry={terms.reload}><DataTable columns={termColumns} rows={terms.data ?? []} keyOf={(row) => row.code} /></AdminSectionState></Panel>
+    <Panel title="Reference Data" count={items.data?.length} action={canManage && selectedType && types.status === "ready" && <Button onClick={(event) => open({ kind: "reference", typeCode: selectedType.code, typeName: selectedType.name }, event.currentTarget)}>Create Item</Button>}>
+      <AdminSectionState {...types} onRetry={types.reload}><Field label="Reference type"><Select value={effectiveTypeCode} onChange={(event) => setTypeCode(event.target.value)} disabled={!types.data?.length}><option value="">Select a type</option>{types.data?.map((type) => <option key={type.code} value={type.code}>{type.name}</option>)}</Select></Field></AdminSectionState>
+      <AdminSectionState {...items} onRetry={items.reload}><DataTable columns={itemColumns} rows={items.data ?? []} keyOf={(row) => row.id} /></AdminSectionState>
+      <p className="mt-3 text-xs text-slate-500">This general panel supports reading and creating items. Item lifecycle changes are not available here.</p>
+    </Panel>
+    <Panel title="Numbering" action={canManage && <Button onClick={(event) => open({ kind: "number" }, event.currentTarget)}>Generate next number</Button>}>
+      <AdminSectionState {...numbering} onRetry={numbering.reload}>{numbering.data && <dl className="space-y-2 break-words text-sm"><dt>Sequence</dt><dd>{numberingCode}</dd><dt>Pattern</dt><dd>{numbering.data.pattern}</dd><dt>Current sequence</dt><dd>{numbering.data.currentSequence}</dd></dl>}</AdminSectionState>
+      {lastNumber && <p className="mt-3 text-sm">Last generated: {lastNumber}</p>}
+      <p className="mt-3 text-xs text-slate-500">Generate advances the stored sequence; it is not a preview. Sequence editing is not available.</p>
+    </Panel>
+    <OverlayDialog open={!!dialog} title={title} pending={pending} onClose={close} restoreFocusRef={triggerRef} footer={<><Button variant="secondary" disabled={pending} onClick={close}>Cancel</Button><Button type="submit" form="configuration-change" disabled={pending || !canManage}>{pending ? "Saving…" : dialog?.kind === "reference" ? "Create" : dialog?.kind === "number" ? "Generate" : "Confirm"}</Button></>}>
+      {dialogError && <Alert tone="error">{dialogError}</Alert>}
+      <form id="configuration-change" onSubmit={submit} className="space-y-4">
+        <fieldset disabled={pending} className="space-y-4">
+          {dialog?.kind === "module" && <p>{dialog.next ? "Activate" : "Deactivate"} {dialog.row.moduleName} for this tenant?</p>}
+          {dialog?.kind === "flag" && <><p>Set <strong>{dialog.row.name}</strong> to <strong>{dialog.next ? "Enabled" : "Disabled"}</strong>?</p><p>Scope: {dialog.scopeName}</p><p className="text-sm text-slate-500">Existing unit overrides take precedence over tenant values.</p></>}
+          {dialog?.kind === "terminology" && <><p className="break-words text-sm">Key: {dialog.row.code}</p><Field label="Label" required><Input name="value" required defaultValue={dialog.row.value} /></Field></>}
+          {dialog?.kind === "reference" && <><p>Type: {dialog.typeName}</p><Field label="Code" required><Input name="code" required /></Field><Field label="Label" required><Input name="label" required /></Field><Field label="Sort order"><Input name="sortOrder" type="number" step="1" /></Field></>}
+          {dialog?.kind === "number" && <p>Generate a number for {numberingCode}? This advances the stored sequence and cannot be undone here.</p>}
+        </fieldset>
+      </form>
+    </OverlayDialog>
+  </section>;
+}
+
+function useScopedResource<T>(load: () => Promise<T>) {
+  const [state, setState] = useState<{ data: T | null; loading: boolean; error: string | null; denied: boolean; sessionExpired: boolean }>({ data: null, loading: true, error: null, denied: false, sessionExpired: false });
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    if (orgUnits.length > 0 && !scopeOrgUnitId) {
-      setScopeOrgUnitId(orgUnits[0].id);
-    }
-  }, [orgUnits, scopeOrgUnitId]);
-
-  useEffect(() => {
-    if (!scopeOrgUnitId) return;
-    api
-      .configEffectiveFeatureFlags(token, scopeOrgUnitId)
-      .then(setEffectiveFlags)
-      .catch((err) =>
-        onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to resolve flags" }),
-      );
-  }, [token, scopeOrgUnitId, onMessage]);
-
-  useEffect(() => {
-    if (!refTypeCode) return;
-    api
-      .configReferenceDataItems(token, refTypeCode)
-      .then(setRefItems)
-      .catch(() => setRefItems([]));
-  }, [token, refTypeCode]);
-
-  async function toggleModule(code: string, next: boolean) {
-    try {
-      await api.setConfigModuleActivation(token, code, next);
-      onMessage({ type: "success", text: `Module '${code}' ${next ? "activated" : "deactivated"}.` });
-      refresh();
-    } catch (err) {
-      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
-    }
-  }
-
-  async function toggleTenantFlag(code: string, next: boolean) {
-    try {
-      await api.setConfigFeatureFlag(token, code, { isEnabled: next, scopeType: "tenant" });
-      onMessage({ type: "success", text: `Feature Flag '${code}' set to ${next} (tenant scope).` });
-      refresh();
-      if (scopeOrgUnitId) {
-        api.configEffectiveFeatureFlags(token, scopeOrgUnitId).then(setEffectiveFlags);
-      }
-    } catch (err) {
-      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
-    }
-  }
-
-  async function overrideAtScope(code: string, next: boolean) {
-    if (!scopeOrgUnitId) return;
-    try {
-      await api.setConfigFeatureFlag(token, code, {
-        isEnabled: next,
-        scopeType: "organization_unit",
-        scopeOrganizationUnitId: scopeOrgUnitId,
-      });
-      onMessage({
-        type: "success",
-        text: `Feature Flag '${code}' overridden to ${next} for the selected ${orgUnitLabel}.`,
-      });
-      const [flagList, effective] = await Promise.all([
-        api.configFeatureFlags(token),
-        api.configEffectiveFeatureFlags(token, scopeOrgUnitId),
-      ]);
-      setFlags(flagList);
-      setEffectiveFlags(effective);
-    } catch (err) {
-      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
-    }
-  }
-
-  async function handleTerminologySubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const code = String(form.get("code"));
-    const value = String(form.get("value"));
-    try {
-      await api.setConfigTerminology(token, code, value);
-      onMessage({ type: "success", text: `Terminology '${code}' updated.` });
-      e.currentTarget.reset();
-      refresh();
-    } catch (err) {
-      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
-    }
-  }
-
-  async function handleCreateRefItem(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    try {
-      await api.createConfigReferenceDataItem(token, refTypeCode, {
-        code: String(form.get("code")),
-        label: String(form.get("label")),
-        sortOrder: form.get("sortOrder") ? Number(form.get("sortOrder")) : undefined,
-      });
-      onMessage({ type: "success", text: "Reference Data item created." });
-      e.currentTarget.reset();
-      const items = await api.configReferenceDataItems(token, refTypeCode);
-      setRefItems(items);
-    } catch (err) {
-      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
-    }
-  }
-
-  async function handleGenerateNumber() {
-    try {
-      const result = await api.generateConfigNumber(token, numberingCode);
-      setLastGeneratedNumber(result.number);
-      const info = await api.configNumberingSequence(token, numberingCode);
-      setNumberingInfo(info);
-    } catch (err) {
-      onMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed" });
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <h2 className="text-sm font-semibold text-slate-500">
-        Configuration &amp; Metadata
-      </h2>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Module Activation */}
-        <section className="rounded border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold">Module Activation</h3>
-          <ul className="space-y-1 text-sm text-slate-700">
-            {modules.map((m) => (
-              <li key={m.moduleId} className="flex items-center justify-between">
-                <span>{m.moduleName}</span>
-                <button
-                  disabled={!canManage}
-                  onClick={() => toggleModule(m.moduleCode, !m.isActive)}
-                  className={`rounded px-2 py-0.5 text-xs ${
-                    m.isActive ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
-                  } disabled:opacity-50`}
-                >
-                  {m.isActive ? "Active" : "Inactive"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Feature Flags + Configuration Scope */}
-        <section className="rounded border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold">
-            Feature Flags — Configuration Scope
-          </h3>
-          <select
-            value={scopeOrgUnitId}
-            onChange={(e) => setScopeOrgUnitId(e.target.value)}
-            className="mb-2 w-full rounded border border-slate-300 px-2 py-1 text-xs"
-          >
-            {orgUnits.map((u) => (
-              <option key={u.id} value={u.id}>
-                Resolve as: {u.name}
-              </option>
-            ))}
-          </select>
-          <ul className="space-y-2 text-sm text-slate-700">
-            {flags.map((f) => {
-              const effective = effectiveFlags.find((e) => e.code === f.code);
-              return (
-                <li key={f.code} className="border-b border-slate-100 pb-2">
-                  <div className="flex items-center justify-between">
-                    <span>{f.name}</span>
-                    <span className="text-xs text-slate-400">catalog: {String(f.isEnabled)}</span>
-                  </div>
-                  {effective && (
-                    <div className="mt-1 text-xs">
-                      Effective at selected unit:{" "}
-                      <span className="font-medium">{String(effective.isEnabled)}</span>{" "}
-                      <span className="text-slate-400">(source: {effective.source})</span>
-                    </div>
-                  )}
-                  {canManage && (
-                    <div className="mt-1 flex gap-2">
-                      <button
-                        onClick={() => toggleTenantFlag(f.code, !f.isEnabled)}
-                        className="rounded bg-slate-100 px-2 py-0.5 text-xs"
-                      >
-                        Set tenant-wide {String(!f.isEnabled)}
-                      </button>
-                      <button
-                        onClick={() => overrideAtScope(f.code, !(effective?.isEnabled ?? false))}
-                        className="rounded bg-slate-900 px-2 py-0.5 text-xs text-white"
-                      >
-                        Override at selected unit: {String(!(effective?.isEnabled ?? false))}
-                      </button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        {/* Terminology */}
-        <section className="rounded border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold">Terminology</h3>
-          <ul className="space-y-1 text-sm text-slate-700">
-            {terminology.map((t) => (
-              <li key={t.code} className="flex items-center justify-between">
-                <span>
-                  {t.code} — <span className="font-medium">{t.value}</span>
-                </span>
-                {t.isOverridden && <span className="text-xs text-slate-400">(overridden)</span>}
-              </li>
-            ))}
-          </ul>
-          {canManage && (
-            <form onSubmit={handleTerminologySubmit} className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-              <div className="text-xs font-medium text-slate-500">Override a Terminology key</div>
-              <select name="code" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm">
-                {terminology.map((t) => (
-                  <option key={t.code} value={t.code}>
-                    {t.code}
-                  </option>
-                ))}
-              </select>
-              <input
-                name="value"
-                placeholder="New label"
-                required
-                className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
-              />
-              <button type="submit" className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
-                Save
-              </button>
-            </form>
-          )}
-        </section>
-
-        {/* Reference Data */}
-        <section className="rounded border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold">Reference Data</h3>
-          <select
-            value={refTypeCode}
-            onChange={(e) => setRefTypeCode(e.target.value)}
-            className="mb-2 w-full rounded border border-slate-300 px-2 py-1 text-xs"
-          >
-            {refTypes.map((t) => (
-              <option key={t.code} value={t.code}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <ul className="space-y-1 text-sm text-slate-700">
-            {refItems.map((item) => (
-              <li key={item.id}>
-                {item.label} <span className="text-xs text-slate-400">({item.code})</span>
-              </li>
-            ))}
-          </ul>
-          {canManage && (
-            <form onSubmit={handleCreateRefItem} className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-              <div className="text-xs font-medium text-slate-500">Add item</div>
-              <input name="code" placeholder="Code" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-              <input name="label" placeholder="Label" required className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-              <input name="sortOrder" type="number" placeholder="Sort order" className="w-full rounded border border-slate-300 px-2 py-1 text-sm" />
-              <button type="submit" className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
-                Create
-              </button>
-            </form>
-          )}
-        </section>
-
-        {/* Numbering */}
-        <section className="rounded border border-slate-200 bg-white p-4 lg:col-span-2">
-          <h3 className="mb-2 text-sm font-semibold">Numbering</h3>
-          {numberingInfo ? (
-            <div className="text-sm text-slate-700">
-              Sequence <span className="font-mono">{numberingCode}</span> — pattern{" "}
-              <span className="font-mono">{numberingInfo.pattern}</span>, current sequence:{" "}
-              {numberingInfo.currentSequence}
-            </div>
-          ) : (
-            <div className="text-sm text-slate-400">No sequence yet.</div>
-          )}
-          {canManage && (
-            <button
-              onClick={handleGenerateNumber}
-              className="mt-2 rounded bg-slate-900 px-3 py-1 text-sm text-white"
-            >
-              Generate next number
-            </button>
-          )}
-          {lastGeneratedNumber && (
-            <div className="mt-2 text-sm">
-              Last generated: <span className="font-mono font-medium">{lastGeneratedNumber}</span>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
+    let current = true;
+    setState({ data: null, loading: true, error: null, denied: false, sessionExpired: false });
+    load().then((data) => { if (current) setState({ data, loading: false, error: null, denied: false, sessionExpired: false }); }).catch((error: unknown) => {
+      if (!current) return;
+      const denied = error instanceof ApiError && error.status === 403;
+      const sessionExpired = error instanceof ApiError && error.status === 401;
+      setState({ data: null, loading: false, denied, sessionExpired, error: sessionExpired ? "Your session has expired. Sign in again." : denied ? "You do not have permission to read this resource." : error instanceof ApiError ? error.message : "Failed to load configuration." });
+    });
+    return () => { current = false; };
+  }, [load, revision]);
+  return { ...state, reload: () => setRevision((value) => value + 1) };
 }

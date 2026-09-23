@@ -18,6 +18,12 @@ const createReferenceDataItemSchema = z.object({
   sortOrder: z.number().int().optional(),
 });
 
+const setReferenceDataItemActiveSchema = z.object({ isActive: z.boolean() });
+const referenceDataItemParamsSchema = z.object({
+  typeCode: z.string().min(1),
+  itemId: z.string().uuid(),
+});
+
 const createNumberingSequenceSchema = z.object({ pattern: z.string().min(1) });
 
 export function registerConfigurationRoutes(app: FastifyInstance, container: Container) {
@@ -144,6 +150,18 @@ export function registerConfigurationRoutes(app: FastifyInstance, container: Con
         body,
       );
       return reply.status(201).send(created);
+    },
+  );
+
+  app.patch(
+    "/config/reference-data/:typeCode/:itemId",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { typeCode, itemId } = referenceDataItemParamsSchema.parse(request.params);
+      const { isActive } = setReferenceDataItemActiveSchema.parse(request.body);
+      return reply.send(await container.configuration.setReferenceDataItemActive(
+        request.actor!, typeCode, itemId, isActive,
+      ));
     },
   );
 
