@@ -507,7 +507,7 @@ export function DashboardPage() {
 
   // Helpers for OU detail
   const getOuParentName = (ou: OrgUnit): string => {
-    if (!ou.parentId) return "(root)";
+    if (!ou.parentId) return "Central";
     const parent = orgUnits.data.find((u) => u.id === ou.parentId);
     return parent?.name ?? "(unavailable organization unit)";
   };
@@ -1012,7 +1012,7 @@ export function DashboardPage() {
 
             <Field label="Parent organization unit" hint="Leave as root if this unit sits at the top of the hierarchy.">
               <Select name="parentId" disabled={ouCreatePending}>
-                <option value="">(root — no parent)</option>
+                <option value="">Central (no parent)</option>
                 {orgUnits.data.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
