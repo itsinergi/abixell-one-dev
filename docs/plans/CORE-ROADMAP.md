@@ -454,6 +454,8 @@ Yang sudah ada saat ini hanya satu tabel kecil, `metadata_registry`, berisi 4 ba
 | Menu navigasi | **Tidak dipindah di Epic 2.** Menu yang ada tetap di kode; menu dari kamus dikerjakan di Epic 3. |
 | Halaman & aksi lama | **Didaftarkan otomatis** sebagai gelombang awal. Yang belum terdaftar ditandai `belum terdaftar` dan **tidak bisa dikunci role** sampai didaftarkan — tidak ada yang diam-diam lolos. |
 | Aktifkan rancangan | **Satu super admin cukup**, tetapi setiap pengaktifan tercatat: siapa, kapan, dari versi mana ke versi mana. Perubahan yang menyentuh akses ditolak dari jalur ini. |
+| Operator aturan terstruktur | **9 operator, terkunci di Gelombang 1:** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `notIn`, `isNull`. `in` dan `notIn` menerima nilai berupa array; `isNull` menerima boolean (`true` = field harus kosong/absen). Operator lain tidak diterima. Ingat: menambah operator di gelombang berikutnya berarti setiap versi aturan yang sudah tersimpan harus dibaca ulang dengan himpunan yang lebih luas, jadi himpunan ini dilebarkan **dengan sengaja**, bukan dengan menambah operator sambil jalan. |
+| Wizard | **Cukup penanda pada Tab.** `app_tabs.tab_type` sudah bernilai `fields`, `cards`, atau `wizard`; **tidak ada** objek kamus `app_wizards` terpisah. Isi wizard tetap card berurutan (`sequence_no` 10, 20, 30) di dalam Tab itu, dan wizard tetap berada di dalam Tab seperti keputusan di atas. |
 
 #### Prinsip yang mengikat Epic 2
 
@@ -563,8 +565,8 @@ Tidak ada penimpa yang diam-diam tertimpa. Tidak ada definisi lama yang diam-dia
 
 | # | Item | Perlu |
 |---|---|---|
-| 1 | Bentuk tepat aturan terstruktur: berapa operator yang didukung di gelombang 1? | Keputusan saat eksekusi gelombang 1 |
-| 2 | Apakah wizard perlu objek kamus sendiri, atau cukup ditandai pada Tab? | Keputusan saat eksekusi gelombang 1 |
+| 1 | Bentuk tepat aturan terstruktur: berapa operator yang didukung di gelombang 1? | **Ditutup 2026-09-26 — terkunci 9 operator** (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `notIn`, `isNull`; lihat tabel keputusan). Validator route dan evaluator sudah mengimplementasikannya (`field-rule-evaluator.ts`). |
+| 2 | Apakah wizard perlu objek kamus sendiri, atau cukup ditandai pada Tab? | **Ditutup 2026-09-26 — cukup penanda pada Tab** (`app_tabs.tab_type = 'wizard'`; tidak ada objek `app_wizards`; lihat tabel keputusan). |
 | 3 | Halaman admin/konfigurasi mana yang pertama memakai generator terbatas? | **Diteruskan Epic 13 (§4.13 open item #5):** dijawab saat Wave 13.5 — bukan di Epic 4. Urutan generator dikunci §4.13 keputusan #12: layar baca-saja dulu (Wave 13.4), form admin menyusul (Wave 13.5). |
 | 4 | Apakah penimpa tenant ikut masuk versioning, atau cukup audit? | Keputusan saat eksekusi gelombang 2 |
 
