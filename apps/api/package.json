@@ -15,7 +15,8 @@
     "migrate:down": "node-pg-migrate down -m migrations --envPath .env",
     "migrate:create": "node-pg-migrate create -m migrations",
     "seed": "tsx scripts/seed.ts",
-    "sync-permissions": "tsx scripts/sync-role-permissions.ts"
+    "sync-permissions": "tsx scripts/sync-role-permissions.ts",
+    "cleanup:test-tenants": "tsx scripts/cleanup-test-tenants.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
