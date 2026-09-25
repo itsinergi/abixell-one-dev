@@ -97,8 +97,26 @@ export interface AppApiResource {
   updatedAt: Date;
 }
 
-/** Structured rule operator: no DSL, only typed operators */
-export type RuleOperator = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in";
+/** Structured rule operator: no DSL, only typed operators.
+ *
+ * Locked Wave 1 set (9). `in`/`notIn` compare membership in an array value;
+ * `isNull` tests presence, so its value is a boolean (`true` = the field must
+ * be absent/null, `false` = it must be present). No other value shape is
+ * meaningful for those three and the validator enforces that.
+ *
+ * Wave 3 may extend this set, but extending it means every rule version
+ * already stored has to be re-read under the wider set — so the set is
+ * widened deliberately, not by adding an operator inline. */
+export type RuleOperator =
+  | "eq"
+  | "neq"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "in"
+  | "notIn"
+  | "isNull";
 
 /** Single rule: field + operator + value */
 export interface FieldRuleCondition {

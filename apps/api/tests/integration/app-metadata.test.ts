@@ -349,6 +349,72 @@ describe("Epic 2 Wave 1 — Application Dictionary & Metadata Engine", () => {
       expect(body.isCurrent).toBe(false);
     });
 
+    it("should accept all nine locked operators with valid value shapes", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/app-metadata/tables/${tableId}/rule-versions`,
+        headers: authHeader(adminToken),
+        payload: {
+          rules: [
+            {
+              field: "reviewState",
+              ruleType: "readonly",
+              conditions: {
+                rules: [
+                  { field: "text", operator: "eq", value: "x" },
+                  { field: "text", operator: "neq", value: "y" },
+                  { field: "number", operator: "gt", value: 1 },
+                  { field: "number", operator: "gte", value: 1 },
+                  { field: "number", operator: "lt", value: 9 },
+                  { field: "number", operator: "lte", value: 9 },
+                  { field: "state", operator: "in", value: ["draft", "review"] },
+                  { field: "state", operator: "notIn", value: ["final"] },
+                  { field: "approver", operator: "isNull", value: true },
+                ],
+                combinator: "AND",
+              },
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+    });
+
+    it("should reject invalid shapes for notIn and isNull", async () => {
+      const invalidNotIn = await app.inject({
+        method: "POST",
+        url: `/app-metadata/tables/${tableId}/rule-versions`,
+        headers: authHeader(adminToken),
+        payload: {
+          rules: [
+            {
+              field: "reviewState",
+              ruleType: "readonly",
+              conditions: { rules: [{ field: "state", operator: "notIn", value: "final" }], combinator: "AND" },
+            },
+          ],
+        },
+      });
+      expect(invalidNotIn.statusCode).toBe(400);
+
+      const invalidIsNull = await app.inject({
+        method: "POST",
+        url: `/app-metadata/tables/${tableId}/rule-versions`,
+        headers: authHeader(adminToken),
+        payload: {
+          rules: [
+            {
+              field: "reviewState",
+              ruleType: "readonly",
+              conditions: { rules: [{ field: "approver", operator: "isNull", value: "true" }], combinator: "AND" },
+            },
+          ],
+        },
+      });
+      expect(invalidIsNull.statusCode).toBe(400);
+    });
+
     it("should publish a rule version and retire previous current", async () => {
       // Create first version
       const createResponse1 = await app.inject({

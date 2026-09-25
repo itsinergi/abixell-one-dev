@@ -34,11 +34,24 @@ const createTabSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-const ruleConditionSchema = z.object({
-  field: z.string().min(1),
-  operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "in"]),
-  value: z.unknown().refine((v) => v !== undefined, "value is required"),
-});
+const ruleConditionSchema = z
+  .object({
+    field: z.string().min(1),
+    operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "in", "notIn", "isNull"]),
+    value: z.unknown().refine((v) => v !== undefined, "value is required"),
+  })
+  // Operator-specific value shapes: membership operators take an array,
+  // isNull takes a boolean. Every other operator accepts any defined value.
+  .superRefine((condition, ctx) => {
+    if (condition.operator === "in" || condition.operator === "notIn") {
+      if (!Array.isArray(condition.value)) {
+        ctx.addIssue({ code: "custom", message: `${condition.operator} requires an array value` });
+      }
+    }
+    if (condition.operator === "isNull" && typeof condition.value !== "boolean") {
+      ctx.addIssue({ code: "custom", message: "isNull requires a boolean value" });
+    }
+  });
 
 const rulesDefinitionSchema = z.object({
   rules: z.array(
