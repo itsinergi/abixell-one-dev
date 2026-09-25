@@ -140,6 +140,9 @@ export const api = {
       token,
     }),
 
+  updateTenantName: (token: string, payload: { name: string }) =>
+    request<{ name: string }>("/tenants/me", { method: "PATCH", token, body: payload }),
+
   organizationUnits: (token: string) =>
     request<
       Array<{

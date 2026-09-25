@@ -50,6 +50,7 @@ interface ShellContextValue {
   activeModuleCodes: string[];
   userId: string;
   tenantName: string;
+  setTenantName: (name: string) => void;
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
@@ -63,7 +64,7 @@ export function useShell(): ShellContextValue {
 
 function scopeSummary(scopeTypes: string[]): string {
   const labels = [
-    scopeTypes.includes("tenant") ? "Tenant-wide scope" : null,
+    scopeTypes.includes("tenant") ? "All Project" : null,
     scopeTypes.includes("organization_unit") ? "Organization unit scope" : null,
     scopeTypes.includes("customer") ? "Customer scope" : null,
   ].filter((label): label is string => label !== null);
@@ -341,6 +342,7 @@ export function AppShell() {
   const [navigationQuery, setNavigationQuery] = useState("");
   const drawerRef = useRef<HTMLElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const loadGeneration = useRef(0);
   const online = useOnlineStatus();
 
   const closeMobileNavigation = useCallback(() => setMobileNavOpen(false), []);
@@ -359,6 +361,9 @@ export function AppShell() {
   );
 
   const load = useCallback(async () => {
+    // Guard against a slower earlier load resolving after a newer one (token
+    // or assignment changed mid-flight) and overwriting the newer context.
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
@@ -366,6 +371,7 @@ export function AppShell() {
       // Passing the chosen assignment narrows the reported set to that work
       // context; it only ever hides navigation, never grants access.
       const me = await api.me(token, { assignmentId });
+      if (loadGeneration.current !== generation) return;
       setPermissions(me.permissions);
       setScopeTypes(me.scopeTypes);
       setActiveModuleCodes(me.activeModuleCodes ?? []);
@@ -375,14 +381,17 @@ export function AppShell() {
       // neutral title (ADR-0003) instead.
       try {
         const tenant = await api.tenant(token);
+        if (loadGeneration.current !== generation) return;
         setTenantName(tenant.name);
       } catch {
+        if (loadGeneration.current !== generation) return;
         setTenantName("");
       }
     } catch (err) {
+      if (loadGeneration.current !== generation) return;
       setError(err instanceof ApiError ? err.message : "Failed to load your workspace");
     } finally {
-      setLoading(false);
+      if (loadGeneration.current === generation) setLoading(false);
     }
   }, [token, assignmentId]);
 
@@ -545,7 +554,9 @@ export function AppShell() {
                 <div className="truncate text-xs text-slate-500">{currentScopeSummary}</div>
               </div>
               <div className="hidden min-w-0 lg:block">
-                <div className="text-sm font-medium text-slate-700">Workspace</div>
+                <div className="truncate text-sm font-medium text-slate-700" title={workspaceTitle}>
+                  {workspaceTitle}
+                </div>
                 <div className="text-xs text-slate-500">{currentScopeSummary}</div>
               </div>
             </div>
@@ -588,6 +599,7 @@ export function AppShell() {
                   activeModuleCodes,
                   userId: session!.userId,
                   tenantName,
+                  setTenantName,
                 }}
               >
                 <Outlet />

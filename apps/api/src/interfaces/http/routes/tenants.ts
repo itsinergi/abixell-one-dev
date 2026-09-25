@@ -7,6 +7,12 @@ const createTenantSchema = z.object({
   name: z.string().min(2),
 });
 
+const updateTenantNameSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+  })
+  .strict();
+
 export function registerTenantRoutes(app: FastifyInstance, container: Container) {
   // Platform-bootstrap only — see ADR-0004. Not an RBAC-guarded endpoint.
   app.post("/tenants", { preHandler: app.requireBootstrapKey }, async (request, reply) => {
@@ -21,6 +27,12 @@ export function registerTenantRoutes(app: FastifyInstance, container: Container)
     const actor = request.actor!;
     await container.rbac.requirePermission(actor.userId, "tenant.read");
     const tenant = await container.tenant.getById(actor.tenantId);
+    return reply.send(tenant);
+  });
+
+  app.patch("/tenants/me", { preHandler: app.authenticate }, async (request, reply) => {
+    const body = updateTenantNameSchema.parse(request.body);
+    const tenant = await container.tenant.updateName(request.actor!, body);
     return reply.send(tenant);
   });
 }

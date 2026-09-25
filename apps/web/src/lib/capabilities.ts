@@ -112,6 +112,7 @@ export const PERMISSIONS = {
   reportingBiManage: "reporting.bi.manage",
   reportingPredictiveRead: "reporting.predictive.read",
   adminConsoleRead: "admin.console.read",
+  tenantUpdate: "tenant.update",
   salesRead: "sales.read",
   salesManage: "sales.manage",
   salesApprove: "sales.approve",
@@ -650,11 +651,14 @@ export const NAV_SECTIONS: NavSection[] = [
     group: "governance",
     path: "/admin",
     label: "Admin Console",
-    // Phase 11C: a consolidated READ-ONLY view of the administration areas.
-    // Internal-only — an external Customer User has no business here even if
-    // the permission were somehow granted. The backend enforces both the
-    // entry permission and a per-section permission regardless.
-    description: "A read-only overview of users, roles, access, modules, workflows, and activity.",
+    // Phase 11C consolidated the administration areas here, and most of it is
+    // read only. Two things are not: governed user-role assignment changes
+    // (Phase 11F) and the tenant-name update, both behind their own
+    // permissions. Internal-only — an external Customer User has no business
+    // here even if the permission were somehow granted. The backend enforces
+    // both the entry permission and a per-section permission regardless.
+    description:
+      "An overview of users, roles, access, modules, workflows, and activity. Changes are limited to separately permissioned controls.",
     requiresAnyOf: [PERMISSIONS.adminConsoleRead],
     requiresInternal: true,
   },

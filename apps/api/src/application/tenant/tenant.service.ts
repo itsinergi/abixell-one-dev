@@ -1,6 +1,12 @@
-import type { CreateTenantInput, TenantRepository } from "../../domain/tenant/tenant.entity.js";
+import type {
+  CreateTenantInput,
+  TenantRepository,
+  UpdateTenantInput,
+} from "../../domain/tenant/tenant.entity.js";
+import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 import { ConflictError, NotFoundError } from "../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { RbacService } from "../rbac/rbac.service.js";
 
 /**
  * Tenant creation is a platform-bootstrap operation, not an RBAC-guarded
@@ -14,6 +20,7 @@ export class TenantService {
   constructor(
     private readonly repo: TenantRepository,
     private readonly audit: AuditService,
+    private readonly rbac: RbacService,
   ) {}
 
   async create(input: CreateTenantInput): Promise<ReturnType<TenantRepository["create"]>> {
@@ -37,6 +44,11 @@ export class TenantService {
     const tenant = await this.repo.findById(id);
     if (!tenant) throw new NotFoundError("Tenant", id);
     return tenant;
+  }
+
+  async updateName(actor: ActorContext, input: UpdateTenantInput) {
+    await this.rbac.requireTenantScopedPermission(actor.tenantId, actor.userId, "tenant.update");
+    return this.repo.updateName(input, actor);
   }
 
   list() {

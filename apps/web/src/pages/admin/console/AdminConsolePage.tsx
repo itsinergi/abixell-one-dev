@@ -3,22 +3,30 @@
  *
  * A tenant-local consolidation of platform administration: who exists, what
  * access is defined, which modules and workflows are configured, and what
- * happened recently. Phase 11F adds only governed user-role assignment changes;
- * every other section remains read only. This is not the Platform Architect or
- * Builder Console and provides no metadata, schema, query, or package tools.
+ * happened recently. Phase 11F adds governed user-role assignment changes and
+ * this page permits a separately-gated tenant-name update. Other sections
+ * remain read only. This is not the Platform Architect or Builder Console and
+ * provides no metadata, schema, query, or package tools.
  */
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useShell } from "../../../shell/layout/AppShell";
+import { useAuth } from "../../../auth/AuthContext";
+import { api, ApiError, type AdminCountSection, type AdminOverview } from "../../../lib/api";
 import { isInternalScope, PERMISSIONS } from "../../../lib/capabilities";
-import { api, type AdminCountSection, type AdminOverview } from "../../../lib/api";
+import { OverlayDialog } from "../../../shell/components/OverlayDialog";
 import {
+  Alert,
   Badge,
+  Button,
   Card,
   EmptyState,
+  Field,
+  Input,
   PageHeader,
   PermissionDeniedState,
   StatusPill,
 } from "../../../shell/components/ui";
+import { useShell } from "../../../shell/layout/AppShell";
 import { AdminSectionState } from "./AdminSection";
 import { useAdminResource, type AdminResourceState } from "./useAdminResource";
 import { AdminRolesView } from "./AdminRolesView";
@@ -78,6 +86,7 @@ export function AdminConsolePage() {
 }
 
 function AdminConsoleContent() {
+  const { permissions, scopeTypes } = useShell();
   const [searchParams] = useSearchParams();
   const requestedSection = searchParams.get("section");
   const activeSection: SectionKey = isSectionKey(requestedSection) ? requestedSection : "overview";
@@ -91,7 +100,12 @@ function AdminConsoleContent() {
       <PageHeader
         title="Admin Console"
         subtitle="Tenant-local administration summaries with section-specific permission checks."
-        actions={overview.data?.capabilities.readOnly ? <Badge>Read only</Badge> : undefined}
+        actions={
+          overview.data?.capabilities.readOnly &&
+          !(permissions.includes(PERMISSIONS.tenantUpdate) && scopeTypes.includes("tenant")) ? (
+            <Badge>Read only</Badge>
+          ) : undefined
+        }
       />
 
       <nav
@@ -136,8 +150,55 @@ function AdminConsoleContent() {
 }
 
 function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOverview> }) {
-  const { tenantName, scopeTypes } = useShell();
+  const { session } = useAuth();
+  const token = session!.accessToken;
+  const assignmentId = session!.assignmentId;
+  const { tenantName, setTenantName, permissions, scopeTypes } = useShell();
   const { data, loading, error, denied, sessionExpired, reload } = resource;
+  const [editOpen, setEditOpen] = useState(false);
+  const [editPending, setEditPending] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState<string | null>(null);
+  const editFormRef = useRef<HTMLFormElement>(null);
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const lifetime = useRef(0);
+  const canEditTenant = permissions.includes(PERMISSIONS.tenantUpdate) && scopeTypes.includes("tenant") && Boolean(tenantName);
+
+  useEffect(() => () => {
+    lifetime.current += 1;
+  }, [token, assignmentId]);
+
+  const closeEdit = useCallback(() => {
+    if (editPending) return;
+    setEditOpen(false);
+    setEditError(null);
+  }, [editPending]);
+
+  const handleEdit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (editPending || !editFormRef.current || !canEditTenant) return;
+    const name = String(new FormData(editFormRef.current).get("name") ?? "").trim();
+    if (name.length < 2 || name.length > 120) {
+      setEditError("Tenant name must be between 2 and 120 characters.");
+      return;
+    }
+    const life = lifetime.current;
+    setEditError(null);
+    setEditMessage(null);
+    setEditPending(true);
+    try {
+      const updated = await api.updateTenantName(token, { name });
+      if (lifetime.current !== life) return;
+      setTenantName(updated.name);
+      setEditMessage("Tenant name updated.");
+      setEditOpen(false);
+    } catch (err) {
+      if (lifetime.current !== life) return;
+      setEditError(err instanceof ApiError ? err.message : "Failed to update tenant name");
+    } finally {
+      if (lifetime.current === life) setEditPending(false);
+    }
+  }, [token, canEditTenant, editPending, setTenantName]);
   const scopeLabels = [
     scopeTypes.includes("tenant") ? "Tenant-wide" : null,
     scopeTypes.includes("organization_unit") ? "Organization unit" : null,
@@ -219,23 +280,79 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
               permission catalogue is fixed platform metadata and contains no tenant, user, or business
               record data.
             </p>
+            {canEditTenant && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={(event) => {
+                    editTriggerRef.current = event.currentTarget;
+                    setEditError(null);
+                    setEditMessage(null);
+                    setEditOpen(true);
+                  }}
+                >
+                  Edit tenant name
+                </Button>
+                {editMessage && <Alert tone="success">{editMessage}</Alert>}
+              </div>
+            )}
           </Card>
 
           <Card className="mt-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">
-                  {data.capabilities.readOnly ? "Read-only access" : "Governed user access management"}
+                  {data.capabilities.userRoleManage ? "Governed user access management" : "Assignment access status"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   {data.capabilities.userRoleManage
                     ? "You can add or remove user role assignments through mandatory review and server-authoritative reload. Roles, permission definitions, modules, and workflows remain read only."
-                    : "You can inspect administration summaries and access assignments, but cannot change them."}
+                    : "You can inspect administration summaries and access assignments. Changes remain limited to separately permissioned controls, such as tenant name when available."}
                 </p>
               </div>
               <Badge>{data.capabilities.userRoleManage ? "User access manager" : "API declared"}</Badge>
             </div>
           </Card>
+
+          {canEditTenant && (
+            <OverlayDialog
+              open={editOpen}
+              title="Edit tenant name"
+              description="Update the name shown for this tenant. Its code, status, and business data will not change."
+              pending={editPending}
+              onClose={closeEdit}
+              restoreFocusRef={editTriggerRef}
+              footer={
+                <>
+                  <Button variant="secondary" onClick={closeEdit} disabled={editPending}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => editFormRef.current?.requestSubmit()}
+                    disabled={editPending}
+                  >
+                    {editPending ? "Saving…" : "Save changes"}
+                  </Button>
+                </>
+              }
+            >
+              <form ref={editFormRef} onSubmit={handleEdit} className="space-y-4">
+                {editError && <Alert tone="error">{editError}</Alert>}
+                <Field label="Tenant name" required hint="Between 2 and 120 characters.">
+                  <Input
+                    name="name"
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    defaultValue={tenantName}
+                    disabled={editPending}
+                    autoComplete="organization"
+                  />
+                </Field>
+              </form>
+            </OverlayDialog>
+          )}
         </>
       )}
     </AdminSectionState>

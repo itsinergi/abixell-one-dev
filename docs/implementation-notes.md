@@ -2072,3 +2072,130 @@ AP/AR, aging, budgeting, cost centres, bank reconciliation, tax, fixed-asset
 accounting, depreciation, consolidation, P&L, balance sheet, statutory
 cash-flow statement, financial closing, fiscal period lock, multi-ledger, and
 every FX conversion/revaluation concept.
+
+## 2026-09-23 — Tenant Name Update (Admin Console)
+
+**Requests:** "cara mengubah tenant bagaimana?" → product path chosen (endpoint +
+permission-gated Administration control + audit), not manual SQL.
+**Baseline moved:** 161 → 162 permissions · 37 → 38 migrations · 609 → 619 API tests (1 new file)
+**Scope boundary:** tenant *code*, tenant status, cross-tenant transfer, and tenant
+switching are deliberately out of scope. Finance Wave A6 untouched.
+
+### What it does
+Renames the Tenant the authenticated actor already belongs to. Nothing else.
+There is no route that accepts an arbitrary tenant id: the target is always
+`actor.tenantId`, derived from the verified token, so the cross-tenant question
+never arises.
+
+### Shape
+```text
+apps/api/src/interfaces/http/routes/tenants.ts                  PATCH /tenants/me
+apps/api/src/domain/tenant/tenant.entity.ts                     UpdateTenantInput
+apps/api/src/application/tenant/tenant.service.ts               use case + RBAC precheck
+apps/api/src/infrastructure/persistence/repositories/tenant.repository.pg.ts
+apps/api/migrations/1786000000000_tenant-name-update-permission.cjs
+apps/api/tests/integration/tenant-update.test.ts                (10 tests)
+apps/web/src/pages/admin/console/AdminConsolePage.tsx           dialog in "Tenant and data scope"
+```
+
+Body is `{ name }` only, `.strict()`, trimmed, 2–120 chars. Extra keys —
+including `tenantId`, `code`, and `status` — are a 400, so the body can never
+widen the mutation. Response is the canonical `{ name }`.
+
+### Permission and scope must share one assignment
+`tenant.update` is granted only when the permission **and** tenant scope sit on
+the same effective assignment (`scope_type='tenant'` with both scope columns
+null). Three rejected shapes are covered by tests, not by convention: no
+permission, an organization-unit-scoped permission, and permission and tenant
+scope split across two *different* assignments. The last one is the interesting
+case — a naive `EXISTS` per condition would allow it; `hasTenantScopedPermission`
+grouping by assignment does not.
+
+### Two checks, same transaction
+The service prechecks, then the repository re-checks inside
+`inGovernedTransaction` before touching the row. The precheck is the friendly
+error; the in-transaction check is the one that actually holds when a permission
+is revoked between the two. A test calls the repository directly with an
+OU-scoped actor, bypassing the service, and it still refuses.
+
+The rename and its single `tenant.updated` audit event commit together on the
+same client: lock the tenant row, read the previous name, update `name` /
+`updated_by` / `updated_at`, insert one audit row with metadata
+`{ previousName, name }`, then commit. A forced audit-insert failure rolls the
+rename back — proven with a namespaced trigger on `audit_log` that is dropped
+in a `finally`, and the test asserts the row count is unchanged rather than
+zero, because earlier cases in the same file legitimately wrote events.
+
+### Verified
+- API: 619/619 tests, 42 files, green.
+- Web: typecheck, lint, and build clean (build keeps its pre-existing 886 kB
+  chunk-size warning).
+- Nobody claims a clean run it did not earn: the whole suite was run against a
+  separate database, never `abixell_one_dev`.
+
+### Isolated test database
+The existing Vitest suite shares the dev database and leaves fixtures in it
+(`npm test` currently writes test tenants into `abixell_one_dev` — see the
+technical-debt register). This feature does not run there. It uses a dedicated
+database created **empty** and migrated by `node-pg-migrate` itself:
+
+```bash
+docker exec abixell-dev psql -U abixell -d postgres -c "CREATE DATABASE abixell_one_tenant_update_test;"
+```
+
+```bash
+DATABASE_URL="postgresql://abixell:abixell_dev_password@localhost:5442/abixell_one_tenant_update_test?schema=public" npx vitest run
+```
+
+Note the env precedence: `tests/setup.ts` calls `dotenv.config` *without*
+`override: true`, so a process-level `DATABASE_URL` wins over `.env`. That is
+what makes the override safe — and it also means the override must be present
+or the suite silently targets `abixell_one_dev`. Confirm with
+`SELECT current_database()` before trusting a result.
+
+Do not clone the dev database with `TEMPLATE` (it fails while the dev API holds
+sessions) and do not copy it with `pg_dump --schema-only` (it copies tables but
+not `pgmigrations` rows, so the next `migrate` fails with "already exists").
+Create it empty and let migrations build it.
+
+### Applying to an existing deployment
+Permission migrations are data migrations, so they need the companion sync —
+the same two steps the deployment runbook already sequences as `migrate` then
+one-shot `sync-permissions`:
+
+```bash
+npm run migrate -w apps/api
+```
+
+```bash
+npm run sync-permissions -w apps/api
+```
+
+Both are idempotent. The migration inserts the permission with
+`ON CONFLICT (code) DO NOTHING`, and `down` refuses to delete it while any role
+still references it. The sync adds new permissions to `is_full_access` roles
+only; curated non-full-access roles are untouched and need an explicit grant.
+
+### UI
+**Admin Console → Overview → Tenant and data scope** (`/admin`). The trigger
+appears only with `tenant.update`, tenant scope, and a name that actually
+loaded — the page gate `admin.console.read` still applies above it, and the UI
+gate is a convenience, never the authorization.
+
+On success the header, sidebar, and overview take the name from the response, so
+there is no logout or reload. The dialog reuses `OverlayDialog` (focus trap,
+Escape blocked while pending, focus restored to the trigger). A lifetime ref
+guards against a response from a superseded session or assignment overwriting
+current state. `AppShell`'s context load got the same generation guard, because
+a slower earlier load resolving late could otherwise overwrite newer context.
+
+Copy that had become untrue was corrected: the "Read only" badge is now
+suppressed when the tenant-name control is actually available, and the
+capabilities card no longer claims every section is read only.
+
+### Known limitations
+- Rename only. `code`, `status`, and ownership are unchanged by design.
+- The audit trail records the rename but there is no "revert" action; restoring
+  an old name is just another rename, and both events stay.
+- The dev database reported 36 tenants and 1703 audit rows before and after
+  this work; it was migrated and synced, never reset or reseeded.

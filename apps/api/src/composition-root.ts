@@ -676,7 +676,7 @@ export function buildContainer() {
     rbac,
     eventBus,
     scheduler,
-    tenant: new TenantService(tenantRepo, audit),
+    tenant: new TenantService(tenantRepo, audit, rbac),
     legalEntity: new LegalEntityService(legalEntityRepo, audit, rbac),
     organizationUnit: new OrganizationUnitService(organizationUnitRepo, audit, rbac, rbacRepo),
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
