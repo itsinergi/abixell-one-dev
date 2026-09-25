@@ -16,6 +16,7 @@ import { registerOrganizationUnitRoutes } from "./interfaces/http/routes/organiz
 import { registerUserRoutes } from "./interfaces/http/routes/users.js";
 import { registerAuditRoutes } from "./interfaces/http/routes/audit.js";
 import { registerConfigurationRoutes } from "./interfaces/http/routes/config.js";
+import { registerAppMetadataRoutes } from "./interfaces/http/routes/app-metadata.js";
 import { registerWorkflowRoutes } from "./interfaces/http/routes/workflow.js";
 import { registerNotificationRoutes } from "./interfaces/http/routes/notifications.js";
 import { registerDocumentRoutes } from "./interfaces/http/routes/documents.js";
@@ -144,6 +145,7 @@ export function buildApp(): FastifyInstance {
     registerUserRoutes(scoped, container);
     registerAuditRoutes(scoped, container);
     registerConfigurationRoutes(scoped, container);
+    registerAppMetadataRoutes(scoped, container);
     registerWorkflowRoutes(scoped, container);
     registerNotificationRoutes(scoped, container);
     registerDocumentRoutes(scoped, container);

@@ -6,6 +6,7 @@ import { PgUserRepository } from "./infrastructure/persistence/repositories/user
 import { PgRbacRepository } from "./infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { PgAuditLogRepository } from "./infrastructure/persistence/repositories/audit-log.repository.pg.js";
 import { PgConfigurationRepository } from "./infrastructure/persistence/repositories/configuration.repository.pg.js";
+import { PgAppMetadataRepository } from "./infrastructure/persistence/repositories/app-metadata.repository.pg.js";
 import { PgWorkflowRepository } from "./infrastructure/persistence/repositories/workflow.repository.pg.js";
 import { PgDomainEventRepository } from "./infrastructure/persistence/repositories/domain-event.repository.pg.js";
 import { PgNotificationRepository } from "./infrastructure/persistence/repositories/notification.repository.pg.js";
@@ -36,6 +37,7 @@ import { OrganizationUnitService } from "./application/organization-unit/organiz
 import { UserService } from "./application/identity/user.service.js";
 import { AuthService } from "./application/identity/auth.service.js";
 import { ConfigurationService } from "./application/configuration/configuration.service.js";
+import { AppMetadataService } from "./application/configuration/app-metadata.service.js";
 import { WorkflowService } from "./application/workflow/workflow.service.js";
 import { EventBus } from "./application/event/event-bus.js";
 import { NotificationService } from "./application/notification/notification.service.js";
@@ -134,6 +136,7 @@ export function buildContainer() {
   const rbacRepo = new PgRbacRepository(pool);
   const auditRepo = new PgAuditLogRepository(pool);
   const configurationRepo = new PgConfigurationRepository(pool);
+  const appMetadataRepo = new PgAppMetadataRepository(pool);
   const workflowRepo = new PgWorkflowRepository(pool);
   const domainEventRepo = new PgDomainEventRepository(pool);
   const notificationRepo = new PgNotificationRepository(pool);
@@ -152,6 +155,10 @@ export function buildContainer() {
   const audit = new AuditService(auditRepo);
   const rbac = new RbacService(rbacRepo, organizationUnitRepo);
   const configuration = new ConfigurationService(configurationRepo, audit, rbac);
+  // Epic 2 Wave 1 — Application Dictionary. configurationRepo is reused as the
+  // Schema Registry source so Ajv validation of rule payloads reads the real
+  // metadata_registry row (area='app_field_rules', key='rules_definition').
+  const appMetadata = new AppMetadataService(appMetadataRepo, audit, rbac, configurationRepo);
 
   const eventBus = new EventBus(domainEventRepo, (eventType, error) => {
     console.error(`[EventBus] subscriber for '${eventType}' failed:`, error);
@@ -682,6 +689,7 @@ export function buildContainer() {
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
     configuration,
+    appMetadata,
     workflow,
     notification,
     document,
