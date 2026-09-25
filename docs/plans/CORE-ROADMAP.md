@@ -1,10 +1,9 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.6
+**Versi:** 1.7
 **Tanggal:** 2026-09-25
-**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; customer scope menunggu session terpisah; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6)
+**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; customer scope menunggu session terpisah; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
-**Basis tema:** `D:\RESEARCH AREA\research\acqpro-ui` — diperiksa 2026-09-23, hasil di §9
 
 ---
 
@@ -184,7 +183,7 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 | 10 | Password, Session & User Security | Epic 1, 6 | **Digali 2026-09-25 — detail di §4.10, siap desain setelah Epic 1 dan 6** |
 | 11 | Extension Hooks: Validator, Event, Callout & Process | Epic 2, 7 | **Digali 2026-09-25 — detail di §4.11, siap desain setelah Epic 2 dan 7** |
 | 12 | Reporting, Scheduler & Notification Artifacts | Epic 7, 11 | **Digali 2026-09-25 — detail di §4.12, siap desain setelah Epic 7 dan 11** |
-| 13 | UI/UX Theme System & Generic Rendering | Epic 2, §9 | **Digali 2026-09-25 — detail di §4.13, siap desain setelah Epic 2 + prasyarat §9.1 (lisensi wajib lebih dulu)** |
+| 13 | UI/UX Theme System & Generic Rendering | Epic 2 | **Digali 2026-09-25 — detail di §4.13, siap desain setelah Epic 2; design system dibangun native di dalam repo (keputusan #6 direvisi 2026-09-25)** |
 | 14 | Finance & Accounting Posting | Epic 7 | **Digali 2026-09-25 — detail di §4.14 (kernel posting saja); sisanya Wave A6 sesi terpisah; siap desain setelah Epic 7, 8, 9, 11 + tinjauan akuntan untuk template bagan akun** |
 
 Setiap Epic 2–14 digali lewat wawancara sebelum ditulis detail dan dieksekusi, mengikuti mekanisme yang sama dengan Epic 1.
@@ -3742,7 +3741,7 @@ Epic 12 dianggap selesai jika:
 
 Epic 13 adalah epic yang paling lama ditunda dan paling banyak menerima titipan. Ia muncul di register sejak awal, tetapi selalu ditulis "Belum digali" sementara epic lain menyelesaikan kontraknya. Akibatnya lima epic sudah menyerahkan pekerjaan ke sini dan tidak satu pun punya tempat mendarat.
 
-Epic 2 memberi pijakan kamus: "Epic 1 (akses), Epic 3 (menu), Epic 4 (konfigurasi role), Epic 7 (dokumen), dan Epic 13 (tema) punya pijakan yang sama" (baris 430). Epic 2 juga mengunci batas generator: "**Generator terbatas.** Kamus boleh menghasilkan form sederhana untuk halaman admin/konfigurasi. Halaman transaksi utama tetap ditulis manual di React" (baris 438). Epic 11 menahan UI authoring callout: "kontrak backend-nya dikunci sekarang supaya generator UI Epic 13 tidak perlu membongkar engine" (baris 3233), dengan handoff eksplisit di baris 3394 dan open item #4 di baris 3413. Epic 12 menyerahkan tiga layar: "Halaman laporan, layar monitoring, dan panel preferensi notifikasi memakai theme system & generator UI" (baris 3667). Dan §9 mengunci `acqpro-ui` sebagai package workspace dengan delapan prasyarat perbaikan (baris 3903–3912).
+Epic 2 memberi pijakan kamus: "Epic 1 (akses), Epic 3 (menu), Epic 4 (konfigurasi role), Epic 7 (dokumen), dan Epic 13 (tema) punya pijakan yang sama" (baris 430). Epic 2 juga mengunci batas generator: "**Generator terbatas.** Kamus boleh menghasilkan form sederhana untuk halaman admin/konfigurasi. Halaman transaksi utama tetap ditulis manual di React" (baris 438). Epic 11 menahan UI authoring callout: "kontrak backend-nya dikunci sekarang supaya generator UI Epic 13 tidak perlu membongkar engine" (baris 3233), dengan handoff eksplisit di baris 3394 dan open item #4 di baris 3413. Epic 12 menyerahkan tiga layar: "Halaman laporan, layar monitoring, dan panel preferensi notifikasi memakai theme system & generator UI" (baris 3667). Design system Epic 13 dibangun native di atas komponen Abixell yang sudah ada; tidak ada kode atau paket pihak ketiga yang menjadi sumber implementasi.
 
 Kondisi kode saat ini menjelaskan mengapa penundaan ini punya biaya.
 
@@ -3752,7 +3751,7 @@ Kondisi kode saat ini menjelaskan mengapa penundaan ini punya biaya.
 
 **Celah aksesibilitas terverifikasi.** `Field` (`ui.tsx:193`) membungkus anaknya dalam `<label>` tanpa prop `error`, tanpa `id` yang dihasilkan, tanpa `aria-describedby`, tanpa `aria-invalid`. Galat form karena itu tidak terbaca pembaca layar. Di seluruh 93 berkas `apps/web/src`, `aria-describedby` muncul **tepat sekali** (`OverlayDialog.tsx:138`) dan `aria-invalid` **tepat sekali** (`FinanceTransactionsPage.tsx:212`) — keduanya tidak berpasangan dengan apa pun. `prefers-reduced-motion` nol kemunculan, sementara `animate-spin` dan `transition-*` tersebar tanpa penjaga. Baris kartu `DataTable` (`ui.tsx:281`) memasang `onRowClick` pada `<li>` tanpa `role`, `tabIndex`, atau penangan tombol. Total atribut `aria-`/`role=`: **77 di 21 berkas** — 72 dari 93 berkas nol.
 
-**Dua bahasa warna sudah hidup berdampingan.** `ui.tsx:8-9` menyatakan komponen "reuses the existing Tailwind design language (slate palette, subtle borders, `text-sm` scale)". Tetapi 502 pemanggilan `Field` dan 110 pemanggilan `DataTable` di 52 berkas tersebar di halaman modul yang masing-masing mengulang literalnya sendiri. `forwardRef` nol di seluruh `src`; nol komponen punya prop `size`. Runtime dependency tetap **tiga** (react, react-dom, react-router-dom) — angka yang §9.2 catat sebagai keunggulan dan yang keputusan wawancara ini pertahankan.
+**Dua bahasa warna sudah hidup berdampingan.** `ui.tsx:8-9` menyatakan komponen "reuses the existing Tailwind design language (slate palette, subtle borders, `text-sm` scale)". Tetapi 502 pemanggilan `Field` dan 110 pemanggilan `DataTable` di 52 berkas tersebar di halaman modul yang masing-masing mengulang literalnya sendiri. `forwardRef` nol di seluruh `src`; nol komponen punya prop `size`. Runtime dependency tetap **tiga** (react, react-dom, react-router-dom) — angka yang keputusan wawancara ini pertahankan, dan salah satu alasan paket pihak ketiga ditolak (keputusan #6).
 
 Epic 13 menutup kelima titipan itu dengan satu urutan kerja: **token lebih dulu, karena semua pekerjaan berikutnya menumpang di atasnya.** Mengerjakan komponen atau generator sebelum token berarti menulis ulang keduanya saat bahasa warna berubah.
 
@@ -3772,9 +3771,9 @@ Wawancara Epic 13: 24 pertanyaan, ditambah dua pertanyaan penyelesaian konflik. 
 
 5. **API komponen dinaikkan secara terukur**: `forwardRef` dan prop `size` pada `Button`, tanpa dekomposisi `Card`. Alasan: prop opsional tidak merusak 502 pemanggilan `Field` dan 110 pemanggilan `DataTable`, sedangkan dekomposisi `Card` mengubah setiap pemakaian `Card` yang ada dan nilainya baru terasa setelah theme layer selesai. `forwardRef` dibutuhkan secara teknis oleh pemicu popover, tooltip, dan fokus programatik.
 
-6. **`acqpro-ui` dipangkas ke empat komponen yang §9.4 nilai layak**, sisanya beserta 28 dependency dibuang. Menghindari seluruh persoalan provenance **ditolak** karena membatalkan keputusan §9.1 yang sudah dikunci 2026-09-23. **Peringatan yang mengikat: lisensi harus diselesaikan sebelum kode acqpro masuk repo.** Tanpa berkas `LICENSE`, status penggunaan ulang kode itu belum jelas, dan `git remote` menunjuk repo pihak lain.
+6. **Design system dibangun native di dalam repo; tidak ada kode pihak ketiga yang disalin.** Empat kebutuhan yang riset nilai layak — `Button` dengan matriks varian/ukuran, `Card` yang dapat didekomposisi, `Modal` dengan skala ukuran, dan `Field` dengan perangkaian galat — diimplementasikan langsung di atas komponen Abixell yang sudah ada (`ui.tsx`, `OverlayDialog.tsx`). Mengadopsi paket pihak ketiga **ditolak** karena menyeret sistem token yang bersaing, 28 dependency, dan persoalan provenance ke aplikasi yang sengaja hanya memegang tiga dependency runtime. **Direvisi 2026-09-25:** keputusan awal ("paket dipangkas ke empat komponen") dibatalkan atas permintaan pemilik produk — tidak boleh ada jejak pihak ketiga di dalam repo. Nama paket, kode, dokumentasi, dan strukturnya tidak dipakai sama sekali. Yang bertahan dari riset hanyalah **analisis celah** (apa yang kurang di Abixell), bukan bahannya.
 
-7. **Bahasa warna diganti ke nama semantik** (`bg-surface`, `bg-elevated`, `text-muted`, `border-subtle`), dengan `slate` hanya muncul di definisi token. Literal slate dipertahankan **ditolak** karena membuat branding per tenant tidak mungkin: `bg-slate-900` hardcoded di 73 berkas tidak bisa diubah tenant. Migrasi berjalan **bertahap per gelombang**, tidak sekali jadi. Migrasi semantik hanya di `ui.tsx` dan shell **ditolak** karena meninggalkan dua bahasa yang hidup berdampingan — persis masalah yang §9.2 catat dari acqpro.
+7. **Bahasa warna diganti ke nama semantik** (`bg-surface`, `bg-elevated`, `text-muted`, `border-subtle`), dengan `slate` hanya muncul di definisi token. Literal slate dipertahankan **ditolak** karena membuat branding per tenant tidak mungkin: `bg-slate-900` hardcoded di 73 berkas tidak bisa diubah tenant. Migrasi berjalan **bertahap per gelombang**, tidak sekali jadi. Migrasi semantik hanya di `ui.tsx` dan shell **ditolak** karena meninggalkan dua bahasa yang hidup berdampingan — masalah yang sudah terlihat di basis kode sendiri, tempat 502 pemanggilan `Field` dan 110 pemanggilan `DataTable` masing-masing mengulang literalnya.
 
 8. **Baseline aksesibilitas internal sekarang, naik ke WCAG 2.1 level AA setelah token layer selesai.** Baseline internal berarti: kontras terukur, semua aksi tercapai keyboard, fokus selalu terlihat. **Keputusan operasional: WCAG 2.1 level AA menjadi target Wave 2, dan kepatuhan baru boleh diklaim setelah audit manual.** Alat otomatis hanya menangkap sekitar sepertiga persoalan, jadi mengklaim level tanpa audit manual tidak jujur. "Sesuai apa adanya" ditolak karena `Field` hari ini sudah gagal menghubungkan galat ke input.
 
@@ -3796,7 +3795,7 @@ Wawancara Epic 13: 24 pertanyaan, ditambah dua pertanyaan penyelesaian konflik. 
 
 17. **Halaman login dan survei publik mendapat branding tenant, termasuk logo dan warna.** Tidak ada branding pra-login **ditolak** untuk halaman survei, karena token survei sudah mengidentifikasi tenant sehingga branding bisa ditentukan sebelum sesi ada. **Catatan teknis yang mengikat: untuk halaman login, tenant belum tentu diketahui sebelum pengguna memasukkan email, sehingga urutan pemuatan branding harus dirancang tersendiri** — lihat Open item #1.
 
-18. **Library ikon: tanpa library di Wave 1, SVG inline sesuai kebutuhan; tambahkan satu library dengan pohon yang bisa di-*tree-shake* bila jumlah ikon melewati sekitar dua puluh.** Riset §9.4 mencatat bahwa ikon gaya seragam dari satu library tipis adalah ciri keluaran yang terasa generik, dan paket ini sengaja hanya punya tiga dependency runtime. Font ikon **ditolak** karena masalah aksesibilitas dan pemuatan font.
+18. **Library ikon: tanpa library di Wave 1, SVG inline sesuai kebutuhan; tambahkan satu library dengan pohon yang bisa di-*tree-shake* bila jumlah ikon melewati sekitar dua puluh.** Ikon gaya seragam dari satu library tipis adalah ciri keluaran yang terasa generik, dan paket ini sengaja hanya punya tiga dependency runtime. Font ikon **ditolak** karena masalah aksesibilitas dan pemuatan font.
 
 19. **Primitif notifikasi klien: keduanya** — toast dengan wilayah `aria-live` yang benar untuk umpan balik aksi, dan pusat notifikasi permanen untuk riwayat. Toast saja **ditolak** karena pesannya hilang sebelum sempat dibaca dan tidak bisa ditinjau ulang. Pusat notifikasi saja **ditolak** karena setiap aksi lambat terasa tanpa balasan. Epic 12 keputusan #4 sudah mendefinisikan `in_app` sebagai inbox terpadu, jadi ini menyelesaikan bagian kliennya.
 
@@ -3966,7 +3965,7 @@ YANG TIDAK BOLEH DILAKUKAN GENERATOR:
 | **Dari Epic 3** | Struktur `app_menus`/`app_menu_tree` menjadi sumber tabel route bersama (keputusan #15); menu tetap digerbangi server |
 | **Dari Epic 11** | **Menutup open item #4 Epic 11 (baris 3413):** UI authoring callout masuk generator setelah pola render terbukti (Wave 13.5+). Kontrak backend Callout tidak dibongkar (baris 3233) |
 | **Dari Epic 12** | **Menutup handoff baris 3667:** halaman laporan, layar monitoring, panel preferensi notifikasi memakai theme system + generator. Layar `posted='E'` menjadi kasus pertama generator (keputusan #12); primitif toast + pusat notifikasi (keputusan #19) |
-| **Dari §9** | Delapan prasyarat `acqpro-ui` tetap berlaku; **dipersempit ke empat komponen** dan tujuh pekerjaan (keputusan #6). Lisensi wajib selesai sebelum kode masuk repo |
+| **Dari riset tema** | Empat kebutuhan komponen (`Button` ukuran, `Card` terdekomposisi, `Modal` skala, `Field` galat) diimplementasikan native di repo (keputusan #6, direvisi 2026-09-25). Tidak ada paket pihak ketiga yang masuk |
 | **Ke Epic 14** | Laporan keuangan memakai generator baca-saja + token yang sama |
 
 #### Out-of-scope Epic 13
@@ -3983,7 +3982,7 @@ YANG TIDAK BOLEH DILAKUKAN GENERATOR:
 - Library form (react-hook-form atau serupa) — ditolak (keputusan #9).
 - `DESIGN.md` yang ditulis model — ditolak sebagai sumber arah (keputusan #23).
 - Halaman transaksi berfungsi penuh di ponsel — di luar batas Wave 1 (keputusan #22).
-- Dua renderer paralel (mis. Swing + ZK) — ditolak; satu klien React (§9.3, pelajaran `14-ui.md:390–396`).
+- Dua renderer paralel (mis. Swing + ZK) — ditolak; satu klien React (pelajaran `14-ui.md:390–396`).
 
 #### Open items
 
@@ -4007,7 +4006,7 @@ YANG TIDAK BOLEH DILAKUKAN GENERATOR:
 | Risiko | Dampak | Mitigasi |
 |---|---|---|
 | Migrasi 1445 pemakaian `slate-` ke semantik dilakukan sekaligus | Perubahan besar tak tertinjau, regresi visual tersebar | Migrasi bertahap per gelombang (keputusan #7); Wave 13.3 membatasi diri ke `ui.tsx` + shell (176 kemunculan) |
-| Kode `acqpro-ui` masuk repo tanpa lisensi | Masalah provenance; §9 mencatat tidak ada `LICENSE` dan `git remote` menunjuk repo pihak lain | **Lisensi wajib selesai sebelum kode masuk repo** (keputusan #6); paket dipangkas ke empat komponen untuk mempersempit permukaan |
+| Kode pihak ketiga masuk repo membawa sistem token yang bersaing dan 28 dependency | Tabrakan simbol senyap, UI dua palet, keunggulan tiga dependency hilang | Tidak ada paket pihak ketiga diambil (keputusan #6, direvisi 2026-09-25); yang diadopsi hanya analisis celah, implementasinya native di repo |
 | Token layer dibangun sebelum `DESIGN.md` ada | Seluruh keluaran berstatus draf; token diarahkan ke bahasa yang mungkin belum final | Wave 13.1 menghasilkan `DESIGN.md` lebih dulu; kalau belum ada, Wave 13.2–13.7 berstatus draf dan arah token harus ditinjau ulang (keputusan #23) |
 | Branding tenant merusak kontras | Warna tenant membuat teks tidak terbaca | Kontras terukur diuji saat Wave 13.6; validator token menolak kombinasi yang gagal ambang |
 | Generator dipakai untuk halaman transaksi karena "kelihatan mudah" | Menabrak §4.2 dan menciptakan dua pola halaman | Batas ditulis di Prinsip dan Out-of-scope; jalur ke halaman transaksi tidak disediakan generator (keputusan #12) |
@@ -4017,7 +4016,7 @@ YANG TIDAK BOLEH DILAKUKAN GENERATOR:
 | `prefers-reduced-motion` diterapkan per-elemen lebih dulu | Permukaan tidak tertutup selama pengerjaan | Aturan global lebih dulu (keputusan #10); varian per-elemen menyusul |
 | Klaim WCAG 2.1 AA tanpa audit manual | Klaim tidak jujur; sekitar dua pertiga persoalan terlewat | Kepatuhan hanya diklaim setelah audit manual (keputusan #8, Open item #7) |
 | Duplikasi route kembali muncul setelah tabel bersama dibuat | Path berubah di satu tempat, gerbang tertinggal | Satu tabel bersama (keputusan #15); `NAV_SECTIONS` dan router membaca sumber yang sama |
-| Produk keluar dari paket tiga dependency | Keunggulan §9.2 hilang tanpa keputusan sadar | Setiap dependency baru butuh keputusan wawancara tersendiri; library ikon ditunda (keputusan #18), library form ditolak (keputusan #9) |
+| Produk keluar dari paket tiga dependency | Keunggulan tiga dependency runtime hilang tanpa keputusan sadar | Setiap dependency baru butuh keputusan wawancara tersendiri; library ikon ditunda (keputusan #18), library form ditolak (keputusan #9), paket pihak ketiga ditolak (keputusan #6) |
 
 #### Completion gate
 
@@ -4036,7 +4035,7 @@ Epic 13 dianggap selesai jika:
 (12) setiap halaman baru punya keadaan kosong, memuat, dan galat; CI menegakkannya.
 (13) **`DESIGN.md` ada dan ditulis pemilik produk.** Sebelum itu, Epic 13 dianggap belum menjadi deliverable produksi (keputusan #23).
 
-**Bukan** syarat selesai Epic 13: dark mode (Wave 13.7), klaim WCAG 2.1 AA sebelum audit manual, library ikon, library form, generator untuk halaman transaksi, palet penuh per tenant, `acqpro-ui` penuh.
+**Bukan** syarat selesai Epic 13: dark mode (Wave 13.7), klaim WCAG 2.1 AA sebelum audit manual, library ikon, library form, generator untuk halaman transaksi, palet penuh per tenant.
 
 #### Catatan implementasi terhadap keputusan roadmap
 
@@ -4048,7 +4047,7 @@ Epic 13 dianggap selesai jika:
 - **Berkas `DESIGN.md` belum ada di repo.** Selama belum ada, seluruh pekerjaan Wave 13.2–13.7 berstatus "draft without direction" dengan dial ENERGY/RHYTHM/MOTION = 1, dan bukan deliverable produksi (antislop, baris 365 dan 3998).
 - **iDempiere bukan sumber untuk keputusan aksesibilitas Epic 13.** Riset tidak membahas aksesibilitas WebUI sama sekali; keputusan #8–#11 berasal dari celah kode sendiri (77 atribut ARIA di 21 dari 93 berkas, `aria-describedby` sekali, `prefers-reduced-motion` nol).
 - **iDempiere juga bukan sumber untuk dark mode, palet per klien, logo, atau halaman login per klien** — keempatnya tidak ada di riset. Semua itu keputusan baru, bukan adopsi.
-- `acqpro-ui` bukan pengganti arah desain: ia tidak punya `DESIGN.md`, tidak punya dokumentasi identitas, dan tidak punya berkas tema di luar token shadcn bawaan (§9.6). Keputusan #6 mempersempitnya ke empat komponen.
+- **Tidak ada paket pihak ketiga di Epic 13** (keputusan #6, direvisi 2026-09-25). Empat kebutuhan komponen diimplementasikan native di atas `ui.tsx` dan `OverlayDialog.tsx` yang sudah ada, dengan token Abixell sendiri dan tetap tiga dependency runtime.
 - Basis iDempiere diverifikasi terhadap `14-ui.md` §1–§7, `08-application-dictionary.md` §2–§6, `06-plugin-system.md` §9–§11, `18-development-guide.md`, `20-limitations.md`, `13-database.md:153`, `04-source-code.md:154–166`, `01-overview.md:56`.
 - **Handoff Epic 13 dari Epic 3 tidak eksplisit di §4.3** — riset verifikasi tidak menemukan referensi Epic 13 di §4.3 maupun §4.4. Kontrak di sini dijabarkan dari `app_menus`/`app_menu_tree` dan `NAV_SECTIONS` yang ada.
 
@@ -4426,7 +4425,7 @@ Catatan tambahan yang memperkaya tapi tidak mengoreksi:
 | 5 | Entitas transaksi mana yang masuk document engine lebih dulu | 7 | Belum |
 | 6 | Preseden `AD_SysConfig.ConfigurationLevel` (System / Client / Organization) — berapa jenjang di Abixell One? | 8 | Belum |
 | 7 | Urutan pengerjaan Epic | semua | **Diputuskan 2026-09-23: wawancara dimulai dari Epic 2 (Application Dictionary & Metadata Engine).** Alasan: Epic 2 memblokir Epic 3, 4, 7, 11, dan 13. Menggali fondasi metadata lebih dulu mencegah keputusan di Epic lain yang harus dibongkar ulang. |
-| 8 | Apakah `acqpro-ui` dijadikan package workspace | 13 | **Diputuskan 2026-09-23: ya**, dengan token Abixell One yang berlaku. Lihat §9.1. |
+| 8 | Apakah paket tema pihak ketiga dijadikan package workspace | 13 | **Diputuskan 2026-09-23: ya. Direvisi 2026-09-25: tidak** — design system dibangun native di repo, tidak ada kode pihak ketiga (§4.13 keputusan #6) |
 | 9 | Susunan menu final untuk user eksternal dan aturan customer scope | Service Operation / 4 | **Dipindahkan ke session wawancara Customer Scope terpisah pada 2026-09-24.** Epic 4 mempertahankan backend tetapi mengunci opsi UI sampai enam aturan di §4.4 selesai. |
 | 10 | Apakah `belum terdaftar` diberi tenggat, atau dilaporkan selamanya sebagai pekerjaan tertunda | 3 | Belum. Lihat §4.3 item terbuka nomor 2 |
 | 11 | Cara penyajian menu dari server ke klien: ikut `/me` atau endpoint tersendiri | 3 | Belum. Harus diputuskan lewat pengukuran, bukan asumsi. Lihat §4.3 item terbuka nomor 1 |
@@ -4576,57 +4575,36 @@ Setiap konsep yang dipakai dokumen ini, sumber verifikasinya, dan wujud di Abixe
 
 ---
 
-## 9. Bahan Tema UI/UX — Hasil Pemeriksaan `acqpro-ui`
+## 9. Celah Design System Abixell — Bahan Epic 13
 
-**Diperiksa:** 2026-09-23 · **Lokasi:** `D:\RESEARCH AREA\research\acqpro-ui` · **Sifat:** read-only, tidak ada berkas yang diubah
+**Diperiksa:** 2026-09-23, direvisi 2026-09-25 · **Sifat:** analisis internal; tidak ada berkas di luar repo yang dibaca untuk §9 versi ini
 
 ### 9.1 Keputusan
 
-> **`acqpro-ui` dijadikan package workspace, tetapi token layer tetap milik Abixell One.**
+> **Design system Epic 13 dibangun native di atas komponen Abixell yang sudah ada. Tidak ada paket pihak ketiga yang diambil.**
 
-Keputusan user, 2026-09-23. Pilihan yang diambil: **"Package, tapi token Abixell yang menang."**
+Diputuskan pemilik produk, 2026-09-25. **Revisi:** keputusan 2026-09-23 yang mengadopsi sebuah paket tema pihak ketiga sebagai package workspace dibatalkan. Tidak boleh ada nama paket, kode, dokumentasi, struktur ekspor, atau berkas tema pihak ketiga di dalam repo maupun di dalam dokumen ini.
 
-Artinya:
-- `acqpro-ui` dipindahkan menjadi paket di `packages/acqpro-ui` dan dipakai lintas aplikasi.
-- Komponen di dalamnya **dilepas dari token HSL-nya** (variabel `--primary`, `--background`, dst) dan dipetakan ulang ke token milik Abixell One.
-- Blok `.dark` dari acqpro **tidak dipakai** selama Abixell belum memutuskan dark mode (§9.6). **Diperbarui Epic 13 (2026-09-25):** dark mode masuk kandidat Wave 2 dan token disiapkan sejak Wave 1, tetapi blok `.dark` acqpro tetap tidak dipakai — tema gelap Abixell ditulis sendiri di `[data-theme="dark"]` di atas token Abixell (§4.13 keputusan #3).
-- Visual akhir mengikuti bahasa slate Abixell. acqpro menyumbang **struktur komponen dan perilakunya**, bukan warnanya.
+Alasan revisi: paket itu membawa sistem token yang bersaing, 28 dependency runtime, dan persoalan provenance tanpa berkas lisensi. Yang benar-benar dibutuhkan dari penilaian itu hanyalah **analisis celah** — apa yang kurang di Abixell — dan analisis celah tidak memerlukan kode pihak lain.
 
-Konsekuensi yang harus dikerjakan sebelum paket bisa dipakai — semuanya masuk Epic 13:
+**Catatan provenance.** Karena tidak ada kode pihak ketiga yang disalin, tidak ada kewajiban lisensi, atribusi, atau third-party notice yang muncul dari keputusan ini. Aplikasi tetap memegang **tiga dependency runtime**: `react`, `react-dom`, `react-router-dom`.
 
-| # | Pekerjaan | Alasan |
+Empat kebutuhan yang dicatat dari analisis §9.4, semuanya diimplementasikan di dalam repo:
+
+| # | Kebutuhan | Titik implementasi |
 |---|---|---|
-| 1 | Perbaiki `src/index.ts:8-10` (`primatives` → `primitives`) | Barrel ekspor rusak, `TS2307` |
-| 2 | Ubah `tsconfig.json:12` agar build bisa emit, dan tambahkan `build.lib` di `vite.config.ts` | Sekarang `noEmit: true` dan tidak ada konfigurasi library; `dist/` tidak pernah ada |
-| 3 | Perbaiki `eslint.config.js` | Mengimpor `eslint-define-config` yang tidak terpasang |
-| 4 | Selesaikan lisensi | Tidak ada berkas `LICENSE`; `git remote` menunjuk `github.com/shuppel/acqpro-ui` |
+| 1 | `Button` dengan matriks varian/ukuran dan `forwardRef` | `apps/web/src/shell/components/ui.tsx:22-45` |
+| 2 | `Card` yang dapat didekomposisi (header/isi/footer) | `apps/web/src/shell/components/ui.tsx:49-58` |
+| 3 | `Modal` dengan skala ukuran lebih dari `md`/`lg` | `apps/web/src/shell/components/OverlayDialog.tsx` |
+| 4 | `Field` dengan perangkaian galat ke input | `apps/web/src/shell/components/ui.tsx:193-209` |
 
-**Diperbarui Epic 13 (2026-09-25).** Kedelapan pekerjaan di atas tetap berlaku, tetapi **cakupan paketnya dipersempit: `acqpro-ui` dipangkas ke empat komponen saja** (§4.13 keputusan #6) — sehingga pekerjaan #7 (pangkas komponen dan dependensi) berubah dari "pangkas sebagian" menjadi "buang seluruh sisanya". Dua urutan wajib ditambahkan:
+Kebutuhan #4 bukan soal kosmetik — §9.3 mencatatnya sebagai celah aksesibilitas nyata.
 
-- **Pekerjaan #4 (lisensi) menjadi prasyarat keras:** tidak ada kode `acqpro-ui` boleh masuk repo sebelum berkas `LICENSE` dan provenance selesai (§4.13 keputusan #6). Ini pekerjaan pertama, bukan pekerjaan keempat.
-- **Pekerjaan #1, #2, #3, #8 hanya perlu diselesaikan sejauh yang dipakai keempat komponen itu.** Memperbaiki build library penuh untuk komponen yang dibuang tidak menambah nilai.
-| 5 | Ganti seluruh kelas token HSL → token Abixell | Lihat §9.2 |
-| 6 | Ganti alias `@/*` → jalur relatif atau alias Abixell | acqpro pakai `@/*`, Abixell pakai jalur relatif |
-| 7 | Pangkas komponen dan dependensi yang tidak dipakai | 28 dependensi acqpro membawa d3, chart.js, framer-motion, react-dnd |
-| 8 | Selesaikan ~52 galat `tsc` | `npm run type-check` gagal |
+**Alasan pokok penolakan paket pihak ketiga** — dicatat agar tidak hilang:
 
-**Catatan tata kelola:** begitu menjadi paket workspace, `acqpro-ui` keluar dari `D:\RESEARCH AREA` dan menjadi kode Abixell yang ikut dirawat. Folder di area riset tidak lagi menjadi sumber kebenaran; yang berlaku adalah salinan di dalam repo.
+**1. Tidak dapat dipakai sebagai paket.** Tiga cacat independen yang terverifikasi saat pemeriksaan: barrel ekspor menunjuk direktori yang salah eja (`primatives` vs `primitives`) sehingga impor gagal keras; konfigurasi build tidak pernah menghasilkan `dist/` yang ditunjuk `main`/`types`; dan konfigurasi lint mengimpor paket yang tidak terpasang. Pemeriksaan tipe berhenti dengan puluhan galat. Memperbaiki semua itu untuk memakai empat komponen tidak sebanding dengan menulis empat komponen sendiri.
 
-**Alasan penolakan yang tetap berlaku** — berikut dicatat agar tidak hilang, walaupun keputusannya sudah diambil:
-
-Alasan berurutan menurut tingkat keparahan:
-
-**1. Tidak dapat dipakai sebagai paket — tiga cacat independen, semuanya terverifikasi.**
-
-| # | Cacat | Bukti |
-|---|---|---|
-| a | Barrel ekspor menunjuk direktori yang tidak ada | `src/index.ts:8-10` mengimpor `./components/form/primatives/…`; direktori di disk bernama `primitives/`. Salah ejaan di sumber. Galat `TS2307` keras. |
-| b | Build tidak menghasilkan apa pun | `tsconfig.json:12` menetapkan `"noEmit": true`, tetapi skrip build `"tsc && vite build"` (`package.json:9`) dan `vite.config.ts` **tidak punya `build.lib`/entry** — ini build aplikasi, bukan build library. `package.json:5-6` menunjuk `main`/`types` ke `dist/` yang **tidak ada**. |
-| c | ESLint tidak bisa dimuat | `eslint.config.js:1` mengimpor `eslint-define-config`, tidak ada di `package.json` maupun `node_modules`. |
-
-`npm run type-check` dijalankan: **gagal dengan ~52 galat TypeScript**, termasuk `TS2307` untuk tiga impor barrel yang rusak.
-
-**2. Masalah provenance.** Tidak ada berkas `LICENSE`. `git remote` menunjuk `https://github.com/shuppel/acqpro-ui`. Repositori ini berdiri sendiri di dalam area riset — bukan bagian dari workspace Abixell (`workspaces: ["apps/*", "packages/*"]`). Menyalin kode tanpa lisensi adalah masalah provenance, bukan sekadar preferensi teknis.
+**2. Masalah provenance.** Tidak ada berkas lisensi di repo, dan `git remote` menunjuk repositori pihak lain. Menyalin kode tanpa lisensi adalah masalah provenance, bukan preferensi teknis. Karena keputusan 2026-09-25 memilih tidak mengambil kodenya sama sekali, persoalan ini hilang dari Epic 13.
 
 **3. Membawa sistem token yang bersaing.** Lihat §9.2.
 
@@ -4634,10 +4612,10 @@ Alasan berurutan menurut tingkat keparahan:
 
 ### 9.2 Konflik token — dua sistem yang tidak berbagi satu kelas pun
 
-| | Abixell One | acqpro-ui |
+| | Abixell One | Paket pihak ketiga |
 |---|---|---|
-| Token layer | **Tidak ada.** `apps/web/src/index.css` 3 baris, hanya tiga directive Tailwind | `src/styles/globals.css:6-61` — HSL custom properties lengkap + blok `.dark` |
-| Tailwind theme | `apps/web/tailwind.config.js:4-7` → `theme: { extend: {} }` | `tailwind.config.js:16-69` — seluruh warna, radius, keyframes |
+| Token layer | **Tidak ada.** `apps/web/src/index.css` 3 baris, hanya tiga directive Tailwind | Custom properties lengkap + blok `.dark` |
+| Tailwind theme | `apps/web/tailwind.config.js:4-7` → `theme: { extend: {} }` | seluruh warna, radius, keyframes |
 | Bahasa desain | Literal slate hardcoded: `bg-slate-900`, `border-slate-200` | Kelas semantik: `bg-primary`, `border-input` |
 | Dark mode | **0 kemunculan `dark:`** di seluruh `apps/web/src` | Blok `.dark` penuh |
 | Runtime deps | **3** (react, react-dom, react-router-dom) | **28** |
@@ -4645,53 +4623,49 @@ Alasan berurutan menurut tingkat keparahan:
 
 Abixell menyatakan bahasanya secara eksplisit di `apps/web/src/shell/components/ui.tsx:8-9`: *"Every component reuses the existing Tailwind design language (slate palette, subtle borders, `text-sm` scale) rather than introducing a new visual system."*
 
-Kedua proyek mendefinisikan `Button`, `Card`, `Badge`, `Alert`, `Input`, `Select`, `Table` dengan **nama sama, props berbeda, visual berbeda**. Menyalin borongan menghasilkan tabrakan simbol senyap dan UI dua palet.
+Kedua pihak mendefinisikan `Button`, `Card`, `Badge`, `Alert`, `Input`, `Select`, `Table` dengan **nama sama, props berbeda, visual berbeda**. Menggabungkan keduanya menghasilkan tabrakan simbol senyap dan UI dua palet. Inilah alasan teknis utama mengapa jalur native dipilih: satu bahasa, satu token, tiga dependency.
 
 ### 9.3 Temuan yang membalik asumsi: Abixell sudah lebih maju di aksesibilitas
 
-| | Abixell One | acqpro-ui |
+| | Abixell One | Paket pihak ketiga |
 |---|---|---|
 | Kepadatan atribut a11y | **77** | **18** |
-| Modal | `OverlayDialog.tsx` — focus trap dengan wrap-around, focus capture/restore, `requestAnimationFrame` initial focus, body scroll lock, `aria-modal`/`aria-busy`, guard `pending` yang memblokir Escape saat mutasi berjalan, touch target 44px | `Modal.tsx` — pembungkus Radix tipis, tanpa jaminan focus-restore, tanpa guard pending |
+| Modal | `OverlayDialog.tsx` — focus trap dengan wrap-around, focus capture/restore, `requestAnimationFrame` initial focus, body scroll lock, `aria-modal`/`aria-busy`, guard `pending` yang memblokir Escape saat mutasi berjalan, touch target 44px | pembungkus tipis, tanpa jaminan focus-restore, tanpa guard pending |
 | Tabel di mobile | `ui.tsx:262-269` — `DataTable` merender kartu bertumpuk di bawah 640px | — |
 | Reduced motion | 0 kemunculan `prefers-reduced-motion` | 0 kemunculan |
 
-Satu-satunya keunggulan acqpro adalah semantik native dari Radix untuk `Select`, `Calendar`, `Tooltip`, `Accordion`, `Popover`.
+Modal Abixell sudah lebih kuat dari padanan mana pun yang diperiksa. Yang benar-benar kurang di Abixell bukan perilaku dialog, melainkan **perangkaian galat pada `Field`** dan **matriks ukuran pada `Button`**.
 
-### 9.4 Yang layak diambil sebagai ide (salin-lalu-sesuaikan)
+### 9.4 Empat celah yang menjadi kebutuhan Epic 13
 
-| Sumber acqpro | Celah di Abixell | Catatan |
-|---|---|---|
-| `common/Button/Button.tsx:5-29` | `ui.tsx:22-45` — `Button` punya 3 varian, tanpa prop `size`, tanpa `forwardRef` | Matriks varian/ukuran berbasis cva adalah ide paling bersih |
-| `layout/Card/Card.tsx:5-60` | `ui.tsx:49-58` — `Card` hanya header-less dan padding | Dekomposisi `CardHeader/Title/Description/Content/Footer` |
-| `feedback/Modal/Modal.tsx:61-78` | `OverlayDialog` hanya punya `md`/`lg` | Skala ukuran `sm…2xl/full` |
-| `form/primitives/FormField/FormField.tsx:20-41` | `ui.tsx:193-209` — `Field` membungkus child dalam `<label>`, **tanpa** wiring error/`aria-describedby` | **Celah a11y nyata.** Implementasi acqpro bergantung pada `react-hook-form`; harus ditulis ulang di atas `Field` yang ada |
+| # | Celah di Abixell | Titik | Kebutuhan |
+|---|---|---|---|
+| 1 | `Button` punya 3 varian, tanpa prop `size`, tanpa `forwardRef` | `ui.tsx:22-45` | Matriks varian/ukuran yang bersih, `forwardRef` untuk fokus programatik |
+| 2 | `Card` hanya header-less dan padding | `ui.tsx:49-58` | Dekomposisi header/isi/footer — **ditolak** untuk Wave 1 (§4.13 keputusan #5) |
+| 3 | `OverlayDialog` hanya punya `md`/`lg` | `OverlayDialog.tsx` | Skala ukuran `sm…2xl/full` |
+| 4 | `Field` membungkus child dalam `<label>`, **tanpa** wiring error/`aria-describedby` | `ui.tsx:193-209` | **Celah a11y nyata.** `useId` + `error`/`hint` + `aria-describedby`/`aria-invalid` |
 
-**Jangan diambil:** `DataGrid` (prop `virtualization` diterima tetapi tidak pernah diimplementasikan — jebakan; nol ARIA), `Charts` (butuh d3/chart.js), `TreeView`, `List`, `Calendar` (butuh react-day-picker), `Toast` (butuh framer-motion), `useFormValidation` (butuh react-hook-form + zod + `@hookform/resolvers`), `src/schemas/forms.ts` (skema domain produk lain).
+Semuanya diimplementasikan sebagai perubahan pada berkas yang sudah ada. Tidak ada berkas baru untuk keempatnya; hanya `design-tokens.ts` yang merupakan berkas baru di Wave 13.1.
 
-### 9.5 Matriks kompatibilitas
+### 9.5 Prinsip yang mengikat pekerjaan tema
 
-| Dimensi | Kompatibel? |
+| Prinsip | Konsekuensi |
 |---|---|
-| React major (18) | Ya — satu-satunya titik bersih |
-| Tailwind 3.4 | Ya |
-| TypeScript / Vite major | Ya |
-| Path alias | **Tidak** — acqpro pakai `@/*` (`tsconfig.json:21-23`, `vite.config.ts:7-11`); Abixell murni path relatif |
-| ESLint | **Tidak** — flat-config acqpro rusak; Abixell pakai `typescript-eslint` |
-| Ketatnya tsconfig | Parsial — acqpro menambah `noUnusedLocals`/`noUnusedParameters`, tidak ada di Abixell |
-| Target build | **Tidak** — Abixell aplikasi Vite dengan service worker PWA; acqpro library yang tidak pernah terbit |
-| Design token | **Tidak** — lihat §9.2 |
-| Graf dependensi | **Tidak** — 3 vs 28, tanpa irisan |
+| Satu bahasa warna | Nama semantik (`bg-surface`, `text-muted`), `slate` hanya di definisi token (§4.13 keputusan #7) |
+| Satu sumber token | `:root` dan `[data-theme="dark"]` satu-satunya tempat nilai warna brand ditulis |
+| Token runtime-swappable hanya pada subset brand | Branding tenant berubah tanpa rebuild; sisa palet tetap literal build-time (#2, #4) |
+| Tiga dependency runtime dipertahankan | Setiap dependency baru butuh keputusan wawancara tersendiri |
+| Tidak ada kode pihak ketiga | Implementasi native; tidak ada lisensi, atribusi, atau notice yang muncul (§9.1) |
 
 ### 9.6 Dampak ke Epic 13
 
-**Diputuskan 2026-09-23:** `acqpro-ui` menjadi package workspace, token tetap milik Abixell One (§9.1). Delapan pekerjaan perbaikan di §9.1 menjadi prasyarat Epic 13.
+**Diputuskan 2026-09-25:** tidak ada paket pihak ketiga yang diambil; design system dibangun native di repo (§9.1, **menggantikan** keputusan 2026-09-23).
 
-**Dijawab Epic 13 (2026-09-25).** Empat pertanyaan yang menggantung di sini dijawab §4.13:
+Pertanyaan yang menggantung di sini sudah dijawab §4.13:
 
 1. **Dark mode masuk kandidat Wave 2**, dan token disiapkan sejak Wave 1 supaya tidak perlu dibongkar ulang. Ditolak sebagai pekerjaan Wave 1 karena menerapkan tema kedua ke 1445 kemunculan `slate-` sebelum token layer terbukti terlalu berisiko. (§4.13 keputusan #3, gelombang 13.7.)
-2. **Penamaan langsung, bukan HSL ala shadcn**, dengan format kanal RGB (`--color-primary: 15 23 42`) supaya modifier alpha Tailwind (`bg-primary/50`) tetap jalan lewat `rgb(var(--color-primary) / <alpha-value>)`. (§4.13 keputusan #2, `Mekanisme — token layer`.)
+2. **Penamaan langsung, dengan format kanal RGB** (`--color-primary: 15 23 42`) supaya modifier alpha Tailwind (`bg-primary/50`) tetap jalan lewat `rgb(var(--color-primary) / <alpha-value>)`. (§4.13 keputusan #2, `Mekanisme — token layer`.)
 3. **Ya — satu tenant boleh punya palet sendiri, tetapi hanya pada subset brand.** Karena itu token wajib runtime-swappable untuk subset itu, sementara sisanya (mis. seluruh 1445 `slate-`) tetap literal build-time. Palet penuh per tenant ditolak. (§4.13 keputusan #2, #4, tabel `package_theme_configs`.)
-4. **Dipertahankan, dinaikkan terukur.** `forwardRef` + prop `size` pada `Button`; dekomposisi `Card` **ditolak** karena mengubah setiap pemakaian `Card` yang ada sementara nilainya baru terasa setelah theme layer selesai. (§4.13 keputusan #5.)
+4. **Dinaikkan terukur.** `forwardRef` + prop `size` pada `Button`; dekomposisi `Card` **ditolak** karena mengubah setiap pemakaian `Card` yang ada sementara nilainya baru terasa setelah theme layer selesai. (§4.13 keputusan #5.)
 
-**Catatan antislop.** Modul antislop belum diarahkan untuk pekerjaan ini. Karena tidak ada `DESIGN.md` dan tidak ada arahan desain dari user, setiap pekerjaan UI yang keluar dari dokumen ini diperlakukan sebagai **draft without direction** (dial ENERGY/RHYTHM/MOTION = 1) dan bukan deliverable produksi. `acqpro-ui` bukan pengganti arah desain: ia tidak punya `DESIGN.md`, tidak punya dokumentasi identitas, dan tidak punya berkas tema di luar token shadcn bawaan.
+**Catatan antislop.** Modul antislop belum diarahkan untuk pekerjaan ini. Karena tidak ada `DESIGN.md` dan tidak ada arahan desain dari user, setiap pekerjaan UI yang keluar dari dokumen ini diperlakukan sebagai **draft without direction** (dial ENERGY/RHYTHM/MOTION = 1) dan bukan deliverable produksi. **Tidak ada berkas arah desain dari pihak luar** — `DESIGN.md` tetap wajib ditulis pemilik produk (§4.13 keputusan #23).
