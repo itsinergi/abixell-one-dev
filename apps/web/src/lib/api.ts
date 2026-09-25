@@ -109,6 +109,8 @@ export const api = {
     request<{
       userId: string;
       tenantId: string;
+      fullName: string;
+      email: string;
       permissions: string[];
       scopeTypes: string[];
       activeModuleCodes: string[];
@@ -120,6 +122,16 @@ export const api = {
         token,
       },
     ),
+
+  updateProfile: (
+    token: string,
+    payload: { fullName?: string; password?: string; currentPassword?: string },
+  ) =>
+    request<{ id: string; email: string; fullName: string; status: string }>("/me", {
+      method: "PATCH",
+      token,
+      body: payload,
+    }),
 
   // Frontend token/session persistence (Checkpoint 0F): `refresh` trades
   // the opaque refresh token for a new access token AND a rotated

@@ -58,6 +58,7 @@ import { ProjectDeliveryPage } from "./modules/project-delivery/ProjectDeliveryP
 import { ProjectDeliveryDetailPage } from "./modules/project-delivery/ProjectDeliveryDetailPage";
 import { ReportingInsightPage } from "./modules/reporting-insight/ReportingInsightPage";
 import { AdminConsolePage } from "./pages/admin/console/AdminConsolePage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { useAuth } from "./auth/AuthContext";
 
 /**
@@ -181,6 +182,7 @@ export default function App() {
           <Route path="reporting" element={<ReportingInsightPage />} />
           {/* Phase 11C — Business Admin Console (read-only) */}
           <Route path="admin" element={<AdminConsolePage />} />
+          <Route path="profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

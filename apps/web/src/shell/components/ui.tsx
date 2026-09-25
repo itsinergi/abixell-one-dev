@@ -8,13 +8,14 @@
  * reuses the existing Tailwind design language (slate palette, subtle
  * borders, `text-sm` scale) rather than introducing a new visual system.
  */
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  PropsWithChildren,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
+import {
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type PropsWithChildren,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from "react";
 
 /* ------------------------------------------------------------------ Button */
@@ -208,9 +209,14 @@ export function Field({
   );
 }
 
-export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`${CONTROL_CLASS} ${className}`} {...rest} />;
-}
+/** Forwards its ref so a field can take focus programmatically (e.g. moving
+ * focus to the input a validation failure belongs to). Additive: callers
+ * that pass no ref are unaffected. */
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className = "", ...rest }, ref) {
+    return <input ref={ref} className={`${CONTROL_CLASS} ${className}`} {...rest} />;
+  },
+);
 
 export function Textarea({ className = "", ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={`${CONTROL_CLASS} ${className}`} {...rest} />;

@@ -39,6 +39,7 @@ import {
   type VisibleNavTreeGroup,
 } from "../../lib/capabilities";
 import { Alert, Button, Spinner } from "../components/ui";
+import { UserMenu } from "../components/UserMenu";
 import { useOnlineStatus } from "../useOnlineStatus";
 
 interface ShellContextValue {
@@ -326,7 +327,7 @@ function useNavigationDrawer(
 }
 
 export function AppShell() {
-  const { session, logout } = useAuth();
+  const { session, logout, updateSession } = useAuth();
   const token = session!.accessToken;
   const assignmentId = session!.assignmentId;
   const location = useLocation();
@@ -375,6 +376,7 @@ export function AppShell() {
       setPermissions(me.permissions);
       setScopeTypes(me.scopeTypes);
       setActiveModuleCodes(me.activeModuleCodes ?? []);
+      updateSession({ fullName: me.fullName, email: me.email });
       // The Tenant name is only the workspace title, and reading it needs
       // `tenant.read` — a permission a Customer User does NOT hold. Fetch it
       // best-effort so its absence never blocks the shell; fall back to the
@@ -393,7 +395,7 @@ export function AppShell() {
     } finally {
       if (loadGeneration.current === generation) setLoading(false);
     }
-  }, [token, assignmentId]);
+  }, [token, assignmentId, updateSession]);
 
   useEffect(() => {
     load();
@@ -467,12 +469,7 @@ export function AppShell() {
           filterId="desktop-navigation-filter"
         />
         <div className="border-t border-slate-200 p-3">
-          <div className="truncate px-1 text-xs text-slate-500" title={session!.userId}>
-            Signed in as {session!.userId}
-          </div>
-          <Button variant="secondary" className="mt-2 w-full" onClick={logout}>
-            Sign out
-          </Button>
+          <UserMenu fullName={session?.fullName} email={session?.email} onSignOut={logout} />
         </div>
       </aside>
 
@@ -523,12 +520,7 @@ export function AppShell() {
               />
             </div>
             <div className="border-t border-slate-200 p-3">
-              <div className="truncate px-1 text-xs text-slate-500" title={session!.userId}>
-                Signed in as {session!.userId}
-              </div>
-              <Button variant="secondary" className="mt-2 min-h-[44px] w-full" onClick={logout}>
-                Sign out
-              </Button>
+              <UserMenu fullName={session?.fullName} email={session?.email} onSignOut={logout} />
             </div>
           </aside>
         </div>
@@ -561,12 +553,7 @@ export function AppShell() {
               </div>
             </div>
             <div className="hidden min-w-0 items-center gap-3 lg:flex">
-              <span className="max-w-xs truncate text-xs text-slate-500" title={session!.userId}>
-                {session!.userId}
-              </span>
-              <Button variant="secondary" onClick={logout}>
-                Sign out
-              </Button>
+              <UserMenu fullName={session?.fullName} email={session?.email} onSignOut={logout} />
             </div>
           </header>
           {!online && (

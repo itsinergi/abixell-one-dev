@@ -16,6 +16,10 @@ interface Session {
   userId: string;
   tenantId: string;
   tenantCode: string;
+  /** User's full name, populated from GET /me. */
+  fullName?: string;
+  /** User's email address, populated from GET /me. */
+  email?: string;
   /** The role+scope pair chosen on the post-login selection screen. Set
    * after login, before entering the workspace; absent on a session that
    * has not yet passed through the picker. */

@@ -912,7 +912,15 @@ try {
   assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 2, "PWA icons are incomplete");
 
   console.log("10. Logout and post-logout protection");
-  await page.getByRole("button", { name: "Sign out" }).first().click();
+  // Sign out lives inside the avatar dropdown (Epic 2 Wave 1), so the menu
+  // has to be opened first. Two triggers exist in the DOM at desktop width
+  // (persistent sidebar + header); either opens an equivalent menu, so
+  // `.first()` is deterministic.
+  await page.locator('button[aria-haspopup="menu"]').first().click();
+  const userMenu = page.getByRole("menu", { name: "User menu" });
+  await assertVisible(userMenu, "User menu did not open");
+  await assertVisible(userMenu.getByRole("menuitem", { name: "Profile" }), "Profile entry missing from user menu");
+  await userMenu.getByRole("menuitem", { name: "Sign out" }).click();
   await page.waitForURL(/\/login/, { timeout: 5000 });
   assert.equal(
     await page.evaluate(() => window.localStorage.getItem("abixell.session")),
