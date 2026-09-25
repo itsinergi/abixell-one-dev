@@ -1,7 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Container } from "../../../composition-root.js";
-import { getLoginRateLimitConfig } from "../../../infrastructure/security/http-hardening.js";
+import { hashPassword } from "../../../infrastructure/security/password.js";
+import {
+  getLoginRateLimitConfig,
+  getProfileUpdateRateLimitConfig,
+} from "../../../infrastructure/security/http-hardening.js";
+import { ValidationError } from "../../../domain/shared-kernel/errors.js";
 
 // `tenantCode`/`tenantId` are optional: the login form now collects only
 // email + password, and tenant resolution either falls out of the email
@@ -66,10 +71,32 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
     assignmentId: z.string().uuid().optional(),
   });
 
+  // Self-service profile edit. Deliberately narrower than the admin
+  // PATCH /users/:id: `email` is not accepted here at all (it stays an
+  // admin action behind user.email.update), and a password change must
+  // carry the caller's current password.
+  const patchMeSchema = z
+    .object({
+      fullName: z.string().trim().min(1).max(200).optional(),
+      password: z.string().min(8).optional(),
+      currentPassword: z.string().min(1).optional(),
+    })
+    .strict()
+    .refine((body) => body.currentPassword === undefined || body.password !== undefined, {
+      message: "currentPassword is only valid together with a password change",
+    })
+    .refine((body) => body.fullName !== undefined || body.password !== undefined, {
+      message: "Supply fullName or password",
+    })
+    .refine((body) => body.password === undefined || body.currentPassword !== undefined, {
+      message: "currentPassword is required when changing password",
+    });
+
   app.get("/me", { preHandler: app.authenticate }, async (request, reply) => {
     const actor = request.actor!;
     const { assignmentId } = meQuerySchema.parse(request.query ?? {});
-    const [permissions, assignments, myAssignments, activeModuleCodes] = await Promise.all([
+    const [user, permissions, assignments, myAssignments, activeModuleCodes] = await Promise.all([
+      container.user.getMe(actor),
       container.rbac.getEffectivePermissions(actor.userId),
       container.rbac.getAssignments(actor.userId),
       container.rbac.getMyAssignmentsWithScopeNames(actor.userId),
@@ -101,6 +128,8 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
     return reply.send({
       userId: actor.userId,
       tenantId: actor.tenantId,
+      fullName: user.fullName,
+      email: user.email,
       permissions: Array.from(effectivePermissions),
       scopeTypes,
       activeModuleCodes,
@@ -108,4 +137,31 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
       activeAssignmentId: picked?.id ?? null,
     });
   });
+
+  app.patch(
+    "/me",
+    {
+      preHandler: app.authenticate,
+      config: { rateLimit: getProfileUpdateRateLimitConfig() },
+    },
+    async (request, reply) => {
+      const actor = request.actor!;
+      const parsed = patchMeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues[0]?.message ?? "Invalid profile update");
+      }
+      const body = parsed.data;
+
+      const updated = await container.user.updateOwnProfile(
+        actor,
+        {
+          fullName: body.fullName,
+          passwordHash:
+            body.password === undefined ? undefined : await hashPassword(body.password),
+        },
+        body.currentPassword,
+      );
+      return reply.send(updated);
+    },
+  );
 }

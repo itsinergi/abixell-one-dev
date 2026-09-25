@@ -119,6 +119,26 @@ export class UserService {
     return this.repo.listByTenant(actor.tenantId);
   }
 
+  async getMe(actor: ActorContext) {
+    const user = await this.repo.findById(actor.userId);
+    if (!user || user.tenantId !== actor.tenantId) {
+      throw new NotFoundError("User", actor.userId);
+    }
+    return user;
+  }
+
+  /** Self-service profile edit. Current-password verification happens
+   * inside the repository's transaction, under the user-row lock, so a
+   * concurrent password change cannot be verified against and then
+   * overwritten (see PgUserRepository.updateOwnProfile). */
+  async updateOwnProfile(
+    actor: ActorContext,
+    input: { fullName?: string; passwordHash?: string },
+    currentPassword?: string,
+  ) {
+    return this.repo.updateOwnProfile(input, actor, currentPassword);
+  }
+
   async updateProfile(
     actor: ActorContext,
     id: string,

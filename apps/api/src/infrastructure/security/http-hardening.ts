@@ -110,3 +110,15 @@ export function getLoginRateLimitConfig(): { max: number; timeWindow: string } {
     timeWindow: process.env.AUTH_RATE_LIMIT_WINDOW ?? "1 minute",
   };
 }
+
+/** Self-service profile edit (PATCH /me) verifies the caller's current
+ * password with bcrypt, so a wrong-password guess costs the server the
+ * same as a login attempt and this route needs its own budget rather
+ * than riding the global floor. The ceiling is looser than login's: the
+ * same endpoint also carries ordinary name edits, which are not guesses. */
+export function getProfileUpdateRateLimitConfig(): { max: number; timeWindow: string } {
+  return {
+    max: readPositiveIntegerEnv("PROFILE_UPDATE_RATE_LIMIT_MAX", 30),
+    timeWindow: process.env.PROFILE_UPDATE_RATE_LIMIT_WINDOW ?? "1 minute",
+  };
+}

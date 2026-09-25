@@ -8,7 +8,13 @@ import type {
   UserWithPasswordHash,
 } from "../../../domain/identity/user.entity.js";
 import type { ActorContext } from "../../../domain/shared-kernel/audit-context.js";
-import { ConflictError, NotFoundError } from "../../../domain/shared-kernel/errors.js";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from "../../../domain/shared-kernel/errors.js";
+import { verifyPassword } from "../../security/password.js";
 import {
   inGovernedTransaction,
   requireTransactionActorPermission,
@@ -180,6 +186,93 @@ export class PgUserRepository implements UserRepository {
           changedFields: [
             ...(input.fullName !== undefined ? ["fullName"] : []),
             ...(input.email !== undefined ? ["email"] : []),
+            ...(input.passwordHash !== undefined ? ["password"] : []),
+          ],
+        },
+      });
+
+      return mapRow(updated.rows[0]);
+    });
+  }
+
+  // Self-service (PATCH /me) — the target is always the caller, never an
+  // id off the wire, so this has no permission gate (unlike updateProfile)
+  // and no email field (email stays admin-only via updateProfile above).
+  // Current-password verification happens HERE, under the FOR UPDATE row
+  // lock, so verification and write are atomic: a concurrent password
+  // change either completes first (and the stale currentPassword fails)
+  // or this one wins, but a verified-then-overwritten hash is impossible.
+  async updateOwnProfile(
+    input: UpdateUserProfileInput,
+    actor: ActorContext,
+    currentPassword?: string,
+  ): Promise<User> {
+    if (input.fullName === undefined && input.passwordHash === undefined) {
+      throw new ConflictError("No profile fields supplied");
+    }
+    if (input.email !== undefined) {
+      throw new ForbiddenError("Email cannot be changed via self-service profile update");
+    }
+    return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
+      const target = await client.query(
+        `SELECT id, full_name, password_hash
+           FROM users
+          WHERE id = $1
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+            AND status = 'active'
+          FOR UPDATE`,
+        [actor.userId, actor.tenantId],
+      );
+      if (!target.rows[0]) throw new NotFoundError("User", actor.userId);
+      if (
+        input.passwordHash &&
+        (currentPassword === undefined ||
+          !(await verifyPassword(currentPassword, target.rows[0].password_hash)))
+      ) {
+        throw new UnauthorizedError("Current password is not valid");
+      }
+
+      const updated = await client.query(
+        `UPDATE users
+            SET full_name = $1,
+                password_hash = COALESCE($2, password_hash),
+                updated_by = $3,
+                updated_at = now()
+          WHERE id = $3
+            AND tenant_id = $4
+            AND deleted_at IS NULL
+            AND status = 'active'
+        RETURNING *`,
+        [
+          input.fullName ?? target.rows[0].full_name,
+          input.passwordHash ?? null,
+          actor.userId,
+          actor.tenantId,
+        ],
+      );
+      if (!updated.rows[0]) throw new NotFoundError("User", actor.userId);
+
+      // Credential update invalidates all old refresh sessions.
+      if (input.passwordHash) {
+        await client.query(
+          `UPDATE refresh_tokens
+              SET revoked_at = now()
+            WHERE user_id = $1
+              AND revoked_at IS NULL`,
+          [actor.userId],
+        );
+      }
+
+      await recordGovernedAudit(client, {
+        tenantId: actor.tenantId,
+        actorUserId: actor.userId,
+        action: "user.updated",
+        entityType: "user",
+        entityId: actor.userId,
+        metadata: {
+          changedFields: [
+            ...(input.fullName !== undefined ? ["fullName"] : []),
             ...(input.passwordHash !== undefined ? ["password"] : []),
           ],
         },
