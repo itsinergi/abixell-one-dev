@@ -16,6 +16,17 @@ export interface AppWindow {
   name: string;
   description?: string;
   moduleCode: string;
+  /**
+   * Route registration status (§4.3). Routes seeded by the auto-registration
+   * migration carry `di_menu` or `tersembunyi`; a window created without a
+   * route (e.g. by hand in the dictionary screen) defaults to
+   * `belum_terdaftar` and cannot be role-locked yet.
+   */
+  registrationStatus: "di_menu" | "tersembunyi" | "belum_terdaftar";
+  /** "any of" permission codes; empty = authenticated-only. */
+  requiredPermissions: string[];
+  /** Parent route for detail pages that inherit the parent's access. */
+  parentPath?: string;
   isExternalAllowed: boolean;
   isActive: boolean;
   createdAt: Date;

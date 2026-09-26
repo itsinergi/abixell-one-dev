@@ -96,10 +96,24 @@ export function registerAppMetadataRoutes(app: FastifyInstance, container: Conta
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { windowId } = request.params as { windowId: string };
-      // LOCKED DECISION: catch isExternalAllowed at wire boundary, before schema parse
-      // (zod strip:unknown would remove it silently; explicit check guards intent).
-      if ("isExternalAllowed" in (request.body as Record<string, unknown>)) {
+      // `request.body` is whatever JSON was sent: null, a string, a number or
+      // absent all reach here, and `field in body` throws a TypeError on each
+      // (a 500, before authorization). Narrow it first.
+      const wire = request.body;
+      if (typeof wire !== "object" || wire === null || Array.isArray(wire)) {
+        return reply.status(400).send({ error: "Request body must be a JSON object" });
+      }
+      // LOCKED DECISION: catch code-only fields at the wire boundary, before
+      // schema parse (zod strip:unknown would remove them silently; the
+      // explicit check guards intent). Route registration fields decide
+      // whether a page renders and who may reach it — code owns them (§4.2).
+      if ("isExternalAllowed" in wire) {
         return reply.status(400).send({ error: "Window isExternalAllowed is set in code only; UI edits forbidden" });
+      }
+      for (const field of ["registrationStatus", "requiredPermissions", "parentPath"]) {
+        if (field in wire) {
+          return reply.status(400).send({ error: `Window ${field} is set in code only; UI edits forbidden` });
+        }
       }
       const body = updateWindowSchema.parse(request.body);
       return reply.send(await container.appMetadata.updateWindow(request.actor!, windowId, body));

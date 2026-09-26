@@ -38,6 +38,7 @@ import {
   type ModuleCode,
   type VisibleNavTreeGroup,
 } from "../../lib/capabilities";
+import { evaluateRouteAccess } from "../../lib/routeRegistry";
 import { Alert, Button, Spinner } from "../components/ui";
 import { UserMenu } from "../components/UserMenu";
 import { useOnlineStatus } from "../useOnlineStatus";
@@ -346,6 +347,17 @@ export function AppShell() {
   const loadGeneration = useRef(0);
   const online = useOnlineStatus();
 
+  // Report-mode route guard (Epic 2 Wave 1, option C). It resolves the current
+  // path against the route registry and reports what it found; it does NOT
+  // block rendering. Flipping GUARD_ENFORCE in lib/routeRegistry.ts turns the
+  // same resolution fail-closed. Derived, not stored: `location` and
+  // `permissions` already trigger the render, so an extra effect would only
+  // add a frame of stale state.
+  const routeGuardReport = useMemo(
+    () => evaluateRouteAccess(location.pathname, permissions),
+    [location.pathname, permissions],
+  );
+
   const closeMobileNavigation = useCallback(() => setMobileNavOpen(false), []);
   const toggleModule = useCallback((moduleCode: ModuleCode) => {
     setExpandedModules((prev) => ({
@@ -563,6 +575,22 @@ export function AppShell() {
               aria-live="polite"
             >
               You are offline — some actions may be unavailable until the connection returns.
+            </div>
+          )}
+          {/* Report mode: say what the guard found, block nothing. Gated on the
+              loaded state — while /me is in flight `permissions` is still [],
+              so every gated route would read as denied and flash a false
+              warning on each reload. */}
+          {!loading && !error && !routeGuardReport.ok && (
+            <div
+              className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900"
+              role="status"
+              aria-live="polite"
+            >
+              {!routeGuardReport.registered
+                ? `Route registry: ${routeGuardReport.pathname} is not registered (belum_terdaftar).`
+                : `Route registry: ${routeGuardReport.pathname} needs one of ${routeGuardReport.missingPermissions.join(", ")}.`}{" "}
+              Report only — the page still renders.
             </div>
           )}
         </div>

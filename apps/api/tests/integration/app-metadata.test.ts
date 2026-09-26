@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { bootstrapTenant, provisionFirstAdmin, login, authHeader } from "./helpers.js";
+import { ROUTE_REGISTRY } from "../../src/domain/configuration/route-registry.js";
 
 const TENANT_CODE = `test-app-metadata-${Date.now()}`;
 
@@ -170,6 +171,141 @@ describe("Epic 2 Wave 1 — Application Dictionary & Metadata Engine", () => {
       expect(updateResponse.statusCode).toBe(400);
       const error = JSON.parse(updateResponse.body);
       expect(error.error).toContain("isExternalAllowed is set in code only");
+    });
+
+    it("should reject code-owned route metadata from the wire (locked decision)", async () => {
+      const createResponse = await app.inject({
+        method: "POST",
+        url: "/app-metadata/windows",
+        headers: { authorization: `Bearer ${adminToken}` },
+        payload: {
+          code: "route_metadata_locked",
+          name: "Route Metadata Locked",
+          moduleCode: "core_locked",
+          isActive: true,
+        },
+      });
+      const created = JSON.parse(createResponse.body);
+
+      // Zod strips unknown keys, so without the explicit pre-parse check these
+      // would vanish silently. They decide whether a page renders and who may
+      // reach it (§4.2 "inti di kode"), so they must fail loudly instead.
+      for (const [field, value] of [
+        ["registrationStatus", "di_menu"],
+        ["requiredPermissions", ["config.manage"]],
+        ["parentPath", "/administration"],
+      ] as const) {
+        const response = await app.inject({
+          method: "PATCH",
+          url: `/app-metadata/windows/${created.id}`,
+          headers: { authorization: `Bearer ${adminToken}` },
+          payload: { name: "Still Original", [field]: value },
+        });
+
+        expect(response.statusCode, `${field} must be rejected`).toBe(400);
+        expect(JSON.parse(response.body).error).toContain(`${field} is set in code only`);
+      }
+
+      // Nothing leaked through: the window is unchanged and still unregistered.
+      const after = await app.inject({
+        method: "GET",
+        url: `/app-metadata/windows/${created.id}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      const body = JSON.parse(after.body);
+      expect(body.name).toBe("Route Metadata Locked");
+      expect(body.registrationStatus).toBe("belum_terdaftar");
+      expect(body.requiredPermissions).toEqual([]);
+    });
+
+    it("should answer 400, not 500, for a non-object PATCH body", async () => {
+      // `field in body` throws a TypeError on null/string/number, which the
+      // error mapper turns into a 500 before authorization even runs.
+      for (const payload of [null, "just a string", 42, [1, 2, 3]]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/app-metadata/windows/00000000-0000-0000-0000-000000000000",
+          headers: { authorization: `Bearer ${adminToken}`, "content-type": "application/json" },
+          payload: JSON.stringify(payload),
+        });
+        expect(response.statusCode, `body ${JSON.stringify(payload)}`).toBe(400);
+      }
+    });
+
+    it("should ignore code-owned route metadata supplied at create time", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/app-metadata/windows",
+        headers: { authorization: `Bearer ${adminToken}` },
+        payload: {
+          code: "route_metadata_on_create",
+          name: "Route Metadata On Create",
+          moduleCode: "core_locked",
+          isActive: true,
+          registrationStatus: "di_menu",
+          requiredPermissions: ["config.read"],
+          parentPath: "/",
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      // A window created through the API has no route behind it, so it can
+      // never be role-locked — the seed migration is what registers routes.
+      expect(body.registrationStatus).toBe("belum_terdaftar");
+      expect(body.requiredPermissions).toEqual([]);
+      expect(body.parentPath).toBeUndefined();
+    });
+  });
+
+  describe("Route auto-registration seed (Epic 2 Wave 1, §4.3)", () => {
+    it("seeds one app_window per registered route for a new tenant", async () => {
+      const rows = await pool.query<{
+        code: string;
+        registration_status: string;
+        required_permissions: string[];
+      }>(
+        `SELECT code, registration_status, required_permissions
+           FROM app_windows
+          WHERE tenant_id = $1 AND code LIKE 'route:%'`,
+        [tenantId],
+      );
+
+      // Comparing against the registry rather than a pinned count means a route
+      // added in code without a matching seed fails here, which is the drift
+      // this migration exists to prevent.
+      const seededPaths = rows.rows.map((r) => r.code.replace(/^route:/, "")).sort();
+      expect(seededPaths).toEqual(ROUTE_REGISTRY.map((r) => r.path).sort());
+
+      const byCode = new Map(rows.rows.map((r) => [r.code, r]));
+
+      // The HSE report form is gated server-side on `hse.report`
+      // (hse.service.ts:110), not `hse.manage`; the registry carries both so an
+      // assignee can also open it to correct a record.
+      const hseReport = byCode.get("route:/hse/report");
+      expect(hseReport?.registration_status).toBe("tersembunyi");
+      expect(hseReport?.required_permissions).toEqual(["hse.report", "hse.manage"]);
+
+      const adminComplaints = byCode.get("route:/administration/complaints");
+      expect(adminComplaints?.required_permissions).toEqual(["complaint.configure"]);
+
+      // Entry-flow routes render outside the shell and need no permission.
+      expect(byCode.get("route:/login")?.required_permissions).toEqual([]);
+
+      // Nothing is seeded as unregistered: that status exists for rows created
+      // through the API, and it is what guard report mode surfaces.
+      expect(rows.rows.every((r) => r.registration_status !== "belum_terdaftar")).toBe(true);
+    });
+
+    it("provides the module every registry moduleCode references", async () => {
+      const missing = await pool.query<{ code: string }>(
+        `SELECT DISTINCT w.module_code AS code
+           FROM app_windows w
+           LEFT JOIN modules m ON m.code = w.module_code
+          WHERE w.tenant_id = $1 AND w.code LIKE 'route:%' AND m.code IS NULL`,
+        [tenantId],
+      );
+      expect(missing.rows.map((r) => r.code)).toEqual([]);
     });
   });
 

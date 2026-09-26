@@ -271,7 +271,7 @@ export function SalesPipelinePage() {
   }
 
   // Handle Submit Quotation
-  async function handleSubmitQuotation(id: string) {
+  const handleSubmitQuotation = useCallback(async (id: string) => {
     try {
       await api.submitQuotationForApproval(token, id);
       setMessage({ type: "success", text: "Quotation submitted for review." });
@@ -286,10 +286,10 @@ export function SalesPipelinePage() {
         text: err instanceof ApiError ? err.message : "Failed to submit quotation.",
       });
     }
-  }
+  }, [loadData, selectedQuotationId, token]);
 
   // Handle Approve Quotation
-  async function handleApproveQuotation(id: string, decision: "issued" | "withdrawn") {
+  const handleApproveQuotation = useCallback(async (id: string, decision: "issued" | "withdrawn") => {
     try {
       await api.recordQuotationApproval(token, id, decision);
       setMessage({ type: "success", text: `Quotation ${decision}.` });
@@ -304,10 +304,10 @@ export function SalesPipelinePage() {
         text: err instanceof ApiError ? err.message : "Failed to update quotation approval.",
       });
     }
-  }
+  }, [loadData, selectedQuotationId, token]);
 
   // Handle Customer Decision
-  async function handleCustomerDecision(id: string, decision: "accepted" | "declined") {
+  const handleCustomerDecision = useCallback(async (id: string, decision: "accepted" | "declined") => {
     try {
       await api.recordQuotationCustomerDecision(token, id, { decision });
       setMessage({ type: "success", text: `Customer decision recorded: ${decision}.` });
@@ -322,7 +322,7 @@ export function SalesPipelinePage() {
         text: err instanceof ApiError ? err.message : "Failed to record customer decision.",
       });
     }
-  }
+  }, [loadData, selectedQuotationId, token]);
 
   // Handle Create Price Book
   async function handleCreatePriceBook(e: FormEvent<HTMLFormElement>) {
@@ -490,7 +490,13 @@ export function SalesPipelinePage() {
         ),
       },
     ],
-    [canManageSales, canApproveSales],
+    [
+      canManageSales,
+      canApproveSales,
+      handleApproveQuotation,
+      handleCustomerDecision,
+      handleSubmitQuotation,
+    ],
   );
 
   return (

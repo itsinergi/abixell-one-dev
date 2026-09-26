@@ -222,7 +222,7 @@ export function ServiceQualityPage() {
   }
 
   // Handle Verify CAPA
-  async function handleVerifyCapa(id: string, verdict: "effective" | "ineffective") {
+  const handleVerifyCapa = useCallback(async (id: string, verdict: "effective" | "ineffective") => {
     try {
       await api.verifySqCapaEffectiveness(token, id, { verdict });
       setMessage({ type: "success", text: `CAPA marked as ${verdict}.` });
@@ -230,7 +230,7 @@ export function ServiceQualityPage() {
     } catch (err) {
       setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to verify CAPA." });
     }
-  }
+  }, [loadData, token]);
 
   // Handle Create Recurrence Rule
   async function handleCreateRecurrenceRule(e: FormEvent<HTMLFormElement>) {
@@ -254,7 +254,7 @@ export function ServiceQualityPage() {
   }
 
   // Handle Proposal Decision
-  async function handleProposalDecision(id: string, decision: "approve" | "reject") {
+  const handleProposalDecision = useCallback(async (id: string, decision: "approve" | "reject") => {
     try {
       if (decision === "approve") {
         await api.approveSqAutomationProposal(token, id);
@@ -271,7 +271,7 @@ export function ServiceQualityPage() {
     } catch (err) {
       setMessage({ type: "error", text: err instanceof ApiError ? err.message : `Failed to ${decision} proposal.` });
     }
-  }
+  }, [loadData, selectedProposalId, token]);
 
   const capaColumns: Column<SqCapaActionRecord>[] = useMemo(
     () => [
@@ -331,7 +331,7 @@ export function ServiceQualityPage() {
         ),
       },
     ],
-    [canConfigure],
+    [canConfigure, handleVerifyCapa],
   );
 
   const proposalColumns: Column<SqAutomationProposalRecord>[] = useMemo(
@@ -398,7 +398,7 @@ export function ServiceQualityPage() {
         ),
       },
     ],
-    [canConfigure],
+    [canConfigure, handleProposalDecision],
   );
 
   return (

@@ -27,11 +27,18 @@ export interface AppMetadataRepository {
   /** Get a window by code. */
   getWindowByCode(tenantId: string, code: string): Promise<AppWindow | null>;
 
-  /** Create a new window. */
-  createWindow(tenantId: string, window: Omit<AppWindow, "id" | "tenantId" | "createdAt" | "updatedAt">): Promise<AppWindow>;
+  /**
+   * Create a new window. The three code-owned route fields are not input:
+   * the seed migration is what registers routes (§4.2 "inti di kode").
+   */
+  createWindow(tenantId: string, window: Omit<AppWindow, "id" | "tenantId" | "createdAt" | "updatedAt" | "registrationStatus" | "requiredPermissions" | "parentPath">): Promise<AppWindow>;
 
-  /** Update a window. */
-  updateWindow(tenantId: string, windowId: string, updates: Partial<Omit<AppWindow, "id" | "tenantId" | "createdAt">>): Promise<AppWindow | null>;
+  /**
+   * Update a window. The three code-owned route fields are absent from the
+   * input type, so no caller can smuggle them through; the service guard is
+   * the loud rejection, this is the structural one.
+   */
+  updateWindow(tenantId: string, windowId: string, updates: Partial<Omit<AppWindow, "id" | "tenantId" | "createdAt" | "registrationStatus" | "requiredPermissions" | "parentPath">>): Promise<AppWindow | null>;
 
   // --- Tabs (Sections within a Window) ------------------------------------
 

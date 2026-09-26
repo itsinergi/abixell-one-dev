@@ -11,7 +11,28 @@ import type {
 } from "../../../domain/configuration/app-metadata.entity.js";
 import type { AppMetadataRepository } from "../../../domain/configuration/app-metadata.repository.js";
 
-function mapWindow(r: any): AppWindow {
+/** Row shape of `app_windows`, so a renamed column fails the build. */
+interface AppWindowRow {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  module_code: string;
+  registration_status: "di_menu" | "tersembunyi" | "belum_terdaftar";
+  required_permissions: string[];
+  parent_path: string | null;
+  is_external_allowed: boolean;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function mapWindow(r: AppWindowRow): AppWindow {
+  // registration_status and required_permissions are NOT NULL with defaults, so
+  // they need no fallback; parent_path is the only nullable one. A fallback on
+  // the NOT NULL pair would turn "the column is missing" into a silent
+  // belum_terdaftar for the whole dictionary instead of an error.
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -19,6 +40,9 @@ function mapWindow(r: any): AppWindow {
     name: r.name,
     description: r.description ?? undefined,
     moduleCode: r.module_code,
+    registrationStatus: r.registration_status,
+    requiredPermissions: r.required_permissions,
+    parentPath: r.parent_path ?? undefined,
     isExternalAllowed: r.is_external_allowed,
     isActive: r.is_active,
     createdAt: r.created_at,
@@ -166,11 +190,27 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async createWindow(
     tenantId: string,
-    window: Omit<AppWindow, "id" | "createdAt" | "updatedAt">,
+    window: Omit<
+      AppWindow,
+      | "id"
+      | "tenantId"
+      | "createdAt"
+      | "updatedAt"
+      | "registrationStatus"
+      | "requiredPermissions"
+      | "parentPath"
+    >,
   ): Promise<AppWindow> {
+    // The three route columns are written as literals, not from the argument:
+    // a window created here has no route behind it, so it starts unregistered
+    // and cannot be role-locked (§4.2 "inti di kode").
     const result = await this.pool.query(
-      `INSERT INTO app_windows (tenant_id, code, name, description, module_code, is_external_allowed, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO app_windows (
+         tenant_id, code, name, description, module_code,
+         registration_status, required_permissions, parent_path,
+         is_external_allowed, is_active
+       )
+       VALUES ($1, $2, $3, $4, $5, 'belum_terdaftar', '{}'::text[], NULL, $6, $7)
        RETURNING *`,
       [
         tenantId,
@@ -188,12 +228,24 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
   async updateWindow(
     tenantId: string,
     windowId: string,
-    updates: Partial<Omit<AppWindow, "id" | "tenantId" | "createdAt">>,
+    updates: Partial<
+      Omit<
+        AppWindow,
+        | "id"
+        | "tenantId"
+        | "createdAt"
+        | "registrationStatus"
+        | "requiredPermissions"
+        | "parentPath"
+      >
+    >,
   ): Promise<AppWindow | null> {
     const existing = await this.getWindow(tenantId, windowId);
     if (!existing) return null;
 
     const merged = { ...existing, ...updates };
+    // Code-owned route columns are absent from the SET list on purpose: no
+    // update path may change whether a page renders or who may reach it.
     const result = await this.pool.query(
       `UPDATE app_windows
           SET name = $1, description = $2, module_code = $3,

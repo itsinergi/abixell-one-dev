@@ -64,7 +64,18 @@ export class AppMetadataService {
 
   async createWindow(
     actor: ActorContext,
-    window: Omit<AppWindow, "id" | "tenantId" | "createdAt" | "updatedAt">,
+    window: Omit<
+      AppWindow,
+      | "id"
+      | "tenantId"
+      | "createdAt"
+      | "updatedAt"
+      // Code-owned route metadata is never part of the input: the seed
+      // migration registers routes, not this endpoint (§4.2 "inti di kode").
+      | "registrationStatus"
+      | "requiredPermissions"
+      | "parentPath"
+    >,
   ): Promise<AppWindow> {
     await this.rbac.requirePermission(actor.userId, "config.app_dictionary.manage");
 
@@ -72,6 +83,10 @@ export class AppMetadataService {
     const existing = await this.repo.getWindowByCode(actor.tenantId, window.code);
     if (existing) throw new ConflictError(`Window code '${window.code}' already exists`);
 
+    // LOCKED DECISION: route registration is code-owned (§4.2 "inti di kode").
+    // The repository writes `belum_terdaftar` / empty permissions as literals,
+    // so there is nothing to pass here; the seed migration is what registers
+    // routes.
     const created = await this.repo.createWindow(actor.tenantId, window);
 
     await this.audit.record({
@@ -96,6 +111,16 @@ export class AppMetadataService {
     // LOCKED DECISION: Super admin cannot edit access-controlling fields
     if ("isExternalAllowed" in updates) {
       throw new ValidationError("Window isExternalAllowed is set in code only; UI edits forbidden");
+    }
+
+    // LOCKED DECISION: registration status, required permissions and parent
+    // route all decide whether a page renders and who may reach it. They come
+    // from ROUTE_REGISTRY (§4.2 "inti di kode"); letting the UI rewrite them
+    // would let an operator widen access without a code review.
+    for (const field of ["registrationStatus", "requiredPermissions", "parentPath"] as const) {
+      if (field in updates) {
+        throw new ValidationError(`Window ${field} is set in code only; UI edits forbidden`);
+      }
     }
 
     const updated = await this.repo.updateWindow(actor.tenantId, windowId, updates);

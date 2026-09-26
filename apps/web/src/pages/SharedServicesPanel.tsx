@@ -208,9 +208,15 @@ export function SharedServicesPanel({
 
   useEffect(() => {
     refresh();
+    // Capture the counters object once. The object identity never changes, but
+    // reading `generations.current` inside the cleanup would re-read it after
+    // an unknown number of renders; pinning it to the effect's own scope is
+    // what the rule asks for and keeps the "invalidate every in-flight
+    // request" intent unambiguous.
+    const generationCounters = generations.current;
     return () => {
-      Object.keys(generations.current).forEach((key) => {
-        generations.current[key] += 1;
+      Object.keys(generationCounters).forEach((key) => {
+        generationCounters[key] += 1;
       });
       dialogGeneration.current += 1;
       pendingRef.current = false;

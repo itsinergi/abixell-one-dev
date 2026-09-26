@@ -427,8 +427,15 @@ test("current repository has no blocking platform-boundary findings", async () =
   // eleven governed Stage 2 permissions: `supply_chain.service_acceptance.*`
   // (3), `supply_chain.consignment.*` (2), `supply_chain.disposal.*` (3), and
   // `supply_chain.warehouse_task.*` (3).
+  // 149 through Wave A5.1 Stage 2. The three migrations that follow add exactly
+  // fifteen governed permissions and were committed without updating this pin
+  // (noticed 2026-09-26): Tahap B lifecycle adds twelve — `user.*` (6),
+  // `legal_entity.*` (3), `organization_unit.*` (3); the tenant-name migration
+  // adds `tenant.update` (1); the Epic 2 Wave 1 app-dictionary foundation adds
+  // `config.app_dictionary.read` and `config.app_dictionary.manage` (2).
+  // The Epic 2 Wave 1 route auto-registration migration declares none.
   // Pinned deliberately: an unexplained change means a permission was
   // introduced or removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 149);
+  assert.equal(result.permissionCount, 164);
   assert.equal(result.advisoryCount, 1);
 });

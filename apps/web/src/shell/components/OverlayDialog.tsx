@@ -54,14 +54,17 @@ export function OverlayDialog({
   const capturedRestoreFocusRef = useRef<HTMLElement | null>(null);
   const pendingRef = useRef(pending);
   const onCloseRef = useRef(onClose);
-  pendingRef.current = pending;
-  onCloseRef.current = onClose;
 
-  if (open && capturedRestoreFocusRef.current === null) {
-    capturedRestoreFocusRef.current =
-      suppliedRestoreFocusRef?.current ??
-      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  }
+  // Mirror the latest props into refs so the keydown listener below stays
+  // bound for the dialog's whole lifetime instead of re-subscribing on every
+  // render. Written in an effect rather than during render: a render-phase
+  // write is discarded when React abandons a render and applied twice under
+  // StrictMode, either of which leaves the listener reading a value from a
+  // render that never committed.
+  useEffect(() => {
+    pendingRef.current = pending;
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;

@@ -40,7 +40,15 @@ export function useAdminResource<T>(
   const [status, setStatus] = useState<AdminResourceStatus>("loading");
   const [error, setError] = useState<string | null>(null);
 
-  latestLoader.current = load;
+  // Keep the newest loader reachable from `run` without making `run` depend on
+  // it, so the mount effect below fires on token change rather than on every
+  // caller re-render. Written in an effect, not during render: a render-phase
+  // ref write can be dropped or applied twice under StrictMode and concurrent
+  // rendering, and `run` would then call a loader from a render that never
+  // committed. Declared before the run effect so it lands first on mount.
+  useEffect(() => {
+    latestLoader.current = load;
+  });
 
   const run = useCallback(async () => {
     const requestGeneration = ++generation.current;

@@ -484,6 +484,11 @@ function AccessDialog({
   const submitGuard = useRef(false);
   const permissionRequestId = useRef(0);
 
+  // `step` is the only gate a button may read. The dialog renders exactly one
+  // footer branch per step, so the branch that offers Confirm is unmounted the
+  // moment `pending` is entered — an inline `submitGuard.current` check here
+  // added nothing and read a ref during render, which cannot re-render on
+  // change. The guard still serialises the async paths inside the handlers.
   const pending = step === "pending";
   const selectedRole = roles.find((role) => role.code === selectedRoleCode) ?? null;
   const selectedScope = scopeChoices.find((scope) => scope.key === selectedScopeKey) ?? scopeChoices[0];
@@ -790,7 +795,7 @@ function AccessDialog({
             </Button>
             <Button
               className="min-h-[44px]"
-              disabled={!permissionReviewSatisfied || submitGuard.current}
+              disabled={!permissionReviewSatisfied}
               onClick={() => void confirmMutation()}
             >
               Confirm {operation.kind === "add" ? "add" : "remove"}
@@ -807,7 +812,7 @@ function AccessDialog({
             </Button>
             <Button
               className="min-h-[44px]"
-              disabled={!acceptedMutation || submitGuard.current}
+              disabled={!acceptedMutation}
               onClick={() => void retryVerification()}
             >
               Retry verification
