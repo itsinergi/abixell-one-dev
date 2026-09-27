@@ -14,7 +14,7 @@ const COLUMNS: Column<AdminWorkflowSummary>[] = [
   {
     header: "Code",
     cell: (workflow) => (
-      <code className="break-all font-mono text-xs font-medium text-slate-800">{workflow.code}</code>
+      <code className="break-all font-mono text-xs font-medium text-ink">{workflow.code}</code>
     ),
     mobileRole: "title",
   },

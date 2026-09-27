@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 0D integration test — proves the Workflow & Approval Engine
@@ -36,6 +30,7 @@ describe("Checkpoint 0D — Workflow & Approval Engine Foundation", () => {
 
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 0D");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     await provisionFirstAdmin({
       tenantId,

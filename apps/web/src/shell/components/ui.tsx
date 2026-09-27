@@ -4,9 +4,14 @@
  * Intentionally minimal (FD-1C-03): only the generic primitives the 1C.1
  * experience foundation actually uses live here. Data-heavy primitives
  * (DataTable, Timeline, Form fields) are deferred to the checkpoints that
- * first need them, to avoid shipping unused abstractions. Every component
- * reuses the existing Tailwind design language (slate palette, subtle
- * borders, `text-sm` scale) rather than introducing a new visual system.
+ * first need them, to avoid shipping unused abstractions.
+ *
+ * Epic 4 Wave 1 — repainted onto the design tokens from DESIGN.md. These
+ * components carry the direction for the whole product, so they name tokens
+ * (`bg-panel`, `text-ink-dim`, `border-line`) rather than palette values, and
+ * they obey the two standing rules: the accent marks the primary action, the
+ * focus ring and the selected row — never a status; and status keeps its own
+ * four colors, each paired with its soft background.
  */
 import {
   forwardRef,
@@ -23,10 +28,10 @@ import {
 type ButtonVariant = "primary" | "secondary" | "ghost";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50",
+  primary: "bg-accent text-accent-on hover:bg-accent-line disabled:opacity-50",
   secondary:
-    "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50",
-  ghost: "text-slate-600 hover:bg-slate-100 disabled:opacity-50",
+    "border border-line-strong bg-panel text-ink-dim hover:bg-panel-3 hover:text-ink disabled:opacity-50",
+  ghost: "text-ink-dim hover:bg-panel-2 hover:text-ink disabled:opacity-50",
 };
 
 export function Button({
@@ -37,7 +42,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   return (
     <button
-      className={`inline-flex min-h-[44px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 sm:min-h-[36px] ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-[44px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground sm:min-h-[36px] ${BUTTON_VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {children}
@@ -52,7 +57,7 @@ export function Card({
   children,
 }: PropsWithChildren<{ className?: string }>) {
   return (
-    <section className={`rounded-lg border border-slate-200 bg-white p-3 sm:p-4 lg:p-6 ${className}`}>
+    <section className={`rounded border border-line bg-panel p-3 sm:p-4 lg:p-6 ${className}`}>
       {children}
     </section>
   );
@@ -72,8 +77,8 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+        <h1 className="text-xl font-semibold text-ink">{title}</h1>
+        {subtitle && <p className="mt-0.5 text-sm text-ink-dim">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">{actions}</div>}
     </div>
@@ -82,13 +87,18 @@ export function PageHeader({
 
 /* ------------------------------------------------------------------- Badge */
 
+/**
+ * A non-urgent qualifier next to a title. Rectangular, not a pill: DESIGN.md
+ * §5 allows pill geometry only for the 19px status marker, so a Badge and a
+ * StatusPill never read as the same thing.
+ */
 export function Badge({
   children,
   className = "",
 }: PropsWithChildren<{ className?: string }>) {
   return (
     <span
-      className={`inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ${className}`}
+      className={`inline-flex items-center rounded border border-line bg-panel-2 px-2 py-0.5 text-xs font-medium text-ink-dim ${className}`}
     >
       {children}
     </span>
@@ -100,11 +110,13 @@ export function Badge({
 type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 
 const STATUS_TONES: Record<StatusTone, string> = {
-  neutral: "bg-slate-100 text-slate-600",
-  info: "bg-blue-50 text-blue-700",
-  success: "bg-green-50 text-green-700",
-  warning: "bg-amber-50 text-amber-700",
-  danger: "bg-red-50 text-red-700",
+  neutral: "border-line-strong bg-status-idle-soft text-status-idle",
+  // `info` is not a status color in this direction, and the accent is never
+  // used for one; an informational marker is neutral.
+  info: "border-line-strong bg-panel-2 text-ink-dim",
+  success: "border-status-ok bg-status-ok-soft text-status-ok",
+  warning: "border-status-warn bg-status-warn-soft text-status-warn",
+  danger: "border-status-danger bg-status-danger-soft text-status-danger",
 };
 
 export function StatusPill({
@@ -113,7 +125,7 @@ export function StatusPill({
 }: PropsWithChildren<{ tone?: StatusTone }>) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TONES[tone]}`}
+      className={`inline-flex h-[19px] items-center gap-1 rounded px-2 text-[10.5px] font-semibold uppercase tracking-[0.04em] ${STATUS_TONES[tone]}`}
     >
       {children}
     </span>
@@ -132,10 +144,10 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
-      <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+    <div className="flex flex-col items-center justify-center rounded border border-dashed border-line-strong bg-panel-2 px-6 py-12 text-center">
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
       {description && (
-        <p className="mt-1 max-w-md text-sm text-slate-500">{description}</p>
+        <p className="mt-1 max-w-md text-sm text-ink-dim">{description}</p>
       )}
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -147,12 +159,12 @@ export function EmptyState({
 export function Spinner({ label = "Loading…" }: { label?: string }) {
   return (
     <div
-      className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500"
+      className="flex items-center justify-center gap-2 py-8 text-sm text-ink-dim"
       role="status"
       aria-live="polite"
     >
       <span
-        className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600"
+        className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-ink-dim"
         aria-hidden="true"
       />
       {label}
@@ -165,10 +177,10 @@ export function Spinner({ label = "Loading…" }: { label?: string }) {
 type AlertTone = "error" | "success" | "info" | "warning";
 
 const ALERT_TONES: Record<AlertTone, string> = {
-  error: "border border-red-200 bg-red-50 text-red-800",
-  success: "border border-green-200 bg-green-50 text-green-800",
-  info: "border border-blue-200 bg-blue-50 text-blue-800",
-  warning: "border border-amber-200 bg-amber-50 text-amber-900",
+  error: "border border-status-danger bg-status-danger-soft text-status-danger",
+  success: "border border-status-ok bg-status-ok-soft text-status-ok",
+  info: "border border-line-strong bg-panel-2 text-ink-dim",
+  warning: "border border-status-warn bg-status-warn-soft text-status-warn",
 };
 
 /** Inline feedback primitive — the foundation's feedback mechanism for
@@ -188,7 +200,7 @@ export function Alert({
 /* ------------------------------------------------- Form primitives (1C.2) */
 
 const CONTROL_CLASS =
-  "mt-1 min-h-[44px] w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50 sm:min-h-[36px]";
+  "mt-1 min-h-[44px] w-full rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-60 sm:min-h-[36px]";
 
 /** Labelled field wrapper — pairs a label with a control and optional hint. */
 export function Field({
@@ -199,12 +211,12 @@ export function Field({
 }: PropsWithChildren<{ label: string; required?: boolean; hint?: ReactNode }>) {
   return (
     <label className="block text-sm">
-      <span className="font-medium text-slate-700">
+      <span className="font-medium text-ink-dim">
         {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
+        {required && <span className="ml-0.5 text-status-danger">*</span>}
       </span>
       {children}
-      {hint && <span className="mt-0.5 block text-xs text-slate-400">{hint}</span>}
+      {hint && <span className="mt-0.5 block text-xs text-ink-faint">{hint}</span>}
     </label>
   );
 }
@@ -246,7 +258,12 @@ export interface Column<T> {
 }
 
 /** Generic, responsive table. Horizontal-scrolls inside its own container so
- * the page never scrolls sideways. Rows are optionally clickable. */
+ * the page never scrolls sideways. Rows are optionally clickable.
+ *
+ * Desktop rows are a fixed 32px (DESIGN.md §3): the value of a dense table is
+ * that the eye can run down a column without re-finding its place. Cells keep
+ * a minimum height rather than a fixed one so a cell wrapping to two lines
+ * still grows instead of clipping its content. */
 export function DataTable<T>({
   columns,
   rows,
@@ -271,7 +288,8 @@ export function DataTable<T>({
   return (
     <>
       {/* Mobile (Checkpoint 1C.7): stacked cards instead of a sideways-scrolling
-          table, so dense operational/management tables stay usable on a phone. */}
+          table, so dense operational/management tables stay usable on a phone.
+          Cards follow the 44px touch-target rule, not the 32px desktop density. */}
       <ul className={`space-y-3 ${cardVisibility}`}>
         {rows.map((row) => {
           const titleColumns = columns.filter((column) => column.mobileRole === "title");
@@ -285,13 +303,13 @@ export function DataTable<T>({
             <li
               key={keyOf(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={`rounded-lg border border-slate-200 bg-white p-3 ${onRowClick ? "cursor-pointer active:bg-slate-50" : ""}`}
+              className={`rounded border border-line bg-panel p-3 ${onRowClick ? "cursor-pointer active:bg-panel-2" : ""}`}
             >
               {hasHierarchy && (
-                <div className="mb-2 flex items-start justify-between gap-3 border-b border-slate-100 pb-2">
+                <div className="mb-2 flex items-start justify-between gap-3 border-b border-line pb-2">
                   <div className="min-w-0 space-y-0.5">
                     {titleColumns.map((column, index) => (
-                      <div key={index} className="break-words text-sm font-semibold text-slate-900">
+                      <div key={index} className="break-words text-sm font-semibold text-ink">
                         {column.cell(row)}
                       </div>
                     ))}
@@ -305,10 +323,10 @@ export function DataTable<T>({
               )}
               {(hasHierarchy ? detailColumns : columns).map((column, index) => (
                 <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] items-start gap-3 py-1">
-                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
                     {column.header}
                   </span>
-                  <span className="min-w-0 break-words text-right text-sm text-slate-700">
+                  <span className="min-w-0 break-words text-right text-sm text-ink">
                     {column.cell(row)}
                   </span>
                 </div>
@@ -319,30 +337,33 @@ export function DataTable<T>({
       </ul>
 
       {/* Desktop/tablet: the full table (still scrolls inside its own box). */}
-      <div className={`${tableVisibility} overflow-x-auto rounded-lg border border-slate-200`}>
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
-            <tr>
+      <div className={`${tableVisibility} overflow-x-auto rounded border border-line`}>
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-line-strong">
               {columns.map((column, index) => (
                 <th
                   key={index}
                   scope="col"
-                  className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${column.className ?? ""}`}
+                  className={`px-3 pb-2 pt-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint ${column.className ?? ""}`}
                 >
                   {column.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody>
             {rows.map((row) => (
               <tr
                 key={keyOf(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={onRowClick ? "cursor-pointer hover:bg-slate-50" : ""}
+                className={`border-b border-line last:border-b-0 hover:bg-panel-2 ${onRowClick ? "cursor-pointer" : ""}`}
               >
                 {columns.map((column, index) => (
-                  <td key={index} className={`px-3 py-2 align-middle text-slate-700 ${column.className ?? ""}`}>
+                  <td
+                    key={index}
+                    className={`min-h-row px-3 align-middle text-ink ${column.className ?? ""}`}
+                  >
                     {column.cell(row)}
                   </td>
                 ))}
@@ -372,7 +393,7 @@ export function PermissionDeniedState({
           {permission ? (
             <>
               Viewing this area requires permission{" "}
-              <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs text-slate-700">
+              <code className="rounded bg-panel-3 px-1.5 py-0.5 font-mono text-xs text-ink-dim">
                 {permission}
               </code>
               .
@@ -400,20 +421,20 @@ export interface TimelineItem {
 /** Vertical progress timeline — generic, ordered oldest→newest by caller. */
 export function Timeline({ items }: { items: TimelineItem[] }) {
   if (items.length === 0) {
-    return <p className="text-sm text-slate-500">No activity recorded yet.</p>;
+    return <p className="text-sm text-ink-dim">No activity recorded yet.</p>;
   }
   return (
-    <ol className="relative ml-2 border-l border-slate-200">
+    <ol className="relative ml-2 border-l border-line">
       {items.map((item) => (
         <li key={item.key} className="mb-4 ml-4">
-          <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-slate-300" />
-          <div className="text-sm font-medium text-slate-800">{item.title}</div>
+          <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-panel bg-line-strong" />
+          <div className="text-sm font-medium text-ink">{item.title}</div>
           {item.timestamp && (
-            <div className="text-xs text-slate-400">
+            <div className="text-xs text-ink-faint">
               {new Date(item.timestamp).toLocaleString()}
             </div>
           )}
-          {item.detail && <div className="mt-0.5 text-sm text-slate-600">{item.detail}</div>}
+          {item.detail && <div className="mt-0.5 text-sm text-ink-dim">{item.detail}</div>}
         </li>
       ))}
     </ol>

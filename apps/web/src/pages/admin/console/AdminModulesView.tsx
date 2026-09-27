@@ -12,7 +12,7 @@ import { useAdminResource } from "./useAdminResource";
 const COLUMNS: Column<AdminModuleSummary>[] = [
   {
     header: "Module",
-    cell: (module) => <span className="font-medium text-slate-800">{module.moduleName}</span>,
+    cell: (module) => <span className="font-medium text-ink">{module.moduleName}</span>,
     mobileRole: "title",
   },
   {

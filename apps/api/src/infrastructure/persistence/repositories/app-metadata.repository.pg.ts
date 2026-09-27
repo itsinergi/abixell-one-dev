@@ -8,6 +8,7 @@ import type {
   AppTab,
   AppTable,
   AppWindow,
+  MenuNode,
 } from "../../../domain/configuration/app-metadata.entity.js";
 import type { AppMetadataRepository } from "../../../domain/configuration/app-metadata.repository.js";
 
@@ -47,6 +48,91 @@ function mapWindow(r: AppWindowRow): AppWindow {
     isActive: r.is_active,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+  };
+}
+
+/** Row shape of one menu node in the tree, parent resolved to its code. */
+interface MenuTreeRow {
+  code: string;
+  name: string;
+  description: string | null;
+  is_summary: boolean;
+  module_code: string | null;
+  window_code: string | null;
+  is_external_allowed: boolean;
+  required_permissions: string[];
+  seq_no: number;
+  parent_code: string | null;
+}
+
+/**
+ * One row per menu node, carrying its own parent's code so the tree assembles
+ * without a second round trip. Ordered by `seq_no` then `code`, so every
+ * sibling list is already in display order by the time it is built.
+ *
+ * Wave 3 step 11: `name` and `description` fall back to the Product Core
+ * catalogue row and yield to a tenant override when one exists
+ * (CORE-ROADMAP.md §4.3 "Label dan deskripsi boleh ditimpa tenant, dibatasi
+ * daftar istilah yang diizinkan"). The override is reached through
+ * `menu_terminology_allowlist`, so a terminology key that the core allowlist
+ * does not point at this menu/field pair can never surface here — the gate is
+ * the join, not a check downstream.
+ *
+ * Everything else in the row — `code`, destination, `module_id`,
+ * `required_permissions`, `is_external_allowed` — is read from `app_menus`
+ * and is deliberately NOT overridable: §4.2 "Tenant hanya menimpa yang
+ * aman: label, terminologi, urutan field, field disembunyikan", and
+ * guardrail #1 forbids the UI from touching access definitions at all.
+ *
+ * Both joins are 1:1 by unique constraint (`menu_terminology_allowlist` on
+ * (menu_code, field), `tenant_terminology_overrides` on
+ * (tenant_id, terminology_key_id)), so a node cannot be multiplied. The
+ * override is matched on `t.tenant_id` — the same tenant as the tree row —
+ * so one tenant's label never reaches another's tree.
+ */
+const MENU_TREE_QUERY = `
+  SELECT m.code,
+         COALESCE(nto.value, m.name) AS name,
+         COALESCE(dto.value, m.description) AS description,
+         m.is_summary,
+         mod.code AS module_code,
+         w.code AS window_code,
+         m.is_external_allowed,
+         m.required_permissions,
+         t.seq_no,
+         parent.code AS parent_code
+    FROM app_menu_tree t
+    JOIN app_menus m ON m.id = t.menu_id AND m.tenant_id = t.tenant_id
+    LEFT JOIN modules mod ON mod.id = m.module_id
+    LEFT JOIN app_windows w ON w.id = m.window_id
+    LEFT JOIN app_menus parent ON parent.id = t.parent_id
+    LEFT JOIN menu_terminology_allowlist na
+           ON na.menu_code = m.code AND na.field = 'name'
+    LEFT JOIN tenant_terminology_overrides nto
+           ON nto.terminology_key_id = na.terminology_key_id
+          AND nto.tenant_id = t.tenant_id
+    LEFT JOIN menu_terminology_allowlist da
+           ON da.menu_code = m.code AND da.field = 'description'
+    LEFT JOIN tenant_terminology_overrides dto
+           ON dto.terminology_key_id = da.terminology_key_id
+          AND dto.tenant_id = t.tenant_id
+   WHERE t.tenant_id = $1
+   ORDER BY t.seq_no, m.code`;
+
+function mapMenuRow(r: MenuTreeRow): MenuNode {
+  return {
+    code: r.code,
+    name: r.name,
+    description: r.description ?? undefined,
+    isSummary: r.is_summary,
+    moduleCode: r.module_code ?? undefined,
+    // Window codes carry a `route:` prefix in the dictionary; a menu serves
+    // the path itself.
+    path: r.window_code === null ? undefined : r.window_code.replace(/^route:/, ""),
+    isExternalAllowed: r.is_external_allowed,
+    requiredPermissions: r.required_permissions,
+    seqNo: r.seq_no,
+    children: [],
   };
 }
 
@@ -161,6 +247,38 @@ function mapFieldRule(r: any): AppFieldRule {
 
 export class PgAppMetadataRepository implements AppMetadataRepository {
   constructor(private readonly pool: Pool) {}
+
+  // --- Menu tree ------------------------------------------------------------
+
+  /**
+   * One row per menu node, carrying its own parent's code so the tree is
+   * assembled without a second round trip. Ordered by `seq_no` then `code`:
+   * every sibling list is therefore already in display order by the time it
+   * is built, and no post-sort is needed.
+   */
+  async listMenuTree(tenantId: string): Promise<MenuNode[]> {
+    const result = await this.pool.query(
+      MENU_TREE_QUERY,
+      [tenantId],
+    );
+
+    const byCode = new Map<string, MenuNode>();
+    for (const r of result.rows as MenuTreeRow[]) {
+      byCode.set(r.code, mapMenuRow(r));
+    }
+
+    const roots: MenuNode[] = [];
+    for (const r of result.rows as MenuTreeRow[]) {
+      const node = byCode.get(r.code)!;
+      // A parent code missing from this map would mean a tree row hanging off
+      // another tenant's menu; the tenant-scoped join makes that impossible,
+      // so a miss here is only reachable if the node itself is absent.
+      const parent = r.parent_code === null ? undefined : byCode.get(r.parent_code);
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+    }
+    return roots;
+  }
 
   // --- Windows -------------------------------------------------------------
 

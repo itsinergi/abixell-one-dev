@@ -1,8 +1,8 @@
 /**
  * Epic 2 Wave 1 — avatar dropdown for shell header and drawer.
  *
- * Draft without direction (no DESIGN.md) — dials ENERGY 1 / RHYTHM 1 /
- * MOTION 1. Uses an initials circle, never an invented profile asset.
+ * Repainted onto the DESIGN.md tokens (Epic 4 Wave 1). Uses an initials
+ * circle on the accent, never an invented profile asset.
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
@@ -94,17 +94,17 @@ export function UserMenu({
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex min-h-[44px] items-center gap-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        className="flex min-h-[44px] items-center gap-2 rounded border border-line-strong bg-panel px-2 py-1 text-sm hover:bg-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-white"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-on"
         >
           {initials}
         </span>
         <span className="hidden min-w-0 flex-col items-start text-left sm:flex">
-          <span className="max-w-[10rem] truncate text-sm font-medium text-slate-800">{displayName}</span>
-          {email && <span className="max-w-[10rem] truncate text-xs text-slate-500">{email}</span>}
+          <span className="max-w-[10rem] truncate text-sm font-medium text-ink">{displayName}</span>
+          {email && <span className="max-w-[10rem] truncate text-xs text-ink-dim">{email}</span>}
         </span>
       </button>
       {open && (
@@ -113,18 +113,18 @@ export function UserMenu({
           ref={menuRef}
           role="menu"
           aria-label="User menu"
-          className="absolute right-0 z-30 mt-2 w-56 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+          className="absolute right-0 z-30 mt-2 w-56 rounded border border-line bg-panel py-1 shadow-lg"
         >
-          <div className="border-b border-slate-100 px-3 py-2 sm:hidden">
-            <div className="truncate text-sm font-medium text-slate-800">{displayName}</div>
-            {email && <div className="truncate text-xs text-slate-500">{email}</div>}
+          <div className="border-b border-line px-3 py-2 sm:hidden">
+            <div className="truncate text-sm font-medium text-ink">{displayName}</div>
+            {email && <div className="truncate text-xs text-ink-dim">{email}</div>}
           </div>
           <NavLink
             to="/profile"
             role="menuitem"
             tabIndex={-1}
             onClick={close}
-            className="block min-h-[44px] px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
+            className="block min-h-[44px] px-3 py-2 text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-none"
           >
             Profile
           </NavLink>
@@ -136,7 +136,7 @@ export function UserMenu({
               close();
               onSignOut();
             }}
-            className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
+            className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-none"
           >
             Sign out
           </button>

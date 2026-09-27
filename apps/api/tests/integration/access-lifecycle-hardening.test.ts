@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { authHeader, bootstrapTenant, login } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, login } from "./helpers.js";
 
 /**
  * Phase 11F — Access lifecycle hardening.
@@ -44,12 +44,14 @@ describe("Phase 11F — access lifecycle hardening", () => {
   beforeAll(async () => {
     passwordHash = await hashPassword(PASSWORD);
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant Lifecycle");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     const otherTenant = await bootstrapTenant(
       app,
       `${TENANT_CODE}-other`,
       "Test Tenant Lifecycle Other",
     );
+    await activateAllModules(otherTenant.id);
     otherTenantId = otherTenant.id;
   });
 

@@ -13,6 +13,7 @@ import type {
   AppApiResource,
   AppFieldRule,
   AppFieldRuleVersion,
+  MenuNode,
 } from "./app-metadata.entity.js";
 
 export interface AppMetadataRepository {
@@ -39,6 +40,14 @@ export interface AppMetadataRepository {
    * the loud rejection, this is the structural one.
    */
   updateWindow(tenantId: string, windowId: string, updates: Partial<Omit<AppWindow, "id" | "tenantId" | "createdAt" | "registrationStatus" | "requiredPermissions" | "parentPath">>): Promise<AppWindow | null>;
+
+  /**
+   * The tenant's navigation tree, roots first, each node in `seq_no` order
+   * (§4.3). Returns the whole catalogue for the tenant; per-caller filtering
+   * (external whitelist, module status, role rights) is the caller's job, so
+   * one query serves every persona rather than one query per persona.
+   */
+  listMenuTree(tenantId: string): Promise<MenuNode[]>;
 
   // --- Tabs (Sections within a Window) ------------------------------------
 

@@ -34,8 +34,56 @@
  * Detail routes inherit their parent's access (§4.3 "Halaman rincian ...
  * mewarisi aksesnya"), so their permission list is repeated from the parent
  * rather than resolved at runtime — an explicit copy keeps the registry
- * readable and diffable. The read-only exception (`/finance/transactions/:id`)
- * carries its own narrower list on purpose.
+ * readable and diffable.
+ *
+ * §4.3 open item 3 ("rincian mana saja yang memang perlu pengecualian
+ * hanya-baca") was audited 2026-09-26 across the registry's detail routes
+ * (parentPath set). The measurement:
+ *
+ *   - 15 of 17 detail routes repeat their parent's list verbatim.
+ *   - `/asset-maintenance/assets/:assetId` is admitted by a different
+ *     capability set: meters, downtime, and performance analytics rather
+ *     than the maintenance list. Test roles OPERATOR_ROLE and NO_ANALYTICS_ROLE
+ *     show the distinction: the former holds `asset.meter.manage` and
+ *     `asset.analytics.read`; the latter holds only `asset.maintenance.read`.
+ *   - `/hse/report` is the second and only other deviation: the server gates
+ *     the create form on `hse.report` (hse.service.ts:110), not `hse.manage`,
+ *     so both codes are listed — an admission correction, not a mode change.
+ *   - No detail page is read-only. `/finance/transactions/:transactionId`, the
+ *     route the roadmap names by hand, writes through `finance.manage` and
+ *     `finance.approve`.
+ *
+ * What the audit does NOT support is the conclusion first drawn from it — that
+ * a read-only exception has no reason to exist. Page capability and role
+ * permission are different questions. That a page contains mutations says
+ * nothing about whether a given role may perform them; a role holding only
+ * `*.read` must be able to open the page and not write, and today nothing
+ * expresses that. `permissions` here answers "may the role open the Window at
+ * all" — it cannot answer "read-only". That is the third layer, the per-role
+ * window lock `role_window_access` (§4.4 Gelombang 1), which is why the roadmap
+ * added it and why this registry cannot carry the exception alone.
+ *
+ * `role_window_access` has landed (Epic 4 Wave 1) and is enforced: step 11b
+ * maps each mutating API path to a Window in `window-enforcement.ts`, and
+ * `window-access-plugin.ts` rejects POST/PUT/PATCH/DELETE with a 403 when every
+ * authorization-effective assignment for that Window is read-only. The route
+ * gate still decides whether the page renders.
+ *
+ * One residue was left by the historical seed, and it was visible. `1787200000000`
+ * seeded this route's `note` as "Read-only exception (§4.3): own window identity
+ * so it can be locked apart from the list." That note is copied into
+ * `app_windows.description` by `config_seed_app_windows_for_tenant()`, and
+ * `GET /app-metadata/windows` returns the column — so the wrong framing reached
+ * the Application Dictionary for every existing and future tenant, not just this
+ * file. The migration is historical (project policy freezes 1755500000000 through
+ * 1787600000000), so `1787900000000_epic-3-route-note-correction.cjs` repairs it
+ * forward: an UPDATE for existing tenants and a corrected trigger function for
+ * future ones. The `note` above is the source-of-truth wording; the registry
+ * carries it, the migration restores it in the database.
+ *
+ * Not digested by the boundary validator — `PHASE_11A_MIGRATION_DIGESTS` ends at
+ * `1772000000000`. The freeze on the historical range is a project instruction,
+ * not a validator rule.
  */
 
 export type RouteRegistrationStatus = "di_menu" | "tersembunyi" | "belum_terdaftar";
@@ -546,7 +594,7 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     status: "tersembunyi",
     permissions: ["finance.read", "finance.manage"],
     parentPath: "/finance/transactions",
-    note: "Read-only exception (§4.3): own window identity so it can be locked apart from the list.",
+    note: "Detail with its own window identity (§4.3); role read-only mode is lapis 3, not carried here.",
   },
   {
     path: "/finance/cashflow",
@@ -624,6 +672,15 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     status: "di_menu",
     permissions: ["admin.console.read"],
     note: "Internal only; each console section carries its own permission server-side.",
+  },
+  {
+    path: "/admin/roles/:roleCode",
+    name: "Role Definition",
+    moduleCode: "platform",
+    status: "tersembunyi",
+    permissions: ["admin.console.read"],
+    parentPath: "/admin",
+    note: "Epic 4 Wave 1 — reached from the Admin Console Roles section. Hidden because it is a drill-down, not a menu entry; it renders the same Window picker the console section shows, and the write path behind it is gated by `role_window_access` (step 11b).",
   },
   // --- Entry flow (outside the shell) --------------------------------------
   // §4.3: these three are "didaftarkan sebagai alur masuk" — registered, not

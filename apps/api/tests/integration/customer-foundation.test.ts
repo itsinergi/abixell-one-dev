@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 1A — Document Scope & Customer Experience Foundation.
@@ -71,6 +71,7 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
 
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 1A");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     await provisionFirstAdmin({ tenantId, email: "admin@test1a.local", password: "Admin12345!" });
     const adminLogin = await login(app, TENANT_CODE, "admin@test1a.local", "Admin12345!");
@@ -424,6 +425,8 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
     expect(outOfScope.statusCode).toBe(403);
 
     const otherTenant = await bootstrapTenant(app, `${TENANT_CODE}-other`, "Other Tenant 1A");
+
+    await activateAllModules(otherTenant.id);
     await provisionFirstAdmin({ tenantId: otherTenant.id, email: "admin@other1a.local", password: "Admin12345!" });
     const otherLogin = await login(app, `${TENANT_CODE}-other`, "admin@other1a.local", "Admin12345!");
     crossTenantAdminToken = otherLogin.body.accessToken;

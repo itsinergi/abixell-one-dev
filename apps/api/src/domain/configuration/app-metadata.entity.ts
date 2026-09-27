@@ -33,6 +33,49 @@ export interface AppWindow {
   updatedAt: Date;
 }
 
+/**
+ * Menu node: one entry of the navigation tree (§4.3).
+ *
+ * The two-table split is deliberate (iDempiere's AD_Menu / AD_Tree_Menu):
+ * `AppMenu` is WHAT the menu is — its code, label and destination — while the
+ * tree row is only WHERE it hangs. Moving a menu therefore never rewrites its
+ * definition, and the same definition may be re-hung without touching it.
+ *
+ * This is the shape the server serves. Wave 1 proved the served catalogue
+ * matched the navigation of the day; Wave 2 filters it per caller in
+ * `menu-filter.ts` before it leaves the server, which is where `locked` and
+ * `lockedReason` are set.
+ */
+export interface MenuNode {
+  /** Stable code, locked in code. Example: nav-operations-work-orders. */
+  code: string;
+  name: string;
+  description?: string;
+  /** `true` = a folder (Grup, Modul); only a folder has children. */
+  isSummary: boolean;
+  /** Module this menu belongs to; mandatory for a page, absent for a folder. */
+  moduleCode?: string;
+  /** Route this menu opens, resolved from its window. Absent for a folder. */
+  path?: string;
+  /** The external whitelist flag. Default closed. */
+  isExternalAllowed: boolean;
+  /** "any of" permission codes the server-side filter uses (Wave 2). */
+  requiredPermissions: string[];
+  /** Position among its siblings. */
+  seqNo: number;
+  children: MenuNode[];
+  /**
+   * Wave 2: the caller's role cannot open this page, but the module is active,
+   * so the menu is sent in a disabled state with a reason rather than hidden
+   * (§4.3 "MODUL AKTIF + role tidak boleh → menu tampil, NONAKTIF + keterangan").
+   * `false` for folders and for pages the caller may open; only the server
+   * sets it, never the client.
+   */
+  locked?: boolean;
+  /** Why the menu is locked. Present only when `locked` is true. */
+  lockedReason?: string;
+}
+
 /** Tab: a section within a window/page */
 export interface AppTab {
   id: string;

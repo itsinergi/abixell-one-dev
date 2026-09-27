@@ -3,15 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  createScheduledJobFixture,
-  deleteScheduledJobFixture,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, createScheduledJobFixture, deleteScheduledJobFixture, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 0F integration test — proves the Phase 0 Stabilization
@@ -46,6 +38,7 @@ describe("Checkpoint 0F — Phase 0 Stabilization", () => {
       name: "Test 0F Workflow Escalation Sweep",
     });
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 0F");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     await provisionFirstAdmin({ tenantId, email: "admin@test0f.local", password: "Admin12345!" });
     const adminLogin = await login(app, TENANT_CODE, "admin@test0f.local", "Admin12345!");

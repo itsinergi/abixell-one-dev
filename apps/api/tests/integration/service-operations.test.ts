@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Phase 2 — Service Operations & Work Management Core (SO-CORE-001…015).
@@ -84,6 +84,7 @@ describe("Phase 2 — Service Operations & Work Management Core", () => {
 
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant P2");
+    await activateAllModules(t.id);
     tenantId = t.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p2.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@p2.local", "Admin12345!")).body.accessToken;
@@ -156,6 +157,7 @@ describe("Phase 2 — Service Operations & Work Management Core", () => {
 
     // Second tenant for cross-tenant isolation checks.
     const ot = await bootstrapTenant(app, OTHER, "Tenant P2 Other");
+    await activateAllModules(ot.id);
     otherTenantUserId = (
       await provisionFirstAdmin({ tenantId: ot.id, email: "admin@p2other.local", password: "Admin12345!" })
     ).userId;

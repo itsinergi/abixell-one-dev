@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Wave A4 — Workforce Advanced Integration Test Suite (HR-ADV-001…009).
@@ -129,6 +123,7 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
     // 1. Bootstrap Tenants & Provision Admins
     // -----------------------------------------------------------------------
     const primaryTenant = await bootstrapTenant(app, TENANT_CODE, "Wave A4 Primary Tenant");
+    await activateAllModules(primaryTenant.id);
     tenantId = primaryTenant.id;
     const adminUser = await provisionFirstAdmin({
       tenantId,
@@ -140,6 +135,8 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
     adminToken = adminLogin.body.accessToken;
 
     const otherTenant = await bootstrapTenant(app, OTHER_TENANT_CODE, "Wave A4 Other Tenant");
+
+    await activateAllModules(otherTenant.id);
     otherTenantId = otherTenant.id;
     const otherAdmin = await provisionFirstAdmin({
       tenantId: otherTenantId,

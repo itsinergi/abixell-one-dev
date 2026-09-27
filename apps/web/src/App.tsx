@@ -58,6 +58,7 @@ import { ProjectDeliveryPage } from "./modules/project-delivery/ProjectDeliveryP
 import { ProjectDeliveryDetailPage } from "./modules/project-delivery/ProjectDeliveryDetailPage";
 import { ReportingInsightPage } from "./modules/reporting-insight/ReportingInsightPage";
 import { AdminConsolePage } from "./pages/admin/console/AdminConsolePage";
+import { AdminRoleDefinitionPage } from "./pages/admin/console/AdminRoleDefinitionPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { useAuth } from "./auth/AuthContext";
 
@@ -71,7 +72,7 @@ function ProtectedLayout() {
   const { session, initializing } = useAuth();
   if (initializing) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-screen items-center justify-center text-sm text-ink-dim">
         Loading…
       </div>
     );
@@ -182,6 +183,10 @@ export default function App() {
           <Route path="reporting" element={<ReportingInsightPage />} />
           {/* Phase 11C — Business Admin Console (read-only) */}
           <Route path="admin" element={<AdminConsolePage />} />
+          {/* Epic 4 Wave 1 — Role definition editor, reached from the Roles
+              section. A distinct route so the definition survives a reload
+              and can be linked to directly. */}
+          <Route path="admin/roles/:roleCode" element={<AdminRoleDefinitionPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

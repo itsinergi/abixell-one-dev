@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 0C integration test — proves the Configuration & Metadata
@@ -23,6 +17,18 @@ import {
  */
 
 const TENANT_CODE = `test-0c-${Date.now()}`;
+
+/**
+ * Epic 3 Wave 3 (§4.3 step 10): turning a module on or off is a platform
+ * authority act, so `PUT /config/modules/:code` now needs the platform-operator
+ * credential (ADR-0004) in addition to `config.manage`. Tests that only want to
+ * reach the RBAC layer pass this; the tests that prove RBAC still bites pass it
+ * too, on purpose — the credential is layered ON TOP of RBAC, never instead of it.
+ */
+function bootstrapHeaders() {
+  const key = process.env.PLATFORM_BOOTSTRAP_KEY || "dev-only-change-me-bootstrap";
+  return { "x-bootstrap-key": key };
+}
 
 describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
   const app = buildApp();
@@ -97,7 +103,7 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     const response = await app.inject({
       method: "PUT",
       url: "/config/modules/customer_complaint",
-      headers: authHeader(adminToken),
+      headers: { ...authHeader(adminToken), ...bootstrapHeaders() },
       payload: { isActive: true },
     });
     expect(response.statusCode).toBe(200);
@@ -298,7 +304,11 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     const writeResponse = await app.inject({
       method: "PUT",
       url: "/config/modules/survey_assessment",
-      headers: authHeader(auditorLogin.body.accessToken),
+      // Deliberately carries the platform credential as well: this asserts
+      // that RBAC still bites UNDER it (ADR-0004's "no precedent for
+      // bypassing RBAC"). An auditor holding `config.read` fails on
+      // `config.manage` even when the platform operator's key is present.
+      headers: { ...authHeader(auditorLogin.body.accessToken), ...bootstrapHeaders() },
       payload: { isActive: true },
     });
     expect(writeResponse.statusCode).toBe(403);
@@ -337,6 +347,7 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     expect((await app.inject({ method: "GET", url: "/config/modules", headers })).statusCode).toBe(403);
 
     const otherTenant = await bootstrapTenant(app, `${TENANT_CODE}-other`, "Other Navigation Tenant");
+
     try {
       await provisionFirstAdmin({
         tenantId: otherTenant.id,
@@ -347,7 +358,8 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
       expect(otherAdmin.statusCode).toBe(200);
       const otherHeaders = authHeader(otherAdmin.body.accessToken);
       const activated = await app.inject({
-        method: "PUT", url: "/config/modules/survey_assessment", headers: otherHeaders,
+        method: "PUT", url: "/config/modules/survey_assessment",
+        headers: { ...otherHeaders, ...bootstrapHeaders() },
         payload: { isActive: true },
       });
       expect(activated.statusCode).toBe(200);
@@ -358,7 +370,8 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
         .toEqual(["customer_complaint"]);
 
       const disabled = await app.inject({
-        method: "PUT", url: "/config/modules/customer_complaint", headers: authHeader(adminToken),
+        method: "PUT", url: "/config/modules/customer_complaint",
+        headers: { ...authHeader(adminToken), ...bootstrapHeaders() },
         payload: { isActive: false },
       });
       expect(disabled.statusCode).toBe(200);
@@ -367,7 +380,8 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     } finally {
       await pool.query(`DELETE FROM tenants WHERE id = $1`, [otherTenant.id]);
       await app.inject({
-        method: "PUT", url: "/config/modules/customer_complaint", headers: authHeader(adminToken),
+        method: "PUT", url: "/config/modules/customer_complaint",
+        headers: { ...authHeader(adminToken), ...bootstrapHeaders() },
         payload: { isActive: true },
       });
     }

@@ -1,5 +1,10 @@
-/** Phase 11F — Tenant role summaries with on-demand permission inspection. */
+/** Phase 11F — Tenant role summaries, with the Epic 4 Wave 1 definition
+ *  editor reached per role. The summary list and the definition resource are
+ *  separate reads with separate permissions: an actor may list roles without
+ *  being allowed to open a definition, so the row link is only offered when
+ *  the definition is readable. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../auth/AuthContext";
 import {
   api,
@@ -21,10 +26,22 @@ import {
 import { OverlayDialog } from "../../../shell/components/OverlayDialog";
 import { AdminEmpty, AdminPanel, AdminSectionState } from "./AdminSection";
 import { useAdminResource } from "./useAdminResource";
+import { CreateRoleDialog } from "./AdminRoleDefinitionView";
 
-export function AdminRolesView() {
+export function AdminRolesView({
+  canManage,
+  canRead,
+}: {
+  /** `role.manage`, tenant-scoped — mirrors the server's write gate. */
+  canManage: boolean;
+  /** `config.read`, tenant-scoped — mirrors the server's definition read gate. */
+  canRead: boolean;
+}) {
   const { session, logout } = useAuth();
   const token = session!.accessToken;
+  const navigate = useNavigate();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [copySource, setCopySource] = useState<AdminRoleSummary | null>(null);
   const { data, loading, error, denied, sessionExpired, reload } =
     useAdminResource<AdminRoleSummary[]>(
       (accessToken) => api.adminRoles(accessToken),
@@ -98,7 +115,7 @@ export function AdminRolesView() {
   const columns: Column<AdminRoleSummary>[] = [
     {
       header: "Code",
-      cell: (role) => <code className="font-mono text-xs font-medium text-slate-800">{role.code}</code>,
+      cell: (role) => <code className="font-mono text-xs font-medium text-ink">{role.code}</code>,
       mobileRole: "title",
     },
     { header: "Name", cell: (role) => role.name },
@@ -125,16 +142,41 @@ export function AdminRolesView() {
     {
       header: "Details",
       cell: (role) => (
-        <Button
-          variant="secondary"
-          className="w-full sm:min-h-[44px] sm:w-auto"
-          onClick={(event) => {
-            detailTriggerRef.current = event.currentTarget;
-            void loadRoleDetails(role);
-          }}
-        >
-          View permissions
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="secondary"
+            className="w-full sm:min-h-[44px] sm:w-auto"
+            onClick={(event) => {
+              // The row itself opens the definition; this button must not.
+              event.stopPropagation();
+              detailTriggerRef.current = event.currentTarget;
+              void loadRoleDetails(role);
+            }}
+          >
+            View permissions
+          </Button>
+          {canRead && (
+            <Link
+              to={`/admin/roles/${encodeURIComponent(role.code)}`}
+              onClick={(event) => event.stopPropagation()}
+              className="inline-flex min-h-[44px] items-center justify-center rounded border border-line-strong bg-panel px-3 py-1.5 text-sm font-medium text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-h-[36px]"
+            >
+              Definition
+            </Link>
+          )}
+          {canManage && (
+            <Button
+              variant="ghost"
+              className="w-full sm:min-h-[44px] sm:w-auto"
+              onClick={(event) => {
+                event.stopPropagation();
+                setCopySource(role);
+              }}
+            >
+              Copy
+            </Button>
+          )}
+        </div>
       ),
       className: "text-right",
     },
@@ -154,12 +196,20 @@ export function AdminRolesView() {
         <AdminPanel
           title="Roles"
           description="Tenant-local roles, access breadth, permission totals, and assignment totals. Open one role to inspect its current grants."
+          actions={
+            canManage && (
+              <Button onClick={() => setCreateOpen(true)}>New role</Button>
+            )
+          }
         >
           <DataTable
             columns={columns}
             rows={data ?? []}
             keyOf={(role) => role.code}
             mobileBreakpoint="md"
+            onRowClick={
+              canRead ? (role) => navigate(`/admin/roles/${encodeURIComponent(role.code)}`) : undefined
+            }
             empty={
               <AdminEmpty
                 title="No roles configured"
@@ -169,6 +219,31 @@ export function AdminRolesView() {
           />
         </AdminPanel>
       </AdminSectionState>
+
+      <CreateRoleDialog
+        open={createOpen}
+        mode="create"
+        canManage={canManage}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(roleCode) => {
+          setCreateOpen(false);
+          void reload();
+          navigate(`/admin/roles/${encodeURIComponent(roleCode)}`);
+        }}
+      />
+
+      <CreateRoleDialog
+        open={copySource !== null}
+        mode="copy"
+        sourceCode={copySource?.code}
+        canManage={canManage}
+        onClose={() => setCopySource(null)}
+        onCreated={(roleCode) => {
+          setCopySource(null);
+          void reload();
+          navigate(`/admin/roles/${encodeURIComponent(roleCode)}`);
+        }}
+      />
 
       <OverlayDialog
         open={selectedRole !== null}
@@ -216,10 +291,10 @@ export function AdminRolesView() {
         )}
         {detailState === "ready" && details && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-line bg-panel-2 p-3">
               <div>
-                <div className="font-medium text-slate-900">{details.roleName}</div>
-                <code className="font-mono text-xs text-slate-600">{details.roleCode}</code>
+                <div className="font-medium text-ink">{details.roleName}</div>
+                <code className="font-mono text-xs text-ink-dim">{details.roleCode}</code>
               </div>
               {details.isFullAccess ? (
                 <StatusPill tone="warning">Full access</StatusPill>
@@ -248,7 +323,7 @@ export function AdminRolesView() {
                   </Field>
                   <div className="flex items-center gap-3">
                     <p
-                      className="text-sm tabular-nums text-slate-500"
+                      className="text-sm tabular-nums text-ink-dim"
                       role="status"
                       aria-live="polite"
                     >
@@ -267,13 +342,13 @@ export function AdminRolesView() {
                     description="Try a different search term or clear the filter."
                   />
                 ) : (
-                  <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                  <ul className="divide-y divide-line rounded border border-line">
                     {filteredPermissions.map((permission) => (
                       <li key={permission.code} className="px-3 py-3">
-                        <code className="break-all font-mono text-xs font-medium text-slate-800">
+                        <code className="break-all font-mono text-xs font-medium text-ink">
                           {permission.code}
                         </code>
-                        <p className="mt-1 text-sm text-slate-500">{permission.description}</p>
+                        <p className="mt-1 text-sm text-ink-dim">{permission.description}</p>
                       </li>
                     ))}
                   </ul>

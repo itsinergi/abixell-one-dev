@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 1C.4 — QA / Verification Experience. The verifier experience is
@@ -75,6 +75,7 @@ describe("Checkpoint 1C.4 — QA / Verification Experience", () => {
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Tenant 1C4");
     tenantId = tenant.id;
+    await activateAllModules(tenantId);
     await provisionFirstAdmin({ tenantId, email: "admin@test1c4.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT_CODE, "admin@test1c4.local", "Admin12345!")).body.accessToken;
 
@@ -106,6 +107,8 @@ describe("Checkpoint 1C.4 — QA / Verification Experience", () => {
     await addWorkflow();
 
     const otherTenant = await bootstrapTenant(app, OTHER_TENANT_CODE, "Other 1C4");
+
+    await activateAllModules(otherTenant.id);
     otherTenantId = otherTenant.id;
     await provisionFirstAdmin({ tenantId: otherTenantId, email: "admin@other1c4.local", password: "Admin12345!" });
     otherAdminToken = (await login(app, OTHER_TENANT_CODE, "admin@other1c4.local", "Admin12345!")).body.accessToken;

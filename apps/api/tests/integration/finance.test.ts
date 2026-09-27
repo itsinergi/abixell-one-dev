@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Phase 6 — Finance Core (FIN-CORE-001…011).
@@ -114,6 +114,7 @@ describe("Phase 6 — Finance Core", () => {
 
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant P6");
+    await activateAllModules(t.id);
     tenantId = t.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p6.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@p6.local", "Admin12345!")).body.accessToken;
@@ -184,6 +185,7 @@ describe("Phase 6 — Finance Core", () => {
 
     // Second tenant for cross-tenant isolation.
     const ot = await bootstrapTenant(app, OTHER, "Tenant P6 Other");
+    await activateAllModules(ot.id);
     await provisionFirstAdmin({ tenantId: ot.id, email: "admin@p6other.local", password: "Admin12345!" });
     otherAdminToken = (await login(app, OTHER, "admin@p6other.local", "Admin12345!")).body.accessToken;
     await post("/config/numbering/finance_transaction", otherAdminToken, { pattern: "FIN-O-{SEQ:5}" });

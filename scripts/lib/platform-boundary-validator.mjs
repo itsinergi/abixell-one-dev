@@ -87,9 +87,14 @@ const HISTORICAL_INHERITED_TENANT_OWNERSHIP = new Map([
   ["integration_endpoint_inactive_windows", { column: "integration_endpoint_id", parent: "integration_endpoints" }],
 ]);
 
-// This list is intentionally empty in Phase 11B. A future global/system table
-// needs an exact, reviewed entry here rather than a heuristic exemption.
-const REVIEWED_NEW_GLOBAL_TABLES = new Map();
+// Every global/system table added after Phase 11B needs an exact reviewed
+// entry here rather than a heuristic exemption.
+const REVIEWED_NEW_GLOBAL_TABLES = new Map([
+  [
+    "menu_terminology_allowlist",
+    "Product Core allowlist shared by all tenants; tenant values stay in tenant_terminology_overrides.",
+  ],
+]);
 
 const ROUTE_CONTAINER_EXCEPTIONS = [
   "asset", "finance", "hse", "project-delivery", "reporting-insight",

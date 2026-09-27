@@ -33,9 +33,16 @@ export function registerConfigurationRoutes(app: FastifyInstance, container: Con
     return reply.send(list);
   });
 
+  // Epic 3 Wave 3 (§4.3 step 10): only the platform authority — Super Admin,
+  // "otoritas platform" (§4.4) — may turn a module on or off. ADR-0004's
+  // platform-operator credential is the codebase's representation of that
+  // authority; it is layered ON TOP of RBAC here, never instead of it, so the
+  // ADR's "no precedent for bypassing RBAC" line still holds. A Tenant Admin
+  // holding `config.manage` but not the key gets 401; the key alone without a
+  // valid actor gets 401 from `authenticate`.
   app.put(
     "/config/modules/:code",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requireBootstrapKey] },
     async (request, reply) => {
       const { code } = request.params as { code: string };
       const body = setModuleActivationSchema.parse(request.body);

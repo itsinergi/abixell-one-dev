@@ -68,6 +68,19 @@ export class RbacService {
     }
   }
 
+  /** Epic 4 step 11b — Window read-only state for one actor and one Window.
+   * Passthrough so the enforcement plugin asks the same service every other
+   * authorization question asks, and so the repository read has exactly one
+   * consumer-shaped entry point. See `RbacRepository.getWindowAccessState`
+   * for the semantics of `configured` and `writable`. */
+  async getWindowAccessState(
+    tenantId: string,
+    userId: string,
+    windowCode: string,
+  ): Promise<{ configured: boolean; writable: boolean }> {
+    return this.repo.getWindowAccessState(tenantId, userId, windowCode);
+  }
+
   /**
    * Throws ForbiddenError unless the user has an assignment whose Data
    * Scope covers `targetOrganizationUnitId` — either a tenant-wide

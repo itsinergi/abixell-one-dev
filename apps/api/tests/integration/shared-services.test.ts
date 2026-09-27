@@ -3,15 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  createScheduledJobFixture,
-  deleteScheduledJobFixture,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, createScheduledJobFixture, deleteScheduledJobFixture, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 0E integration test — proves the Enterprise Shared Services
@@ -74,6 +66,8 @@ describe("Checkpoint 0E — Enterprise Shared Services", () => {
     });
 
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 0E");
+
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     await provisionFirstAdmin({ tenantId, email: "admin@test0e.local", password: "Admin12345!" });
 

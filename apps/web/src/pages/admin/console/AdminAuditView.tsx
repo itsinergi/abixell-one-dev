@@ -43,7 +43,7 @@ function auditColumns(
     },
     {
       header: "Action",
-      cell: (entry) => <code className="break-all font-mono text-xs font-medium text-slate-800">{entry.action}</code>,
+      cell: (entry) => <code className="break-all font-mono text-xs font-medium text-ink">{entry.action}</code>,
     },
     {
       header: "Area",
@@ -58,7 +58,7 @@ function auditColumns(
               (actorNamesResolved ? "User unavailable" : "Name not shown")}
           </span>
         ) : (
-          <span className="text-slate-400">System</span>
+          <span className="text-ink-faint">System</span>
         ),
     },
   ];

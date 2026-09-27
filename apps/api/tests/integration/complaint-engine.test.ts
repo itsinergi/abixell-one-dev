@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 1B — Generic Customer Complaint Engine.
@@ -52,6 +52,7 @@ describe("Checkpoint 1B — Generic Customer Complaint Engine", () => {
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 1B");
     tenantId = tenant.id;
+    await activateAllModules(tenantId);
     await provisionFirstAdmin({ tenantId, email: "admin@test1b.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT_CODE, "admin@test1b.local", "Admin12345!")).body.accessToken;
 
@@ -348,6 +349,7 @@ describe("Checkpoint 1B — Generic Customer Complaint Engine", () => {
     // path (its token must never reach Tenant 1B's data, even by guessing
     // a valid Complaint id).
     const otherTenant = await bootstrapTenant(app, OTHER_TENANT_CODE, "Other Tenant 1B");
+    await activateAllModules(otherTenant.id);
     otherTenantId = otherTenant.id;
     await provisionFirstAdmin({
       tenantId: otherTenantId,

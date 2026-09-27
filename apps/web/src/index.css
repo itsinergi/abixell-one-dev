@@ -1,3 +1,98 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Epic 4 Wave 1 — design tokens.
+ *
+ * The single source of truth for color, density, and shape, transcribed from
+ * DESIGN.md. Components name these tokens (`bg-panel`, `text-muted`,
+ * `border-line`) instead of Tailwind palette values, so the theme is decided
+ * here once rather than in 75 files.
+ *
+ * Light is `:root`. Dark is selected by `data-theme="dark"` on `<html>`, set
+ * by `ThemeProvider` and applied before first paint by the inline script in
+ * index.html. Dark values are authored first in DESIGN.md; light is the
+ * shipped default until the remaining pages migrate (see ThemeProvider).
+ *
+ * Two rules hold everywhere:
+ *   1. The accent is for the primary action, the focus ring, and the selected
+ *      row — never for status.
+ *   2. Status colors (`ok` / `warn` / `danger` / `idle`) are for status only,
+ *      and always pair with the matching `*-soft` background.
+ */
+:root {
+  color-scheme: light;
+
+  --bg: #f2f4f7;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --surface-3: #eef1f5;
+  --border: #dde2e8;
+  --border-strong: #c3cad3;
+
+  --text: #171a1f;
+  --text-dim: #4b5361;
+  --text-faint: #606a78;
+
+  --accent: #4a5be8;
+  --accent-line: #3546c9;
+  --accent-soft: rgba(74, 91, 232, 0.1);
+  --accent-on: #ffffff;
+
+  --ok: #0f7a4a;
+  --warn: #8a5a00;
+  --danger: #b32b22;
+  --idle: #55606e;
+
+  --ok-soft: rgba(15, 122, 74, 0.1);
+  --warn-soft: rgba(138, 90, 0, 0.1);
+  --danger-soft: rgba(179, 43, 34, 0.1);
+  --idle-soft: rgba(85, 96, 110, 0.1);
+
+  /* Density and shape — DESIGN.md §3 and §5. */
+  --row: 32px;
+  --control: 28px;
+  --radius: 3px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #14161a;
+  --surface: #1a1d22;
+  --surface-2: #20242b;
+  --surface-3: #262b33;
+  --border: #2a2f37;
+  --border-strong: #3a414c;
+
+  --text: #e7eaf0;
+  --text-dim: #a9b2bf;
+  --text-faint: #8a93a1;
+
+  --accent: #6b7cff;
+  --accent-line: #8c99ff;
+  --accent-soft: rgba(107, 124, 255, 0.14);
+  --accent-on: #0e1017;
+
+  --ok: #35c08a;
+  --warn: #e0a028;
+  --danger: #f2685f;
+  --idle: #8b93a1;
+
+  --ok-soft: rgba(53, 192, 138, 0.13);
+  --warn-soft: rgba(224, 160, 40, 0.13);
+  --danger-soft: rgba(242, 104, 95, 0.13);
+  --idle-soft: rgba(139, 147, 161, 0.13);
+}
+
+/*
+ * A ground and ink on the document itself, so a page that has not migrated to
+ * tokens yet still sits on the right ground instead of showing the browser
+ * default. Text and background are always set together: setting one without
+ * the other is how a dark ground ends up with black text.
+ */
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}

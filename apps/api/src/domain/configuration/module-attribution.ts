@@ -26,10 +26,12 @@
  *      the `PERMISSION_MODULE_EXCEPTIONS` list holds every permission whose
  *      owner is not implied by its prefix.
  *
- *   2. `attributeApiSegment` — from the first path segment of the route. The
+ *   2. `attributeApiPath` — from the first path segment of the route. The
  *      API surface is grouped by resource noun, and the noun names the module.
- *      Where one module publishes under more than one noun (`/wms` and
- *      `/supply-chain/advanced` both being warehouse), both map to it.
+ *      The one place the noun lies is the legacy `/supply-chain/advanced`
+ *      alias, which mounts three modules' registrars under a single segment;
+ *      `API_PATH_MODULE_OVERRIDES` states those subtrees explicitly, and it is
+ *      consulted before the segment table.
  *
  *   3. Route attribution is NOT here — it is already stated per route in
  *      `route-registry.ts`, which is the canonical source for `app_windows`.
@@ -171,6 +173,10 @@ export const PERMISSION_MODULE_PREFIXES: ReadonlyArray<readonly [string, ModuleC
 
   // Platform — identity, tenancy, configuration and cross-module plumbing.
   ["admin.", "platform"],
+  // Role definition authority (Epic 4 §4.4 Gelombang 1): sits ahead of the
+  // user.* family because `user.role.manage` (assignment of existing roles)
+  // and `role.manage` (mutating a role definition) are deliberately separate.
+  ["role.", "platform"],
   ["audit_log.", "platform"],
   ["config.", "platform"],
   ["integration.", "platform"],
@@ -300,13 +306,94 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
 };
 
 /**
+ * The one place the first-segment rule is wrong: the legacy
+ * `/supply-chain/advanced/*` namespace.
+ *
+ * That namespace is a backward-compatibility shim
+ * (`supply-chain/advanced/api/supply-chain-advanced.routes.ts`) which mounts
+ * three different registrars under a single first segment:
+ *
+ *   registerWmsRoutes(app, deps, "/supply-chain/advanced")
+ *   registerProcurementRoutes(app, deps, "/supply-chain/advanced")
+ *   + three legacy-only account-assignment-config routes
+ *
+ * So the first segment says `supply_chain` for all of them, while the routes
+ * are in fact warehouse, procurement, and supply-chain writes. Left uncorrected
+ * this is a silent bypass of §4.3's module ceiling: a tenant that turns off
+ * `warehouse_management` but keeps `supply_chain` could still post inventory
+ * movements at `/supply-chain/advanced/movements`, and the same handler refused
+ * at `/wms/movements` would be accepted at the alias URL. The reverse is just
+ * as wrong — disabling `supply_chain` alone would 403 the alias while the
+ * canonical `/wms/*` route keeps working.
+ *
+ * Stated as a table, longest prefix first, exactly like the permission rules
+ * above. `module-namespace-parity.test.ts` derives the pairs mechanically from
+ * the live route tree and fails if this table and the registrars ever disagree —
+ * so adding a route to either namespace without a home here is a test failure,
+ * not a silent hole.
+ */
+export const API_PATH_MODULE_OVERRIDES: ReadonlyArray<readonly [string, ModuleCode]> = [
+  // Delegated to registerWmsRoutes ⇒ warehouse_management.
+  ["/supply-chain/advanced/warehouses", "warehouse_management"],
+  ["/supply-chain/advanced/warehouse-locations", "warehouse_management"],
+  ["/supply-chain/advanced/warehouse-tasks", "warehouse_management"],
+  ["/supply-chain/advanced/batches", "warehouse_management"],
+  ["/supply-chain/advanced/serials", "warehouse_management"],
+  ["/supply-chain/advanced/balances", "warehouse_management"],
+  ["/supply-chain/advanced/movements", "warehouse_management"],
+  ["/supply-chain/advanced/reorder-policies", "warehouse_management"],
+  ["/supply-chain/advanced/reorder-alerts", "warehouse_management"],
+  ["/supply-chain/advanced/reservations", "warehouse_management"],
+  ["/supply-chain/advanced/transfers", "warehouse_management"],
+  ["/supply-chain/advanced/opnames", "warehouse_management"],
+  ["/supply-chain/advanced/valuation-layers", "warehouse_management"],
+  ["/supply-chain/advanced/landed-costs", "warehouse_management"],
+  ["/supply-chain/advanced/receiving-records", "warehouse_management"],
+  ["/supply-chain/advanced/inspections", "warehouse_management"],
+  ["/supply-chain/advanced/discrepancies", "warehouse_management"],
+  ["/supply-chain/advanced/returns-to-vendor", "warehouse_management"],
+  ["/supply-chain/advanced/receipt-reversals", "warehouse_management"],
+  ["/supply-chain/advanced/replacements", "warehouse_management"],
+  ["/supply-chain/advanced/accounting-ready-events", "warehouse_management"],
+  ["/supply-chain/advanced/consignment", "warehouse_management"],
+  ["/supply-chain/advanced/inventory", "warehouse_management"],
+  ["/supply-chain/advanced/disposals", "warehouse_management"],
+
+  // Delegated to registerProcurementRoutes ⇒ procurement_management.
+  ["/supply-chain/advanced/rfqs", "procurement_management"],
+  ["/supply-chain/advanced/bids", "procurement_management"],
+  ["/supply-chain/advanced/evaluations", "procurement_management"],
+  ["/supply-chain/advanced/contracts", "procurement_management"],
+  ["/supply-chain/advanced/spend-analytics", "procurement_management"],
+  ["/supply-chain/advanced/service-acceptances", "procurement_management"],
+
+  // Legacy-only: cross-cutting account-assignment configuration, which stays
+  // on the SCM core (the same split `PERMISSION_MODULE_PREFIXES` makes for
+  // `supply_chain.account_assignment.`).
+  ["/supply-chain/advanced/account-assignment-configs", "supply_chain"],
+];
+
+/** Longest first, so a more specific subtree beats a shorter one that is also
+ * a prefix of the path. */
+const OVERRIDES_LONGEST_FIRST = [...API_PATH_MODULE_OVERRIDES].sort(
+  (a, b) => b[0].length - a[0].length,
+);
+
+/**
  * Resolve the owning module for an API route path.
  *
  * The path arrives as Fastify declares it (`/wms/warehouses/:id`), so the
  * caller passes the raw route URL. A path with no first segment (the root)
  * resolves to `undefined` and must be reported rather than defaulted.
+ *
+ * Explicit subtree overrides win over the first-segment table, and an override
+ * matches only on a segment boundary — `/supply-chain/advanced/inventory`
+ * matches, `/supply-chain/advanced/inventory-x` does not.
  */
 export function attributeApiPath(path: string): ModuleCode | undefined {
+  for (const [prefix, moduleCode] of OVERRIDES_LONGEST_FIRST) {
+    if (path === prefix || path.startsWith(`${prefix}/`)) return moduleCode;
+  }
   const segment = path.replace(/^\//, "").split("/")[0];
   if (segment === "" || segment.startsWith(":")) return undefined;
   return API_SEGMENT_MODULES[segment];

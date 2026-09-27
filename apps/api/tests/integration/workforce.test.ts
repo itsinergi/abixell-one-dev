@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Phase 3 — Workforce / HR Core (HR-CORE-001…010).
@@ -45,6 +45,7 @@ describe("Phase 3 — Workforce / HR Core", () => {
 
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant P3");
+    await activateAllModules(t.id);
     tenantId = t.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p3.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@p3.local", "Admin12345!")).body.accessToken;
@@ -112,6 +113,7 @@ describe("Phase 3 — Workforce / HR Core", () => {
 
     // Second tenant for cross-tenant checks.
     const ot = await bootstrapTenant(app, OTHER, "Tenant P3 Other");
+    await activateAllModules(ot.id);
     otherTenantUserId = (
       await provisionFirstAdmin({ tenantId: ot.id, email: "admin@p3other.local", password: "Admin12345!" })
     ).userId;

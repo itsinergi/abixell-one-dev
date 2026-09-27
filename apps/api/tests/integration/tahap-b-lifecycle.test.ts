@@ -5,7 +5,7 @@ import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgWorkflowRepository } from "../../src/infrastructure/persistence/repositories/workflow.repository.pg.js";
 import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { authHeader, bootstrapTenant, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Tahap B — Lifecycle soft-delete and activation/deactivation guards.
@@ -112,6 +112,7 @@ async function post(url: string, payload: unknown): Promise<{ status: number; bo
 
 beforeAll(async () => {
   const tenant = await bootstrapTenant(app, TENANT, "Tahap B Test");
+  await activateAllModules(tenant.id);
   tenantId = tenant.id;
 
   const admin = await provisionFirstAdmin({

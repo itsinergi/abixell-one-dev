@@ -11,6 +11,11 @@ import type { RbacService } from "../rbac/rbac.service.js";
 import { SchemaRegistryValidator } from "./schema-registry-validator.js";
 import { formatNumber } from "./numbering-formatter.js";
 
+/** Wave 3 step 11 keys read `menu.<menu code>.description` (seeded by
+ * 1787500000000_epic-3-menu-terminology.cjs); everything else is a short
+ * label. This picks the bounded schema, it does not authorize the write. */
+const MENU_DESCRIPTION_KEY = /^menu\..+\.description$/;
+
 export class ConfigurationService {
   private readonly validator: SchemaRegistryValidator;
 
@@ -180,7 +185,18 @@ export class ConfigurationService {
 
   async setTerminologyOverride(actor: ActorContext, code: string, value: string) {
     await this.rbac.requirePermission(actor.userId, "config.manage");
-    await this.validator.validate("terminology", "value", value);
+    // Two bounded shapes, chosen by which field the key feeds: a short label
+    // (60, `terminology.value`) or a longer description (240,
+    // `terminology.description_value`, added for menu descriptions in
+    // Wave 3 step 11). Which key exists is core data — the Schema Registry
+    // refuses the write if this migration was never applied.
+    const schemaKey = MENU_DESCRIPTION_KEY.test(code) ? "description_value" : "value";
+    await this.validator.validate("terminology", schemaKey, value);
+    // §4.2 open item #4: a tenant override needs audit, not a version chain.
+    // "sebelum/sesudah" is only real if the previous value is captured here —
+    // the override row is overwritten in place and keeps no history of its own.
+    const overrides = await this.repo.listTerminologyOverrides(actor.tenantId);
+    const previousValue = overrides.find((o) => o.code === code)?.value ?? null;
     await this.repo.upsertTerminologyOverride(actor.tenantId, code, value, actor.userId);
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -188,7 +204,7 @@ export class ConfigurationService {
       action: "config.terminology.changed",
       entityType: "terminology_key",
       entityId: null,
-      metadata: { code, value },
+      metadata: { code, previousValue, value },
     });
   }
 

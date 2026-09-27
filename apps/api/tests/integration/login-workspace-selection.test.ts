@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { authHeader, bootstrapTenant, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Email-only login + post-login role/site selection.
@@ -44,7 +44,9 @@ describe("Login workspace selection", () => {
 
   beforeAll(async () => {
     const a = await bootstrapTenant(app, TENANT_A, "LWS Tenant A");
+    await activateAllModules(a.id);
     const b = await bootstrapTenant(app, TENANT_B, "LWS Tenant B");
+    await activateAllModules(b.id);
     tenantAId = a.id;
     tenantBId = b.id;
 

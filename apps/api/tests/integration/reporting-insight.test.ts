@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgReportingInsightRepository } from "../../src/modules/reporting-insight/core/infrastructure/reporting-insight.repository.pg.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 const stamp = Date.now();
 const TENANT = `test-p9-${stamp}`;
@@ -12,8 +12,20 @@ async function post(url: string, token: string, payload: unknown) {
   return app.inject({ method: "POST", url, headers: authHeader(token), payload });
 }
 
+/**
+ * The only PUTs this suite makes are Module Activations, which since Epic 3
+ * Wave 3 (§4.3 step 10) require the platform-operator credential ON TOP of
+ * RBAC — the bootstrap key is the codebase's representation of "otoritas
+ * platform" (§4.4), per ADR-0004.
+ */
 async function put(url: string, token: string, payload: unknown) {
-  return app.inject({ method: "PUT", url, headers: authHeader(token), payload });
+  const bootstrapKey = process.env.PLATFORM_BOOTSTRAP_KEY || "dev-only-change-me-bootstrap";
+  return app.inject({
+    method: "PUT",
+    url,
+    headers: { ...authHeader(token), "x-bootstrap-key": bootstrapKey },
+    payload,
+  });
 }
 
 async function get(url: string, token: string) {
@@ -43,6 +55,7 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
 
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant P9");
+    await activateAllModules(t.id);
     tenantId = t.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p9.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@p9.local", "Admin12345!")).body.accessToken;
@@ -170,6 +183,8 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
     await seedOperationalData();
 
     const ot = await bootstrapTenant(app, OTHER, "Tenant P9 Other");
+
+    await activateAllModules(ot.id);
     otherTenantId = ot.id;
     await provisionFirstAdmin({ tenantId: otherTenantId, email: "admin@p9other.local", password: "Admin12345!" });
     otherAdminToken = (await login(app, OTHER, "admin@p9other.local", "Admin12345!")).body.accessToken;

@@ -21,7 +21,7 @@ const COLUMNS: Column<AdminPermission>[] = [
   {
     header: "Code",
     cell: (permission) => (
-      <code className="break-all font-mono text-xs font-medium text-slate-800">{permission.code}</code>
+      <code className="break-all font-mono text-xs font-medium text-ink">{permission.code}</code>
     ),
     mobileRole: "title",
   },
@@ -65,7 +65,7 @@ export function AdminPermissionsView() {
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="w-full max-w-sm">
-            <label htmlFor="admin-permission-filter" className="text-sm font-medium text-slate-700">
+            <label htmlFor="admin-permission-filter" className="text-sm font-medium text-ink-dim">
               Filter permissions
             </label>
             <Input
@@ -77,7 +77,7 @@ export function AdminPermissionsView() {
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm tabular-nums text-slate-500" role="status" aria-live="polite">
+            <p className="text-sm tabular-nums text-ink-dim" role="status" aria-live="polite">
               Showing {rows.length} of {(data ?? []).length}
             </p>
             {hasFilter && (

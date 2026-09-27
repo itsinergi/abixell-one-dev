@@ -6,12 +6,7 @@ import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgTenantRepository } from "../../src/infrastructure/persistence/repositories/tenant.repository.pg.js";
 import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Tenant name update — `PATCH /tenants/me`.
@@ -103,8 +98,10 @@ async function updateAuditRows(id: string) {
 
 beforeAll(async () => {
   const tenant = await bootstrapTenant(app, TENANT, "Tenant Update Test");
+  await activateAllModules(tenant.id);
   tenantId = tenant.id;
   const other = await bootstrapTenant(app, OTHER_TENANT, "Untouched Tenant");
+  await activateAllModules(other.id);
   otherTenantId = other.id;
   otherTenantName = await readName(otherTenantId);
 

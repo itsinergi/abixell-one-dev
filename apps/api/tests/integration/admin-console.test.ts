@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Phase 11C — Business Admin Console read-side regression coverage.
@@ -43,6 +43,7 @@ describe("Phase 11C — Business Admin Console", () => {
 
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant P11C");
+    await activateAllModules(t.id);
     tenantId = t.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p11c.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@p11c.local", "Admin12345!")).body.accessToken;
@@ -73,6 +74,7 @@ describe("Phase 11C — Business Admin Console", () => {
 
     // A second, fully independent tenant — the cross-tenant control.
     const ot = await bootstrapTenant(app, OTHER, "Tenant P11C Other");
+    await activateAllModules(ot.id);
     otherTenantId = ot.id;
     await provisionFirstAdmin({ tenantId: otherTenantId, email: "admin@p11co.local", password: "Admin12345!" });
     const otherAdminToken = (await login(app, OTHER, "admin@p11co.local", "Admin12345!")).body.accessToken;
@@ -279,7 +281,11 @@ describe("Phase 11C — Business Admin Console", () => {
     it("keeps the original Phase 11C routes free of mutation verbs", async () => {
       // Phase 11F adds writes only below the dedicated per-user assignment
       // resource. None of the original summary/catalog routes becomes mutable.
-      for (const url of ENDPOINTS) {
+      // `POST /admin/roles` is Epic 4 Wave 1's governed definition-create
+      // endpoint. All original Phase 11C summary/catalog routes below remain
+      // read-only; routing its new resource through this old regression would
+      // falsely call the intended addition a mutation leak.
+      for (const url of ENDPOINTS.filter((url) => url !== "/admin/roles")) {
         for (const method of ["POST", "PATCH", "PUT", "DELETE"] as const) {
           const response = await app.inject({ method, url, headers: authHeader(adminToken), payload: {} });
           expect([404, 405], `${method} ${url}`).toContain(response.statusCode);

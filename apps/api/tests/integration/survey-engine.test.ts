@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 1D.1 — Generic Survey & Assessment Engine core vertical slice.
@@ -32,6 +32,7 @@ describe("Checkpoint 1D.1 — Survey Engine Core", () => {
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant 1D1");
     tenantId = t.id;
+    await activateAllModules(tenantId);
     await provisionFirstAdmin({ tenantId, email: "admin@t1d1.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@t1d1.local", "Admin12345!")).body.accessToken;
 
@@ -52,6 +53,8 @@ describe("Checkpoint 1D.1 — Survey Engine Core", () => {
     noPermToken = (await login(app, TENANT, "noperm@t1d1.local", "Respondent12345!")).body.accessToken;
 
     const ot = await bootstrapTenant(app, OTHER, "Other 1D1");
+
+    await activateAllModules(ot.id);
     otherTenantId = ot.id;
     otherAdminUserId = (await provisionFirstAdmin({ tenantId: otherTenantId, email: "admin@o1d1.local", password: "Admin12345!" })).userId;
     otherAdminToken = (await login(app, OTHER, "admin@o1d1.local", "Admin12345!")).body.accessToken;

@@ -1,3 +1,9 @@
+import type { WindowEnforcementStatus } from "../configuration/window-enforcement.js";
+import type {
+  AdministrativeVisibility,
+  AssignmentBatchPreview,
+} from "./visibility-scope.js";
+
 export interface Role {
   id: string;
   tenantId: string;
@@ -56,6 +62,89 @@ export type GovernedRoleAssignmentInput =
     }
   | { roleCode: string; scopeType: "customer"; scopeCustomerId: string };
 
+/**
+ * Epic 4 Wave 2 step 14 — one reviewable, confirmable batch. `pairs` is the
+ * complete desired ADDITION for this confirmation (§4.4 C keeps Wave 2
+ * append-only: revocation is Wave 3's soft-revoke model). `previewHash` and
+ * `confirm` make the confirmation explicit and unforgeable; the commit
+ * recomputes the hash from the pairs it is about to write, so a review approved
+ * against one batch can never be applied to another.
+ */
+export interface UpdateRoleAssignmentsInput {
+  pairs: GovernedRoleAssignmentInput[];
+  previewHash: string;
+  confirm: true;
+}
+
+/** Step 14's review step: the proposed pairs alone. `confirm` and
+ * `previewHash` are deliberately absent — a preview cannot carry the token
+ * that authorizes the write, or one body would mean both review and commit. */
+export interface PreviewRoleAssignmentsInput {
+  pairs: GovernedRoleAssignmentInput[];
+}
+
+/** The persisted outcome of one confirmed batch. */
+export interface AssignmentBatchResult {
+  targetUserId: string;
+  created: AdminRoleAssignmentSummary[];
+}
+
+/** Basics accepted when creating a User. No `status` field: §4.4 C fixes the
+ * initial status by the identity rules, not by the administrator's browser. */
+export interface CreateGovernedUserInput {
+  email: string;
+  fullName: string;
+  password: string;
+  pairs: GovernedRoleAssignmentInput[];
+}
+
+/** Privacy-minimized projection of a newly created User — the same five keys
+ * the access projection uses, never credential material. */
+export interface GovernedUserSummary {
+  id: string;
+  fullName: string;
+  email: string;
+  status: string;
+}
+
+/** One assignment flattened with the User it belongs to (step 13). */
+export interface AdminAssignmentRow extends AdminRoleAssignmentSummary {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userStatus: string;
+}
+
+/** Step 15 — the picker universe. `organizationUnits` carries the actor's
+ * assignable units with their tenant-wide tree context; `roles` carries only
+ * Roles the actor may delegate. */
+export interface AssignmentOptions {
+  canAssignTenantScope: boolean;
+  organizationUnits: AssignmentScopeUnitOption[];
+  roles: AssignmentRoleOption[];
+}
+
+export interface AssignmentScopeUnitOption {
+  id: string;
+  name: string;
+  parentId: string | null;
+  /** Depth from the tenant root, for rendering the tree without the browser
+   * reconstructing the hierarchy itself. */
+  depth: number;
+  /** False for an ancestor shown only as context: §4.4 E lets an actor assign
+   * to their own subtree, not to a unit above them. */
+  selectable: boolean;
+}
+
+export interface AssignmentRoleOption {
+  code: string;
+  name: string;
+  permissionCount: number;
+  /** False when the Role carries a permission outside the actor's delegation
+   * ceiling, so the picker never offers a grant the API would refuse. */
+  selectable: boolean;
+}
+
 /** Privacy-minimized access projection: enough to govern access, no credentials
  * or user lifecycle/audit internals. */
 export interface AdminUserAccessSummary {
@@ -91,6 +180,114 @@ export interface RolePermissionDetail {
   permissions: Permission[];
 }
 
+export interface WindowAccessInput {
+  windowCode: string;
+  isReadWrite: boolean;
+  isActive: boolean;
+}
+
+export interface PermissionOption extends Permission {
+  moduleCode: string | null;
+  isActive: boolean;
+  selectable: boolean;
+}
+
+export interface WindowOption {
+  code: string;
+  name: string;
+  moduleCode: string;
+  registrationStatus: string;
+  requiredPermissions: string[];
+  parentPath: string | null;
+  isDetail: boolean;
+  selectable: boolean;
+}
+
+export interface RoleDefinition {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  isFullAccess: boolean;
+  version: number;
+  permissionCodes: string[];
+  windows: WindowAccessInput[];
+  /** Epic 4 step 11b — derived from the API Resource → Window mapping, never
+   * hard-coded: `"partial"` while any mutating route the server declared
+   * resolves to no Window, `"enforced"` once every one does. See
+   * `windowEnforcementStatus()`. */
+  enforcementStatus: WindowEnforcementStatus;
+}
+
+export interface RoleDefinitionOptions {
+  permissions: PermissionOption[];
+  windows: WindowOption[];
+}
+
+export interface RoleDefinitionPreview {
+  role: RoleDefinition;
+  previewHash: string;
+  affectedUserCount: number;
+}
+
+export interface CreateRoleDefinitionInput {
+  code: string;
+  name: string;
+  permissionCodes: string[];
+  windows: WindowAccessInput[];
+}
+
+export interface CopyRoleDefinitionInput {
+  code: string;
+  name: string;
+}
+
+export interface RoleDefinitionPreviewInput {
+  version: number;
+  name: string;
+  permissionCodes: string[];
+  windows: WindowAccessInput[];
+}
+
+export interface UpdateRoleDefinitionInput extends RoleDefinitionPreviewInput {
+  previewHash: string;
+  confirm: true;
+}
+
+export interface RoleDefinitionRepository {
+  getRoleDefinition(
+    tenantId: string,
+    roleCode: string,
+  ): Promise<RoleDefinition | null>;
+  listRoleDefinitionOptions(actor: {
+    tenantId: string;
+    userId: string;
+  }): Promise<RoleDefinitionOptions>;
+  createRoleDefinition(
+    actor: { tenantId: string; userId: string },
+    input: CreateRoleDefinitionInput,
+  ): Promise<RoleDefinition>;
+  copyRoleDefinition(
+    actor: { tenantId: string; userId: string },
+    sourceCode: string,
+    input: CopyRoleDefinitionInput,
+  ): Promise<RoleDefinition>;
+  previewRoleDefinition(
+    actor: { tenantId: string; userId: string },
+    roleCode: string,
+    input: RoleDefinitionPreviewInput,
+  ): Promise<RoleDefinitionPreview>;
+  updateRoleDefinition(
+    actor: { tenantId: string; userId: string },
+    roleCode: string,
+    input: UpdateRoleDefinitionInput,
+  ): Promise<RoleDefinition>;
+  deleteRoleDefinition(
+    actor: { tenantId: string; userId: string },
+    roleCode: string,
+  ): Promise<void>;
+}
+
 /** A Role plus the counts an administrator needs to understand it at a
  * glance. Phase 11C — summary only: the permission CODES a role grants are
  * deliberately not projected here, so the console never becomes a covert
@@ -104,7 +301,7 @@ export interface RoleSummary {
   assignedUserCount: number;
 }
 
-export interface RbacRepository {
+export interface RbacRepository extends RoleDefinitionRepository {
   /** All permission codes from actual role_permissions rows carried by an
    * authorization-effective assignment. Unavailable scopes grant nothing. */
   getEffectivePermissionCodes(userId: string): Promise<Set<string>>;
@@ -115,7 +312,15 @@ export interface RbacRepository {
    * caller's own post-login context picker. */
   getMyAssignmentsWithScopeNames(userId: string): Promise<MyRoleAssignment[]>;
   findRoleByCode(tenantId: string, code: string): Promise<Role | null>;
-  assignRole(input: AssignRoleInput, createdBy: string | null): Promise<UserRoleAssignment>;
+  /** `tenantId` is required because this writer serializes on the tenant row:
+   * `user_role_assignments.role_id` is ON DELETE CASCADE, so an assignment
+   * inserted outside that lock can be silently cascaded away by a concurrent
+   * Role delete. */
+  assignRole(
+    tenantId: string,
+    input: AssignRoleInput,
+    createdBy: string | null,
+  ): Promise<UserRoleAssignment>;
 
   /**
    * Phase 11C — Business Admin Console. Every Role defined in `tenantId`
@@ -151,6 +356,17 @@ export interface RbacRepository {
     permissionCode: string,
   ): Promise<boolean>;
 
+  /** Epic 4 step 11b — the Window lock read. `configured` is true when any
+   * authorization-effective assignment carries a `role_window_access` row for
+   * the Window; `writable` when any of those rows is both `is_read_write` and
+   * `is_active` (union allow). Absence of rows means "not configured", never
+   * "read-only" — the caller passes through on `configured = false`. */
+  getWindowAccessState(
+    tenantId: string,
+    userId: string,
+    windowCode: string,
+  ): Promise<{ configured: boolean; writable: boolean }>;
+
   /** Every authorization-effective assignment carrying `permissionCode`, with
    * that same assignment's Data Scope. Business modules use this when a read
    * or mutation must couple permission and Customer scope instead of combining
@@ -163,8 +379,19 @@ export interface RbacRepository {
   /** Phase 11F governed access reads. Administrative assignment inventory is
    * anchored through the assigned User's tenant. Role/scope display metadata
    * resolves only through same-tenant targets; unresolved metadata is redacted
-   * while the retained assignment ID and stored scope UUID remain removable. */
-  listAdminUserAccess(tenantId: string): Promise<AdminUserAccessSummary[]>;
+   * while the retained assignment ID and stored scope UUID remain removable.
+   *
+   * Epic 4 Wave 2 step 16 — `visibility` NARROWS the result to the target Users
+   * the actor may administer. It is computed server-side from the actor's own
+   * permission-bearing assignments and is never accepted from the browser; the
+   * predicate lives in this SQL, not in the React filter (§4.4 risk row 1).
+   * Only the TARGET list is narrowed: every retained assignment row of a
+   * visible User is still projected, because hiding some of a User's
+   * assignments would make an unremovable grant invisible. */
+  listAdminUserAccess(
+    tenantId: string,
+    visibility: AdministrativeVisibility,
+  ): Promise<AdminUserAccessSummary[]>;
   getRolePermissionDetail(
     tenantId: string,
     roleCode: string,
@@ -182,6 +409,73 @@ export interface RbacRepository {
     targetUserId: string,
     assignmentId: string,
   ): Promise<void>;
+
+  /**
+   * Epic 4 Wave 2 — the centralized Organization Unit scope helpers both
+   * surfaces (User-centric and assignment-centric) call, so the hierarchy rule
+   * exists in exactly one place (§4.4 E: "Pemeriksaan ancestor/descendant
+   * harus memakai helper scope terpusat, bukan logika baru di frontend").
+   */
+  listOrganizationUnitSubtreeIds(
+    tenantId: string,
+    rootOrganizationUnitIds: readonly string[],
+  ): Promise<string[]>;
+  /** The actor's own Organization Unit anchors, unexpanded — the assignable
+   * universe for the scope picker (ancestors are context, not choices). */
+  listActorOrganizationUnitAnchors(
+    userId: string,
+    permissionCode: string,
+  ): Promise<string[]>;
+  /** Resolve the caller's administrative visibility for one permission. */
+  resolveAdministrativeVisibility(
+    tenantId: string,
+    userId: string,
+    permissionCode: string,
+  ): Promise<AdministrativeVisibility>;
+
+  /**
+   * Epic 4 Wave 2 steps 12/14 — the preview and the single-confirmation batch
+   * write shared by BOTH surfaces. The repository owns the whole transaction in
+   * `updateRoleAssignments`, so a failure of any pair leaves no partial state
+   * (§4.4 risk row 8).
+   */
+  previewRoleAssignments(
+    actor: { tenantId: string; userId: string },
+    targetUserId: string,
+    input: PreviewRoleAssignmentsInput,
+  ): Promise<AssignmentBatchPreview>;
+  updateRoleAssignments(
+    actor: { tenantId: string; userId: string },
+    targetUserId: string,
+    input: UpdateRoleAssignmentsInput,
+  ): Promise<AssignmentBatchResult>;
+  /** Create a User together with zero or more initial assignments in ONE
+   * governed transaction (§4.4 C). A User with no assignment is valid and has
+   * no effective access (§4.4 risk row 9). */
+  createGovernedUserWithAssignments(
+    actor: { tenantId: string; userId: string },
+    input: CreateGovernedUserInput,
+  ): Promise<{ user: GovernedUserSummary; assignments: AdminRoleAssignmentSummary[] }>;
+  /** One visible User with the same access projection, or null when the User
+   * is outside the actor's visibility — an out-of-scope target must be
+   * indistinguishable from a missing one (§4.4 risk row 1). */
+  getAdminUserAccess(
+    tenantId: string,
+    userId: string,
+    visibility: AdministrativeVisibility,
+  ): Promise<AdminUserAccessSummary | null>;
+
+  /** Epic 4 Wave 2 step 13 — flattened assignment rows across Users, each with
+   * the User it belongs to, narrowed by the same visibility predicate. */
+  listAdminAssignments(
+    tenantId: string,
+    visibility: AdministrativeVisibility,
+  ): Promise<AdminAssignmentRow[]>;
+  /** Step 15 — the server-owned scope picker universe and the Role options,
+   * both filtered by the actor's delegation limit. */
+  listAssignmentOptions(
+    actor: { tenantId: string; userId: string },
+  ): Promise<AssignmentOptions>;
 
   /**
    * Every user who currently holds `roleCode` with a Data Scope covering
@@ -207,5 +501,8 @@ export interface RbacRepository {
    * receive an internal management signal, even if their role happened to
    * carry the permission (FD-1E §42).
    */
-  listUserIdsWithPermissionInTenant(tenantId: string, permissionCode: string): Promise<string[]>;
+  listUserIdsWithPermissionInTenant(
+    tenantId: string,
+    permissionCode: string,
+  ): Promise<string[]>;
 }

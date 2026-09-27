@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abixell One — pratinjau arah visual (Gelombang 1)</title>
+<style>
+  /* ── Token ────────────────────────────────────────────────────────────────
+     Satu tempat untuk seluruh rasa. Tema gelap adalah bawaan; terang adalah
+     tema kedua dengan token yang sama, bukan stylesheet terpisah.
+
+     Aturan warna: aksen dipakai HANYA untuk aksi utama dan penanda fokus.
+     Status tidak pernah memakai aksen — sukses, gagal, peringatan, dan
+     nonaktif selalu punya warnanya sendiri di seluruh aplikasi.          */
+  :root {
+    --bg:          #14161A;
+    --surface:     #1A1D22;
+    --surface-2:   #20242B;
+    --surface-3:   #262B33;
+    --border:      #2A2F37;
+    --border-strong:#3A414C;
+    --text:        #E7EAF0;
+    --text-dim:    #A9B2BF;
+    --text-faint:  #8A93A1;
+    --accent:      #6B7CFF;
+    --accent-line: #8C99FF;
+    --accent-soft: rgba(107,124,255,.14);
+    --accent-on:   #0E1017;
+    --ok:          #35C08A;
+    --warn:        #E0A028;
+    --danger:      #F2685F;
+    --idle:        #8B93A1;
+    --ok-soft:     rgba(53,192,138,.13);
+    --warn-soft:   rgba(224,160,40,.13);
+    --danger-soft: rgba(242,104,95,.13);
+    --idle-soft:   rgba(139,147,161,.13);
+    --row:         32px;
+    --r:           3px;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  body:has(#theme:checked) {
+    --bg:          #F2F4F7;
+    --surface:     #FFFFFF;
+    --surface-2:   #F7F8FA;
+    --surface-3:   #EEF1F5;
+    --border:      #DDE2E8;
+    --border-strong:#C3CAD3;
+    --text:        #171A1F;
+    --text-dim:    #4B5361;
+    --text-faint:  #606A78;
+    --accent:      #4A5BE8;
+    --accent-line: #3546C9;
+    --accent-soft: rgba(74,91,232,.10);
+    --accent-on:   #FFFFFF;
+    --ok:          #0F7A4A;
+    --warn:        #8A5A00;
+    --danger:      #B32B22;
+    --idle:        #55606E;
+    --ok-soft:     rgba(15,122,74,.10);
+    --warn-soft:   rgba(138,90,0,.10);
+    --danger-soft: rgba(179,43,34,.10);
+    --idle-soft:   rgba(85,96,110,.10);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 400 13px/1.45 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Angka selalu rata kolom supaya baris bisa dibandingkan satu sama lain. */
+  .num, td.num, .pill, .metric { font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--mono); font-size: .846em; letter-spacing: -.01em; }
+
+  /* Label kecil di atas data. Huruf kapital dipakai hanya di sini: ini
+     pemisah tingkat informasi, bukan hiasan judul. */
+  .label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .055em;
+    text-transform: uppercase; color: var(--text-faint);
+  }
+
+  /* ── Kerangka ────────────────────────────────────────────────────────── */
+  .chrome {
+    display: flex; align-items: center; gap: 16px;
+    height: 48px; padding: 0 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; }
+  .brand b { font-size: 14px; font-weight: 650; letter-spacing: -.012em; }
+  .brand span { font-size: 11px; color: var(--text-faint); }
+
+  .tabs { display: flex; gap: 2px; margin-left: 8px; }
+  .tab {
+    height: 28px; padding: 0 10px; display: inline-flex; align-items: center;
+    font-size: 12px; color: var(--text-dim); border-radius: var(--r);
+    border: 1px solid transparent; cursor: default;
+  }
+  .tab[aria-current] {
+    color: var(--text); background: var(--surface-3);
+    border-color: var(--border-strong);
+  }
+  .spacer { flex: 1; }
+
+  .theme {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-dim);
+    border: 1px solid var(--border-strong); border-radius: var(--r);
+    padding: 5px 10px; cursor: pointer; user-select: none;
+  }
+  .theme:hover { border-color: var(--text-faint); }
+  #theme { position: absolute; opacity: 0; pointer-events: none; }
+  #theme:focus-visible + .theme { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .theme .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+  /* ── Isi ─────────────────────────────────────────────────────────────── */
+  .page { max-width: 1200px; margin: 0 auto; padding: 20px 16px 64px; }
+
+  .head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 16px; }
+  .head h1 { margin: 0; font-size: 19px; font-weight: 620; letter-spacing: -.02em; }
+  .head p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-dim); max-width: 62ch; }
+
+  .split { display: grid; grid-template-columns: 340px minmax(0,1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); }
+  .panel > header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  .panel > header h2 { margin: 0; font-size: 12.5px; font-weight: 620; letter-spacing: -.008em; }
+  .panel > header .count { margin-left: auto; font-size: 11px; color: var(--text-faint); }
+  .panel .body { padding: 12px; }
+
+  /* ── Tabel padat ─────────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; font-size: 10.5px; font-weight: 600; letter-spacing: .055em;
+    text-transform: uppercase; color: var(--text-faint);
+    padding: 0 10px 7px; border-bottom: 1px solid var(--border-strong);
+  }
+  thead th.r { text-align: right; }
+  tbody td {
+    height: var(--row); padding: 0 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12.5px; color: var(--text);
+  }
+  tbody td.r { text-align: right; }
+  tbody td.dim { color: var(--text-dim); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr[aria-selected] td { background: var(--accent-soft); }
+  tbody tr[aria-selected] td:first-child { box-shadow: inset 2px 0 0 var(--accent-line); }
+  .code { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+
+  /* Penanda kepadatan: hanya ada di pratinjau ini, untuk menunjukkan angka. */
+  .measure { position: relative; }
+  .measure::after {
+    content: "32px"; position: absolute; right: -46px; top: 0;
+    height: var(--row); display: flex; align-items: center;
+    font-family: var(--mono); font-size: 10px; color: var(--accent-line);
+  }
+
+  /* ── Pil status ──────────────────────────────────────────────────────── */
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 19px; padding: 0 7px; border-radius: 2px;
+    font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    border: 1px solid transparent;
+  }
+  .pill .mark { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .pill.ok     { color: var(--ok);     background: var(--ok-soft);     border-color: var(--ok); }
+  .pill.warn   { color: var(--warn);   background: var(--warn-soft);   border-color: var(--warn); }
+  .pill.danger { color: var(--danger); background: var(--danger-soft); border-color: var(--danger); }
+  .pill.idle   { color: var(--idle);   background: var(--idle-soft);   border-color: var(--border-strong); }
+
+  /* ── Kontrol ─────────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 28px; padding: 0 11px; border-radius: var(--r); cursor: pointer;
+    font: 500 12.5px var(--sans); border: 1px solid var(--border-strong);
+    background: var(--surface-2); color: var(--text);
+  }
+  .btn:hover { background: var(--surface-3); }
+  .btn.primary {
+    background: var(--accent); border-color: var(--accent); color: var(--accent-on);
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: var(--accent-line); border-color: var(--accent-line); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--text-dim); }
+  .btn.ghost:hover { color: var(--text); background: var(--surface-2); }
+  .btn:focus-visible, .seg label:focus-within, .check:focus-within {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+  input[type=search], input[type=text] {
+    height: 28px; width: 100%; padding: 0 9px;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: var(--r);
+    font: 400 12.5px var(--sans);
+  }
+  input::placeholder { color: var(--text-faint); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+
+  /* Dua pilihan (baca / baca-tulis) sebagai satu kontrol, bukan dua kotak
+     centang yang bisa saling bertentangan. */
+  .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r); overflow: hidden; }
+  .seg label {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 22px; padding: 0 9px; font-size: 11px; font-weight: 600;
+    letter-spacing: .03em; text-transform: uppercase; color: var(--text-dim);
+    background: var(--surface-2); cursor: pointer;
+  }
+  .seg label + label { border-left: 1px solid var(--border-strong); }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg input:checked + span { color: var(--accent-on); }
+  .seg label:has(input:checked) { background: var(--accent); color: var(--accent-on); }
+  .seg label:has(input:checked) span { color: var(--accent-on); }
+
+  .switch { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  .switch input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch .track {
+    width: 26px; height: 15px; border-radius: 8px; background: var(--surface-3);
+    border: 1px solid var(--border-strong); position: relative; transition: background .12s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 1px; left: 1px; width: 11px; height: 11px;
+    border-radius: 50%; background: var(--text-faint); transition: transform .12s, background .12s;
+  }
+  .switch input:checked + .track { background: var(--ok-soft); border-color: var(--ok); }
+  .switch input:checked + .track::after { transform: translateX(11px); background: var(--ok); }
+  .switch .txt { font-size: 11.5px; color: var(--text-dim); }
+  .switch input:checked ~ .txt { color: var(--text); }
+
+  .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .check input { width: 13px; height: 13px; accent-color: var(--accent); margin: 0; }
+
+  /* ── Daftar izin ─────────────────────────────────────────────────────── */
+  .picker { border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+  .picker .search { padding: 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .picker ul { list-style: none; margin: 0; padding: 0; max-height: 232px; overflow: auto; }
+  .picker li { border-bottom: 1px solid var(--border); }
+  .picker li:last-child { border-bottom: 0; }
+  .picker li > label {
+    display: flex; align-items: center; gap: 9px;
+    height: var(--row); padding: 0 10px; cursor: pointer;
+  }
+  .picker li > label:hover { background: var(--surface-2); }
+  .picker .desc { margin-left: auto; font-size: 11px; color: var(--text-faint); }
+  .picker li.off > label { cursor: not-allowed; }
+  .picker li.off .code, .picker li.off .desc { opacity: .5; }
+
+  /* ── Nota ────────────────────────────────────────────────────────────── */
+  .note {
+    display: flex; gap: 9px; align-items: flex-start;
+    padding: 9px 11px; border-radius: var(--r);
+    border: 1px solid var(--border-strong); background: var(--surface-2);
+    font-size: 12px; color: var(--text-dim);
+  }
+  .note b { color: var(--text); font-weight: 600; }
+  .note.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .note .sig { font-family: var(--mono); font-size: 10.5px; color: var(--warn); flex: none; padding-top: 1px; }
+
+  /* ── Dampak ──────────────────────────────────────────────────────────── */
+  .impact {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--border); border: 1px solid var(--border); border-radius: var(--r);
+    overflow: hidden;
+  }
+  .impact div { background: var(--surface); padding: 9px 11px; }
+  .metric { font-size: 20px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+  .metric.add { color: var(--ok); }
+  .metric.drop { color: var(--danger); }
+  .impact .sub { font-size: 11px; color: var(--text-faint); margin-top: 1px; }
+
+  footer.act {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 11px 12px; border-top: 1px solid var(--border); background: var(--surface-2);
+  }
+  footer.act .hint { margin-left: auto; font-size: 11.5px; color: var(--text-faint); }
+
+  .stack { display: grid; gap: 14px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .row2 { grid-template-columns: 1fr; } }
+
+  /* ── Catatan arah ────────────────────────────────────────────────────── */
+  .spec {
+    margin-top: 24px; border: 1px solid var(--border); border-radius: var(--r);
+    background: var(--surface); overflow: hidden;
+  }
+  .spec > header { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .spec .body { padding: 12px; }
+  .spec table td { height: auto; padding: 8px 10px; vertical-align: top; border-bottom: 1px solid var(--border); }
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+  .sw { width: 108px; }
+  .sw i { display: block; height: 34px; border-radius: var(--r); border: 1px solid var(--border-strong); }
+  .sw span { display: block; margin-top: 5px; font-family: var(--mono); font-size: 10px; color: var(--text-faint); }
+  .sw b { display: block; font-size: 11.5px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<input type="checkbox" id="theme">
+<div class="chrome">
+  <div class="brand"><b>Abixell One</b><span>Administration</span></div>
+  <nav class="tabs">
+    <a class="tab">Overview</a>
+    <a class="tab" aria-current="page">Roles</a>
+    <a class="tab">Users</a>
+    <a class="tab">Permissions</a>
+    <a class="tab">Modules</a>
+    <a class="tab">Audit</a>
+  </nav>
+  <div class="spacer"></div>
+  <label class="theme" for="theme"><i class="dot"></i>Tema: gelap</label>
+</div>
+
+<div class="page">
+
+  <div class="head">
+    <div>
+      <h1>Role definition</h1>
+      <p>Definisi role tenant: nama, izin, dan akses Window. Penegakan hanya-baca belum aktif pada gelombang ini — konfigurasi disimpan, belum menolak tulisan.</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn">Duplikat</button>
+    <button class="btn primary">Role baru</button>
+  </div>
+
+  <div class="split">
+
+    <!-- ── Daftar ─────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <header>
+        <h2>Roles</h2>
+        <span class="count num">6</span>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th class="r">Izin</th>
+            <th class="r">User</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr aria-selected="true"><td class="code">RD_MANAGER</td><td class="r num">27</td><td class="r num">4</td></tr>
+          <tr><td class="code">RD_SUPERVISOR</td><td class="r num">18</td><td class="r num">11</td></tr>
+          <tr><td class="code">RD_OPERATOR</td><td class="r num">6</td><td class="r num">38</td></tr>
+          <tr><td class="code">RD_AUDITOR</td><td class="r num">9</td><td class="r num">2</td></tr>
+          <tr><td class="code">RD_VIEWER</td><td class="r num">4</td><td class="r num">63</td></tr>
+          <tr><td class="code">RD_TEMP</td><td class="r num">0</td><td class="r num">0</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Detail ─────────────────────────────────────────────────────── -->
+    <div class="stack">
+      <section class="panel">
+        <header>
+          <h2>RD_MANAGER</h2>
+          <span class="pill ok"><i class="mark"></i>Aktif</span>
+          <span class="count">versi <span class="num">3</span></span>
+        </header>
+
+        <div class="body stack">
+          <div class="row2">
+            <div>
+              <div class="label">Nama</div>
+              <input type="text" value="Manager Tenant" style="margin-top:5px">
+            </div>
+            <div>
+              <div class="label">Code</div>
+              <input type="text" value="RD_MANAGER" class="mono" disabled
+                     style="margin-top:5px;opacity:.65">
+              <div style="font-size:11px;color:var(--text-faint);margin-top:4px">
+                Code tidak dapat diubah setelah role dibuat.
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="label" style="margin-bottom:6px">Izin — 27 dipilih</div>
+            <div class="picker">
+              <div class="search"><input type="search" placeholder="Cari code atau keterangan"></div>
+              <ul>
+                <li><label class="check"><input type="checkbox" checked><span class="code">config.read</span><span class="desc">Baca konfigurasi</span></label></li>
+                <li><label class="check"><input type="checkbox" checked><span class="code">role.manage</span><span class="desc">Kelola definisi role</span></label></li>
+                <li><label class="check"><input type="checkbox" checked><span class="code">admin.console.read</span><span class="desc">Masuk Admin Console</span></label></li>
+                <li class="off"><label class="check"><input type="checkbox" disabled><span class="code">hse.report</span><span class="desc">Modul HSE tidak aktif</span></label></li>
+                <li><label class="check"><input type="checkbox"><span class="code">user.read</span><span class="desc">Lihat user</span></label></li>
+                <li class="off"><label class="check"><input type="checkbox" disabled><span class="code">customer.scope.manage</span><span class="desc">Di luar batas delegasi Anda</span></label></li>
+              </ul>
+            </div>
+            <div class="note" style="margin-top:10px">
+              <span class="sig">INFO</span>
+              <span><b>2 izin tidak dapat dipilih.</b> Satu berasal dari modul <b>HSE</b> yang tidak aktif pada tenant ini, satu di luar batas delegasi Anda. Backend menolak keduanya walau dikirim manual.</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="label" style="margin-bottom:6px">Akses Window — 5 dari 70 dikunci</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Window</th>
+                  <th>Akses</th>
+                  <th class="r">Aktif</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="measure">
+                  <td><span class="code">route:/admin/roles</span><div style="font-size:11px;color:var(--text-faint)">Role definition</div></td>
+                  <td>
+                    <span class="seg">
+                      <label><input type="radio" name="w1"><span>Baca</span></label>
+                      <label><input type="radio" name="w1" checked><span>Tulis</span></label>
+                    </span>
+                  </td>
+                  <td class="r">
+                    <label class="switch"><input type="checkbox" checked><span class="track"></span><span class="txt">Aktif</span></label>
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="code">route:/users</span><div style="font-size:11px;color:var(--text-faint)">Users</div></td>
+                  <td>
+                    <span class="seg">
+                      <label><input type="radio" name="w2" checked><span>Baca</span></label>
+                      <label><input type="radio" name="w2"><span>Tulis</span></label>
+                    </span>
+                  </td>
+                  <td class="r">
+                    <label class="switch"><input type="checkbox" checked><span class="track"></span><span class="txt">Aktif</span></label>
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="code">route:/hse/report</span><div style="font-size:11px;color:var(--text-faint)">HSE report</div></td>
+                  <td><span style="color:var(--text-faint);font-size:12px">Modul tidak aktif</span></td>
+                  <td class="r">
+                    <label class="switch"><input type="checkbox" disabled><span class="track"></span><span class="txt">Nonaktif</span></label>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="note warn" style="margin-top:10px">
+              <span class="sig">BELUM AKTIF</span>
+              <span><b>Penegakan hanya-baca belum berjalan.</b> Baris di atas menentukan posisi yang akan dipakai pada langkah 11b nanti. Hari ini API masih mengembalikan <span class="mono">enforcementStatus: "not_enforced"</span>, jadi mengubah pilihan di sini belum menolak tulisan.</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="label" style="margin-bottom:6px">Dampak penyimpanan</div>
+            <div class="impact">
+              <div>
+                <div class="metric">4</div>
+                <div class="sub">User terpengaruh</div>
+              </div>
+              <div>
+                <div class="metric add">+2</div>
+                <div class="sub">Izin ditambah</div>
+              </div>
+              <div>
+                <div class="metric drop">−1</div>
+                <div class="sub">Izin dicabut</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="act">
+          <button class="btn primary">Simpan perubahan</button>
+          <button class="btn">Pratinjau dampak</button>
+          <button class="btn ghost">Batal</button>
+          <span class="hint">Preview disegel pada versi <span class="mono num">3</span> — backend menolak bila definisi berubah lebih dulu.</span>
+        </footer>
+      </section>
+    </div>
+  </div>
+
+  <!-- ── Rujukan arah ──────────────────────────────────────────────────── -->
+  <section class="spec">
+    <header><h2 style="margin:0;font-size:12.5px;font-weight:620">Rujukan arah — jawaban Anda, dalam bentuk keputusan</h2></header>
+    <div class="body stack">
+
+      <div>
+        <div class="label" style="margin-bottom:7px">Palette — netral dingin, satu aksen. Gelap sebagai bawaan.</div>
+        <div class="swatches">
+          <div class="sw"><i style="background:#14161A"></i><b>Latar</b><span>#14161A</span></div>
+          <div class="sw"><i style="background:#1A1D22"></i><b>Permukaan</b><span>#1A1D22</span></div>
+          <div class="sw"><i style="background:#2A2F37"></i><b>Garis</b><span>#2A2F37</span></div>
+          <div class="sw"><i style="background:#E7EAF0"></i><b>Teks</b><span>#E7EAF0</span></div>
+          <div class="sw"><i style="background:#6B7CFF"></i><b>Aksen</b><span>#6B7CFF</span></div>
+          <div class="sw"><i style="background:#35C08A"></i><b>Sukses</b><span>#35C08A</span></div>
+          <div class="sw"><i style="background:#E0A028"></i><b>Peringatan</b><span>#E0A028</span></div>
+          <div class="sw"><i style="background:#F2685F"></i><b>Gagal</b><span>#F2685F</span></div>
+          <div class="sw"><i style="background:#8B93A1"></i><b>Nonaktif</b><span>#8B93A1</span></div>
+        </div>
+        <div class="note" style="margin-top:11px">
+          <span class="sig">CATATAN</span>
+          <span>Aksen <span class="mono">#6B7CFF</span> dipilih agar tidak terbaca konservatif: biru yang condong ke ungu, bukan biru korporat. Aksen hanya dipakai untuk aksi utama, fokus, dan penanda baris terpilih — tidak pernah untuk status. Ini satu-satunya dial yang paling mungkin ingin Anda geser; sebutkan bila ingin arah lain (mis. teal dingin).</span>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <div class="label" style="margin-bottom:7px">Bentuk dan gerak</div>
+          <table>
+            <tbody>
+              <tr><td style="width:38%;color:var(--text-dim)">Sudut</td><td>Radius 3px, seragam. Tidak ada bentuk pil kecuali penanda bulat 5–11px.</td></tr>
+              <tr><td style="color:var(--text-dim)">Bayangan</td><td>Nol. Kedalaman dibuat oleh garis 1px dan tingkat permukaan, bukan blur.</td></tr>
+              <tr><td style="color:var(--text-dim)">Gradien / glow</td><td>Tidak dipakai sama sekali.</td></tr>
+              <tr><td style="color:var(--text-dim)">Gerak</td><td>Hanya transisi 120ms pada kontrol. Tidak ada animasi masuk, tidak ada fade-up.</td></tr>
+              <tr><td style="color:var(--text-dim)">Fokus</td><td>Cincin 2px warna aksen, selalu terlihat saat navigasi papan ketik.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="label" style="margin-bottom:7px">Kepadatan dan tipografi</div>
+          <table>
+            <tbody>
+              <tr><td style="width:38%;color:var(--text-dim)">Baris tabel</td><td>32px, padding mendatar 10px.</td></tr>
+              <tr><td style="color:var(--text-dim)">Isi</td><td>13px, tinggi baris 1.45. Label 10.5px kapital, tracking .055em.</td></tr>
+              <tr><td style="color:var(--text-dim)">Angka</td><td>Tabular di seluruh tabel dan metrik, supaya kolom rata.</td></tr>
+              <tr><td style="color:var(--text-dim)">Code dan ID</td><td>Monospace, 11.5px.</td></tr>
+              <tr><td style="color:var(--text-dim)">Huruf</td><td>Belum diputuskan. Pratinjau ini memakai huruf sistem supaya tidak ada berkas huruf yang diunduh; pilihan keluarga huruf final adalah bagian DESIGN.md.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="note">
+        <span class="sig">STATUS</span>
+        <span><b>Ini pratinjau arah, bukan deliverable.</b> Belum ada DESIGN.md, jadi keluaran ini masih berlabel <i>draft without direction</i>. Setelah Anda menyetujui arahnya, DESIGN.md ditulis dari jawaban Anda, lalu UI Gelombang 1 dibangun penuh terhadap token tersebut.</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

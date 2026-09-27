@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 1C.2 — Customer Complaint Experience (backend read/authorization
@@ -40,6 +40,7 @@ describe("Checkpoint 1C.2 — Customer Complaint Experience", () => {
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 1C2");
     tenantId = tenant.id;
+    await activateAllModules(tenantId);
     await provisionFirstAdmin({ tenantId, email: "admin@test1c2.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT_CODE, "admin@test1c2.local", "Admin12345!")).body.accessToken;
 
@@ -233,6 +234,8 @@ describe("Checkpoint 1C.2 — Customer Complaint Experience", () => {
     });
 
     const otherTenant = await bootstrapTenant(app, OTHER_TENANT_CODE, "Other Tenant 1C2");
+
+    await activateAllModules(otherTenant.id);
     otherTenantId = otherTenant.id;
     await provisionFirstAdmin({ tenantId: otherTenantId, email: "admin@other1c2.local", password: "Admin12345!" });
     otherAdminToken = (await login(app, OTHER_TENANT_CODE, "admin@other1c2.local", "Admin12345!")).body.accessToken;

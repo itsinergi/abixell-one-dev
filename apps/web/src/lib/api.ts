@@ -80,6 +80,29 @@ export type TenantSelectionRequired = {
 
 export type LoginResult = LoginSuccess | TenantSelectionRequired;
 
+/** One node of the server-served navigation catalogue (§4.3). */
+export type MenuNode = {
+  code: string;
+  name: string;
+  description?: string;
+  /** `true` = a folder (Grup, Modul); only a folder has children. */
+  isSummary: boolean;
+  moduleCode?: string;
+  /** Route this menu opens; absent for a folder. */
+  path?: string;
+  isExternalAllowed: boolean;
+  requiredPermissions: string[];
+  seqNo: number;
+  children: MenuNode[];
+  /**
+   * Wave 2: the caller's role cannot open this page while its module is
+   * active, so the server sent it disabled with a reason instead of hiding
+   * it. Read as-is — the browser never decides this.
+   */
+  locked?: boolean;
+  lockedReason?: string;
+};
+
 /** The caller's OWN role+scope pairs, with display names — drives the
  * post-login "select role & site" screen. Mirrors the backend projection. */
 export type MyRoleAssignment = {
@@ -114,6 +137,10 @@ export const api = {
       permissions: string[];
       scopeTypes: string[];
       activeModuleCodes: string[];
+      /** The caller's navigation tree: the tenant catalogue filtered
+       * server-side for THIS caller (§4.3 step 7). Internal menus never
+       * reach an external caller, not even disabled. */
+      menu: MenuNode[];
       assignments: MyRoleAssignment[];
       activeAssignmentId: string | null;
     }>(
@@ -1757,6 +1784,44 @@ export const api = {
   adminRoles: (token: string) => request<AdminRoleSummary[]>("/admin/roles", { token }),
   adminRolePermissions: (token: string, roleCode: string) =>
     request<AdminRolePermissions>(`/admin/roles/${encodeURIComponent(roleCode)}/permissions`, { token }),
+
+  // --- Role definition (Epic 4 Wave 1) ----------------------------------
+  // Read paths accept `config.read`; write paths require `role.manage`. Both
+  // additionally require the edge ticket `admin.console.read` plus one
+  // tenant-scoped assignment holding the pair. No client-side gate replaces
+  // the server check.
+  roleDefinition: (token: string, roleCode: string) =>
+    request<RoleDefinition>(`/admin/roles/${encodeURIComponent(roleCode)}/definition`, { token }),
+  roleDefinitionOptions: (token: string) =>
+    request<RoleDefinitionOptions>("/admin/role-definition-options", { token }),
+  createRoleDefinition: (token: string, body: CreateRoleDefinitionInput) =>
+    request<RoleDefinition>("/admin/roles", { method: "POST", token, body }),
+  copyRoleDefinition: (token: string, roleCode: string, body: CopyRoleDefinitionInput) =>
+    request<RoleDefinition>(`/admin/roles/${encodeURIComponent(roleCode)}/copy`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  /** Dry run. Returns the hash and the affected-user count without writing. */
+  previewRoleDefinition: (token: string, roleCode: string, body: RoleDefinitionFields) =>
+    request<RoleDefinitionPreview>(`/admin/roles/${encodeURIComponent(roleCode)}/preview`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  /** The hash binds the definition the preview described. If the role changed
+   * in between, the server refuses rather than applying a stale intent. */
+  updateRoleDefinition: (token: string, roleCode: string, body: UpdateRoleDefinitionInput) =>
+    request<RoleDefinition>(`/admin/roles/${encodeURIComponent(roleCode)}/definition`, {
+      method: "PUT",
+      token,
+      body,
+    }),
+  deleteRoleDefinition: (token: string, roleCode: string) =>
+    request<void>(`/admin/roles/${encodeURIComponent(roleCode)}/definition`, {
+      method: "DELETE",
+      token,
+    }),
   addAdminUserRoleAssignment: (
     token: string,
     userId: string,
@@ -1913,7 +1978,7 @@ export type AdminOverview = {
     rolePermissionRead: boolean;
     readOnly: boolean;
     userManage: false;
-    roleManage: false;
+    roleManage: boolean;
     permissionManage: false;
     moduleActivationManage: false;
     workflowManage: false;
@@ -1992,6 +2057,87 @@ export type AdminAuditEntry = {
   entityType: string;
   actorUserId: string | null;
   createdAt: string;
+};
+
+// --- Role definition types (Epic 4 Wave 1) ------------------------------
+// Mirrors `domain/rbac/rbac.entity.ts`. The server rejects any body that
+// carries a field not listed here, so these shapes are also the contract for
+// what the UI may send back.
+
+export type WindowAccessInput = {
+  windowCode: string;
+  isReadWrite: boolean;
+  isActive: boolean;
+};
+
+export type RoleDefinition = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  isFullAccess: boolean;
+  version: number;
+  permissionCodes: string[];
+  windows: WindowAccessInput[];
+  /** Read server-side from the census of routes the server actually serves
+   * (Epic 4 step 11b). `"partial"` means at least one mutating route resolves
+   * to no Window and carries no exemption, so it sits outside the read-only
+   * lock with nothing on record saying why; `"enforced"` means every one of
+   * them is mapped or exempted. Never a literal the server can hard-code. */
+  enforcementStatus: "enforced" | "partial";
+};
+
+export type RoleDefinitionPermissionOption = AdminPermission & {
+  moduleCode: string | null;
+  isActive: boolean;
+  /** False when the actor's delegation limit or a disabled module forbids the
+   * grant. The server rejects it even if the UI sends it anyway. */
+  selectable: boolean;
+};
+
+export type RoleDefinitionWindowOption = {
+  code: string;
+  name: string;
+  moduleCode: string;
+  registrationStatus: string;
+  requiredPermissions: string[];
+  parentPath: string | null;
+  isDetail: boolean;
+  selectable: boolean;
+};
+
+export type RoleDefinitionOptions = {
+  permissions: RoleDefinitionPermissionOption[];
+  windows: RoleDefinitionWindowOption[];
+};
+
+export type RoleDefinitionPreview = {
+  role: RoleDefinition;
+  previewHash: string;
+  affectedUserCount: number;
+};
+
+/** What a definition IS, apart from its code: shared by preview and update so
+ * the two can never drift. */
+export type RoleDefinitionFields = {
+  version: number;
+  name: string;
+  permissionCodes: string[];
+  windows: WindowAccessInput[];
+};
+
+/** Create omits `version` deliberately: the server's create schema is strict
+ * and a new role has no version to check against. Keeping the token out of
+ * this type is what stops one being sent by accident. */
+export type CreateRoleDefinitionInput = Omit<RoleDefinitionFields, "version"> & {
+  code: string;
+};
+
+export type CopyRoleDefinitionInput = { code: string; name: string };
+
+export type UpdateRoleDefinitionInput = RoleDefinitionFields & {
+  previewHash: string;
+  confirm: true;
 };
 
 // --- Reporting & Operational Insight types (Phase 9) --------------------

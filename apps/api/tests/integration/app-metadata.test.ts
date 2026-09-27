@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { bootstrapTenant, provisionFirstAdmin, login, authHeader } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, login, provisionFirstAdmin } from "./helpers.js";
 import { ROUTE_REGISTRY } from "../../src/domain/configuration/route-registry.js";
 
 const TENANT_CODE = `test-app-metadata-${Date.now()}`;
@@ -13,6 +13,7 @@ describe("Epic 2 Wave 1 — Application Dictionary & Metadata Engine", () => {
 
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant App Metadata");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     await provisionFirstAdmin({
       tenantId,
@@ -295,6 +296,40 @@ describe("Epic 2 Wave 1 — Application Dictionary & Metadata Engine", () => {
       // Nothing is seeded as unregistered: that status exists for rows created
       // through the API, and it is what guard report mode surfaces.
       expect(rows.rows.every((r) => r.registration_status !== "belum_terdaftar")).toBe(true);
+    });
+
+    it("seeds the corrected finance detail description, not the stale exception note", async () => {
+      // 1787200000000 seeded this row's description from a note that read
+      // "Read-only exception (§4.3) ...". That framing was wrong: the page
+      // writes through `finance.manage` and `finance.approve`, and read-only
+      // mode is lapis 3 (`role_window_access`), never carried by the route.
+      // 1787900000000 repairs the trigger for tenants created after it, so a
+      // fresh tenant must get the corrected wording. The description travels
+      // through `GET /app-metadata/windows`, which is why this is asserted
+      // through the API rather than only against the table.
+      const row = await pool.query<{ description: string | null }>(
+        `SELECT description FROM app_windows
+          WHERE tenant_id = $1 AND code = 'route:/finance/transactions/:transactionId'`,
+        [tenantId],
+      );
+      expect(row.rows[0]?.description).toBe(
+        "Detail with its own window identity (§4.3); role read-only mode is lapis 3, not carried here.",
+      );
+      expect(row.rows[0]?.description ?? "").not.toMatch(/Read-only exception/);
+    });
+
+    it("leaves no tenant carrying the stale finance detail description", async () => {
+      // The other half of 1787900000000: an UPDATE repairs tenants seeded
+      // before the migration, the trigger repair covers tenants seeded after
+      // it. A row that bypassed both would still expose the wrong framing
+      // through the Application Dictionary, so this asserts across every
+      // tenant rather than the one this suite happens to use.
+      const stale = await pool.query<{ tenant_id: string }>(
+        `SELECT tenant_id FROM app_windows
+          WHERE code = 'route:/finance/transactions/:transactionId'
+            AND description LIKE 'Read-only exception%'`,
+      );
+      expect(stale.rows).toEqual([]);
     });
 
     it("provides the module every registry moduleCode references", async () => {

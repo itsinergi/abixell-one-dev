@@ -78,7 +78,7 @@ function UnavailableScopeState() {
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
       <StatusPill tone="warning">Unavailable scope</StatusPill>
-      <span className="text-xs text-amber-800">This assignment currently grants no access.</span>
+      <span className="text-xs text-status-warn">This assignment currently grants no access.</span>
     </div>
   );
 }
@@ -87,7 +87,7 @@ function UnavailableRoleState() {
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
       <StatusPill tone="warning">Unavailable role</StatusPill>
-      <span className="text-xs text-amber-800">Role details are not available.</span>
+      <span className="text-xs text-status-warn">Role details are not available.</span>
     </div>
   );
 }
@@ -114,15 +114,15 @@ function AssignmentRole({
   if (!assignmentHasAvailableRole(assignment)) {
     return (
       <>
-        <div className="text-sm font-medium text-slate-800">Unavailable role</div>
+        <div className="text-sm font-medium text-ink">Unavailable role</div>
         <UnavailableRoleState />
       </>
     );
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-sm font-medium text-slate-800">{assignment.roleName}</span>
-      <code className="break-all font-mono text-xs text-slate-500">
+      <span className="text-sm font-medium text-ink">{assignment.roleName}</span>
+      <code className="break-all font-mono text-xs text-ink-dim">
         {assignment.roleCode}
       </code>
     </div>
@@ -265,7 +265,7 @@ export function AdminUsersView({
                 className="sm:w-80"
               />
             </Field>
-            <p className="text-sm tabular-nums text-slate-500" role="status" aria-live="polite">
+            <p className="text-sm tabular-nums text-ink-dim" role="status" aria-live="polite">
               Showing {filteredUsers.length} of {(data ?? []).length}
             </p>
           </div>
@@ -292,9 +292,9 @@ export function AdminUsersView({
                 canManageAccess={canManageAccess}
                 onManage={manage}
               />
-              <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p
-                  className="text-sm tabular-nums text-slate-500"
+                  className="text-sm tabular-nums text-ink-dim"
                   role="status"
                   aria-live="polite"
                 >
@@ -353,11 +353,11 @@ function UserResults({
     <>
       <ul className="space-y-3 md:hidden">
         {users.map((user) => (
-          <li key={user.id} className="rounded-lg border border-slate-200 bg-white p-3">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+          <li key={user.id} className="rounded border border-line bg-panel p-3">
+            <div className="flex items-start justify-between gap-3 border-b border-line pb-3">
               <div className="min-w-0">
-                <div className="break-words text-sm font-semibold text-slate-900">{user.fullName}</div>
-                <div className="mt-0.5 break-all text-sm text-slate-500">{user.email}</div>
+                <div className="break-words text-sm font-semibold text-ink">{user.fullName}</div>
+                <div className="mt-0.5 break-all text-sm text-ink-dim">{user.email}</div>
               </div>
               <StatusPill tone={user.status === "active" ? "success" : "neutral"}>
                 {user.status}
@@ -365,12 +365,12 @@ function UserResults({
             </div>
             <div className="mt-3 space-y-2">
               {user.roleAssignments.length === 0 ? (
-                <span className="text-sm text-slate-500">No role assignments</span>
+                <span className="text-sm text-ink-dim">No role assignments</span>
               ) : (
                 user.roleAssignments.map((assignment) => (
-                  <div key={assignment.id} className="rounded-md bg-slate-50 px-2.5 py-2">
+                  <div key={assignment.id} className="rounded bg-panel-2 px-2.5 py-2">
                     <AssignmentRole assignment={assignment} />
-                    <div className="mt-0.5 text-xs text-slate-500">{scopeLabel(assignment)}</div>
+                    <div className="mt-0.5 text-xs text-ink-dim">{scopeLabel(assignment)}</div>
                     {assignment.scopeState === "unavailable" && <UnavailableScopeState />}
                   </div>
                 ))
@@ -388,22 +388,22 @@ function UserResults({
         ))}
       </ul>
 
-      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
+      <div className="hidden overflow-x-auto rounded border border-line md:block">
+        <table className="min-w-full divide-y divide-line text-sm">
+          <thead className="bg-panel-2">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">User</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Roles</th>
-              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Access</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-dim">User</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-dim">Status</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-dim">Roles</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-ink-dim">Access</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody className="divide-y divide-line bg-panel">
             {users.map((user) => (
               <tr key={user.id}>
                 <td className="px-3 py-3 align-top">
-                  <div className="font-medium text-slate-900">{user.fullName}</div>
-                  <div className="mt-0.5 break-all text-slate-500">{user.email}</div>
+                  <div className="font-medium text-ink">{user.fullName}</div>
+                  <div className="mt-0.5 break-all text-ink-dim">{user.email}</div>
                 </td>
                 <td className="px-3 py-3 align-top">
                   <StatusPill tone={user.status === "active" ? "success" : "neutral"}>
@@ -413,12 +413,12 @@ function UserResults({
                 <td className="px-3 py-3 align-top">
                   <div className="flex max-w-xl flex-wrap gap-1.5">
                     {user.roleAssignments.length === 0 ? (
-                      <span className="text-slate-500">No role assignments</span>
+                      <span className="text-ink-dim">No role assignments</span>
                     ) : (
                       user.roleAssignments.map((assignment) => (
-                        <div key={assignment.id} className="inline-flex flex-col rounded-md bg-slate-50 px-2 py-1.5">
+                        <div key={assignment.id} className="inline-flex flex-col rounded bg-panel-2 px-2 py-1.5">
                           <AssignmentRole assignment={assignment} />
-                          <span className="text-xs text-slate-500">{scopeLabel(assignment)}</span>
+                          <span className="text-xs text-ink-dim">{scopeLabel(assignment)}</span>
                           {assignment.scopeState === "unavailable" && <UnavailableScopeState />}
                         </div>
                       ))
@@ -434,7 +434,7 @@ function UserResults({
                       Manage access
                     </Button>
                   ) : (
-                    <span className="text-xs text-slate-500">Read only</span>
+                    <span className="text-xs text-ink-dim">Read only</span>
                   )}
                 </td>
               </tr>
@@ -829,7 +829,7 @@ function AccessDialog({
         <div className="space-y-6">
           <section aria-labelledby="current-access-title">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 id="current-access-title" className="text-sm font-semibold text-slate-900">Current access</h3>
+              <h3 id="current-access-title" className="text-sm font-semibold text-ink">Current access</h3>
               {!canManageAccess && <Badge>Read only</Badge>}
             </div>
             {user.roleAssignments.length === 0 ? (
@@ -838,12 +838,12 @@ function AccessDialog({
                 description="This user currently has no assigned roles."
               />
             ) : (
-              <ul className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-200">
+              <ul className="mt-3 divide-y divide-line rounded border border-line">
                 {user.roleAssignments.map((assignment) => (
                   <li key={assignment.id} className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <AssignmentRole assignment={assignment} />
-                      <div className="mt-1 break-words text-sm text-slate-500">{scopeLabel(assignment)}</div>
+                      <div className="mt-1 break-words text-sm text-ink-dim">{scopeLabel(assignment)}</div>
                       {assignment.scopeState === "unavailable" && <UnavailableScopeState />}
                     </div>
                     {canManageAccess && (
@@ -864,8 +864,8 @@ function AccessDialog({
           </section>
 
           {canManageAccess && (
-            <section className="border-t border-slate-200 pt-5" aria-labelledby="add-access-title">
-              <h3 id="add-access-title" className="text-sm font-semibold text-slate-900">Add access</h3>
+            <section className="border-t border-line pt-5" aria-labelledby="add-access-title">
+              <h3 id="add-access-title" className="text-sm font-semibold text-ink">Add access</h3>
               {catalogState === "loading" || catalogState === "idle" ? (
                 <Spinner label="Loading governed choices…" />
               ) : (
@@ -1020,8 +1020,8 @@ function ChangeSummary({
   const scopeId = assignment ? assignmentScopeId(assignment) : scope.id;
 
   return (
-    <section aria-labelledby="change-summary-title" className="rounded-lg border border-slate-300 bg-slate-50 p-4">
-      <h3 id="change-summary-title" className="text-sm font-semibold text-slate-900">
+    <section aria-labelledby="change-summary-title" className="rounded border border-line-strong bg-panel-2 p-4">
+      <h3 id="change-summary-title" className="text-sm font-semibold text-ink">
         {applied ? "Change accepted by the server" : "What will change"}
       </h3>
       {assignment &&
@@ -1072,8 +1072,8 @@ function ChangeSummary({
 function SummaryItem({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 break-words text-slate-800">{children}</dd>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-ink-dim">{label}</dt>
+      <dd className="mt-1 break-words text-ink">{children}</dd>
     </div>
   );
 }
@@ -1093,7 +1093,7 @@ function PermissionSummary({
 }) {
   return (
     <section aria-labelledby="permission-summary-title">
-      <h3 id="permission-summary-title" className="text-sm font-semibold text-slate-900">Actual role permission summary</h3>
+      <h3 id="permission-summary-title" className="text-sm font-semibold text-ink">Actual role permission summary</h3>
       <div className="mt-3">
         {(state === "idle" || state === "loading") && <Spinner label="Loading current role permissions…" />}
         {state === "denied" && (
@@ -1115,22 +1115,22 @@ function PermissionSummary({
           </Alert>
         )}
         {state === "ready" && details && (
-          <div className="rounded-lg border border-slate-200">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-3">
+          <div className="rounded border border-line">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-panel-2 px-3 py-3">
               <div>
-                <span className="font-medium text-slate-900">{details.roleName}</span>{" "}
-                <code className="font-mono text-xs text-slate-600">{details.roleCode}</code>
+                <span className="font-medium text-ink">{details.roleName}</span>{" "}
+                <code className="font-mono text-xs text-ink-dim">{details.roleCode}</code>
               </div>
               {details.isFullAccess ? <StatusPill tone="warning">Full access</StatusPill> : <StatusPill tone="neutral">Scoped access</StatusPill>}
             </div>
             {details.permissions.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-slate-500">No permission grants are currently listed.</p>
+              <p className="px-3 py-4 text-sm text-ink-dim">No permission grants are currently listed.</p>
             ) : (
-              <ul className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
+              <ul className="max-h-56 divide-y divide-line overflow-y-auto">
                 {details.permissions.map((permission) => (
                   <li key={permission.code} className="px-3 py-2.5">
-                    <code className="break-all font-mono text-xs font-medium text-slate-800">{permission.code}</code>
-                    <p className="mt-0.5 text-sm text-slate-500">{permission.description}</p>
+                    <code className="break-all font-mono text-xs font-medium text-ink">{permission.code}</code>
+                    <p className="mt-0.5 text-sm text-ink-dim">{permission.description}</p>
                   </li>
                 ))}
               </ul>

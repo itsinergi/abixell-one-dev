@@ -95,13 +95,14 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
   app.get("/me", { preHandler: app.authenticate }, async (request, reply) => {
     const actor = request.actor!;
     const { assignmentId } = meQuerySchema.parse(request.query ?? {});
-    const [user, permissions, assignments, myAssignments, activeModuleCodes] = await Promise.all([
-      container.user.getMe(actor),
-      container.rbac.getEffectivePermissions(actor.userId),
-      container.rbac.getAssignments(actor.userId),
-      container.rbac.getMyAssignmentsWithScopeNames(actor.userId),
-      container.configuration.listActiveModuleCodesForTenant(actor.tenantId),
-    ]);
+    const [user, permissions, assignments, myAssignments, activeModuleCodes] =
+      await Promise.all([
+        container.user.getMe(actor),
+        container.rbac.getEffectivePermissions(actor.userId),
+        container.rbac.getAssignments(actor.userId),
+        container.rbac.getMyAssignmentsWithScopeNames(actor.userId),
+        container.configuration.listActiveModuleCodesForTenant(actor.tenantId),
+      ]);
 
     // Post-login context picker: when the caller names one of their OWN
     // assignments, narrow the reported capability set to that Role. This is
@@ -125,14 +126,41 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
     // cannot make (both hold complaint.read/manage). Authorization is still
     // enforced per-route in the backend; this only shapes the UI.
     const scopeTypes = Array.from(new Set(effectiveAssignments.map((a) => a.scopeType)));
+
+    // Wave 2 (§4.3 step 7): the menu is filtered SERVER-SIDE, in the fixed
+    // order external whitelist → module status → role rights, from exactly
+    // the inputs this response reports. A caller holding no internal Data
+    // Scope receives only whitelisted menus — internal ones never reach their
+    // browser, not even disabled.
+    const menu = await container.appMetadata.listMenuTree(actor, {
+      permissions: Array.from(effectivePermissions),
+      scopeTypes,
+      activeModuleCodes,
+    });
+
+    // The navigation tree this caller receives (§4.3 steps 4 and 7). Served on
+    // `/me` because the shell already awaits this call before rendering and
+    // already receives `activeModuleCodes` and `permissions` from it — a
+    // separate endpoint would add a round trip for ~2.9 KB gzip on a payload
+    // measured at ~0.6 KB gzip. Decision recorded from measurement, not
+    // assumption (§4.3 open item 1). Wave 2 filters it per caller; the mirror
+    // of the inputs is closed over as `effectivePermissions` and
+    // `scopeTypes`, not re-derived downstream.
     return reply.send({
       userId: actor.userId,
       tenantId: actor.tenantId,
       fullName: user.fullName,
       email: user.email,
       permissions: Array.from(effectivePermissions),
+      // Checkpoint 1C.3 — expose the distinct Data-Scope types the actor holds
+      // ("customer" vs "organization_unit"/"tenant"). This is what lets the
+      // experience layer tell an external Customer User apart from an internal
+      // operational user for navigation — a distinction permissions alone
+      // cannot make (both hold complaint.read/manage). Authorization is still
+      // enforced per-route in the backend; this only shapes the UI.
       scopeTypes,
       activeModuleCodes,
+      menu,
       assignments: myAssignments,
       activeAssignmentId: picked?.id ?? null,
     });

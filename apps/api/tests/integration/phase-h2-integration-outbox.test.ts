@@ -10,14 +10,7 @@ import { PgIntegrationRepository } from "../../src/infrastructure/persistence/re
 import { PgSchedulerRepository } from "../../src/infrastructure/persistence/repositories/scheduler.repository.pg.js";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createScheduledJobFixture,
-  deleteScheduledJobFixture,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createScheduledJobFixture, deleteScheduledJobFixture, login, provisionFirstAdmin } from "./helpers.js";
 
 const FIXTURE_ID = `${Date.now()}-${process.pid}`;
 const TENANT_A_CODE = `test-h2-a-${FIXTURE_ID}`;
@@ -62,7 +55,9 @@ describe("Phase H2 — durable Integration outbox", () => {
       name: "Test PH-8 Integration Outbox Reconciliation",
     });
     const tenantA = await bootstrapTenant(app, TENANT_A_CODE, "PH-8 Tenant A");
+    await activateAllModules(tenantA.id);
     const tenantB = await bootstrapTenant(app, TENANT_B_CODE, "PH-8 Tenant B");
+    await activateAllModules(tenantB.id);
     tenantAId = tenantA.id;
     tenantBId = tenantB.id;
     await provisionFirstAdmin({

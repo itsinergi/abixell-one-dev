@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { bootstrapTenant, provisionFirstAdmin, login, authHeader } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, login, provisionFirstAdmin } from "./helpers.js";
 
 const TENANT_CODE = `test-sp-${Math.floor(Date.now() / 1000)}`;
 
@@ -15,6 +15,7 @@ describe("Epic 2 Wave 1 — Self-Service Profile (Scope 1: fullName, password)",
 
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Self-Service Profile");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     const admin = await provisionFirstAdmin({
       tenantId,

@@ -8,26 +8,29 @@
  * the same commit — apps/api/tests/route-registry-parity.test.ts fails if the
  * two ever disagree, including on status and permissions.
  *
- * The guard ships in REPORT mode (locked decision, option C): it resolves every
- * route and surfaces what it found, but nothing is blocked yet. Flipping
- * GUARD_ENFORCE to true is NOT by itself a behaviour change — this module only
- * resolves; the shell decides what to do with the answer. Before the flip,
- * AppShell must also branch on the constant (withhold the route rather than
- * warn). Two other things are outstanding for that day: the resolver is
- * case-sensitive while React Router matches case-insensitively, and the guard
- * is a UX affordance only — it hides a page, it never stops an API call. Every
- * operation stays gated by the server's own permission check.
+ * Epic 3 Wave 1 flipped the guard to ENFORCE (CORE-ROADMAP.md §4.3 step 1:
+ * "perilaku default tertutup. Route yang belum punya status resmi tidak boleh
+ * merender isi halaman"). AppShell branches on GUARD_ENFORCE and withholds the
+ * route rather than warning. The guard is still a UX affordance only — it
+ * renders a denial screen, it never stops an API call. Every operation stays
+ * gated by the server's own permission check; this only decides what the shell
+ * puts on screen.
  */
 
 export type RouteRegistrationStatus = "di_menu" | "tersembunyi" | "belum_terdaftar";
 
 /**
- * Report mode. Flip to true only after the report is clean across every route,
- * and only together with the AppShell branch that acts on it. Report mode must
- * never be the state a release ships in on purpose; it exists so the guard can
- * be installed and observed before it can deny anyone.
+ * Flipped to true in Epic 3 Wave 1 (§4.3 step 1) after the Epic 2 report came
+ * back clean across every declared route. The shell withholds the page when
+ * this is true; the report banner is gone.
+ *
+ * This is the end state, not a staging value (Epic 3 Wave 2 closed §4.3 open
+ * item 2). An unregistered path already resolves to `null` here and is
+ * withheld — the same outcome a deadline would produce, without a window in
+ * which such a route renders. What keeps `belum_terdaftar` from ever being
+ * reached is the build-time parity check, not a countdown.
  */
-export const GUARD_ENFORCE = false;
+export const GUARD_ENFORCE = true;
 
 export interface RouteRegistryEntry {
   path: string;
@@ -520,6 +523,18 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     status: "di_menu",
     permissions: ["admin.console.read"],
   },
+  // Epic 4 Wave 1 — Role definition lives inside the Roles section. The
+  // section list stays on `admin.console.read`; the definition screen itself
+  // is gated per-view (config.read to load, role.manage to save), so the
+  // route guard only needs to let console holders through.
+  {
+    path: "/admin/roles/:roleCode",
+    name: "Role Definition",
+    moduleCode: "platform",
+    status: "tersembunyi",
+    permissions: ["admin.console.read"],
+    parentPath: "/admin",
+  },
   {
     path: "/login",
     name: "Sign In",
@@ -560,24 +575,44 @@ function normalizePath(path: string): string {
  * The route entry matching a pathname, or `null` when no route in App.tsx
  * corresponds to it. `:param` matches exactly one segment. The wildcard `*`
  * is deliberately not a fallback: if it matched, no path could ever resolve to
- * `belum_terdaftar`, and reporting those is the point of report mode.
+ * `belum_terdaftar` — and surface those is what makes a missing registration
+ * visible instead of silently allowed through.
+ *
+ * Matching is case-insensitive to stay aligned with React Router, which matches
+ * case-insensitively by default. A guard stricter than the router would deny a
+ * path the router happily renders; the two must agree on what "this route" is.
  */
 export function resolveRouteEntry(pathname: string): RouteRegistryEntry | null {
-  const normalized = normalizePath(pathname);
-  const exact = ROUTE_REGISTRY.find((r) => r.path === normalized);
+  const normalized = normalizePath(pathname).toLocaleLowerCase();
+  const exact = ROUTE_REGISTRY.find(
+    (r) => normalizePath(r.path).toLocaleLowerCase() === normalized,
+  );
   if (exact) return exact;
 
   const requestParts = normalized.split("/");
   return (
     ROUTE_REGISTRY.find((route) => {
       if (route.path === "*") return false;
-      const routeParts = route.path.split("/");
+      const routeParts = normalizePath(route.path).toLocaleLowerCase().split("/");
       if (routeParts.length !== requestParts.length) return false;
       return routeParts.every(
         (part, index) => part.startsWith(":") || part === requestParts[index],
       );
     }) ?? null
   );
+}
+
+/**
+ * Entry-flow routes run before the shell exists and carry no permission: the
+ * sign-in screen, the workspace picker, the token-addressed public survey, and
+ * the catch-all redirect. They resolve, so the guard allows them anyway — this
+ * exists so the shell can name WHY it renders one with no navigation behind
+ * it, instead of leaving it looking like a route that slipped through.
+ */
+const ENTRY_FLOW_PATHS = new Set(["/login", "/select-workspace", "/public/surveys/:token", "*"]);
+
+export function isEntryFlowRoute(entry: RouteRegistryEntry | null): boolean {
+  return entry !== null && ENTRY_FLOW_PATHS.has(entry.path);
 }
 
 export interface RouteGuardReport {

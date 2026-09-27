@@ -8,6 +8,8 @@ import rateLimit from "@fastify/rate-limit";
 import { healthRoutes } from "./interfaces/http/routes/health.js";
 import { registerAuthDecorators } from "./interfaces/http/plugins/auth-plugin.js";
 import { registerBootstrapAuthDecorators } from "./interfaces/http/plugins/bootstrap-auth-plugin.js";
+import { registerModuleActivityEnforcement } from "./interfaces/http/plugins/module-activity-plugin.js";
+import { registerWindowAccessEnforcement } from "./interfaces/http/plugins/window-access-plugin.js";
 import { registerErrorMapping } from "./interfaces/http/error-mapping.js";
 import { registerAuthRoutes } from "./interfaces/http/routes/auth.js";
 import { registerTenantRoutes } from "./interfaces/http/routes/tenants.js";
@@ -118,6 +120,19 @@ export function buildApp(): FastifyInstance {
   registerErrorMapping(app);
 
   const container = buildContainer();
+
+  // Epic 3 Wave 3 (§4.3 step 9): mutating routes on an inactive module are
+  // rejected with a 403 reason. Registered before the route block so the
+  // onRoute hook sees every declaration — same ordering contract as the
+  // rate-limit comment below.
+  registerModuleActivityEnforcement(app, container);
+
+  // Epic 4 Wave 1 (§4.4 step 11b): a Window configured read-only for the
+  // actor's Roles rejects POST/PUT/PATCH/DELETE with a 403, while the Window
+  // itself stays open. Registered AFTER the module-active gate on purpose —
+  // both append a preHandler, so this one runs second and an inactive module
+  // reports its own, more actionable reason first.
+  registerWindowAccessEnforcement(app, container);
 
   // Checkpoint 0F fix: every route below is wrapped in a nested
   // `app.register(async ...)` instead of being declared directly on

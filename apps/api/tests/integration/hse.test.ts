@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Phase 7 — HSE Core (HSE-CORE-001…010).
@@ -121,6 +121,7 @@ describe("Phase 7 — HSE Core", () => {
 
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant P7");
+    await activateAllModules(t.id);
     tenantId = t.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p7.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@p7.local", "Admin12345!")).body.accessToken;
@@ -192,6 +193,7 @@ describe("Phase 7 — HSE Core", () => {
 
     // Second tenant for isolation tests
     const ot = await bootstrapTenant(app, OTHER, "Tenant P7 Other");
+    await activateAllModules(ot.id);
     await provisionFirstAdmin({ tenantId: ot.id, email: "admin@p7other.local", password: "Admin12345!" });
     otherAdminToken = (await login(app, OTHER, "admin@p7other.local", "Admin12345!")).body.accessToken;
     await post("/config/numbering/hse_record", otherAdminToken, { pattern: "HSE-O-{SEQ:5}" });

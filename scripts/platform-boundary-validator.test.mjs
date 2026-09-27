@@ -434,8 +434,13 @@ test("current repository has no blocking platform-boundary findings", async () =
   // adds `tenant.update` (1); the Epic 2 Wave 1 app-dictionary foundation adds
   // `config.app_dictionary.read` and `config.app_dictionary.manage` (2).
   // The Epic 2 Wave 1 route auto-registration migration declares none.
+  // Epic 4 Wave 1 role definition adds exactly one: `role.manage`, which
+  // governs mutating a Role definition. It is deliberately distinct from
+  // Phase 11F's `user.role.manage`, which only assigns and removes Roles that
+  // already exist. Same migration extends the seeded Process catalogue so
+  // `dictionary-seed-parity.test.ts` stays green.
   // Pinned deliberately: an unexplained change means a permission was
   // introduced or removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 164);
+  assert.equal(result.permissionCount, 165);
   assert.equal(result.advisoryCount, 1);
 });

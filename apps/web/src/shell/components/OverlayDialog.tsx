@@ -141,17 +141,17 @@ export function OverlayDialog({
         aria-describedby={description ? descriptionId : undefined}
         aria-busy={pending || undefined}
         tabIndex={-1}
-        className={`flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-xl bg-white shadow-2xl focus:outline-none sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl ${
+        className={`flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-lg border border-line bg-panel shadow-2xl focus:outline-none sm:max-h-[calc(100dvh-2rem)] sm:rounded ${
           size === "lg" ? "sm:max-w-3xl" : "sm:max-w-xl"
         }`}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
+        <header className="flex items-start justify-between gap-4 border-b border-line px-4 py-4 sm:px-5">
           <div className="min-w-0">
-            <h2 id={titleId} className="text-base font-semibold text-slate-900">
+            <h2 id={titleId} className="text-base font-semibold text-ink">
               {title}
             </h2>
             {description && (
-              <div id={descriptionId} className="mt-1 text-sm text-slate-500">
+              <div id={descriptionId} className="mt-1 text-sm text-ink-dim">
                 {description}
               </div>
             )}
@@ -161,14 +161,14 @@ export function OverlayDialog({
             onClick={onClose}
             disabled={pending}
             aria-label="Close dialog"
-            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-xl leading-none text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
             ×
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
         {footer && (
-          <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-line bg-panel-2 px-4 py-3 sm:px-5">
             {footer}
           </footer>
         )}

@@ -2,13 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { buildContainer } from "../../src/composition-root.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 const TENANT_CODE = `sq-a-${Date.now()}`;
 const OTHER_TENANT_CODE = `sq-b-${Date.now()}`;
@@ -159,6 +153,7 @@ describe.sequential("Wave A1 — multidimensional Service Quality SLA", () => {
       TENANT_CODE,
       "SQ-ADV-001 Tenant",
     );
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     const admin = await provisionFirstAdmin({
       tenantId,
@@ -406,6 +401,8 @@ describe.sequential("Wave A1 — multidimensional Service Quality SLA", () => {
       OTHER_TENANT_CODE,
       "SQ-ADV-001 Other Tenant",
     );
+
+    await activateAllModules(otherTenant.id);
     otherTenantId = otherTenant.id;
     const otherAdmin = await provisionFirstAdmin({
       tenantId: otherTenantId,

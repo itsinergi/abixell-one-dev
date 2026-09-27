@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Checkpoint 0B integration test — proves the full chain end-to-end:
@@ -33,6 +27,7 @@ describe("Checkpoint 0B — Identity & Organization vertical slice", () => {
 
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Test Tenant 0B");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     await provisionFirstAdmin({
       tenantId,

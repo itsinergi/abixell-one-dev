@@ -109,7 +109,7 @@ function AdminConsoleContent() {
       />
 
       <nav
-        className="mb-6 overflow-x-auto border-b border-slate-200"
+        className="mb-6 overflow-x-auto border-b border-line"
         aria-label="Admin Console sections"
       >
         <div className="flex min-w-max gap-1">
@@ -118,10 +118,10 @@ function AdminConsoleContent() {
               key={section.key}
               to={sectionUrl(section.key)}
               aria-current={activeSection === section.key ? "page" : undefined}
-              className={`-mb-px inline-flex min-h-[44px] items-center rounded-t px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-400 sm:min-h-[36px] ${
+              className={`-mb-px inline-flex min-h-[44px] items-center rounded-t px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent sm:min-h-[36px] ${
                 activeSection === section.key
-                  ? "border-b-2 border-slate-900 text-slate-900"
-                  : "border-b-2 border-transparent text-slate-500 hover:text-slate-700"
+                  ? "border-b-2 border-accent text-ink"
+                  : "border-b-2 border-transparent text-ink-dim hover:text-ink"
               }`}
             >
               {section.label}
@@ -140,7 +140,12 @@ function AdminConsoleContent() {
           )}
         />
       )}
-      {activeSection === "roles" && <AdminRolesView />}
+      {activeSection === "roles" && (
+        <AdminRolesView
+          canManage={Boolean(overview.data?.capabilities.roleManage)}
+          canRead={Boolean(overview.data?.capabilities.rolePermissionRead)}
+        />
+      )}
       {activeSection === "permissions" && <AdminPermissionsView />}
       {activeSection === "modules" && <AdminModulesView />}
       {activeSection === "workflows" && <AdminWorkflowsView />}
@@ -262,20 +267,20 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
           </div>
 
           <Card className="mt-6">
-            <h2 className="text-sm font-semibold text-slate-900">Tenant and data scope</h2>
+            <h2 className="text-sm font-semibold text-ink">Tenant and data scope</h2>
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Workspace</dt>
-                <dd className="mt-1 break-words text-slate-700">{tenantName || "Current tenant"}</dd>
+                <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Workspace</dt>
+                <dd className="mt-1 break-words text-ink-dim">{tenantName || "Current tenant"}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Reported scope</dt>
-                <dd className="mt-1 text-slate-700">
+                <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Reported scope</dt>
+                <dd className="mt-1 text-ink-dim">
                   {scopeLabels.length > 0 ? scopeLabels.join(" · ") : "No data scope reported"}
                 </dd>
               </div>
             </dl>
-            <p className="mt-4 text-sm text-slate-500">
+            <p className="mt-4 text-sm text-ink-dim">
               Tenant-owned summaries are returned within the current deployment and actor scope. The
               permission catalogue is fixed platform metadata and contains no tenant, user, or business
               record data.
@@ -301,10 +306,10 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
           <Card className="mt-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">
+                <h2 className="text-sm font-semibold text-ink">
                   {data.capabilities.userRoleManage ? "Governed user access management" : "Assignment access status"}
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-ink-dim">
                   {data.capabilities.userRoleManage
                     ? "You can add or remove user role assignments through mandatory review and server-authoritative reload. Roles, permission definitions, modules, and workflows remain read only."
                     : "You can inspect administration summaries and access assignments. Changes remain limited to separately permissioned controls, such as tenant name when available."}
@@ -373,27 +378,27 @@ function OverviewCard({
   footnote?: string;
 }) {
   const content = (
-    <Card className={`h-full ${section.visible && destination ? "transition-colors group-hover:border-slate-300 group-hover:bg-slate-50" : ""}`}>
+    <Card className={`h-full ${section.visible && destination ? "transition-colors group-hover:border-line-strong group-hover:bg-panel-2" : ""}`}>
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {!section.visible ? (
           <StatusPill tone="neutral">Restricted</StatusPill>
         ) : destination ? (
-          <span aria-hidden="true" className="text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500">
+          <span aria-hidden="true" className="text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-ink-dim">
             →
           </span>
         ) : null}
       </div>
       {section.visible ? (
         <>
-          <p className="mt-3 text-2xl font-semibold tabular-nums text-slate-900">{section.count ?? "—"}</p>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
-          {footnote && <p className="mt-1 text-xs tabular-nums text-slate-400">{footnote}</p>}
+          <p className="mt-3 text-2xl font-semibold tabular-nums text-ink">{section.count ?? "—"}</p>
+          <p className="mt-1 text-sm text-ink-dim">{description}</p>
+          {footnote && <p className="mt-1 text-xs tabular-nums text-ink-faint">{footnote}</p>}
         </>
       ) : (
-        <p className="mt-3 text-sm text-slate-500">
+        <p className="mt-3 text-sm text-ink-dim">
           Requires{" "}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
+          <code className="rounded bg-panel-3 px-1.5 py-0.5 font-mono text-xs text-ink-dim">
             {section.requiredPermission}
           </code>
           .
@@ -407,7 +412,7 @@ function OverviewCard({
   return (
     <Link
       to={sectionUrl(destination)}
-      className="group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+      className="group rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
       aria-label={`Open ${title}`}
     >
       {content}

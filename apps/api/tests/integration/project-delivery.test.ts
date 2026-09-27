@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 const TENANT_CODE = `test-p8-${Date.now()}`;
 const OTHER_TENANT_CODE = `test-p8o-${Date.now()}`;
@@ -55,11 +55,14 @@ describe("Phase 8 — Project Delivery Core", () => {
 
   beforeAll(async () => {
     const tenant = await bootstrapTenant(app, TENANT_CODE, "Project Delivery Tenant");
+    await activateAllModules(tenant.id);
     tenantId = tenant.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p8.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT_CODE, "admin@p8.local", "Admin12345!")).body.accessToken;
 
     const other = await bootstrapTenant(app, OTHER_TENANT_CODE, "Other Project Delivery Tenant");
+
+    await activateAllModules(other.id);
     otherTenantId = other.id;
     await provisionFirstAdmin({ tenantId: otherTenantId, email: "admin@p8-other.local", password: "Admin12345!" });
     otherAdminToken = (await login(app, OTHER_TENANT_CODE, "admin@p8-other.local", "Admin12345!")).body.accessToken;

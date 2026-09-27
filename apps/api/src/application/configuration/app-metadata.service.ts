@@ -20,8 +20,11 @@ import type {
   AppApiResource,
   AppFieldRule,
   AppFieldRuleVersion,
+  MenuNode,
 } from "../../domain/configuration/app-metadata.entity.js";
 import type { AppMetadataRepository } from "../../domain/configuration/app-metadata.repository.js";
+import { filterMenuForCaller, type MenuFilterInput } from "../../domain/configuration/menu-filter.js";
+export type { MenuFilterInput };
 import type { MetadataRegistryEntry } from "../../domain/configuration/configuration.entity.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 import { NotFoundError, ConflictError, ValidationError } from "../../domain/shared-kernel/errors.js";
@@ -46,6 +49,30 @@ export class AppMetadataService {
     // SchemaRegistryValidator only calls getMetadataSchema; pass the
     // narrower MetadataSchemaSource shape (satisfied by PgConfigurationRepository).
     this.validator = new SchemaRegistryValidator(schemaSource as ConstructorParameters<typeof SchemaRegistryValidator>[0]);
+  }
+
+  // --- Menu tree (§4.3) ------------------------------------------------------
+
+  /**
+   * The caller's navigation tree: the tenant catalogue, filtered for THIS
+   * caller (§4.3 step 7).
+   *
+   * Deliberately not permission-gated as a whole. The shell has to render
+   * navigation for whoever is signed in, including an external Customer User
+   * who holds almost nothing; gating the endpoint on a permission would leave
+   * exactly those callers with no navigation at all. What keeps internal
+   * structure from reaching them is the filter, not a gate — the whitelist
+   * step removes a menu entirely rather than sending it disabled, so a
+   * browser that must not know about a page never learns it exists.
+   *
+   * `caller` is the ACTOR's own effective context, and the route is its only
+   * supplier. The rule itself is pure and lives in `menu-filter.ts`; nothing
+   * here reads the database beyond the catalogue, so the filter cannot
+   * disagree with the permissions `/me` reports alongside it.
+   */
+  async listMenuTree(actor: ActorContext, caller: MenuFilterInput): Promise<MenuNode[]> {
+    const tree = await this.repo.listMenuTree(actor.tenantId);
+    return filterMenuForCaller(tree, caller);
   }
 
   // --- Windows (Pages/Routes) -----------------------------------------------

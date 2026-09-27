@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  createReadOnlyRole,
-  login,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 const TENANT_CODE = `wave-a3-main-${Date.now()}`;
 const OTHER_TENANT_CODE = `wave-a3-other-${Date.now()}`;
@@ -64,6 +58,7 @@ describe.sequential("Wave A3 — Service Operations & Asset Advanced Integration
   beforeAll(async () => {
     // 1. Bootstrap Primary Tenant & Admin
     const primaryTenant = await bootstrapTenant(app, TENANT_CODE, "Wave A3 Primary Tenant");
+    await activateAllModules(primaryTenant.id);
     tenantId = primaryTenant.id;
     const adminUser = await provisionFirstAdmin({
       tenantId,
@@ -76,6 +71,7 @@ describe.sequential("Wave A3 — Service Operations & Asset Advanced Integration
 
     // 2. Bootstrap Other Tenant & Admin (for multi-tenant isolation verification)
     const otherTenant = await bootstrapTenant(app, OTHER_TENANT_CODE, "Wave A3 Other Tenant");
+    await activateAllModules(otherTenant.id);
     otherTenantId = otherTenant.id;
     const otherAdmin = await provisionFirstAdmin({
       tenantId: otherTenantId,

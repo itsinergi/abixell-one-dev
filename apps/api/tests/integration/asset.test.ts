@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Phase 5 — Asset Core (AST-CORE-001…010).
@@ -105,6 +105,7 @@ describe("Phase 5 — Asset Core", () => {
 
   beforeAll(async () => {
     const t = await bootstrapTenant(app, TENANT, "Tenant P5");
+    await activateAllModules(t.id);
     tenantId = t.id;
     await provisionFirstAdmin({ tenantId, email: "admin@p5.local", password: "Admin12345!" });
     adminToken = (await login(app, TENANT, "admin@p5.local", "Admin12345!")).body.accessToken;
@@ -181,6 +182,7 @@ describe("Phase 5 — Asset Core", () => {
     // lifecycle, so both "no approval configured" and "approval configured"
     // postures are exercised in one suite.
     const ot = await bootstrapTenant(app, OTHER, "Tenant P5 Other");
+    await activateAllModules(ot.id);
     await provisionFirstAdmin({ tenantId: ot.id, email: "admin@p5other.local", password: "Admin12345!" });
     otherAdminToken = (await login(app, OTHER, "admin@p5other.local", "Admin12345!")).body.accessToken;
     await post("/config/numbering/asset", otherAdminToken, { pattern: "AST-O-{SEQ:5}" });

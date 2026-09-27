@@ -9,11 +9,7 @@ import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgRbacRepository } from "../../src/infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import {
-  authHeader,
-  bootstrapTenant,
-  provisionFirstAdmin,
-} from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Phase 11F — Governed Business Admin access management.
@@ -300,6 +296,8 @@ describe("Phase 11F — governed Admin access management", () => {
     passwordHash = await hashPassword(PASSWORD);
 
     const primary = await bootstrapTenant(app, TENANT, "Tenant Phase 11F");
+
+    await activateAllModules(primary.id);
     tenantId = primary.id;
     // provisionFirstAdmin receives every migrated permission, including
     // user.role.manage. Keep it tenant-scoped as a real bootstrap survivor,
@@ -710,9 +708,37 @@ describe("Phase 11F — governed Admin access management", () => {
         ),
         remove(removalUrl(target.id, targetBaseAssignmentId), aggregateToken),
       ]);
+      // Epic 4 Wave 2 (§4.4 D) rewired these four to the SAME visibility +
+      // delegation policy as the Wave 2 surface, so a narrow actor is refused
+      // by TARGET rather than by gate. The assertion still pins exactly what it
+      // always pinned — that `user.read`/`user.role.manage` from the
+      // Organization-Unit-scoped `narrowRole` cannot be aggregated with the
+      // zero-permission tenant-wide `unrelatedTenantRole` into tenant-wide
+      // authority:
+      //
+      //   GET /admin/users                 200 — the actor holds `user.read`,
+      //                                    but the payload carries only Users
+      //                                    inside their own OU subtree, which
+      //                                    excludes `target` (customer-scope
+      //                                    assignment only).
+      //   GET .../permissions              403 — `config.read` is still demanded
+      //                                    tenant-scoped, and it lives on no
+      //                                    tenant-scoped assignment here.
+      //   POST / DELETE                    404 — both are governed by
+      //                                    `user.role.manage`, whose
+      //                                    Organization-Unit visibility cannot
+      //                                    reach a User with no live OU-scoped
+      //                                    assignment. Out of visibility is
+      //                                    deliberately indistinguishable from
+      //                                    missing (§4.4 risk row 1).
       expect(responses.map((response) => response.statusCode)).toEqual([
-        403, 403, 403, 403,
+        200, 403, 404, 404,
       ]);
+
+      const listed = (await get("/admin/users", aggregateToken)).json() as Array<
+        Record<string, unknown>
+      >;
+      expect(listed.map((user) => user.id)).not.toContain(target.id);
     });
   });
 

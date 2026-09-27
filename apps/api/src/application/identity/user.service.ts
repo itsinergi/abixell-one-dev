@@ -84,6 +84,7 @@ export class UserService {
     );
 
     const assignment = await this.rbacRepo.assignRole(
+      actor.tenantId,
       {
         userId: user.id,
         roleId: role.id,
