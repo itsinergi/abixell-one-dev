@@ -279,15 +279,9 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     await createReadOnlyRole(tenantId, "AUDITOR", ["config.read"]);
     const auditorPasswordResponse = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "auditor@test-0c.local",
-        fullName: "Test Auditor",
-        password: "AuditorPass123!",
-        roleCode: "AUDITOR",
-        scopeType: "tenant",
-      },
+      payload: {email: "auditor@test-0c.local", fullName: "Test Auditor", password: "AuditorPass123!", pairs: [{ roleCode: "AUDITOR", scopeType: "tenant" as const }]},
     });
     expect(auditorPasswordResponse.statusCode).toBe(201);
 
@@ -326,15 +320,9 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     await createReadOnlyRole(tenantId, "NAVIGATION_USER", ["tenant.read"]);
     const created = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "navigation@test-0c.local",
-        fullName: "Navigation User",
-        password: "NavigationPass123!",
-        roleCode: "NAVIGATION_USER",
-        scopeType: "tenant",
-      },
+      payload: {email: "navigation@test-0c.local", fullName: "Navigation User", password: "NavigationPass123!", pairs: [{ roleCode: "NAVIGATION_USER", scopeType: "tenant" as const }]},
     });
     expect(created.statusCode).toBe(201);
     const user = await login(app, TENANT_CODE, "navigation@test-0c.local", "NavigationPass123!");

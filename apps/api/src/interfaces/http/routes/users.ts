@@ -2,16 +2,22 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Container } from "../../../composition-root.js";
 
-const createSchema = z.object({
-  email: z.string().email(),
-  fullName: z.string().min(1),
-  password: z.string().min(8),
-  roleCode: z.string().min(1),
-  scopeType: z.enum(["tenant", "organization_unit", "customer"]),
-  scopeOrganizationUnitId: z.string().uuid().nullable().optional(),
-  // Checkpoint 1A / ADR-0011 — required when scopeType === "customer".
-  scopeCustomerId: z.string().uuid().nullable().optional(),
-});
+// Checkpoint 1A / ADR-0011 — EXTERNAL Customer User provisioning, and nothing
+// else. `scopeType` accepts one literal, so `tenant` and `organization_unit`
+// are refused at the edge, before any service call. Internal Users are created
+// through `POST /admin/users`, whose governed policy is the stricter of the two
+// (§4.4 D: two doors must never mean two standards); keeping a second, weaker
+// path for internal scope is what this narrows away.
+const createExternalCustomerUserSchema = z
+  .object({
+    email: z.string().email(),
+    fullName: z.string().min(1),
+    password: z.string().min(8),
+    roleCode: z.string().min(1),
+    scopeType: z.literal("customer"),
+    scopeCustomerId: z.string().uuid(),
+  })
+  .strict();
 
 const updateSchema = z
   .object({
@@ -27,9 +33,9 @@ const idSchema = z.object({ id: z.string().uuid() });
 
 export function registerUserRoutes(app: FastifyInstance, container: Container) {
   app.post("/users", { preHandler: app.authenticate }, async (request, reply) => {
-    const body = createSchema.parse(request.body);
+    const body = createExternalCustomerUserSchema.parse(request.body);
     const actor = request.actor!;
-    const { user, assignment } = await container.user.createWithRole(actor, body);
+    const { user, assignment } = await container.user.createExternalCustomerUser(actor, body);
     return reply.status(201).send({ user, assignment });
   });
 

@@ -161,7 +161,7 @@ describe("Phase 5 — Asset Core", () => {
     ]);
 
     const mkUser = (email: string, roleCode: string, scope: Record<string, unknown> = { scopeType: "tenant" }) =>
-      post("/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", roleCode, ...scope });
+      post("/admin/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", pairs: [{ roleCode, ...scope }] });
     await mkUser("assets@p5.local", "ASSET_ADMIN_P5");
     await mkUser("mover@p5.local", "ASSET_MOVER_P5");
     await mkUser("reader@p5.local", "ASSET_READER_P5");

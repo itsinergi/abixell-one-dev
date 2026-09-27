@@ -101,8 +101,24 @@ describe("Checkpoint 1C.2 — Customer Complaint Experience", () => {
       "workflow.instance.act",
     ]);
 
-    const createUser = (payload: Record<string, unknown>) =>
-      app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload });
+    // B1b (§4.4 D): customer-scope payloads stay on the ADR-0011 door; every
+    // other scope is rewritten into a governed one-pair batch.
+    const createUser = (payload: Record<string, unknown>) => {
+      if (payload.scopeType === "customer") {
+        return app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload });
+      }
+      const { email, fullName, password, roleCode, scopeType, scopeOrganizationUnitId, ...rest } = payload as Record<string, string>;
+      const pair =
+        scopeType === "organization_unit"
+          ? { roleCode, scopeType: "organization_unit" as const, scopeOrganizationUnitId }
+          : { roleCode, scopeType: "tenant" as const };
+      return app.inject({
+        method: "POST",
+        url: "/admin/users",
+        headers: authHeader(adminToken),
+        payload: { email, fullName, password, pairs: [pair], ...rest },
+      });
+    };
 
     await createUser({
       email: "handler@test1c2.local",

@@ -117,13 +117,7 @@ describe("Phase 8 — Project Delivery Core", () => {
     });
     projectBId = projectB.json().id;
 
-    const picUser = await post("/users", adminToken, {
-      email: "pic@p8.local",
-      fullName: "P8 PIC User",
-      password: "PicUser12345!",
-      roleCode: "ADMIN",
-      scopeType: "tenant",
-    });
+    const picUser = await post("/admin/users", adminToken, { email: "pic@p8.local", fullName: "P8 PIC User", password: "PicUser12345!", pairs: [{ roleCode: "ADMIN", scopeType: "tenant" as const }] });
     picUserId = picUser.json().user.id;
 
     const picEmployee = await post("/employees", adminToken, {
@@ -140,14 +134,7 @@ describe("Phase 8 — Project Delivery Core", () => {
       "project.read",
       "customer.read",
     ]);
-    const scopedUser = await post("/users", adminToken, {
-      email: "scoped@p8.local",
-      fullName: "P8 Scoped User",
-      password: "Scoped12345!",
-      roleCode: "P8_DELIVERY_SCOPED",
-      scopeType: "organization_unit",
-      scopeOrganizationUnitId: regionId,
-    });
+    const scopedUser = await post("/admin/users", adminToken, { email: "scoped@p8.local", fullName: "P8 Scoped User", password: "Scoped12345!", pairs: [{ roleCode: "P8_DELIVERY_SCOPED", scopeType: "organization_unit" as const, scopeOrganizationUnitId: regionId }] });
     expect(scopedUser.statusCode).toBe(201);
     scopedToken = (await login(app, TENANT_CODE, "scoped@p8.local", "Scoped12345!")).body.accessToken;
 
@@ -344,13 +331,7 @@ describe("Phase 8 — Project Delivery Core", () => {
     });
     expect(projectDenied.statusCode).toBe(404);
 
-    const otherPic = await post("/users", otherAdminToken, {
-      email: "other-pic@p8.local",
-      fullName: "Other PIC",
-      password: "OtherPic12345!",
-      roleCode: "ADMIN",
-      scopeType: "tenant",
-    });
+    const otherPic = await post("/admin/users", otherAdminToken, { email: "other-pic@p8.local", fullName: "Other PIC", password: "OtherPic12345!", pairs: [{ roleCode: "ADMIN", scopeType: "tenant" as const }] });
     const picDenied = await post(`/project-delivery/projects/${projectAId}/activities`, adminToken, {
       title: "Should reject other tenant PIC",
       picUserId: otherPic.json().user.id,

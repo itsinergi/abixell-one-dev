@@ -68,6 +68,16 @@ const previewUserAssignmentsSchema = z
   .object({ pairs: assignmentPairsSchema })
   .strict();
 
+// Epic 4 Wave 3 step 18 — every revoke carries an operator reason. Bounded so
+// the audit row cannot be used as free-form storage.
+const MAX_REVOKE_REASON_LENGTH = 500;
+
+const revokeAssignmentSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(MAX_REVOKE_REASON_LENGTH),
+  })
+  .strict();
+
 const confirmUserAssignmentsSchema = z
   .object({
     pairs: assignmentPairsSchema,
@@ -260,14 +270,24 @@ export function registerAdminConsoleRoutes(
     },
   );
 
-  app.delete(
-    "/admin/users/:userId/role-assignments/:assignmentId",
+  // Epic 4 Wave 3 step 18 — revoke is a governed state transition, not a
+  // delete: the row is retained for history, so the verb is POST with a
+  // reason. The reason is mandatory (§4.4 open item #3, settled for this
+  // surface: every revoke carries an operator explanation).
+  app.post(
+    "/admin/users/:userId/role-assignments/:assignmentId/revoke",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { userId, assignmentId } = assignmentParamsSchema.parse(
         request.params,
       );
-      await svc().removeUserRole(request.actor!, userId, assignmentId);
+      const body = revokeAssignmentSchema.parse(request.body);
+      await svc().revokeUserRole(
+        request.actor!,
+        userId,
+        assignmentId,
+        body.reason,
+      );
       return reply.status(204).send();
     },
   );

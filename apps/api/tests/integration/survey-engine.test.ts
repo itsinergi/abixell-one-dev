@@ -41,9 +41,14 @@ describe("Checkpoint 1D.1 — Survey Engine Core", () => {
     const mk = (email: string, role: string) =>
       app.inject({
         method: "POST",
-        url: "/users",
+        url: "/admin/users",
         headers: authHeader(adminToken),
-        payload: { email, fullName: email, password: "Respondent12345!", roleCode: role, scopeType: "tenant" },
+        payload: {
+          email,
+          fullName: email,
+          password: "Respondent12345!",
+          pairs: [{ roleCode: role, scopeType: "tenant" }],
+        },
       });
     respAId = (await mk("respa@t1d1.local", "RESP_1D1")).json().user.id;
     await mk("respb@t1d1.local", "RESP_1D1");

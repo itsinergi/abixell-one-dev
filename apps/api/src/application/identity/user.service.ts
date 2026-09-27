@@ -7,18 +7,27 @@ import type { CustomerRepository } from "../../domain/customer/customer.entity.j
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../domain/shared-kernel/errors.js";
+import { ConflictError, NotFoundError } from "../../domain/shared-kernel/errors.js";
 import { hashPassword } from "../../infrastructure/security/password.js";
 
-export interface CreateUserWithRoleInput {
+/**
+ * Checkpoint 1A / ADR-0011 — the Customer User provisioning path.
+ *
+ * Narrow on purpose (§4.4 D: no two doors with different policies). Every
+ * assignment whose only valid form is the `customer` scope is created here;
+ * every INTERNAL User is created through `POST /admin/users`, whose governed
+ * policy checks the console ticket, the actor's own permission-bearing
+ * visibility, the delegation ceiling, and the module ceiling. This path keeps
+ * only the ADR-0011 checks the customer model requires, because the governed
+ * surface refuses `customer` scope by design until the Service Operation
+ * interview closes (§4.4 E).
+ */
+export interface CreateExternalCustomerUserInput {
   email: string;
   fullName: string;
   password: string;
   roleCode: string;
-  scopeType: "tenant" | "organization_unit" | "customer";
-  scopeOrganizationUnitId?: string | null;
-  /** Checkpoint 1A / ADR-0011 — required when scopeType === "customer". */
-  scopeCustomerId?: string | null;
+  scopeCustomerId: string;
 }
 
 export class UserService {
@@ -34,7 +43,10 @@ export class UserService {
     private readonly customerRepo?: CustomerRepository,
   ) {}
 
-  async createWithRole(actor: ActorContext, input: CreateUserWithRoleInput) {
+  async createExternalCustomerUser(
+    actor: ActorContext,
+    input: CreateExternalCustomerUserInput,
+  ) {
     await this.rbac.requirePermission(actor.userId, "user.create");
 
     const existing = await this.repo.findByEmailInTenant(actor.tenantId, input.email);
@@ -45,37 +57,19 @@ export class UserService {
     const role = await this.rbacRepo.findRoleByCode(actor.tenantId, input.roleCode);
     if (!role) throw new NotFoundError("Role", input.roleCode);
 
-    // Granting scope wider than or equal to what the actor themself holds
-    // is not allowed: an org-unit-scoped Supervisor cannot mint a
-    // tenant-wide Administrator. This is enforced here, in the backend,
-    // regardless of what the frontend does or doesn't show.
-    if (input.scopeType === "tenant") {
-      const actorHasTenantScope = await this.rbac.hasTenantScope(actor.userId);
-      if (!actorHasTenantScope) {
-        throw new ForbiddenError(
-          "Cannot grant tenant-wide Data Scope without holding it yourself",
-        );
-      }
-    } else if (input.scopeType === "organization_unit" && input.scopeOrganizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.scopeOrganizationUnitId);
-    } else if (input.scopeType === "customer") {
-      // Checkpoint 1A: the actor creating a Customer User must themself
-      // be authorized against that Customer (same "cannot grant wider
-      // than you hold" principle as the tenant-scope check above) — a
-      // Supervisor scoped only to Customer A cannot create a Customer
-      // User for Customer B.
-      if (!input.scopeCustomerId) {
-        throw new ForbiddenError("scopeCustomerId is required when scopeType is 'customer'");
-      }
-      const customer = await this.customerRepo?.findById(input.scopeCustomerId);
-      if (!customer || customer.tenantId !== actor.tenantId) {
-        throw new NotFoundError("Customer", input.scopeCustomerId);
-      }
-      await this.rbac.requireCustomerContextScope(actor.userId, {
-        customerId: input.scopeCustomerId,
-        ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
-      });
+    // Checkpoint 1A: the actor creating a Customer User must themself
+    // be authorized against that Customer (the same "cannot grant wider
+    // than you hold" principle the governed surface applies) — a
+    // Supervisor scoped only to Customer A cannot create a Customer
+    // User for Customer B.
+    const customer = await this.customerRepo?.findById(input.scopeCustomerId);
+    if (!customer || customer.tenantId !== actor.tenantId) {
+      throw new NotFoundError("Customer", input.scopeCustomerId);
     }
+    await this.rbac.requireCustomerContextScope(actor.userId, {
+      customerId: input.scopeCustomerId,
+      ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
+    });
 
     const passwordHash = await hashPassword(input.password);
     const user = await this.repo.create(
@@ -88,9 +82,9 @@ export class UserService {
       {
         userId: user.id,
         roleId: role.id,
-        scopeType: input.scopeType,
-        scopeOrganizationUnitId: input.scopeOrganizationUnitId ?? null,
-        scopeCustomerId: input.scopeCustomerId ?? null,
+        scopeType: "customer",
+        scopeOrganizationUnitId: null,
+        scopeCustomerId: input.scopeCustomerId,
       },
       actor.userId,
     );
@@ -101,7 +95,7 @@ export class UserService {
       action: "user.created",
       entityType: "user",
       entityId: user.id,
-      metadata: { email: user.email, roleCode: role.code, scopeType: input.scopeType },
+      metadata: { email: user.email, roleCode: role.code, scopeType: "customer" },
     });
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -109,7 +103,7 @@ export class UserService {
       action: "user.role_assigned",
       entityType: "user",
       entityId: user.id,
-      metadata: { roleCode: role.code, scopeType: input.scopeType },
+      metadata: { roleCode: role.code, scopeType: "customer" },
     });
 
     return { user, assignment };

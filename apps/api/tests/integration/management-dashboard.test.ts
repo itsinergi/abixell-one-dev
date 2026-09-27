@@ -86,11 +86,16 @@ describe("Checkpoint 1C.5 — Management Dashboard", () => {
     await createReadOnlyRole(tenantId, "MANAGER_SITEA_1C5", ["complaint.read", "complaint.manage", "workflow.instance.act", "customer.read", "complaint.dashboard.read"]);
     await createReadOnlyRole(tenantId, "CUSTOMER_A_1C5", ["customer.read", "complaint.read", "complaint.manage", "workflow.instance.start", "workflow.instance.act"]);
 
-    const mk = (p: Record<string, unknown>) => app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload: p });
-    await mk({ email: "handler@test1c5.local", fullName: "H", password: "Handler12345!", roleCode: "HANDLER_1C5", scopeType: "organization_unit", scopeOrganizationUnitId: siteAId });
-    await mk({ email: "mgrt@test1c5.local", fullName: "MT", password: "Manager12345!", roleCode: "MANAGER_T_1C5", scopeType: "tenant" });
-    await mk({ email: "mgra@test1c5.local", fullName: "MA", password: "Manager12345!", roleCode: "MANAGER_SITEA_1C5", scopeType: "organization_unit", scopeOrganizationUnitId: siteAId });
-    await mk({ email: "usera@test1c5.local", fullName: "UA", password: "CustomerUser12345!", roleCode: "CUSTOMER_A_1C5", scopeType: "customer", scopeCustomerId: customerAId });
+    // Internal Users through the governed door; the Customer User through the
+    // ADR-0011 provisioning path (B1b, §4.4 D).
+    const mkInternal = (email: string, fullName: string, password: string, roleCode: string, scope: Record<string, unknown>) =>
+      app.inject({ method: "POST", url: "/admin/users", headers: authHeader(adminToken), payload: { email, fullName, password, pairs: [{ roleCode, ...scope }] } });
+    const mkCustomerUser = (payload: Record<string, unknown>) =>
+      app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload });
+    await mkInternal("handler@test1c5.local", "H", "Handler12345!", "HANDLER_1C5", { scopeType: "organization_unit", scopeOrganizationUnitId: siteAId });
+    await mkInternal("mgrt@test1c5.local", "MT", "Manager12345!", "MANAGER_T_1C5", { scopeType: "tenant" });
+    await mkInternal("mgra@test1c5.local", "MA", "Manager12345!", "MANAGER_SITEA_1C5", { scopeType: "organization_unit", scopeOrganizationUnitId: siteAId });
+    await mkCustomerUser({ email: "usera@test1c5.local", fullName: "UA", password: "CustomerUser12345!", roleCode: "CUSTOMER_A_1C5", scopeType: "customer", scopeCustomerId: customerAId });
 
     handlerToken = (await login(app, TENANT_CODE, "handler@test1c5.local", "Handler12345!")).body.accessToken;
     managerTenantToken = (await login(app, TENANT_CODE, "mgrt@test1c5.local", "Manager12345!")).body.accessToken;

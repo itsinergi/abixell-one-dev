@@ -57,13 +57,7 @@ describe("Phase 11C — Business Admin Console", () => {
       ["bare@p11c.local", "CONSOLE_BARE_P11C"],
       ["noconsole@p11c.local", "NO_CONSOLE_P11C"],
     ]) {
-      const created = await post("/users", adminToken, {
-        email,
-        fullName: `Console Test ${email}`,
-        password: PASSWORD,
-        roleCode,
-        scopeType: "tenant",
-      });
+      const created = await post("/admin/users", adminToken, { email, fullName: email, password: PASSWORD, pairs: [{ roleCode, scopeType: "tenant" as const }] });
       expect(created.statusCode).toBe(201);
     }
 
@@ -79,13 +73,7 @@ describe("Phase 11C — Business Admin Console", () => {
     await provisionFirstAdmin({ tenantId: otherTenantId, email: "admin@p11co.local", password: "Admin12345!" });
     const otherAdminToken = (await login(app, OTHER, "admin@p11co.local", "Admin12345!")).body.accessToken;
     await createReadOnlyRole(otherTenantId, "CONSOLE_P11CO", ["admin.console.read", ...AREA_PERMISSIONS]);
-    const otherCreated = await post("/users", otherAdminToken, {
-      email: "console@p11co.local",
-      fullName: "Other Console",
-      password: PASSWORD,
-      roleCode: "CONSOLE_P11CO",
-      scopeType: "tenant",
-    });
+    const otherCreated = await post("/admin/users", otherAdminToken, { email: "console@p11co.local", fullName: "Other Console", password: PASSWORD, pairs: [{ roleCode: "CONSOLE_P11CO", scopeType: "tenant" as const }] });
     expect(otherCreated.statusCode).toBe(201);
     otherConsoleToken = (await login(app, OTHER, "console@p11co.local", PASSWORD)).body.accessToken;
   });

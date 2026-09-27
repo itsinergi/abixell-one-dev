@@ -106,20 +106,18 @@ describe("Checkpoint 0B — Identity & Organization vertical slice", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
       payload: {
         email: "supervisor@test-0b.local",
         fullName: "Test Supervisor",
         password: "SupervisorPass123!",
-        roleCode: "SUPERVISOR",
-        scopeType: "organization_unit",
-        scopeOrganizationUnitId: siteId,
+        pairs: [{ roleCode: "SUPERVISOR", scopeType: "organization_unit", scopeOrganizationUnitId: siteId }],
       },
     });
     expect(response.statusCode).toBe(201);
     supervisorUserId = response.json().user.id;
-    expect(response.json().assignment.scopeOrganizationUnitId).toBe(siteId);
+    expect(response.json().assignments[0].scopeOrganizationUnitId).toBe(siteId);
   });
 
   it("authenticates the Supervisor and confirms their effective permissions via /me", async () => {
@@ -188,14 +186,13 @@ describe("Checkpoint 0B — Identity & Organization vertical slice", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(supervisorLogin.body.accessToken),
       payload: {
         email: "sneaky@test-0b.local",
         fullName: "Sneaky",
         password: "Whatever123!",
-        roleCode: "ADMIN",
-        scopeType: "tenant",
+        pairs: [{ roleCode: "ADMIN", scopeType: "tenant" }],
       },
     });
     expect(response.statusCode).toBe(403);

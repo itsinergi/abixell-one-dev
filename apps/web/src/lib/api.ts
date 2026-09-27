@@ -230,15 +230,15 @@ export const api = {
       }>
     >("/users", { token }),
 
-  createUser: (
+  createCustomerUser: (
     token: string,
     payload: {
       email: string;
       fullName: string;
       password: string;
       roleCode: string;
-      scopeType: "tenant" | "organization_unit";
-      scopeOrganizationUnitId?: string | null;
+      scopeType: "customer";
+      scopeCustomerId: string;
     },
   ) => request("/users", { method: "POST", token, body: payload }),
 
@@ -1781,6 +1781,25 @@ export const api = {
   // --- Business Admin Console (Phase 11C/11F) ---------------------------
   adminOverview: (token: string) => request<AdminOverview>("/admin/overview", { token }),
   adminUsers: (token: string) => request<AdminUserAccessSummary[]>("/admin/users", { token }),
+  adminUserAccess: (token: string, userId: string) =>
+    request<AdminUserAccessSummary>(`/admin/users/${encodeURIComponent(userId)}/access`, { token }),
+  adminAssignments: (token: string) => request<AdminAssignmentRow[]>("/admin/assignments", { token }),
+  adminAssignmentOptions: (token: string) =>
+    request<AdminAssignmentOptions>("/admin/assignment-options", { token }),
+  previewAdminUserAssignments: (token: string, userId: string, body: AdminAssignmentPreviewInput) =>
+    request<AdminAssignmentBatchPreview>(`/admin/users/${encodeURIComponent(userId)}/assignment-previews`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  confirmAdminUserAssignments: (token: string, userId: string, body: AdminAssignmentConfirmInput) =>
+    request<AdminAssignmentBatchResult>(`/admin/users/${encodeURIComponent(userId)}/assignment-batches`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  createAdminUser: (token: string, body: CreateAdminUserInput) =>
+    request<CreateAdminUserResult>("/admin/users", { method: "POST", token, body }),
   adminRoles: (token: string) => request<AdminRoleSummary[]>("/admin/roles", { token }),
   adminRolePermissions: (token: string, roleCode: string) =>
     request<AdminRolePermissions>(`/admin/roles/${encodeURIComponent(roleCode)}/permissions`, { token }),
@@ -1832,16 +1851,19 @@ export const api = {
       token,
       body,
     }),
-  deleteAdminUserRoleAssignment: (
+  // Epic 4 Wave 3 — revoke retains the row; a reason is mandatory.
+  revokeAdminUserRoleAssignment: (
     token: string,
     userId: string,
     assignmentId: string,
+    reason: string,
   ) =>
     request<void>(
-      `/admin/users/${encodeURIComponent(userId)}/role-assignments/${encodeURIComponent(assignmentId)}`,
+      `/admin/users/${encodeURIComponent(userId)}/role-assignments/${encodeURIComponent(assignmentId)}/revoke`,
       {
-        method: "DELETE",
+        method: "POST",
         token,
+        body: { reason },
       },
     ),
   adminPermissions: (token: string) => request<AdminPermission[]>("/admin/permissions", { token }),
@@ -2001,6 +2023,14 @@ export type AdminRoleAssignmentSummary = {
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;
   scopeCustomerName: string | null;
+  // Epic 4 Wave 3 — lifecycle kept separate from role/scope availability: an
+  // operator revocation and a system invalidation are different events.
+  assignmentState: "active" | "revoked" | "invalidated" | "unavailable";
+  assignedAt: string | null;
+  assignedBy: string | null;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
 };
 
 export type AdminUserAccessSummary = {
@@ -2019,6 +2049,93 @@ export type AdminRoleAssignmentInput =
       scopeOrganizationUnitId: string;
     }
   | { roleCode: string; scopeType: "customer"; scopeCustomerId: string };
+
+// --- Epic 4 Wave 2: user and assignment surfaces (§4.4 C/D/E) -------------
+
+/** One assignment flattened with its user (step 13, assignment-centric list).
+ * The tenant and organization-unit scopes are the only ones the governed
+ * surface writes; customer pairs are refused by the API until the Service
+ * Operation session closes, so the browser never offers them. */
+export type AdminAssignmentRow = AdminRoleAssignmentSummary & {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userStatus: string;
+};
+
+/** Step 15 — the picker universe, already filtered server-side by the actor's
+ * delegation ceiling and closed-descendant subtree. Non-selectable entries are
+ * context (an ancestor above the actor's own subtree), not choices. */
+export type AdminAssignmentOptions = {
+  canAssignTenantScope: boolean;
+  organizationUnits: AdminAssignmentUnitOption[];
+  roles: AdminAssignmentRoleOption[];
+};
+
+export type AdminAssignmentUnitOption = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  depth: number;
+  selectable: boolean;
+};
+
+export type AdminAssignmentRoleOption = {
+  code: string;
+  name: string;
+  permissionCount: number;
+  selectable: boolean;
+};
+
+export type AdminAssignmentPreviewInput = {
+  pairs: AdminRoleAssignmentInput[];
+};
+
+/** Server-computed pairs of the previewed batch. One row per pair, resolved
+ * against the same policy a confirmation would run. */
+export type AdminAssignmentPairSummary = {
+  roleCode: string;
+  roleName: string;
+  scopeType: AdminRoleAssignmentScopeType;
+  scopeOrganizationUnitId: string | null;
+  scopeOrganizationUnitName: string | null;
+  scopeCustomerId: string | null;
+  scopeCustomerName: string | null;
+};
+
+export type AdminAssignmentBatchPreview = {
+  previewHash: string;
+  targetUserId: string;
+  pairs: AdminAssignmentPairSummary[];
+};
+
+export type AdminAssignmentConfirmInput = {
+  pairs: AdminRoleAssignmentInput[];
+  previewHash: string;
+  confirm: true;
+};
+
+export type AdminAssignmentBatchResult = {
+  targetUserId: string;
+  created: AdminRoleAssignmentSummary[];
+};
+
+export type CreateAdminUserInput = {
+  email: string;
+  fullName: string;
+  password: string;
+  pairs: AdminRoleAssignmentInput[];
+};
+
+export type CreateAdminUserResult = {
+  user: {
+    id: string;
+    fullName: string;
+    email: string;
+    status: string;
+  };
+  assignments: AdminRoleAssignmentSummary[];
+};
 
 export type AdminRoleSummary = {
   code: string;

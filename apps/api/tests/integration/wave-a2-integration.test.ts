@@ -110,12 +110,11 @@ describe.sequential("Wave A2 — Survey & Reporting Advanced Integration Suite",
       "survey.results.read",
     ]);
 
-    const createRespondentRes = await post("/users", adminToken, {
+    const createRespondentRes = await post("/admin/users", adminToken, {
       email: RESPONDENT_EMAIL,
       fullName: "Internal Survey Respondent",
       password: RESPONDENT_PASSWORD,
-      roleCode: "SURVEY_INTERNAL_RESPONDENT",
-      scopeType: "tenant",
+      pairs: [{ roleCode: "SURVEY_INTERNAL_RESPONDENT", scopeType: "tenant" }],
     });
     expect(createRespondentRes.statusCode).toBe(201);
     respondentUserId = createRespondentRes.json().user.id;

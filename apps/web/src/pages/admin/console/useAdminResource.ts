@@ -30,6 +30,7 @@ export interface AdminResourceState<T> {
 export function useAdminResource<T>(
   load: (token: string) => Promise<T>,
   fallbackMessage: string,
+  enabled = true,
 ): AdminResourceState<T> {
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -37,7 +38,9 @@ export function useAdminResource<T>(
   const generation = useRef(0);
 
   const [data, setData] = useState<T | null>(null);
-  const [status, setStatus] = useState<AdminResourceStatus>("loading");
+  const [status, setStatus] = useState<AdminResourceStatus>(
+    enabled ? "loading" : "ready",
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Keep the newest loader reachable from `run` without making `run` depend on
@@ -51,6 +54,7 @@ export function useAdminResource<T>(
   });
 
   const run = useCallback(async () => {
+    if (!enabled) return;
     const requestGeneration = ++generation.current;
     setStatus("loading");
     setError(null);
@@ -76,14 +80,21 @@ export function useAdminResource<T>(
       setError(err instanceof ApiError ? err.message : fallbackMessage);
       setStatus("error");
     }
-  }, [fallbackMessage, token]);
+  }, [enabled, fallbackMessage, token]);
 
   useEffect(() => {
-    run();
+    if (!enabled) {
+      generation.current += 1;
+      setData(null);
+      setError(null);
+      setStatus("ready");
+      return;
+    }
+    void run();
     return () => {
       generation.current += 1;
     };
-  }, [run]);
+  }, [enabled, run]);
 
   return {
     data,

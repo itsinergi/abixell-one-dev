@@ -88,7 +88,7 @@ describe("Phase 3 — Workforce / HR Core", () => {
     ]);
 
     const mkUser = (email: string, roleCode: string, scope: Record<string, unknown> = { scopeType: "tenant" }) =>
-      post("/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", roleCode, ...scope });
+      post("/admin/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", pairs: [{ roleCode, ...scope }] });
 
     await mkUser("hr@p3.local", "HR_P3");
     await mkUser("reader@p3.local", "READER_P3");

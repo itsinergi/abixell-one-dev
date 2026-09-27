@@ -124,7 +124,7 @@ describe("Phase 4 — Supply Chain Core", () => {
     await createReadOnlyRole(tenantId, "READER_P4", ["supply_chain.read"]);
 
     const mkUser = (email: string, roleCode: string, scope: Record<string, unknown> = { scopeType: "tenant" }) =>
-      post("/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", roleCode, ...scope });
+      post("/admin/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", pairs: [{ roleCode, ...scope }] });
     await mkUser("buyer@p4.local", "BUYER_P4");
     await mkUser("store@p4.local", "STORE_P4");
     await mkUser("reader@p4.local", "READER_P4");

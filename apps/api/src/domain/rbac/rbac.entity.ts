@@ -170,6 +170,19 @@ export interface AdminRoleAssignmentSummary {
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;
   scopeCustomerName: string | null;
+  /** Epic 4 Wave 3 (§4.4 step 20) — the row's lifecycle, separate from
+   * role/scope availability: an operator revocation and a system
+   * invalidation are different events and stay distinguishable here even
+   * though both make the grant inert. `unavailable` here means the same
+   * retained-unavailable condition the states above already express. */
+  assignmentState: "active" | "revoked" | "invalidated" | "unavailable";
+  /** Grant provenance. */
+  assignedAt: string | null;
+  assignedBy: string | null;
+  /** Operator revocation provenance, present only after a manual revoke. */
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
 }
 
 /** One tenant-owned Role and only the global catalog entries granted to it. */
@@ -404,10 +417,14 @@ export interface RbacRepository extends RoleDefinitionRepository {
     targetUserId: string,
     input: GovernedRoleAssignmentInput,
   ): Promise<AdminRoleAssignmentSummary>;
-  removeGovernedRoleAssignment(
+  /** Epic 4 Wave 3 step 18 — soft revoke: the row and its history are RETAINED,
+   * the grant becomes authorization-inert on the next check, and the audit
+   * row carries before/after plus the operator's reason. */
+  revokeGovernedRoleAssignment(
     actor: { tenantId: string; userId: string },
     targetUserId: string,
     assignmentId: string,
+    reason: string,
   ): Promise<void>;
 
   /**

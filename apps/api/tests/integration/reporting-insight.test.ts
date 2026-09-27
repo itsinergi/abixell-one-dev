@@ -95,43 +95,11 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
     await createReadOnlyRole(tenantId, "RPT_EXPORT_ONLY_P9", ["reporting.export"]);
     await createReadOnlyRole(tenantId, "NO_RPT_P9", ["finance.read"]);
 
-    await post("/users", adminToken, {
-      email: "reporting@p9.local",
-      fullName: "Reporting Reader P9",
-      password: "Passw0rd12345!",
-      roleCode: "RPT_VIEW_P9",
-      scopeType: "tenant",
-    });
-    await post("/users", adminToken, {
-      email: "export@p9.local",
-      fullName: "Reporting Export P9",
-      password: "Passw0rd12345!",
-      roleCode: "RPT_EXPORT_P9",
-      scopeType: "tenant",
-    });
-    await post("/users", adminToken, {
-      email: "norpt@p9.local",
-      fullName: "No Reporting P9",
-      password: "Passw0rd12345!",
-      roleCode: "NO_RPT_P9",
-      scopeType: "tenant",
-    });
-    await post("/users", adminToken, {
-      email: "north@p9.local",
-      fullName: "North Scoped P9",
-      password: "Passw0rd12345!",
-      roleCode: "RPT_EXPORT_P9",
-      scopeType: "organization_unit",
-      scopeOrganizationUnitId: unitNorthId,
-    });
-    await post("/users", adminToken, {
-      email: "split-export@p9.local",
-      fullName: "Split Reporting Export P9",
-      password: "Passw0rd12345!",
-      roleCode: "RPT_VIEW_P9",
-      scopeType: "organization_unit",
-      scopeOrganizationUnitId: unitNorthId,
-    });
+    await post("/admin/users", adminToken, { email: "reporting@p9.local", fullName: "Reporting Reader P9", password: "Passw0rd12345!", pairs: [{ roleCode: "RPT_VIEW_P9", scopeType: "tenant" as const }] });
+    await post("/admin/users", adminToken, { email: "export@p9.local", fullName: "Reporting Export P9", password: "Passw0rd12345!", pairs: [{ roleCode: "RPT_EXPORT_P9", scopeType: "tenant" as const }] });
+    await post("/admin/users", adminToken, { email: "norpt@p9.local", fullName: "No Reporting P9", password: "Passw0rd12345!", pairs: [{ roleCode: "NO_RPT_P9", scopeType: "tenant" as const }] });
+    await post("/admin/users", adminToken, { email: "north@p9.local", fullName: "North Scoped P9", password: "Passw0rd12345!", pairs: [{ roleCode: "RPT_EXPORT_P9", scopeType: "organization_unit" as const, scopeOrganizationUnitId: unitNorthId }] });
+    await post("/admin/users", adminToken, { email: "split-export@p9.local", fullName: "Split Reporting Export P9", password: "Passw0rd12345!", pairs: [{ roleCode: "RPT_VIEW_P9", scopeType: "organization_unit" as const, scopeOrganizationUnitId: unitNorthId }] });
     const splitUser = await pool.query(
       `SELECT id FROM users WHERE tenant_id = $1 AND email = 'split-export@p9.local'`,
       [tenantId],

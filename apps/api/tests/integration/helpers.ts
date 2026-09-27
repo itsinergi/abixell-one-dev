@@ -208,3 +208,44 @@ export async function deleteScheduledJobFixture(jobCode: string) {
 export function authHeader(token: string) {
   return { authorization: `Bearer ${token}` };
 }
+
+/**
+ * Epic 4 §4.4 D — create an INTERNAL User through the governed surface
+ * (`POST /admin/users`), which is the single door for tenant and
+ * organization-unit assignments since B1b narrowed `POST /users` to
+ * external Customer Users (ADR-0011). `adminToken` must hold the console
+ * ticket plus `user.role.manage` visibility — the `provisionFirstAdmin`
+ * fixture always does.
+ *
+ * `pairs` follows the governed body: one pair per assignment, built from
+ * the same flat `scopeType` / `scopeOrganizationUnitId` fields the legacy
+ * `POST /users` body used, so existing call sites move by changing one line.
+ */
+export async function createInternalUser(
+  app: FastifyInstance,
+  adminToken: string,
+  payload: {
+    email: string;
+    fullName: string;
+    password: string;
+    roleCode: string;
+    scopeType?: "tenant" | "organization_unit";
+    scopeOrganizationUnitId?: string | null;
+  },
+) {
+  const { email, fullName, password, roleCode } = payload;
+  const pair =
+    payload.scopeType === "organization_unit"
+      ? { roleCode, scopeType: "organization_unit" as const, scopeOrganizationUnitId: payload.scopeOrganizationUnitId }
+      : { roleCode, scopeType: "tenant" as const };
+  const response = await app.inject({
+    method: "POST",
+    url: "/admin/users",
+    headers: authHeader(adminToken),
+    payload: { email, fullName, password, pairs: [pair] },
+  });
+  if (response.statusCode !== 201) {
+    throw new Error(`createInternalUser failed: ${response.statusCode} ${response.body}`);
+  }
+  return response.json() as { user: { id: string; email: string }; assignments: unknown[] };
+}

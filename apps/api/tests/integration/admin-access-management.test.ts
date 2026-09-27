@@ -210,11 +210,19 @@ async function post(
   });
 }
 
+// Epic 4 Wave 3 — removal became revocation: POST with a mandatory reason,
+// row retained for history. The helper name keeps the old verb so the guard
+// semantics of each call site stay obvious.
 async function remove(
   url: string,
   token: string,
 ): Promise<LightMyRequestResponse> {
-  return app.inject({ method: "DELETE", url, headers: authHeader(token) });
+  return app.inject({
+    method: "POST",
+    url: `${url}/revoke`,
+    headers: authHeader(token),
+    payload: { reason: "integration test revoke" },
+  });
 }
 
 function assignmentUrl(userId: string) {
@@ -241,6 +249,22 @@ function projectedAssignment(
   return users
     .find((user) => user.id === userId)
     ?.roleAssignments.find((assignment) => assignment.id === assignmentId);
+}
+
+/** Epic 4 Wave 3 — the six lifecycle fields every assignment projection now
+ * carries, inert on any grant that was never revoked. */
+function lifecycleFields(
+  assignmentState: string,
+  assignedBy: string | null,
+): Record<string, unknown> {
+  return {
+    assignmentState,
+    assignedAt: expect.any(String),
+    assignedBy,
+    revokedAt: null,
+    revokedBy: null,
+    revokeReason: null,
+  };
 }
 
 describe("Phase 11F — governed Admin access management", () => {
@@ -534,8 +558,9 @@ describe("Phase 11F — governed Admin access management", () => {
           payload: tenantPayload(assignableRole.code),
         }),
         app.inject({
-          method: "DELETE",
-          url: removalUrl(target.id, targetBaseAssignmentId),
+          method: "POST",
+          url: `${removalUrl(target.id, targetBaseAssignmentId)}/revoke`,
+          payload: { reason: "unauthenticated probe" },
         }),
       ];
       const responses = await Promise.all(probes);
@@ -773,6 +798,7 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: customerId,
         scopeCustomerName: "P11F Customer PRIMARY",
+        ...lifecycleFields("active", null),
       });
 
       const roleResponse = await get(
@@ -831,6 +857,7 @@ describe("Phase 11F — governed Admin access management", () => {
           scopeOrganizationUnitName: null,
           scopeCustomerId: null,
           scopeCustomerName: null,
+          ...lifecycleFields("active", manager.id),
         },
         {
           id: expect.any(String),
@@ -843,6 +870,7 @@ describe("Phase 11F — governed Admin access management", () => {
           scopeOrganizationUnitName: "P11F Organization Unit Primary",
           scopeCustomerId: null,
           scopeCustomerName: null,
+          ...lifecycleFields("active", manager.id),
         },
         {
           id: expect.any(String),
@@ -855,6 +883,7 @@ describe("Phase 11F — governed Admin access management", () => {
           scopeOrganizationUnitName: null,
           scopeCustomerId: customerId,
           scopeCustomerName: "P11F Customer PRIMARY",
+          ...lifecycleFields("active", manager.id),
         },
       ]);
 
@@ -875,11 +904,20 @@ describe("Phase 11F — governed Admin access management", () => {
         expect(response.statusCode).toBe(204);
         expect(response.body).toBe("");
       }
+      // Wave 3 — revocation retains every row as history; none grants access.
       const remaining = await pool.query(
-        `SELECT COUNT(*)::int AS count FROM user_role_assignments WHERE user_id = $1`,
+        `SELECT revoked_at, revoked_by, revoke_reason
+           FROM user_role_assignments
+          WHERE user_id = $1
+          ORDER BY revoked_at`,
         [scopedTarget.id],
       );
-      expect(remaining.rows[0].count).toBe(0);
+      expect(remaining.rows).toHaveLength(3);
+      for (const row of remaining.rows) {
+        expect(row.revoked_at).toBeInstanceOf(Date);
+        expect(row.revoked_by).toBe(manager.id);
+        expect(row.revoke_reason).toBe("integration test revoke");
+      }
     });
 
     it("keeps two-tenant user and role projections isolated", async () => {
@@ -993,6 +1031,7 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        ...lifecycleFields("invalidated", manager.id),
       });
       expect(deletedProjectionResponse.body).not.toContain(
         "P11F Organization Unit Lifecycle",
@@ -1150,6 +1189,7 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: lifecycleCustomerId,
         scopeCustomerName: null,
+        ...lifecycleFields("invalidated", manager.id),
       });
       expect(projectionResponse.body).not.toContain(
         "P11F Customer LIFECYCLE",
@@ -1172,14 +1212,16 @@ describe("Phase 11F — governed Admin access management", () => {
       await pool.query(`UPDATE customers SET deleted_at = NULL WHERE id = $1`, [
         lifecycleCustomerId,
       ]);
+      // Wave 3 — revoke then restore must not revive the grant: the row is
+      // retained and stays revoked, not deleted.
       expect(
         (
           await pool.query(
-            `SELECT 1 FROM user_role_assignments WHERE id = $1`,
+            `SELECT revoked_at FROM user_role_assignments WHERE id = $1`,
             [assignmentId],
           )
-        ).rows,
-      ).toHaveLength(0);
+        ).rows[0].revoked_at,
+      ).toBeInstanceOf(Date);
       expect(
         (
           await rbacRepository.getEffectivePermissionCodes(scopedTarget.id)
@@ -1441,6 +1483,7 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        ...lifecycleFields("invalidated", null),
       });
       expect(movedAwayProjection.body).not.toContain(assignableRole.code);
       expect(movedAwayProjection.body).not.toContain(assignableRole.name);
@@ -1582,6 +1625,7 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        ...lifecycleFields("invalidated", null),
       });
       expect(movedAwayProjection.body).not.toContain(movedRole.code);
       expect(movedAwayProjection.body).not.toContain(movedRole.name);
@@ -1749,6 +1793,7 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        ...lifecycleFields("invalidated", null),
       });
       expect(localProjection.body).not.toContain(foreignRole.code);
       expect(localProjection.body).not.toContain(foreignRole.name);
@@ -1798,7 +1843,7 @@ describe("Phase 11F — governed Admin access management", () => {
         `SELECT metadata
            FROM audit_log
           WHERE tenant_id = $1
-            AND action = 'user.role_removed'
+            AND action = 'user.role_revoked'
             AND entity_id = $2`,
         [tenantId, poisonedTarget.id],
       );
@@ -1809,6 +1854,20 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeType: "organization_unit",
         scopeOrganizationUnitId: organizationUnitId,
         scopeCustomerId: null,
+        before: {
+          status: "invalidated",
+          revokedAt: null,
+          revokedBy: null,
+          revokeReason: null,
+        },
+        after: {
+          status: "revoked",
+          revokedAt: expect.any(String),
+          revokedBy: manager.id,
+          revokeReason: "integration test revoke",
+        },
+        reason: "integration test revoke",
+        assignmentId,
       });
       expect(JSON.stringify(removedAudit.rows[0].metadata)).not.toContain(
         foreignRole.code,
@@ -2136,7 +2195,7 @@ describe("Phase 11F — governed Admin access management", () => {
       ]);
 
       const assignments = await pool.query(
-        `SELECT ura.id, u.id AS user_id, u.status, u.deleted_at
+        `SELECT ura.id, u.id AS user_id, u.status, u.deleted_at, ura.revoked_at
            FROM user_role_assignments ura
            JOIN users u ON u.id = ura.user_id
           WHERE ura.id = ANY($1::uuid[])
@@ -2150,8 +2209,13 @@ describe("Phase 11F — governed Admin access management", () => {
           ],
         ],
       );
+      // Wave 3 — the loser's row is retained but revoked, so "still live" now
+      // means "not revoked" on top of the user-state conditions.
       const activeSurvivors = assignments.rows.filter(
-        (row) => row.status === "active" && row.deleted_at === null,
+        (row) =>
+          row.status === "active" &&
+          row.deleted_at === null &&
+          row.revoked_at === null,
       );
       expect(activeSurvivors).toHaveLength(1);
       expect(assignments.rows.map((row) => row.id)).toEqual(
@@ -2178,7 +2242,7 @@ describe("Phase 11F — governed Admin access management", () => {
   });
 
   describe("audit atomicity and bounded surface invariants", () => {
-    it("writes exactly one allowlisted success audit event for create and delete", async () => {
+    it("writes exactly one allowlisted success audit event for create and revoke", async () => {
       const auditedTarget = await createUser(
         tenantId,
         "audited-success",
@@ -2232,17 +2296,48 @@ describe("Phase 11F — governed Admin access management", () => {
         `SELECT actor_user_id, entity_type, entity_id, metadata
            FROM audit_log
           WHERE tenant_id = $1
-            AND action = 'user.role_removed'
+            AND action = 'user.role_revoked'
             AND entity_id = $2`,
         [tenantId, auditedTarget.id],
       );
       expect(removedAudit.rows).toHaveLength(1);
+      // §4.4 step 21 — the revoke event carries the same legacy identity keys
+      // plus the before/after lifecycle snapshots and the operator's reason.
       expect(removedAudit.rows[0]).toEqual({
         actor_user_id: manager.id,
         entity_type: "user",
         entity_id: auditedTarget.id,
-        metadata: assignedAudit.rows[0].metadata,
+        metadata: {
+          ...(assignedAudit.rows[0].metadata as Record<string, unknown>),
+          before: {
+            status: "active",
+            revokedAt: null,
+            revokedBy: null,
+            revokeReason: null,
+          },
+          after: {
+            status: "revoked",
+            revokedAt: expect.any(String),
+            revokedBy: manager.id,
+            revokeReason: "integration test revoke",
+          },
+          reason: "integration test revoke",
+          assignmentId,
+        },
       });
+      expect(Object.keys(removedAudit.rows[0].metadata).sort()).toEqual(
+        [
+          "targetUserId",
+          "roleCode",
+          "scopeType",
+          "scopeOrganizationUnitId",
+          "scopeCustomerId",
+          "before",
+          "after",
+          "reason",
+          "assignmentId",
+        ].sort(),
+      );
     });
 
     it("does not record an additional success event for a failed mutation", async () => {
@@ -2348,7 +2443,7 @@ describe("Phase 11F — governed Admin access management", () => {
       expect(audit.rows).toHaveLength(0);
     });
 
-    it("keeps the assignment when its namespaced removal audit insert is forced to fail", async () => {
+    it("keeps the grant live when its namespaced revoke audit insert is forced to fail", async () => {
       const rollbackTarget = await createUser(
         tenantId,
         "removal-audit-rollback",
@@ -2357,7 +2452,7 @@ describe("Phase 11F — governed Admin access management", () => {
       const sentinelRole = await createRole(
         tenantId,
         `REMOVE_AUDIT_FAIL_SENTINEL_${codeStamp}`,
-        "Removal audit failure sentinel",
+        "Revoke audit failure sentinel",
       );
       const assignmentId = await createAssignment(
         rollbackTarget.id,
@@ -2374,9 +2469,9 @@ describe("Phase 11F — governed Admin access management", () => {
         AS $$
         BEGIN
           IF NEW.tenant_id = '${tenantId}'::uuid
-             AND NEW.action = 'user.role_removed'
+             AND NEW.action = 'user.role_revoked'
              AND NEW.metadata->>'roleCode' = '${sentinelRole.code}' THEN
-            RAISE EXCEPTION 'Phase 11F namespaced forced removal audit failure';
+            RAISE EXCEPTION 'Phase 11F namespaced forced revoke audit failure';
           END IF;
           RETURN NEW;
         END;
@@ -2398,8 +2493,10 @@ describe("Phase 11F — governed Admin access management", () => {
       }
 
       expect(response!.statusCode).toBe(500);
+      // The audit row and the revoke share one transaction: a failed audit
+      // rolls the UPDATE back, so the grant must still be live and unmarked.
       const assignment = await pool.query(
-        `SELECT id, user_id, role_id
+        `SELECT id, user_id, role_id, revoked_at, revoked_by, revoke_reason
            FROM user_role_assignments
           WHERE id = $1
             AND user_id = $2
@@ -2407,11 +2504,14 @@ describe("Phase 11F — governed Admin access management", () => {
         [assignmentId, rollbackTarget.id, sentinelRole.id],
       );
       expect(assignment.rows).toHaveLength(1);
+      expect(assignment.rows[0].revoked_at).toBeNull();
+      expect(assignment.rows[0].revoked_by).toBeNull();
+      expect(assignment.rows[0].revoke_reason).toBeNull();
       const audit = await pool.query(
         `SELECT 1
            FROM audit_log
           WHERE tenant_id = $1
-            AND action = 'user.role_removed'
+            AND action = 'user.role_revoked'
             AND entity_id = $2
             AND metadata->>'roleCode' = $3`,
         [tenantId, rollbackTarget.id, sentinelRole.code],

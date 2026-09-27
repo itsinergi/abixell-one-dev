@@ -161,7 +161,7 @@ describe("Phase 7 — HSE Core", () => {
     await createReadOnlyRole(tenantId, "HSE_DOC_READER_P7", ["hse.read", "hse.documents.read"]);
 
     const mkUser = (email: string, roleCode: string, scope: Record<string, unknown> = { scopeType: "tenant" }) =>
-      post("/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", roleCode, ...scope });
+      post("/admin/users", adminToken, { email, fullName: email, password: "Passw0rd12345!", pairs: [{ roleCode, ...scope }] });
 
     await mkUser("staff@p7.local", "HSE_STAFF_P7");
     await mkUser("approver@p7.local", "HSE_APPROVER_P7");

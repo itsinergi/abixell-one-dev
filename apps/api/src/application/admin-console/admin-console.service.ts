@@ -476,16 +476,20 @@ export class AdminConsoleService {
     );
   }
 
-  async removeUserRole(
+  /** Epic 4 Wave 3 step 18 — revoke, not remove. The assignment row and its
+   * history are retained; the grant stops authorizing on the next check. */
+  async revokeUserRole(
     actor: ActorContext,
     targetUserId: string,
     assignmentId: string,
+    reason: string,
   ): Promise<void> {
     await this.requireConsoleAccess(actor);
-    await this.rbacRepo.removeGovernedRoleAssignment(
+    await this.rbacRepo.revokeGovernedRoleAssignment(
       actor,
       targetUserId,
       assignmentId,
+      reason,
     );
   }
 

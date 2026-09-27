@@ -37,7 +37,7 @@ describe("Checkpoint 1C.6 — Complaint Administration & Configuration", () => {
 
     await createReadOnlyRole(tenantId, "HANDLER_1C6", ["complaint.read", "complaint.manage", "workflow.instance.act", "customer.read"]);
     await createReadOnlyRole(tenantId, "CUSTOMER_1C6", ["customer.read", "complaint.read", "complaint.manage", "workflow.instance.start", "workflow.instance.act"]);
-    await app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload: { email: "handler@test1c6.local", fullName: "H", password: "Handler12345!", roleCode: "HANDLER_1C6", scopeType: "organization_unit", scopeOrganizationUnitId: siteId } });
+    await app.inject({ method: "POST", url: "/admin/users", headers: authHeader(adminToken), payload: {email: "handler@test1c6.local", fullName: "H", password: "Handler12345!", pairs: [{ roleCode: "HANDLER_1C6", scopeType: "organization_unit" as const, scopeOrganizationUnitId: siteId }]} });
     await app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload: { email: "user@test1c6.local", fullName: "U", password: "CustomerUser12345!", roleCode: "CUSTOMER_1C6", scopeType: "customer", scopeCustomerId: customerId } });
     handlerToken = (await login(app, TENANT_CODE, "handler@test1c6.local", "Handler12345!")).body.accessToken;
     customerUserToken = (await login(app, TENANT_CODE, "user@test1c6.local", "CustomerUser12345!")).body.accessToken;

@@ -397,13 +397,11 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
     ]);
 
     // User scoped to North Org Unit Hierarchy
-    const northMgrUserRes = await post("/users", adminToken, {
+    const northMgrUserRes = await post("/admin/users", adminToken, {
       email: "north.manager@wave-a4.local",
       fullName: "North Engineering Manager",
       password: "Password12345!",
-      roleCode: "HR_MANAGE_ROLE",
-      scopeType: "organization_unit",
-      scopeOrganizationUnitId: orgUnitNorthId,
+      pairs: [{ roleCode: "HR_MANAGE_ROLE", scopeType: "organization_unit", scopeOrganizationUnitId: orgUnitNorthId }],
     });
     northManagerUserId = northMgrUserRes.json().user.id;
     northManagerToken = (
@@ -411,12 +409,11 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
     ).body.accessToken;
 
     // HR Tenant-wide Operator
-    const hrStaffUserRes = await post("/users", adminToken, {
+    const hrStaffUserRes = await post("/admin/users", adminToken, {
       email: "hr.staff@wave-a4.local",
       fullName: "HR Operational Specialist",
       password: "Password12345!",
-      roleCode: "HR_MANAGE_ROLE",
-      scopeType: "tenant",
+      pairs: [{ roleCode: "HR_MANAGE_ROLE", scopeType: "tenant" }],
     });
     hrStaffUserId = hrStaffUserRes.json().user.id;
     hrStaffToken = (
@@ -424,12 +421,11 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
     ).body.accessToken;
 
     // Executive Approver
-    const approverUserRes = await post("/users", adminToken, {
+    const approverUserRes = await post("/admin/users", adminToken, {
       email: "executive.approver@wave-a4.local",
       fullName: "Executive Director Approver",
       password: "Password12345!",
-      roleCode: "APPROVER_ROLE",
-      scopeType: "tenant",
+      pairs: [{ roleCode: "APPROVER_ROLE", scopeType: "tenant" }],
     });
     approverUserId = approverUserRes.json().user.id;
     approverToken = (
@@ -437,12 +433,11 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
     ).body.accessToken;
 
     // Restricted View-Only User
-    await post("/users", adminToken, {
+    await post("/admin/users", adminToken, {
       email: "viewer@wave-a4.local",
       fullName: "Auditor View Only",
       password: "Password12345!",
-      roleCode: "READ_ONLY_WORKFORCE_ROLE",
-      scopeType: "tenant",
+      pairs: [{ roleCode: "READ_ONLY_WORKFORCE_ROLE", scopeType: "tenant" }],
     });
     restrictedUserToken = (
       await login(app, TENANT_CODE, "viewer@wave-a4.local", "Password12345!")

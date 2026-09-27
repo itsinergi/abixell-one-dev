@@ -1,8 +1,8 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.8
-**Tanggal:** 2026-09-27
-**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; customer scope menunggu session terpisah; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; Epic 4 Gelombang 1 (langkah 5–11b) dan seluruh backend Gelombang 2 (enam route user dan assignment) selesai 2026-09-27; UI Gelombang 2 dan Gelombang 3–4 menyusul
+**Versi:** 1.9
+**Tanggal:** 2026-09-28
+**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; customer scope menunggu session terpisah; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. Sisa yang tidak termasuk Epic 4: customer scope menunggu session Service Operation, dan tiga item terbuka 1, 2, 5
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
 
 ---
@@ -1351,6 +1351,39 @@ Konsekuensinya `enforcementStatus` berbunyi `"enforced"` — dan itu benar dalam
 24. Regression test untuk Super Admin, Admin Tenant tenant-wide, Admin Tenant region, dan user tanpa assignment.
 25. Uji dua permukaan assignment agar policy dan hasilnya identik.
 
+**Gelombang 2 UI, Gelombang 3, dan Gelombang 4 selesai 2026-09-28 — Epic 4 tuntas sampai UI/UX.** Yang dibangun, dan keputusan yang mengikat:
+
+**Gelombang 2 — UI dua permukaan**
+
+| Bagian | Wujudnya |
+|---|---|
+| User-centric access management (§4.4 langkah 12) | `AdminUsersView.tsx` detail user dengan blok assignment per role+scope, state per baris (`active`/`revoked`/`invalidated`/`unavailable`), dan dialog revoke dengan alasan wajib. Overlay dialog tetap inert dan stacked; `inFlight` ref guard mencegah submit ganda. |
+| Assignment-centric inventory (§4.4 langkah 13) | `AdminAssignmentsView.tsx` — kolom State dan kolom Revoked (waktu + alasan) memakai label yang sama dengan permukaan Users: satu kebijakan, satu label, dua layar. |
+| Create user + batch (§4.4 langkah 11, 14) | Create user dengan assignment awal opsional; multi-assignment lewat preview + konfirmasi tunggal yang sama dengan API-nya. |
+| Scope picker (§4.4 langkah 15–16) | Tenant dan Organization Unit; visibility server-side — user di luar scope tidak pernah masuk payload, UI hanya menyembunyikan sebagai kenyamanan. |
+
+**Gelombang 3 — revocation dan audit history (langkah 17–21)**
+
+| Bagian | Wujudnya |
+|---|---|
+| Migrasi (langkah 17) | `1788200000000_epic-4-wave-3-assignment-revocation.cjs`: tiga kolom `revoked_at`, `revoked_by` (tanpa FK, sama dengan `created_by` — provenance harus bertahan melewati penghapusan User, dan FK akan merusak tenant-cascade cleanup), `revoke_reason`. Unique index exact-assignment dibangun ulang sebagai partial index `WHERE revoked_at IS NULL AND scope_invalidated_at IS NULL`, sehingga re-grant setelah revoke adalah baris baru, bukan kebangkitan. Trigger dibuat ulang agar `revoked_at` monoton — UPDATE tidak dapat menghapus atau menulis ulang provenance revoke. |
+| Route revoke (langkah 18) | `POST /admin/users/:userId/role-assignments/:assignmentId/revoke` dengan alasan wajib 1–500 karakter (`.strict()` Zod). Baris dipertahankan; revoke kedua 409. Guard: self-revoke 409, final active tenant manager 409, target di luar visibility 404 (tidak dapat dibedakan dari tidak ada). |
+| View authorization (langkah 19) | `authorization_effective_user_role_assignments` mengecualikan `revoked_at IS NOT NULL`; permission hilang pada check berikutnya tanpa logout. |
+| Riwayat user (langkah 20) | Kedua permukaan memproyeksikan `assignmentState` + `revokedAt`/`revokedBy`/`revokeReason`/`assignedAt`/`assignedBy`. Precedence lifecycle: `revoked` > `invalidated` > `unavailable` > `active` — revoke manual dan invalidasi sistem adalah dua event berbeda dengan provenance berbeda. `roleState` tetap menggambarkan baris Role itu sendiri; hanya `scopeState` dan `assignmentState` yang melipat revocation. |
+| Audit (langkah 21) | Action `user.role_revoked` (menggantikan `user.role_removed`), metadata = identitas legacy + `before`/`after` snapshot lifecycle + `reason` + `assignmentId`. INSERT RETURNING jalur tulis diperluas `created_at, created_by` agar payload 201 dan GET identik; `toIsoStringOrNull()` menormalkan Date pg ke ISO string. |
+
+**Gelombang 4 — module feedback dan hardening (langkah 22–25)**
+
+| Bagian | Wujudnya |
+|---|---|
+| Notifikasi modul inactive (langkah 22) | Jalur single-assignment (`createGovernedRoleAssignment`) dan jalur batch (`resolveAssignmentBatch`) menghasilkan kalimat yang identik: `Role '<code>' needs module '<m>' which is not active for this tenant`. Diuji equality literal antar kedua route. |
+| Empat penolakan terbedakan (langkah 23) | Permission kurang = 403 dengan alasan permission; modul inactive = 400 dengan alasan modul; delegation = 400 dengan alasan ceiling; target di luar Data Scope = 404 yang tidak berbeda dari User tidak ada; Role/scope tidak valid = 404 dengan nama entitas. |
+| Regression matrix (langkah 24) | Tenant-wide manager, region (OU-scoped) manager, dan user tanpa assignment: matriks diuji pada kedua permukaan. |
+| Dua permukaan satu kebijakan (langkah 25) | **Cacat nyata ditemukan dan diperbaiki saat pengujian ini**: dua lookup target jalur tulis (`createGovernedRoleAssignment` dan `resolveAssignmentBatch`) belum memfilter `revoked_at IS NULL`, sehingga grant OU yang telah dicabut masih memberi jangkauan tulis sementara jalur baca sudah mengecualikannya. Ketiga lookup target kini konsisten (grant, batch, revoke, baca). Uji identitas permukaan membandingkan set baris per target antara `/admin/users/:id/access` dan `/admin/assignments`. |
+
+**Bukti Gelombang 3–4** (semua pada database terisolasi `abixell_one_epic3_wave4`):
+`tests/integration/epic4-wave3-revocation.test.ts` 10/10 — retensi baris + provenance, permission hilang pada check berikutnya, proyeksi revoked di kedua permukaan, audit before/after tunggal, double-revoke 409, re-grant baris baru dengan id berbeda, alasan wajib + batas 500 + strict, out-of-scope/foreign 404, gerbang permission ganda (403 tanpa `admin.console.read` maupun tanpa `user.role.manage`), trigger monoton (UPDATE mencoba menghapus provenance tetap ditolak), self-revoke dan final-manager 409. `tests/integration/epic4-wave4-hardening.test.ts` 9/9 — parity pesan modul inactive antar route, empat penolakan terbedakan, matriks regresi tiga aktor, identitas dua permukaan, dan revoked-OU-grant tidak lagi memberi jangkauan tulis di grant/batch/preview. `tests/integration/admin-access-management.test.ts` 31/31 setelah perubahan, `role-definition.test.ts` 14/14, `window-enforcement.test.ts` 9/9. `tsc --noEmit` bersih di `apps/api` dan `apps/web`.
+
 #### Serah terima dari Epic 3
 
 | # | Kebutuhan Epic 4 | Kontrak yang harus disediakan Epic 3 |
@@ -1399,7 +1432,7 @@ Status: **Needs interview — session Service Operation terpisah**.
 |---|---|---|
 | 1 | Field metadata role yang boleh diedit tenant selain code, nama, dan permission | Keputusan saat desain kamus Epic 2/eksekusi Epic 4 |
 | 2 | Apakah role yang masih memiliki assignment boleh di-deactivate tanpa revoke semua assignment | Keputusan lifecycle role sebelum implementasi |
-| 3 | Bentuk alasan pencabutan dan apakah wajib untuk semua revoke | Keputusan audit/lifecycle sebelum Gelombang 3 |
+| 3 | ~~Bentuk alasan pencabutan dan apakah wajib untuk semua revoke~~ **Selesai 2026-09-28 (Gelombang 3):** alasan wajib, teks bebas 1–500 karakter, ditolak bila kosong/lewat batas/membawa kunci asing (`.strict()`); alasan masuk metadata audit `user.role_revoked`. Keputusan berlaku untuk permukaan assignment Epic 4. | Keputusan audit/lifecycle sebelum Gelombang 3 |
 | 4 | Apakah batch assignment gagal seluruhnya atau boleh partial success | Keputusan transaksi sebelum implementasi bulk |
 | 5 | Retensi dan akses ke riwayat assignment revoked | Epic 10/audit policy, sebelum production |
 | 6 | Enam aturan customer scope untuk Service Operation | Session terpisah; belum boleh diputuskan di Epic 4 |
@@ -1434,12 +1467,14 @@ Status: **Needs interview — session Service Operation terpisah**.
 - Edit Role menampilkan jumlah user terdampak dan diff permission sebelum commit.
 - User dapat dibuat tanpa assignment.
 - User dapat diberi beberapa role+scope sekaligus dengan satu preview dan satu konfirmasi.
-- Assignment dapat dikelola dari halaman Users dan halaman assignment lintas user dengan policy yang sama.
+- Assignment dapat dikelola dari halaman Users dan halaman assignment lintas user dengan policy yang sama. **(terpenuhi 2026-09-28, Gelombang 2 UI + Gelombang 4 step 25)** — satu service, satu repository, satu set lifecycle field; uji identitas membandingkan set baris antar permukaan, dan cacat lookup tulis yang belum memfilter revoked ditemukan dan diperbaiki oleh uji itu.
 - Organization unit assignment menghormati parent/descendant boundary.
-- Revoke menghentikan effective access pada check berikutnya tanpa logout, tetapi histori tetap terlihat.
-- Audit mencatat actor, target, role, scope, before/after, waktu, dan alasan bila diwajibkan.
+- Revoke menghentikan effective access pada check berikutnya tanpa logout, tetapi histori tetap terlihat. **(terpenuhi 2026-09-28, Gelombang 3)** — uji 10/10 termasuk trigger monoton dan re-grant sebagai baris baru.
+- Audit mencatat actor, target, role, scope, before/after, waktu, dan alasan bila diwajibkan. **(terpenuhi 2026-09-28, Gelombang 3)** — `user.role_revoked` membawa before/after lifecycle, alasan wajib, dan assignmentId.
 - Customer scope tetap tertutup pada UI Epic 4 sampai session Service Operation menghasilkan keputusan lengkap.
 - Test dijalankan pada database terisolasi, bukan `abixell_one_dev`.
+
+**Epic 4 dinyatakan selesai sampai UI/UX pada 2026-09-28.** Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI dua permukaan), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun, diuji, dan tercatat. Yang **tidak** termasuk dan tetap menunggu keputusan pemilik produk: customer scope (session Service Operation terpisah), item terbuka 1 (field metadata role yang boleh diedit tenant), item terbuka 2 (role ber-assignment boleh di-deactivate atau tidak), dan item terbuka 5 (retensi riwayat revoked, Epic 10).
 
 #### Catatan implementasi terhadap kondisi saat ini
 

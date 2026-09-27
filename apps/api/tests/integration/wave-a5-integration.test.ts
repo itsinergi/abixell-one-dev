@@ -340,25 +340,22 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
     ]);
 
     // Create Scoped User (North Manager)
-    const userRes = await post("/users", adminToken, {
+    const userRes = await post("/admin/users", adminToken, {
       email: "north.scm@wave-a5.local",
       fullName: "North SCM Manager",
       password: "Password12345!",
-      roleCode: "SCM_MANAGE_ROLE",
-      scopeType: "organization_unit",
-      scopeOrganizationUnitId: orgUnitNorthId,
+      pairs: [{ roleCode: "SCM_MANAGE_ROLE", scopeType: "organization_unit", scopeOrganizationUnitId: orgUnitNorthId }],
     });
     northManagerUserId = userRes.json().user.id;
     const northLogin = await login(app, TENANT_CODE, "north.scm@wave-a5.local", "Password12345!");
     northManagerToken = northLogin.body.accessToken;
 
     // Create Restricted User with Read-Only Role
-    await post("/users", adminToken, {
+    await post("/admin/users", adminToken, {
       email: "readonly.scm@wave-a5.local",
       fullName: "Readonly SCM User",
       password: "Password12345!",
-      roleCode: "SCM_READONLY_ROLE",
-      scopeType: "tenant",
+      pairs: [{ roleCode: "SCM_READONLY_ROLE", scopeType: "tenant" }],
     });
     const restrictedLogin = await login(app, TENANT_CODE, "readonly.scm@wave-a5.local", "Password12345!");
     restrictedUserToken = restrictedLogin.body.accessToken;

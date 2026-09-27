@@ -229,16 +229,9 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
     ]);
     const supervisorUser = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "supervisor@test1a.local",
-        fullName: "Test Supervisor",
-        password: "Supervisor12345!",
-        roleCode: "SUPERVISOR_1A",
-        scopeType: "organization_unit",
-        scopeOrganizationUnitId: regionId,
-      },
+      payload: {email: "supervisor@test1a.local", fullName: "Test Supervisor", password: "Supervisor12345!", pairs: [{ roleCode: "SUPERVISOR_1A", scopeType: "organization_unit" as const, scopeOrganizationUnitId: regionId }]},
     });
     expect(supervisorUser.statusCode).toBe(201);
     void supervisorRoleId;
@@ -279,16 +272,9 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
 
     const manager = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "commercial-manager@test1a.local",
-        fullName: "Commercial Manager",
-        password: "Manager12345!",
-        roleCode: "COMMERCIAL_MANAGER_1A",
-        scopeType: "organization_unit",
-        scopeOrganizationUnitId: regionId,
-      },
+      payload: {email: "commercial-manager@test1a.local", fullName: "Commercial Manager", password: "Manager12345!", pairs: [{ roleCode: "COMMERCIAL_MANAGER_1A", scopeType: "organization_unit" as const, scopeOrganizationUnitId: regionId }]},
     });
     expect(manager.statusCode).toBe(201);
 
@@ -401,16 +387,9 @@ describe("Checkpoint 1A — Customer Experience Foundation", () => {
     ]);
     const outOfScopeManager = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "commercial-out-of-scope@test1a.local",
-        fullName: "Commercial Out Of Scope",
-        password: "Manager12345!",
-        roleCode: "COMMERCIAL_MANAGER_OUT_OF_SCOPE_1A",
-        scopeType: "organization_unit",
-        scopeOrganizationUnitId: siblingOrgUnitId,
-      },
+      payload: {email: "commercial-out-of-scope@test1a.local", fullName: "Commercial Out Of Scope", password: "Manager12345!", pairs: [{ roleCode: "COMMERCIAL_MANAGER_OUT_OF_SCOPE_1A", scopeType: "organization_unit" as const, scopeOrganizationUnitId: siblingOrgUnitId }]},
     });
     expect(outOfScopeManager.statusCode).toBe(201);
     const outOfScopeLogin = await login(app, TENANT_CODE, "commercial-out-of-scope@test1a.local", "Manager12345!");

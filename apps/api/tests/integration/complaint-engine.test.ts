@@ -116,29 +116,16 @@ describe("Checkpoint 1B — Generic Customer Complaint Engine", () => {
 
     const handlerCreate = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "handler@test1b.local",
-        fullName: "Test Complaint Handler",
-        password: "Handler12345!",
-        roleCode: "COMPLAINT_HANDLER_1B",
-        scopeType: "organization_unit",
-        scopeOrganizationUnitId: siteId,
-      },
+      payload: {email: "handler@test1b.local", fullName: "Test Complaint Handler", password: "Handler12345!", pairs: [{ roleCode: "COMPLAINT_HANDLER_1B", scopeType: "organization_unit" as const, scopeOrganizationUnitId: siteId }]},
     });
     expect(handlerCreate.statusCode).toBe(201);
     const managerCreate = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "manager@test1b.local",
-        fullName: "Test Complaint Manager",
-        password: "Manager12345!",
-        roleCode: "COMPLAINT_MANAGER_1B",
-        scopeType: "tenant",
-      },
+      payload: {email: "manager@test1b.local", fullName: "Test Complaint Manager", password: "Manager12345!", pairs: [{ roleCode: "COMPLAINT_MANAGER_1B", scopeType: "tenant" as const }]},
     });
     expect(managerCreate.statusCode).toBe(201);
     const customerUserCreate = await app.inject({
@@ -373,15 +360,9 @@ describe("Checkpoint 1B — Generic Customer Complaint Engine", () => {
     void noPermRoleId;
     const create = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
-      payload: {
-        email: "noperm@test1b.local",
-        fullName: "No Permission User",
-        password: "NoPerm12345!",
-        roleCode: "NO_COMPLAINT_PERM_1B",
-        scopeType: "tenant",
-      },
+      payload: {email: "noperm@test1b.local", fullName: "No Permission User", password: "NoPerm12345!", pairs: [{ roleCode: "NO_COMPLAINT_PERM_1B", scopeType: "tenant" as const }]},
     });
     expect(create.statusCode).toBe(201);
     const noPermToken = (await login(app, TENANT_CODE, "noperm@test1b.local", "NoPerm12345!")).body

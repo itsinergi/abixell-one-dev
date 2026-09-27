@@ -91,12 +91,11 @@ describe.sequential("Wave A3 — Service Operations & Asset Advanced Integration
       "asset.analytics.read",
     ]);
 
-    const createOpRes = await post("/users", adminToken, {
+    const createOpRes = await post("/admin/users", adminToken, {
       email: OPERATOR_EMAIL,
       fullName: "Field Operator Technician",
       password: OPERATOR_PASSWORD,
-      roleCode: "OPERATOR_ROLE",
-      scopeType: "tenant",
+      pairs: [{ roleCode: "OPERATOR_ROLE", scopeType: "tenant" }],
     });
     expect(createOpRes.statusCode).toBe(201);
     operatorUserId = createOpRes.json().user.id;
@@ -877,13 +876,12 @@ describe.sequential("Wave A3 — Service Operations & Asset Advanced Integration
     it("enforces RBAC permissions on reliability analytics and snapshot generation", async () => {
       // User without analytics permission cannot generate snapshots
       await createReadOnlyRole(tenantId, "NO_ANALYTICS_ROLE", ["asset.maintenance.read"]);
-      const noPermUser = await post("/users", adminToken, {
-        email: "noanalytics@wave-a3.local",
-        fullName: "No Analytics User",
-        password: "User12345!",
-        roleCode: "NO_ANALYTICS_ROLE",
-        scopeType: "tenant",
-      });
+      const noPermUser = await post("/admin/users", adminToken, {
+      email: "noanalytics@wave-a3.local",
+      fullName: "No Analytics User",
+      password: "User12345!",
+      pairs: [{ roleCode: "NO_ANALYTICS_ROLE", scopeType: "tenant" }],
+    });
       const noPermToken = (await login(app, TENANT_CODE, "noanalytics@wave-a3.local", "User12345!")).body.accessToken;
 
       const noPermRes = await post(`/assets/${assetId}/predictive-snapshots`, noPermToken);

@@ -70,29 +70,32 @@ describe("Checkpoint 0D — Workflow & Approval Engine Foundation", () => {
 
     const reviewerCreate = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
       payload: {
         email: "reviewer@test-0d.local",
         fullName: "Test Reviewer",
         password: "ReviewerPass123!",
-        roleCode: "WORKFLOW_REVIEWER",
-        scopeType: "organization_unit",
-        scopeOrganizationUnitId: siteId,
+        pairs: [
+          {
+            roleCode: "WORKFLOW_REVIEWER",
+            scopeType: "organization_unit",
+            scopeOrganizationUnitId: siteId,
+          },
+        ],
       },
     });
     expect(reviewerCreate.statusCode).toBe(201);
 
     const managerCreate = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
       payload: {
         email: "manager@test-0d.local",
         fullName: "Test Manager",
         password: "ManagerPass123!",
-        roleCode: "WORKFLOW_MANAGER",
-        scopeType: "tenant",
+        pairs: [{ roleCode: "WORKFLOW_MANAGER", scopeType: "tenant" }],
       },
     });
     expect(managerCreate.statusCode).toBe(201);
@@ -422,14 +425,13 @@ describe("Checkpoint 0D — Workflow & Approval Engine Foundation", () => {
     await createReadOnlyRole(tenantId, "WORKFLOW_OBSERVER", ["workflow.instance.read"]);
     const observerCreate = await app.inject({
       method: "POST",
-      url: "/users",
+      url: "/admin/users",
       headers: authHeader(adminToken),
       payload: {
         email: "observer@test-0d.local",
         fullName: "Test Observer",
         password: "ObserverPass123!",
-        roleCode: "WORKFLOW_OBSERVER",
-        scopeType: "tenant",
+        pairs: [{ roleCode: "WORKFLOW_OBSERVER", scopeType: "tenant" }],
       },
     });
     expect(observerCreate.statusCode).toBe(201);

@@ -93,8 +93,24 @@ describe("Checkpoint 1C.4 — QA / Verification Experience", () => {
     await createReadOnlyRole(tenantId, "MANAGER_1C4", ["complaint.read", "complaint.manage", "workflow.instance.act", "customer.read"]);
     await createReadOnlyRole(tenantId, "CUSTOMER_A_1C4", ["customer.read", "complaint.read", "complaint.manage", "workflow.instance.start", "workflow.instance.act"]);
 
-    const createUser = (payload: Record<string, unknown>) =>
-      app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload });
+    // B1b (§4.4 D): customer-scope payloads stay on the ADR-0011 door; every
+    // other scope is rewritten into a governed one-pair batch.
+    const createUser = (payload: Record<string, unknown>) => {
+      if (payload.scopeType === "customer") {
+        return app.inject({ method: "POST", url: "/users", headers: authHeader(adminToken), payload });
+      }
+      const { email, fullName, password, roleCode, scopeType, scopeOrganizationUnitId, ...rest } = payload as Record<string, string>;
+      const pair =
+        scopeType === "organization_unit"
+          ? { roleCode, scopeType: "organization_unit" as const, scopeOrganizationUnitId }
+          : { roleCode, scopeType: "tenant" as const };
+      return app.inject({
+        method: "POST",
+        url: "/admin/users",
+        headers: authHeader(adminToken),
+        payload: { email, fullName, password, pairs: [pair], ...rest },
+      });
+    };
     await createUser({ email: "handler@test1c4.local", fullName: "Handler", password: "Handler12345!", roleCode: "HANDLER_1C4", scopeType: "organization_unit", scopeOrganizationUnitId: siteId });
     await createUser({ email: "manager@test1c4.local", fullName: "Manager", password: "Manager12345!", roleCode: "MANAGER_1C4", scopeType: "tenant" });
     await createUser({ email: "user-a@test1c4.local", fullName: "Customer A User", password: "CustomerUser12345!", roleCode: "CUSTOMER_A_1C4", scopeType: "customer", scopeCustomerId: customerAId });

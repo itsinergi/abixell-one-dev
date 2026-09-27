@@ -35,12 +35,22 @@ import { AdminModulesView } from "./AdminModulesView";
 import { AdminWorkflowsView } from "./AdminWorkflowsView";
 import { AdminAuditView } from "./AdminAuditView";
 import { AdminUsersView } from "./AdminUsersView";
+import { AdminAssignmentsView } from "./AdminAssignmentsView";
 
-type SectionKey = "overview" | "users" | "roles" | "permissions" | "modules" | "workflows" | "audit";
+type SectionKey =
+  | "overview"
+  | "users"
+  | "assignments"
+  | "roles"
+  | "permissions"
+  | "modules"
+  | "workflows"
+  | "audit";
 
 const SECTIONS: { key: SectionKey; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "users", label: "Users" },
+  { key: "assignments", label: "Assignments" },
   { key: "roles", label: "Roles" },
   { key: "permissions", label: "Permissions" },
   { key: "modules", label: "Modules" },
@@ -94,6 +104,13 @@ function AdminConsoleContent() {
     (token) => api.adminOverview(token),
     "Failed to load the administration overview",
   );
+  // The overview's capability tuple is tenant-scoped only, but Wave 2
+  // assignment authority accepts Organization-Unit scope too (the backend
+  // resolves `user.role.manage` visibility per assignment). The shell's
+  // effective permission list is scope-agnostic, so it is the honest gate
+  // here; the endpoints still refuse what this permits, and their 403/404
+  // states render through the views' own resource state.
+  const canManageAccess = permissions.includes("user.role.manage");
 
   return (
     <>
@@ -132,13 +149,10 @@ function AdminConsoleContent() {
 
       {activeSection === "overview" && <AdminOverviewView resource={overview} />}
       {activeSection === "users" && (
-        <AdminUsersView
-          canManageAccess={Boolean(
-            overview.data?.capabilities.userRoleManage &&
-              overview.data.capabilities.userAccessRead &&
-              overview.data.capabilities.rolePermissionRead,
-          )}
-        />
+        <AdminUsersView canManageAccess={canManageAccess} />
+      )}
+      {activeSection === "assignments" && (
+        <AdminAssignmentsView canManageAccess={canManageAccess} />
       )}
       {activeSection === "roles" && (
         <AdminRolesView
@@ -374,7 +388,7 @@ function OverviewCard({
   title: string;
   description: string;
   section: AdminCountSection;
-  destination?: Exclude<SectionKey, "overview">;
+  destination?: Exclude<SectionKey, "overview" | "assignments">;
   footnote?: string;
 }) {
   const content = (

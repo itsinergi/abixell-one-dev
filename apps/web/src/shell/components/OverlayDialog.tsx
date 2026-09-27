@@ -24,11 +24,38 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
  * Pending work cannot be dismissed, ensuring callers cannot hide an uncertain
  * mutation outcome while the server is still deciding it.
  */
+
+/** Stack of live dialogs, innermost last. Only the innermost one reacts to
+ *  Escape, and the scroll lock is released only when the last dialog goes. */
+const dialogStack: symbol[] = [];
+
+/** Saved `body.style.overflow` from before the first dialog opened, plus how
+ *  many live dialogs hold the lock. */
+const scrollLock = { depth: 0, previous: "" };
+
+function acquireScrollLock(): () => void {
+  if (scrollLock.depth === 0) {
+    scrollLock.previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  }
+  scrollLock.depth += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    scrollLock.depth -= 1;
+    if (scrollLock.depth === 0) {
+      document.body.style.overflow = scrollLock.previous;
+    }
+  };
+}
+
 export function OverlayDialog({
   open,
   title,
   description,
   pending = false,
+  stacked = false,
   onClose,
   children,
   footer,
@@ -40,6 +67,11 @@ export function OverlayDialog({
   title: string;
   description?: ReactNode;
   pending?: boolean;
+  /** True while another dialog is open above this one: this dialog then stops
+   *  claiming to be the sole modal (no aria-modal, no background description
+   *  for assistive tech). The stack order in the keydown handler above still
+   *  decides who reacts to Escape and Tab. */
+  stacked?: boolean;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
@@ -69,11 +101,13 @@ export function OverlayDialog({
   useEffect(() => {
     if (!open) return;
 
+    const dialogId = Symbol("overlay-dialog");
+    dialogStack.push(dialogId);
+    const releaseScrollLock = acquireScrollLock();
+
     capturedRestoreFocusRef.current ??=
       suppliedRestoreFocusRef?.current ??
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const focusFrame = window.requestAnimationFrame(() => {
       const target =
         initialFocusRef?.current ??
@@ -84,6 +118,10 @@ export function OverlayDialog({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        // A stacked dialog owns this keystroke: the innermost one either
+        // closes or (while pending) refuses, and the outer one must not act
+        // on the same press in either case.
+        if (dialogStack[dialogStack.length - 1] !== dialogId) return;
         if (!pendingRef.current) {
           event.preventDefault();
           onCloseRef.current();
@@ -91,6 +129,9 @@ export function OverlayDialog({
         return;
       }
       if (event.key !== "Tab" || !dialogRef.current) return;
+      // Tab belongs to the innermost dialog too; an outer one would otherwise
+      // pull focus back into itself from inside the dialog stacked over it.
+      if (dialogStack[dialogStack.length - 1] !== dialogId) return;
 
       const focusable = focusableElements(dialogRef.current);
       if (focusable.length === 0) {
@@ -116,9 +157,17 @@ export function OverlayDialog({
     return () => {
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      capturedRestoreFocusRef.current?.focus();
-      capturedRestoreFocusRef.current = null;
+      const index = dialogStack.lastIndexOf(dialogId);
+      const wasTopmost = index === dialogStack.length - 1;
+      if (index !== -1) dialogStack.splice(index, 1);
+      releaseScrollLock();
+      // Restore focus when this was topmost. A dialog below may remain mounted
+      // after a nested dialog closes; it is no longer inert at this point and
+      // owns the captured trigger again. Never steal focus from a dialog above.
+      if (wasTopmost) {
+        capturedRestoreFocusRef.current?.focus();
+        capturedRestoreFocusRef.current = null;
+      }
     };
   }, [initialFocusRef, open, suppliedRestoreFocusRef]);
 
@@ -136,7 +185,7 @@ export function OverlayDialog({
       <div
         ref={dialogRef}
         role="dialog"
-        aria-modal="true"
+        aria-modal={stacked ? undefined : "true"}
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         aria-busy={pending || undefined}

@@ -127,14 +127,19 @@ describe("Phase 2 — Service Operations & Work Management Core", () => {
     const site = await post("/sites", adminToken, { customerId: customerAId, code: "SITE-P2-A", name: "Site A" });
     siteAId = site.json().id;
 
+    // Two doors since B1b (§4.4 D): internal Users go through the governed
+    // surface as one assignment pair; the Customer User stays on the ADR-0011
+    // provisioning path.
     const mkUser = (email: string, roleCode: string, scope: Record<string, unknown> = { scopeType: "tenant" }) =>
-      post("/users", adminToken, {
-        email,
-        fullName: email,
-        password: "Passw0rd12345!",
-        roleCode,
-        ...scope,
-      });
+      post(
+        scope.scopeType === "customer"
+          ? "/users"
+          : "/admin/users",
+        adminToken,
+        scope.scopeType === "customer"
+          ? { email, fullName: email, password: "Passw0rd12345!", roleCode, ...scope }
+          : { email, fullName: email, password: "Passw0rd12345!", pairs: [{ roleCode, ...scope }] },
+      );
     await mkUser("coord@p2.local", "COORD_P2");
     executorUserId = (await mkUser("exec@p2.local", "EXEC_P2")).json().user.id;
     otherExecutorUserId = (await mkUser("exec2@p2.local", "EXEC_P2")).json().user.id;

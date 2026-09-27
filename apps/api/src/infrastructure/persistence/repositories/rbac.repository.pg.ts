@@ -140,6 +140,15 @@ function isDetailWindow(windowCode: string): boolean {
   return entry?.parentPath !== undefined;
 }
 
+/** `pg` hands back `timestamptz` as a JS Date while the projection is typed as
+ * an ISO string; normalize here so an INSERT's RETURNING and a later SELECT
+ * describe the same moment the same way. */
+function toIsoStringOrNull(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
 function mapAdminAssignment(
   row: Record<string, unknown>,
 ): AdminRoleAssignmentSummary {
@@ -156,7 +165,30 @@ function mapAdminAssignment(
       (row.scope_organization_unit_name as string | null) ?? null,
     scopeCustomerId: (row.scope_customer_id as string | null) ?? null,
     scopeCustomerName: (row.scope_customer_name as string | null) ?? null,
+    assignmentState: assignmentLifecycleState(row),
+    assignedAt: toIsoStringOrNull(row.created_at),
+    assignedBy: (row.created_by as string | null) ?? null,
+    revokedAt: toIsoStringOrNull(row.revoked_at),
+    revokedBy: (row.revoked_by as string | null) ?? null,
+    revokeReason: (row.revoke_reason as string | null) ?? null,
   };
+}
+
+/** Epic 4 Wave 3 step 20 — the row lifecycle, kept separate from role/scope
+ * availability: a manual revoke (`revoked_at`) and a system invalidation
+ * (`scope_invalidated_at`) are different events with different provenance.
+ * Rows written before this projection existed (or by the batch writer's
+ * RETURNING, which has no lifecycle columns) lack both timestamps and read as
+ * `active` unless their role/scope is unavailable. */
+function assignmentLifecycleState(
+  row: Record<string, unknown>,
+): AdminRoleAssignmentSummary["assignmentState"] {
+  if (row.revoked_at != null) return "revoked";
+  if (row.scope_invalidated_at != null) return "invalidated";
+  if (row.role_state !== "available" || row.scope_state !== "available") {
+    return "unavailable";
+  }
+  return "active";
 }
 
 /** The actor's own Organization Unit anchors for one permission, unexpanded.
@@ -346,6 +378,12 @@ function projectAdminAssignment(
     scope_organization_unit_name: row.scope_organization_unit_name,
     scope_customer_id: row.scope_customer_id,
     scope_customer_name: row.scope_customer_name,
+    scope_invalidated_at: row.scope_invalidated_at,
+    revoked_at: row.revoked_at,
+    revoked_by: row.revoked_by,
+    revoke_reason: row.revoke_reason,
+    created_at: row.created_at,
+    created_by: row.created_by,
   });
 }
 
@@ -381,6 +419,18 @@ async function recordAssignmentBatchAudit(
       }),
     ],
   );
+}
+
+/** The lifecycle half of an assignment, shaped for the audit payload. Role and
+ * scope identity live at the top level of the same event; this carries only
+ * what changed, so `before` and `after` read as one transition. */
+function auditLifecycleSnapshot(assignment: AdminRoleAssignmentSummary) {
+  return {
+    status: assignment.assignmentState,
+    revokedAt: assignment.revokedAt,
+    revokedBy: assignment.revokedBy,
+    revokeReason: assignment.revokeReason,
+  };
 }
 
 export class PgRbacRepository implements RbacRepository {
@@ -630,12 +680,23 @@ export class PgRbacRepository implements RbacRepository {
               access.scope_organization_unit_id,
               access.scope_organization_unit_name,
               access.scope_customer_id,
-              access.scope_customer_name
+              access.scope_customer_name,
+              access.scope_invalidated_at,
+              access.created_at,
+              access.created_by,
+              access.revoked_at,
+              access.revoked_by,
+              access.revoke_reason
          FROM users u
          LEFT JOIN LATERAL (
            SELECT ura.id,
                   ura.role_id,
                   ura.created_at,
+                  ura.created_by,
+                  ura.scope_invalidated_at,
+                  ura.revoked_at,
+                  ura.revoked_by,
+                  ura.revoke_reason,
                   CASE WHEN r.id IS NOT NULL THEN 'available' ELSE 'unavailable' END
                     AS role_state,
                   r.code AS role_code,
@@ -643,6 +704,7 @@ export class PgRbacRepository implements RbacRepository {
                   ura.scope_type,
                   CASE
                     WHEN ura.scope_invalidated_at IS NULL
+                     AND ura.revoked_at IS NULL
                      AND r.id IS NOT NULL
                      AND (
                        (
@@ -658,13 +720,17 @@ export class PgRbacRepository implements RbacRepository {
                   END AS scope_state,
                   ura.scope_organization_unit_id,
                   CASE
-                    WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                    WHEN ura.scope_invalidated_at IS NULL
+                      AND ura.revoked_at IS NULL
+                      AND r.id IS NOT NULL
                       THEN ou.name
                     ELSE NULL
                   END AS scope_organization_unit_name,
                   ura.scope_customer_id,
                   CASE
-                    WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                    WHEN ura.scope_invalidated_at IS NULL
+                      AND ura.revoked_at IS NULL
+                      AND r.id IS NOT NULL
                       THEN c.name
                     ELSE NULL
                   END AS scope_customer_name
@@ -695,6 +761,7 @@ export class PgRbacRepository implements RbacRepository {
                WHERE target_assignment.user_id = u.id
                  AND target_assignment.scope_type = 'organization_unit'
                  AND target_assignment.scope_invalidated_at IS NULL
+                 AND target_assignment.revoked_at IS NULL
                  AND target_assignment.scope_organization_unit_id = ANY($4::uuid[])
             )
           )
@@ -794,6 +861,7 @@ export class PgRbacRepository implements RbacRepository {
                      WHERE ura.user_id = users.id
                        AND ura.scope_type = 'organization_unit'
                        AND ura.scope_invalidated_at IS NULL
+                       AND ura.revoked_at IS NULL
                   ) AS organization_unit_ids
              FROM users
             WHERE id = $1
@@ -912,7 +980,8 @@ export class PgRbacRepository implements RbacRepository {
              (user_id, role_id, scope_type, scope_organization_unit_id,
               scope_customer_id, created_by)
            VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING id, scope_type, scope_organization_unit_id, scope_customer_id`,
+           RETURNING id, scope_type, scope_organization_unit_id,
+                     scope_customer_id, created_at, created_by`,
           [
             targetUserId,
             role.id,
@@ -946,23 +1015,28 @@ export class PgRbacRepository implements RbacRepository {
         scope_organization_unit_name: organizationUnitName,
         scope_customer_id: row.scope_customer_id,
         scope_customer_name: customerName,
+        // Wave 3 — the INSERT's own RETURNING supplies the grant provenance so
+        // the 201 payload carries the same lifecycle fields a reload would.
+        created_at: row.created_at,
+        created_by: row.created_by,
       });
 
       await this.recordGovernedAudit(client, {
         tenantId: actor.tenantId,
         actorUserId: actor.userId,
         targetUserId,
-        assignment,
         action: "user.role_assigned",
+        after: assignment,
       });
       return assignment;
     });
   }
 
-  async removeGovernedRoleAssignment(
+  async revokeGovernedRoleAssignment(
     actor: { tenantId: string; userId: string },
     targetUserId: string,
     assignmentId: string,
+    reason: string,
   ): Promise<void> {
     await this.inGovernedTransaction(actor.tenantId, async (client) => {
       // §4.4 D rewire — see createGovernedRoleAssignment.
@@ -981,6 +1055,7 @@ export class PgRbacRepository implements RbacRepository {
                      WHERE ura.user_id = users.id
                        AND ura.scope_type = 'organization_unit'
                        AND ura.scope_invalidated_at IS NULL
+                       AND ura.revoked_at IS NULL
                   ) AS organization_unit_ids
              FROM users
             WHERE id = $1
@@ -1003,6 +1078,7 @@ export class PgRbacRepository implements RbacRepository {
                 ura.scope_type,
                 CASE
                   WHEN ura.scope_invalidated_at IS NULL
+                   AND ura.revoked_at IS NULL
                    AND r.id IS NOT NULL
                    AND (
                      (
@@ -1018,16 +1094,26 @@ export class PgRbacRepository implements RbacRepository {
                 END AS scope_state,
                 ura.scope_organization_unit_id,
                 CASE
-                  WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                  WHEN ura.scope_invalidated_at IS NULL
+                    AND ura.revoked_at IS NULL
+                    AND r.id IS NOT NULL
                     THEN ou.name
                   ELSE NULL
                 END AS scope_organization_unit_name,
                 ura.scope_customer_id,
                 CASE
-                  WHEN ura.scope_invalidated_at IS NULL AND r.id IS NOT NULL
+                  WHEN ura.scope_invalidated_at IS NULL
+                    AND ura.revoked_at IS NULL
+                    AND r.id IS NOT NULL
                     THEN c.name
                   ELSE NULL
                 END AS scope_customer_name,
+                ura.created_at,
+                ura.created_by,
+                ura.scope_invalidated_at,
+                ura.revoked_at,
+                ura.revoked_by,
+                ura.revoke_reason,
                 r.code AS role_code,
                 r.name AS role_name,
                 EXISTS (
@@ -1094,19 +1180,44 @@ export class PgRbacRepository implements RbacRepository {
         }
       }
 
-      const assignment = mapAdminAssignment(row);
-      await client.query(
-        `DELETE FROM user_role_assignments
+      // §4.4 step 18 — soft revoke: the row and its history are retained; the
+      // grant becomes inert on the next authorization check. A second revoke
+      // of the same row is a conflict, not a second history event.
+      if (row.revoked_at != null) {
+        throw new ConflictError("This Role assignment is already revoked");
+      }
+
+      const before = mapAdminAssignment(row);
+      const revoked = await client.query<{ revoked_at: Date }>(
+        `UPDATE user_role_assignments
+            SET revoked_at = statement_timestamp(),
+                revoked_by = $3,
+                revoke_reason = $4
           WHERE id = $1
-            AND user_id = $2`,
-        [assignmentId, targetUserId],
+            AND user_id = $2
+            AND revoked_at IS NULL
+          RETURNING revoked_at`,
+        [assignmentId, targetUserId, actor.userId, reason],
       );
+      if (revoked.rows.length === 0) {
+        // Lost a race inside the same transaction window: the row was revoked
+        // between the SELECT and this UPDATE by a concurrent governed write.
+        throw new ConflictError("This Role assignment is already revoked");
+      }
+
+      const after = mapAdminAssignment({
+        ...row,
+        revoked_at: revoked.rows[0].revoked_at,
+        revoked_by: actor.userId,
+        revoke_reason: reason,
+      });
       await this.recordGovernedAudit(client, {
         tenantId: actor.tenantId,
         actorUserId: actor.userId,
         targetUserId,
-        assignment,
-        action: "user.role_removed",
+        action: "user.role_revoked",
+        before,
+        after,
       });
     });
   }
@@ -1286,6 +1397,7 @@ export class PgRbacRepository implements RbacRepository {
                    WHERE ura.user_id = users.id
                      AND ura.scope_type = 'organization_unit'
                      AND ura.scope_invalidated_at IS NULL
+                     AND ura.revoked_at IS NULL
                 ) AS organization_unit_ids
            FROM users
           WHERE id = $1
@@ -1523,6 +1635,8 @@ export class PgRbacRepository implements RbacRepository {
           role_id: string;
           scope_type: "tenant" | "organization_unit";
           scope_organization_unit_id: string | null;
+          created_at: Date;
+          created_by: string;
         }>(
           `INSERT INTO user_role_assignments
              (user_id, role_id, scope_type, scope_organization_unit_id,
@@ -1531,7 +1645,8 @@ export class PgRbacRepository implements RbacRepository {
              FROM unnest($3::uuid[], $4::text[], $5::uuid[])
                AS p(role_id, scope_type, scope_organization_unit_id)
              JOIN roles r ON r.id = p.role_id
-           RETURNING id, role_id, scope_type, scope_organization_unit_id`,
+           RETURNING id, role_id, scope_type, scope_organization_unit_id,
+                     created_at, created_by`,
           [
             targetUserId,
             actor.userId,
@@ -1585,6 +1700,8 @@ export class PgRbacRepository implements RbacRepository {
           scope_organization_unit_name: summary.scopeOrganizationUnitName,
           scope_customer_id: null,
           scope_customer_name: null,
+          created_at: row.created_at,
+          created_by: row.created_by,
         });
       });
 
@@ -1690,6 +1807,8 @@ export class PgRbacRepository implements RbacRepository {
           role_id: string;
           scope_type: "tenant" | "organization_unit";
           scope_organization_unit_id: string | null;
+          created_at: Date;
+          created_by: string;
         }>(
           `INSERT INTO user_role_assignments
              (user_id, role_id, scope_type, scope_organization_unit_id,
@@ -1698,7 +1817,8 @@ export class PgRbacRepository implements RbacRepository {
              FROM unnest($3::uuid[], $4::text[], $5::uuid[])
                AS p(role_id, scope_type, scope_organization_unit_id)
              JOIN roles r ON r.id = p.role_id
-           RETURNING id, role_id, scope_type, scope_organization_unit_id`,
+           RETURNING id, role_id, scope_type, scope_organization_unit_id,
+                     created_at, created_by`,
           [
             created.id,
             actor.userId,
@@ -1739,6 +1859,8 @@ export class PgRbacRepository implements RbacRepository {
             scope_organization_unit_name: summary.scopeOrganizationUnitName,
             scope_customer_id: null,
             scope_customer_name: null,
+            created_at: row.created_at,
+            created_by: row.created_by,
           });
         });
       }
@@ -2987,16 +3109,32 @@ export class PgRbacRepository implements RbacRepository {
       tenantId: string;
       actorUserId: string;
       targetUserId: string;
-      assignment: AdminRoleAssignmentSummary;
-      action: "user.role_assigned" | "user.role_removed";
+      action: "user.role_assigned" | "user.role_revoked";
+      /** §4.4 step 21 — before/after, not just the resulting state. A revoke
+       * keeps its row, so the audit has to say what the grant was and what it
+       * became, alongside the operator's reason. */
+      before?: AdminRoleAssignmentSummary;
+      after?: AdminRoleAssignmentSummary;
     },
   ): Promise<void> {
     const metadata = {
       targetUserId: input.targetUserId,
-      roleCode: input.assignment.roleCode,
-      scopeType: input.assignment.scopeType,
-      scopeOrganizationUnitId: input.assignment.scopeOrganizationUnitId,
-      scopeCustomerId: input.assignment.scopeCustomerId,
+      roleCode: input.after?.roleCode ?? input.before?.roleCode ?? null,
+      scopeType: input.after?.scopeType ?? input.before?.scopeType ?? null,
+      scopeOrganizationUnitId:
+        input.after?.scopeOrganizationUnitId ??
+        input.before?.scopeOrganizationUnitId ??
+        null,
+      scopeCustomerId:
+        input.after?.scopeCustomerId ?? input.before?.scopeCustomerId ?? null,
+      ...(input.before && input.after
+        ? {
+            before: auditLifecycleSnapshot(input.before),
+            after: auditLifecycleSnapshot(input.after),
+            reason: input.after.revokeReason,
+            assignmentId: input.after.id,
+          }
+        : {}),
     };
     await client.query(
       `INSERT INTO audit_log
