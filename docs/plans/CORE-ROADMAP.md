@@ -1,8 +1,8 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.9
+**Versi:** 1.10
 **Tanggal:** 2026-09-28
-**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; customer scope menunggu session terpisah; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. Sisa yang tidak termasuk Epic 4: customer scope menunggu session Service Operation, dan tiga item terbuka 1, 2, 5
+**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. **Wawancara customer scope selesai 2026-09-28 — enam keputusan terkunci (eksternal saja, default baca dua permission dengan opsi set penuh, permukaan internal tertutup, Admin Tenant pemberi, pencabutan manual plus penjaring sistem, tidak boleh campur scope); item terbuka 1, 2, 5, 6, 7 juga terkunci.** Sisa: pekerjaan implementasi, menunggu modul Service Operation dibuka
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
 
 ---
@@ -1416,6 +1416,27 @@ Customer scope tidak dianggap selesai hanya karena kolom dan authorization helpe
 5. Kapan akses dicabut saat hubungan dengan customer berakhir, siapa pelakunya, dan bagaimana auditnya?
 6. Apakah customer scope boleh dimiliki bersamaan dengan tenant atau organization-unit scope?
 
+**Wawancara selesai 2026-09-28 — enam pertanyaan terkunci.**
+
+| # | Pertanyaan | Keputusan |
+|---|---|---|
+| 1 | Siapa pemakai customer scope | **Eksternal saja.** Hanya Customer User portal. User internal memakai tenant atau organization-unit scope plus permission modul; customer scope bukan cara memberi akses kepada staf. |
+| 2 | Data apa yang terlihat per modul Service Operation | **Default baca saja: `service_operations.read` dan `optimization.read` dari delapan permission modul.** Enam sisanya (`execute`, `verify`, `manage`, `configure`, `pack.manage`, `optimization.apply`) ditolak saat grant, dengan bentuk penolakan yang sama seperti permission di luar delegation ceiling. **Set penuh tetap disiapkan sebagai opsi** yang dapat dibuka Admin Tenant dan Super Admin lewat batas role; keputusan membukanya milik pemilik produk, bukan disimpulkan dari default. |
+| 3 | Data apa yang tetap tertutup walaupun user memiliki role yang sama | **Permukaan internal tertutup.** Daftar tetap: catatan internal (`customers.notes`), audit trail dan riwayat perubahan, baris customer lain, direktori staf internal, dan data modul lain (finance, hse, dan seterusnya). Penegakan di query server, bukan penyembunyian di React; penolakan berbentuk 403/404 mengikuti aturan out-of-scope yang sudah berjalan. |
+| 4 | Siapa yang boleh memberi customer scope | **Admin Tenant.** Guard sama seperti assignment internal: `admin.console.read` plus `user.role.manage` pada grant tenant-scope, ditambah delegation ceiling. Super Admin memakai jalur yang sama dengan authority lebih tinggi. |
+| 5 | Kapan akses dicabut, siapa pelakunya, bagaimana auditnya | **Manual plus penjaring sistem.** Jalur resmi: Admin Tenant mencabut lewat UI Gelombang 3 (`revoked_at`, `revoked_by`, `revoke_reason`, audit `user.role_revoked`), sehingga audit selalu memiliki pelaku bernama dan alasan. Penjaring: bila customer dihapus lebih dulu, trigger `enforce_role_assignment_scope_invalidation` menandai `scope_invalidated_at` seperti sekarang. Tidak ada jalur backend baru. |
+| 6 | Apakah customer scope boleh dimiliki bersamaan dengan tenant atau organization-unit scope | **Tidak boleh.** Satu user tidak boleh memegang customer scope dan tenant atau organization-unit scope sekaligus. Ditegakkan di database lewat partial unique index pada `user_id`, bukan hanya validasi aplikasi. |
+
+Ketiga keputusan pada baris 1, 4, dan 6 memerlukan pekerjaan backend saat implementasi dibuka: constraint campur scope (partial unique index pada `user_id`), allowlist permission customer (plafon default dua permission dengan jalur pembukaan set penuh), dan daftar tetap permukaan internal yang harus difilter di setiap query customer-facing. Ketiganya belum dikerjakan dan tidak termasuk Epic 4.
+
+#### Keputusan item terbuka terkait (2026-09-28)
+
+| # | Item terbuka | Keputusan |
+|---|---|---|
+| 1 | Field metadata role yang boleh diedit tenant | **`name` dan `description`.** `code` tetap karena dipakai di pesan error dan audit; daftar permission diubah lewat jalur terpisah yang sudah ada. Perlu migration menambah kolom `description` pada `roles` dan field pada form role; belum dikerjakan. |
+| 2 | Role ber-assignment boleh di-deactivate atau tidak | **Tidak boleh selama masih ada assignment hidup.** Permintaan di-deactivate ditolak dengan pesan yang menyebut jumlah assignment, mengikuti bentuk guard delete role yang sudah ada. |
+| 5 | Retensi dan akses ke riwayat assignment revoked | **Disimpan selamanya** sampai Epic 10 menetapkan kebijakan retensi artefak yang berlaku untuk semua tabel riwayat, termasuk tabel ini. Tidak ada migration retensi dan tidak ada purge terjadwal sekarang. |
+
 Sampai session itu selesai:
 
 - backend customer scope tetap dipertahankan;
@@ -1424,19 +1445,19 @@ Sampai session itu selesai:
 - menu/transaksi Service Operation yang memerlukan customer scope tetap mengikuti default tertutup;
 - keputusan customer scope tidak boleh ditebak dari kebutuhan internal tenant.
 
-Status: **Needs interview — session Service Operation terpisah**.
+Status: **Wawancara selesai 2026-09-28 — enam keputusan terkunci di atas.** Batasan di atas (UI tidak menawarkan customer scope, default tertutup) tetap berlaku sampai implementasi Service Operation menjalankan ketiga pekerjaan backend yang dicatat.
 
 #### Item terbuka Epic 4
 
 | # | Item | Perlu |
 |---|---|---|
-| 1 | Field metadata role yang boleh diedit tenant selain code, nama, dan permission | Keputusan saat desain kamus Epic 2/eksekusi Epic 4 |
-| 2 | Apakah role yang masih memiliki assignment boleh di-deactivate tanpa revoke semua assignment | Keputusan lifecycle role sebelum implementasi |
+| 1 | ~~Field metadata role yang boleh diedit tenant selain code, nama, dan permission~~ **Selesai 2026-09-28:** `name` dan `description` boleh diedit tenant; `code` tetap; permission lewat jalur terpisah. Perlu migration kolom `description` pada `roles` dan field pada form role. | Keputusan saat desain kamus Epic 2/eksekusi Epic 4 |
+| 2 | ~~Apakah role yang masih memiliki assignment boleh di-deactivate tanpa revoke semua assignment~~ **Selesai 2026-09-28:** tidak boleh selama masih ada assignment hidup; permintaan ditolak dengan pesan yang menyebut jumlah assignment. | Keputusan lifecycle role sebelum implementasi |
 | 3 | ~~Bentuk alasan pencabutan dan apakah wajib untuk semua revoke~~ **Selesai 2026-09-28 (Gelombang 3):** alasan wajib, teks bebas 1–500 karakter, ditolak bila kosong/lewat batas/membawa kunci asing (`.strict()`); alasan masuk metadata audit `user.role_revoked`. Keputusan berlaku untuk permukaan assignment Epic 4. | Keputusan audit/lifecycle sebelum Gelombang 3 |
 | 4 | Apakah batch assignment gagal seluruhnya atau boleh partial success | Keputusan transaksi sebelum implementasi bulk |
-| 5 | Retensi dan akses ke riwayat assignment revoked | Epic 10/audit policy, sebelum production |
-| 6 | Enam aturan customer scope untuk Service Operation | Session terpisah; belum boleh diputuskan di Epic 4 |
-| 7 | Perilaku customer scope bila user memiliki scope internal bersamaan | Session terpisah; jangan disimpulkan dari helper backend saat ini |
+| 5 | ~~Retensi dan akses ke riwayat assignment revoked~~ **Selesai 2026-09-28:** disimpan selamanya sampai Epic 10 menetapkan kebijakan retensi artefak yang berlaku untuk semua tabel riwayat. Tanpa purge terjadwal sekarang. | Epic 10/audit policy, sebelum production |
+| 6 | ~~Enam aturan customer scope untuk Service Operation~~ **Selesai 2026-09-28:** enam keputusan terkunci pada tabel wawancara di atas (eksternal saja; default baca dua permission dengan opsi set penuh; permukaan internal tertutup; Admin Tenant pemberi; manual plus penjaring sistem; tidak boleh campur scope). Implementasi menunggu Service Operation. | Session terpisah; belum boleh diputuskan di Epic 4 |
+| 7 | ~~Perilaku customer scope bila user memiliki scope internal bersamaan~~ **Selesai 2026-09-28:** terjawab oleh keputusan 6 — tidak boleh dimiliki bersamaan, ditegakkan di database. | Session terpisah; jangan disimpulkan dari helper backend saat ini |
 
 #### Strategi mitigasi risiko Epic 4
 
@@ -1474,7 +1495,7 @@ Status: **Needs interview — session Service Operation terpisah**.
 - Customer scope tetap tertutup pada UI Epic 4 sampai session Service Operation menghasilkan keputusan lengkap.
 - Test dijalankan pada database terisolasi, bukan `abixell_one_dev`.
 
-**Epic 4 dinyatakan selesai sampai UI/UX pada 2026-09-28.** Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI dua permukaan), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun, diuji, dan tercatat. Yang **tidak** termasuk dan tetap menunggu keputusan pemilik produk: customer scope (session Service Operation terpisah), item terbuka 1 (field metadata role yang boleh diedit tenant), item terbuka 2 (role ber-assignment boleh di-deactivate atau tidak), dan item terbuka 5 (retensi riwayat revoked, Epic 10).
+**Epic 4 dinyatakan selesai sampai UI/UX pada 2026-09-28.** Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI dua permukaan), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun, diuji, dan tercatat. Wawancara customer scope dan item terbuka 1, 2, 5 juga selesai 2026-09-28 — seluruh keputusan terkunci di tabel di atas. Yang tersisa bukan keputusan melainkan pekerjaan implementasi: migration `description` pada `roles` plus form role (item 1), guard deactivate role (item 2), dan ketiga pekerjaan backend customer scope yang menunggu dibukanya modul Service Operation.
 
 #### Catatan implementasi terhadap kondisi saat ini
 
