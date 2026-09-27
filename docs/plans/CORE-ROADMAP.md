@@ -1,8 +1,8 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.7
-**Tanggal:** 2026-09-25
-**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; customer scope menunggu session terpisah; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo
+**Versi:** 1.8
+**Tanggal:** 2026-09-27
+**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; customer scope menunggu session terpisah; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; Epic 4 Gelombang 1 (langkah 5–11b) dan seluruh backend Gelombang 2 (enam route user dan assignment) selesai 2026-09-27; UI Gelombang 2 dan Gelombang 3–4 menyusul
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
 
 ---
@@ -590,7 +590,7 @@ Empat akibat yang sudah terverifikasi:
 
 1. **Menu bukan penjaga akses — dan memang tidak pernah dirancang begitu.** Header `capabilities.ts` menyatakannya sendiri: *"Hiding a nav item never grants or denies access; it only declutters the shell."* Ini benar dan sejalan dengan iDempiere. Masalahnya, penjaga yang sebenarnya (API) tidak selalu menerjemahkan penolakannya menjadi penjelasan yang bisa dipakai orang.
 
-2. **Ada route yang bisa dibuka tanpa ada di menu.** Dari 62 route unik: 41 terdaftar di menu, 3 berada di luar shell (`/login`, `/select-workspace`, `/public/surveys/:token` — bagian alur masuk, memang bukan menu), dan **18 dapat dicapai di dalam shell tanpa terdaftar di menu**. Rincian 18 itu:
+2. **Ada route yang bisa dibuka tanpa ada di menu.** Dari 62 route unik (pengukuran 2026-09-23, sebelum pendaftaran Epic 3): 41 terdaftar di menu, 3 berada di luar shell (`/login`, `/select-workspace`, `/public/surveys/:token` — bagian alur masuk, memang bukan menu), dan **18 dapat dicapai di dalam shell tanpa terdaftar di menu**. Rincian 18 itu:
 
    | Kelompok | Jumlah | Contoh |
    |---|---|---|
@@ -600,7 +600,9 @@ Empat akibat yang sudah terverifikasi:
 
    Untuk dua halaman terakhir, data tidak bocor: API-nya tetap menolak. `apps/api/src/modules/hse/core/application/hse.service.ts:110` memanggil `rbac.requirePermission(actor.userId, "hse.report")`. Tetapi user tanpa izin yang mengetik alamat itu melihat **seluruh form tampil dan bisa diisi** — baru saat submit API menolak. Halaman `/reporting` tidak termasuk celah ini: ia terdaftar di menu dan tidak punya route yatim.
 
-3. **Hanya 9 dari 62 halaman memeriksa izin sendiri.** Lima puluh tiga sisanya bergantung sepenuhnya pada penolakan API. Aman untuk data, buruk untuk pengalaman.
+   **Keadaan akhir setelah Epic 3 Wave 1 (`route-registry.ts`, diukur ulang 2026-09-27): 70 route terdaftar** — 41 `di_menu`, 29 `tersembunyi`, 0 `belum_terdaftar`. Dari 29 tersembunyi itu: 3 alur masuk (`/login`, `/select-workspace`, `/public/surveys/:token`), 1 wildcard (`*`), dan **25 tersembunyi di dalam shell**. Angka 18 di atas adalah baseline audit sebelum pendaftaran; selisihnya adalah route yang ditambahkan setelah 2026-09-23 dan route yang dipindahkan ke alur masuk. Nol `belum_terdaftar` adalah hasil yang dituju langkah ini, bukan sisa pekerjaan.
+
+3. **Hanya 9 dari 62 halaman memeriksa izin sendiri** (pengukuran 2026-09-23, baseline yang sama). Lima puluh tiga sisanya bergantung sepenuhnya pada penolakan API. Aman untuk data, buruk untuk pengalaman.
 
 4. **Menonaktifkan modul saat ini hanya kosmetik.** `apps/api/src/application/configuration/configuration.service.ts` saat `setModuleActivation` menulis status aktivasi dan satu catatan audit `config.module_activation.changed` — **tidak menyentuh `role_permissions` sama sekali**, dan tidak ada pemeriksaan modul-aktif di layer API (pencarian `requireModule` / `moduleActive` tidak menemukan apa pun). Akibatnya tenant yang mematikan modul HSE tetap bisa memakai seluruh API HSE lewat integrasi atau URL langsung.
 
@@ -709,13 +711,15 @@ Halaman rincian secara default menjadi turunan halaman induk dan **mewarisi akse
   /assets/:assetId             turunan, mewarisi induk
   /asset-maintenance/.../:id   turunan, mewarisi induk
 
-/finance/transactions
-  /finance/transactions/:id    PENGECUALIAN: mode hanya-baca
-                               punya identitas Window sendiri
-                               tetap tersembunyi dari menu
+/asset-maintenance
+  /asset-maintenance/assets/:id  PENGECUALIAN: daftar izin lebih sempit
+                                 (meter, downtime, analytics)
+                                 tetap tersembunyi dari menu
 ```
 
-Pengecualian hanya-baca dipakai ketika memang ada rincian yang lingkupnya tidak boleh sepemuh induknya. Rincian seperti itu tetap punya identitas Window sendiri supaya dapat dikunci terpisah, tetapi tetap tidak muncul di menu.
+Pengecualian rincian dipakai ketika memang ada rincian yang lingkupnya tidak boleh sepemuh induknya. Rincian seperti itu tetap punya identitas Window sendiri supaya dapat dikunci terpisah, tetapi tetap tidak muncul di menu.
+
+> **Diperbarui 2026-09-26 (penutupan item terbuka 3).** Contoh `/finance/transactions/:id` di atas dulu ditulis sebagai pengecualian hanya-baca. Pendataan seluruh 17 rincian menunjukkan contoh itu **tidak** hanya-baca — halamannya menulis lewat aksi yang masing-masing dijaga izinnya sendiri (`finance.manage`, `finance.approve`) — sehingga contohnya diganti dengan rincian yang benar-benar berbeda dari induknya. Ada dua: `/asset-maintenance/assets/:id` (masuk lewat izin meter, downtime, dan analytics) dan `/hse/report` (form dibuat dijaga `hse.report`, bukan `hse.manage`). Perhatikan juga: pengecualian sempit itu berlaku pada **daftar izin**, bukan pada mode hanya-baca. Mode hanya-baca (`is_read_write`) menunjuk `role_window_access` di §4.4 dan belum ada. Alasan lengkap ada di "Item terbuka di Epic 3" → item 3.
 
 **Tersembunyi bukan berarti tanpa kunci.** Halaman yang tidak muncul di menu tetap wajib memeriksa hak sebelum menampilkan isinya. Alasan: menu hanyalah daftar tampilan, sedangkan alamat bisa diketik siapa saja. Halaman yang hanya mengandalkan "tidak ada di menu" sebenarnya terbuka, bukan tersembunyi.
 
@@ -828,7 +832,7 @@ Tidak ada pengalihan diam-diam ke Overview. API tetap melakukan pemeriksaan tera
 **Gelombang 1 — Menu dari kamus, setara hari ini.**
 
 1. **Membuat satu komponen penjaga route terlebih dahulu**, dengan perilaku default tertutup. Route yang belum punya status resmi tidak boleh merender isi halaman. Dua route yang saat ini tanpa penjaga (`/hse/report`, `/administration/complaints`) menjadi prioritas pertama untuk ditutup.
-2. Mendaftarkan seluruh 62 route ke kamus dengan salah satu dari tiga status resmi: 41 `di-menu`, 18 `tersembunyi`, dan 3 di luar shell yang didaftarkan sebagai alur masuk. Dua route yang saat ini tanpa penjaga masuk sebagai `tersembunyi` **berkunci**, bukan `tersembunyi` terbuka.
+2. Mendaftarkan seluruh route ke kamus dengan salah satu dari tiga status resmi — rencana awal ditulis dari baseline 62 route (41 `di-menu`, 18 `tersembunyi`, 3 alur masuk); hasil akhir pada `route-registry.ts` (2026-09-27) adalah **70 route: 41 `di_menu`, 25 `tersembunyi` di dalam shell, 3 alur masuk, 1 wildcard** (29 `tersembunyi` total, 0 `belum_terdaftar`). Selisihnya route tambahan yang lahir setelah baseline. Dua route yang saat baseline tanpa penjaga (`/hse/report`, `/administration/complaints`) masuk sebagai `tersembunyi` **berkunci**, bukan `tersembunyi` terbuka.
 3. Membuat `app_menus` + `app_menu_tree`; mengisi tiga grup, 13 modul, dan sub-menu dari definisi kode lewat migration.
 4. Menyajikan menu dari server, dengan cara penyajiannya dipilih berdasarkan hasil pengukuran, bukan asumsi (§Item terbuka 1).
 5. Memeriksa hasilnya terhadap menu hari ini: **daftar menu harus sama persis** sebelum ada penyesuaian baru. Ini titik pembuktian bahwa pemindahan tidak menghilangkan apa pun.
@@ -839,11 +843,46 @@ Tidak ada pengalihan diam-diam ke Overview. API tetap melakukan pemeriksaan tera
 7. Penyaring menu di server: penanda `boleh untuk eksternal` (daftar putih customer) → status modul → hak role. Default tertutup: menu tanpa penanda tidak pernah dikirim ke user eksternal.
 8. Penjelasan 403 / 404 yang tepat pada route yang dibuka langsung.
 
+**Gelombang 2 selesai 2026-09-26.** Yang dibangun, dan yang diputuskan saat mengerjakannya:
+
+| Bagian | Wujudnya |
+|---|---|
+| Penyaring (§4.3 langkah 7) | `apps/api/src/domain/configuration/menu-filter.ts` — fungsi murni, urutan tetap: daftar putih eksternal → status modul → hak role. Dipanggil `app-metadata.service.ts::listMenuTree(actor, caller)`; `GET /me` menghitung `effectivePermissions` + `scopeTypes` lebih dulu, lalu menyajikan hasil saringnya sebagai `menu` |
+| Menu nonaktif + keterangan (§4.3 langkah 6) | `NavRow` di `AppShell.tsx` merender menu `locked` sebagai teks, bukan tautan, dengan alasannya sebagai teks terlihat — bukan `title` saja, karena tooltip tidak terjangkau sentuh dan mudah terlewat oleh keyboard |
+| Sumber render | `apps/web/src/lib/servedNav.ts`. Sidebar **dan** `OverviewPage` membaca pohon yang disajikan server. `capabilities.ts` turun pangkat jadi sumber data untuk test paritas saja, bukan lagi sumber render |
+| Penjelasan tiga sebab (§4.3 langkah 8) | Satu layar, tiga kalimat berbeda: modul tidak aktif (keputusan tenant), tanpa hak (keputusan admin), alamat tidak dikenal (bukan keduanya). Tidak ada pengalihan diam-diam ke Overview — user yang memilih |
+| Bukti | `menu-filter.test.ts` (5 uji lewat `GET /me`), `menu-filter-unit.test.ts` (12 uji pada fungsi murni), `served-nav.test.ts` (13 uji pada adaptor render), `menu-seed-parity.test.ts` (10 uji paritas, tetap lulus) |
+
+**Keputusan yang diambil saat Gelombang 2 dan mengikat implementasi:**
+
+1. **Modul `platform` dikecualikan dari pemeriksaan modul-aktif, dan pengecualiannya ditulis di kode, bukan disimpulkan.** Diukur: `tenant_module_activations` **tidak punya satu baris pun** untuk `platform`, di tenant mana pun, sedangkan registry memberi `module_code: "platform"` pada `/`, `/profile`, `/administration`, dan `/admin`. Tanpa pengecualian ini, penjaga modul-aktif akan menolak seluruh workspace setiap tenant — termasuk halaman masuknya sendiri. `platform` adalah modul shell, bukan modul bisnis yang dinyalakan per tenant; halaman di belakangnya tetap dijaga izin masing-masing.
+2. **Untuk user eksternal, menu internal tidak ada — bukan nonaktif.** Bukti yang dituntut daftar risiko ("memastikan menu internal tidak ada, bukan hanya disabled") diwujudkan apa adanya: uji eksternal memeriksa **setiap simpul di payload, dalam keadaan apa pun**, dan gagal bila ada satu simpul tanpa `is_external_allowed`. Uji ini sengaja tidak menerima menu internal yang `locked` — build yang meloloskan menu internal nonaktif akan lulus pemeriksaan bentuk, tetapi tetap membocorkan susunan informasi internal ke browser customer.
+3. **Hanya `nav-overview` yang merupakan halaman `di-menu` tanpa syarat izin.** Diukur dari kamus: 17 menu berpermission kosong, tetapi 14 di antaranya folder (Grup/Modul) dan 2 sisanya (`nav-administration`, `nav-admin-console`) tidak berstatus `di-menu`. Karena folder tidak pernah `locked` (hak ada di tujuan, bukan di folder), "halaman tanpa syarat izin tidak pernah nonaktif" punya tepat satu contoh nyata — dan itu dipakai sebagai uji.
+
 **Gelombang 3 — Modul sebagai plafon, dan penonaktifan yang nyata.**
 
 9. Menegakkan modul-aktif di layer API: create/update/action ditolak, baca arsip tetap boleh lewat jalur berizin.
 10. Membatasi penonaktifan modul hanya untuk super admin.
 11. Penimpa label tenant dari daftar istilah yang diizinkan.
+
+**Gelombang 3 selesai 2026-09-26.** Yang dibangun, dan keputusan yang mengikat:
+
+| Bagian | Wujudnya |
+|---|---|
+| Penjaga API (§4.3 langkah 9) | `module-activity-plugin.ts` memasang pemeriksaan setelah autentikasi pada setiap route yang berubah-data. `module-enforcement.ts` memetakan route ke modul dan menolak `POST`/`PUT`/`PATCH`/`DELETE` modul bisnis nonaktif dengan 403: `Modul ini tidak aktif untuk tenant Anda.` GET tidak dipotong; data arsip tetap melalui izin route biasa. |
+| Otoritas penonaktifan (§4.3 langkah 10) | `PUT /config/modules/:code` wajib lulus RBAC `config.manage` **dan** `x-bootstrap-key` ADR-0004. Kunci platform tidak menggantikan actor atau izin tenant; tanpa actor maupun tanpa kunci responsnya 401. |
+| Pengecualian shell | `platform` dikecualikan secara eksplisit dari plafon modul. Shell dan Configuration harus dapat menyalakan modul pertama tenant baru; setiap halaman di dalamnya tetap memakai izin masing-masing. |
+| Terminologi menu (§4.3 langkah 11) | Migrasi `1787500000000_epic-3-menu-terminology.cjs` menanam allowlist Product Core dari `config_menu_seed()`. Query pohon menu mencapai override hanya lewat join allowlist; kunci terminologi lain boleh tersimpan tetapi tidak dapat mengubah navigasi. |
+| Batas dan audit | Label menu memakai Schema Registry `terminology.value` maksimal 60 karakter; deskripsi memakai `terminology.description_value` maksimal 240. Audit terminology menyimpan `previousValue` dan `value`; identitas, route, modul, serta izin menu tidak dapat ditimpa. |
+| Bukti | Database uji `abixell_one_epic3_wave3`: 759 uji API lulus semua (55 file), termasuk 10 uji penjaga modul dan 9 uji terminologi menu; typecheck dan build API lulus; platform-boundaries PASS 0 blocking. |
+
+**Koreksi atribusi kamus yang diungkap Gelombang 3 — migrasi `1787600000000_epic-3-api-resource-module-corrections.cjs`.** Penjaga modul (langkah 9) membuat kesalahan atribusi lama menjadi berdaya guna. Seed kamus Epic 2 (1787300000000) merekam seluruh route di bawah namespace alias `/supply-chain/advanced/*` sebagai `supply_chain`, padahal namespace itu memuat registrar tiga modul di bawah satu segmen pertama — warehouse, procurement, dan tiga route legacy `account-assignment-config`. Sebelum langkah 9 kesalahan ini hanya salah catat; sesudahnya, tenant yang mematikan `warehouse_management` masih dapat menulis movement lewat URL alias sementara handler yang sama ditolak di `/wms/*`, dan sebaliknya mematikan `supply_chain` saja keliru menolak route alias yang seharusnya tetap terjangkau.
+
+Koreksi: 105 baris (79 `warehouse_management`, 26 `procurement_management`) mengikuti `API_PATH_MODULE_OVERRIDES`; `module-namespace-parity.test.ts` menurunkan pasangan yang sama dari pohon route hidup dan gagal bila tabel dan registrar berselisih. Fungsi katalog diubah dengan pola rename-plus-join — snapshot 617 baris tidak ditulis ulang, nama lama tetap terbaca — dan `config_seed_dictionary_for_tenant()` tetap utuh karena ia memanggil fungsi katalog lewat nama. Migrasi seed Epic 2 tidak disentuh (append-only), kolom yang berubah hanya `module_code`, tidak ada izin baru, tidak ada `role_permissions`. `app_processes` tidak tersentuh: atribusi izin tidak pernah memakai aturan segmen path.
+
+**Keputusan item terbuka 4 — baca arsip cukup lewat Administration.** Gate hanya menolak perubahan; route baca berizin yang sudah ada tetap dapat mengakses catatan ketika modul nonaktif. Tidak dibangun halaman arsip khusus per modul dalam Epic 3. Endpoint arsip khusus dan izin `admin.module_archive.read` adalah bentuk pengembangan berikutnya bila route Administration terbukti tidak cukup.
+
+**Backlog sengaja ditunda:** B-02, B-03, B-04, dan B-05 tidak berubah dalam gelombang ini. Tidak ada bypass role, script bebas, atau perluasan hak akses untuk melengkapinya.
 
 #### Serah terima ke Epic 4 (wajib dipenuhi, bukan dikerjakan di sini)
 
@@ -871,10 +910,71 @@ Permintaan berikut muncul saat wawancara Epic 3, tetapi tempatnya di Epic 4. Dic
 
 | # | Item | Perlu |
 |---|---|---|
-| 1 | Cara penyajian menu ke klien: ikut payload `/me` yang sudah ada, atau endpoint menu tersendiri. Harus dipilih berdasarkan pengukuran — jumlah menu, ukuran payload, dan waktu muat — bukan berdasarkan asumsi. | Keputusan saat eksekusi gelombang 1 |
-| 2 | Apakah `belum terdaftar` diberi tenggat, setelah lewat tenggat route ditolak keras, atau cukup dilaporkan selamanya sebagai pekerjaan tertunda | Keputusan saat eksekusi gelombang 2 |
-| 3 | Rincian mana saja yang memang perlu pengecualian hanya-baca, bukan mewarisi induknya | Didata saat eksekusi gelombang 1 |
+| 1 | Cara penyajian menu ke klien: ikut payload `/me` yang sudah ada, atau endpoint menu tersendiri. Harus dipilih berdasarkan pengukuran — jumlah menu, ukuran payload, dan waktu muat — bukan berdasarkan asumsi. | **Ditutup 2026-09-26 — ikut payload `/me`.** Diukur pada tenant dengan seluruh modul aktif dan role berisi seluruh izin (kasus terbesar yang mungkin): `/me` **41,8 ms**, payload **22.431 B**, menu **17.614 B** (79%), **57 simpul** menu dalam 3 grup. Endpoint menu tersendiri akan menambah satu perjalanan bolak-balik dan satu invokasi, lalu tetap memuat data yang sama — tanpa menghilangkan satu byte pun dari `/me`, karena halaman yang memanggilnya toh membaca keduanya bersama (shell butuh `permissions` + `scopeTypes` untuk alasan yang sama ia butuh `menu`). Menambah endpoint hanya untuk 17.614 B yang sudah ikut terkirim adalah optimasi tanpa sasaran. Ukuran ini juga masih di bawah satu koneksi lambat mana pun dengan margin besar. Ambang tinjau ulang dicatat di bawah |
+| 2 | Apakah `belum terdaftar` diberi tenggat, setelah lewat tenggat route ditolak keras, atau cukup dilaporkan selamanya sebagai pekerjaan tertunda | **Ditutup 2026-09-26 — ditolak keras sejak sekarang, dan tenggatnya adalah sekarang.** Lihat alasan di bawah |
+| 3 | Rincian mana saja yang memang perlu pengecualian hanya-baca, bukan mewarisi induknya | **Dipindahkan 2026-09-26, dan tuntas di Epic 4 pada 2026-09-27.** Pendataan 17 rincian: 15 mewarisi induk, 2 lebih sempit, 0 hanya-baca. Angka itu menutup bagian registry-nya; bagian hanya-baca-nya diwujudkan sebagai `role_window_access` dan **ditegakkan** pada Epic 4 Gelombang 1 langkah 11a–11b — role read-only tetap membuka halamannya, tulisnya ditolak server dengan 403. Dikoreksi 2026-09-26: penutupan pertama menyimpulkan "tidak perlu pengecualian" dari kemampuan halaman, padahal pertanyaannya tentang izin per role. Lihat alasan di bawah |
 | 4 | Apakah baca-arsip modul nonaktif cukup lewat Administration, atau perlu halaman arsip khusus per modul | Keputusan saat eksekusi gelombang 3 |
+
+**Ambang tinjau ulang untuk item terbuka 1.** Keputusan "ikut `/me`" diikat ke angka yang diukur, bukan ke selera. Ditinjau ulang bila salah satu tercapai: menu melewati **±120 simpul** (dua kali lipat hari ini), payload `/me` melewati **±64 KB**, atau `/me` melewati **±200 ms** pada database produksi. Selama ketiganya belum tercapai, endpoint menu tersendiri tidak dibuat.
+
+**Alasan lengkap item terbuka 2 — `belum terdaftar` ditolak keras.** Pertanyaannya menawarkan tiga pilihan; dua di antaranya sudah tidak berlaku karena kenyataan yang terukur:
+
+```text
+Tenggat + tolak setelah lewat tenggat   →  tidak perlu tenggat.
+                                           Tolakannya sudah berlaku sejak route guard dinyalakan.
+Dilaporkan selamanya sebagai utang      →  bertentangan dengan gate rilis §4.3 yang
+                                           menjadikan `belum terdaftar` sebagai error, bukan warning.
+```
+
+Yang membuat tenggat tidak diperlukan adalah pengukuran, bukan pilihan rasa. Dari 13.370 baris `app_windows` di database pembangunan, **nol** berstatus `belum_terdaftar` — 7.831 `di_menu`, 5.539 `tersembunyi`. Registry mengisi status setiap route saat pendaftaran, dan registry itulah yang melewatkan route yang tidak dideklarasikan. Jadi `belum_terdaftar` bukan kondisi yang menumpuk dan perlu ditenggat; ia hanya bisa muncul dari route yang baru ditambahkan ke `App.tsx` tanpa didaftarkan ke kamus.
+
+Dan untuk route seperti itu, perilakunya sekarang sudah tepat sasaran: `resolveRouteEntry` mengembalikan `null` (wildcard `*` sengaja **tidak** dipakai sebagai cadangan — itu akan membuat penjaga tidak pernah bisa melaporkan alamat tak dikenal), lalu `AppShell` menahan render dan menampilkan "Page not found." tanpa mengalihkan diam-diam ke Overview. Artinya route yang belum terdaftar **tidak merender isinya**, yaitu hal yang sama dengan "ditolak keras" — hanya dicapai lewat 404, bukan lewat 403.
+
+Gagasan "tenggat" sendiri cacat untuk kasus ini. Tenggat masuk akal bila ada baris yang menumpuk di database dan perlu dipaksa selesai; di sini tidak ada baris seperti itu, dan menambahkan tenggat berarti menambahkan **jendela di mana route yang belum terdaftar boleh dirender** — persis kebalikan dari prinsip 4 ("menambah halaman tanpa mendaftarkannya adalah kesalahan yang terlihat, bukan kesalahan yang senyap") dan dari mitigasi baris "Developer menambah route tanpa mendaftar". Tenggat akan melemahkan kontrol, bukan memperkuatnya.
+
+Konsekuensi yang mengikat:
+
+1. `GUARD_ENFORCE = true` di `apps/web/src/lib/routeRegistry.ts` adalah keadaan akhir, bukan nilai sementara untuk dibalik nanti. Ini menutup langkah "flip fail-closed" yang dulu direncanakan sebagai pekerjaan tersendiri.
+2. Penegakan fail-closed tetap berada di jalur **build/CI** (uji `route-registry-parity.test.ts` membandingkan registry dengan route yang benar-benar dideklarasikan `App.tsx`, dua arah: tidak ada route tanpa entri, tidak ada entri tanpa route). Itu yang menjadikan `belum_terdaftar` tidak pernah tercapai di produksi — bukan tenggat.
+3. Laporan kamus tetap ada untuk pembacaan manusia, tetapi **bukan** sebagai izin menunda: halaman yang belum terdaftar tidak dirender hari ini juga, bukan setelah lewat sekian hari.
+
+**Alasan lengkap item terbuka 3 — dipindahkan ke Epic 4, bukan ditutup sebagai tidak perlu.** Item ini diminta "didata saat eksekusi gelombang 1" dan terlewat di sana; pendataannya dilakukan terhadap registry yang sudah berjalan (70 entri, 17 di antaranya rincian).
+
+> **Koreksi 2026-09-26.** Penutupan pertama item ini keliru dan sudah dibatalkan. Waktu itu item ditutup dengan kesimpulan "tidak ada rincian yang perlu pengecualian hanya-baca, dan pertanyaannya keliru bentuk". Kesimpulan itu dibangun dari premis yang salah: ia menyamakan **kemampuan halaman** dengan **izin role**. Yang didata memang benar — 17 halaman rincian (`parentPath` terisi), 15 mewarisi daftar izin induk, 0 hanya-baca menurut kode halamannya. Dua yang tidak mewarisi adalah `/asset-maintenance/assets/:assetId` dan `/hse/report`, dan keduanya menyimpang karena capability masuknya berbeda, bukan karena mode bacanya berbeda. Yang tidak sah adalah lompatan darinya ke "maka pengecualian hanya-baca tidak perlu ada". Pertanyaan §4.3 bukan "apakah halamannya menulis", melainkan "bolehkah **role** ini menulis di halaman itu". Halaman yang punya mutasi tetap harus bisa dibuka oleh role yang hanya berhak baca; hari ini tidak ada satu pun tempat yang menyatakan itu. Sebuah audit atas satu keadaan implementasi tidak boleh membatalkan kebutuhan yang sudah ditetapkan sebagai keputusan desain — dan `role_window_access` sudah berada di Epic 1 (baris 287) sejak sebelum audit ini. Karena itu item ini tidak ditutup: bagian registry-nya selesai, bagian hanya-baca-nya **dipindahkan** ke Epic 4 Gelombang 1.
+
+**Pertanyaan §4.3 menanyakan apakah ada halaman rincian yang tidak menulis.** Jawaban terukur: dari 17 halaman rincian (`parentPath` terisi), **tidak ada** yang murni hanya membaca. Yang membaca saja hanya `/finance/transactions/:transactionId`? Tidak — halaman itu pun menulis. Yang benar-benar hanya membaca tidak ada satu pun.
+
+Hasil ini menjawab bagian **registry**. Ia tidak menjawab bagian **hanya-baca**, karena keduanya dua pertanyaan berbeda. Daftar izin route menjawab "role mana yang boleh membuka Window ini" (lapis 2). Mode hanya-baca menjawab "setelah dibuka, boleh menulis atau tidak" (lapis 3). Satu halaman yang menulis bisa saja harus dibuka oleh role yang tidak boleh menulis; justru itulah keadaan yang menuntut lapis 3, bukan yang meniadakannya.
+
+| Uji | Hasil |
+|---|---|
+| Rincian yang mengulang daftar izin induknya persis | 15 dari 17 |
+| Rincian dengan daftar izin berbeda dari induknya | 2 — `/asset-maintenance/assets/:assetId` (masuk lewat izin lain) dan `/hse/report` (form-nya dijaga `hse.report`, bukan `hse.manage`) |
+| Rincian yang halamannya tidak melakukan penulisan sama sekali | **0** |
+
+**Dua rincian yang layak dibahas, dan apa yang sebenarnya keduanya tunjukkan.**
+
+`/asset-maintenance/assets/:assetId` (“Asset Performance”) memang punya daftar lebih sempit — `asset.meter.manage`, `asset.downtime.manage`, `asset.analytics.read`, bukan daftar induk. Pengecualiannya nyata dan terukur: `OPERATOR_ROLE` masuk lewat daftar itu, `NO_ANALYTICS_ROLE` tertahan meski memegang `asset.maintenance.read`. Tetapi bentuknya **bukan** pengecualian hanya-baca: halamannya mencatat pembacaan meter, mencatat downtime, menutup downtime, dan menghasilkan snapshot prediktif — empat penulisan. Melabelinya hanya-baca akan salah dan akan memutus pekerjaan yang memang tugasnya. Ia tetap anak penuh `/asset-maintenance`; yang membuatnya berbeda adalah izinnya, bukan modus bacanya.
+
+`/finance/transactions/:transactionId` adalah baris yang §4.3 sebut dengan tangan sebagai contoh, dan justru baris itu yang menulis: `reverseFinanceTransaction`, `actOnFinanceTransaction`, `uploadDocument`. Yang membuat “hanya-baca” di sini bukan daftar route, melainkan kerja tiap aksi di server:
+
+| Aksi halaman | Dijaga server oleh |
+|---|---|
+| `getTransaction` (baca) | `finance.read` |
+| `reverseTransaction` | `finance.manage` |
+| `actOnTransaction` | `finance.approve` |
+| `uploadDocument` | izin unggah dokumen |
+
+Satu route memang tidak dapat memisahkan `finance.read` dari `finance.approve`: `FIN_READER_P6` dan `FIN_APPROVER_P6` sama-sama berhak membuka halaman itu, dan yang membedakan keduanya hanya aksi yang boleh dijalankan. Kalau daftar route dipersempit untuk memisahkan mereka, halaman yang tertutup adalah halaman yang seharusnya boleh dibuka.
+
+**Apa yang sebenarnya menahan perubahan, dan di mana ia berada.** Bukan route guard. Route guard hanya memutuskan halaman dirender atau tidak; ia berjalan di browser dan §4.3 sendiri menyebutnya “afordansi UX”, bukan penjaga. Yang menahan perubahan adalah `requirePermission` di service, per aksi. Konsekuensi yang sudah berlaku hari ini, tanpa pekerjaan tambahan:
+
+1. Route gate untuk rincian tetap menyalin daftar induk. Tidak ada penafsiran runtime, tidak ada aturan tersembunyi yang bisa dilupakan.
+2. Registry tidak menandai rincian sebagai hanya-baca karena registry mendeskripsikan akses Window, bukan mode akses per role. Tidak adanya tanda di registry **bukan** bukti bahwa role tidak memerlukan mode hanya-baca.
+3. Jika role hanya memegang izin baca, `role_window_access.is_read_write = false` harus menahan mutasi di server tanpa menutup halaman. Daftar izin route tidak boleh dipersempit untuk memisahkan role tersebut, karena halaman tetap boleh dibuka.
+4. Pengecualian daftar izin tetap hanya dipakai bila rincian memang memiliki lingkup capability berbeda — seperti `/asset-maintenance/assets/:assetId` — bukan untuk mengekspresikan mode baca role.
+
+**Pekerjaan dipindahkan secara eksplisit ke Epic 4 Gelombang 1.** “Mode hanya-baca” pada kalimat §4.3 — “identitas Window sendiri dengan mode read-only” — diwujudkan sebagai `role_window_access` (`role_id`, `window_code`, `is_read_write`, `is_active`). Tabel ini belum ada dan kini menjadi tambahan wajib Gelombang 1, bersama picker Window pada definisi Role dan penegakan server-side terhadap mutasi. Semua Window yang dapat dipilih tetap punya mode baca/tulis per role; angka 15 dari 17 hanya menjelaskan pewarisan daftar izin registry, bukan alasan untuk menyembunyikan rincian dari picker. Empat tabel saudara (`role_process_access`, `role_table_access`, `role_column_access`, `role_record_access`) tetap di luar Gelombang 1: Process saat ini identik 165/165 dengan permission (angka diperbarui 2026-09-27 setelah `role.manage` masuk), `app_tables` kosong, `app_columns` belum ada, dan dictionary record belum ada. Mereka baru dibangun setelah objek yang akan dikunci memiliki identitas operasional.
 
 #### Strategi mitigasi risiko Epic 3
 
@@ -886,7 +986,7 @@ Strategi utama: **keamanan ditutup lebih dulu, perubahan menu dilakukan bertahap
 |---|---|---|---|
 | Route baru atau route tersembunyi merender tanpa izin | User melihat form atau data yang bukan haknya; celah `/hse/report` dan `/administration/complaints` terulang | Jadikan **route guard terpusat** langkah pertama. Default guard adalah menolak: route tanpa entri kamus, tanpa hak, atau dengan modul nonaktif tidak boleh merender isi halaman | Test untuk route `di-menu`, `tersembunyi`, `belum terdaftar`, tanpa hak, dan modul nonaktif; isi halaman tidak muncul sebelum pemeriksaan selesai |
 | Modul nonaktif hanya menyembunyikan menu | URL langsung dan integrasi tetap membuat atau mengubah data | Satu helper server wajib, misalnya `requireModuleActive(moduleCode)`, dipakai pada semua create/update/action. Baca arsip memakai jalur dan izin khusus | Test API membuktikan create/update/action ditolak, baca arsip tetap sesuai izin, dan data tidak dihapus |
-| Menu internal terkirim ke user eksternal | Struktur internal atau fungsi administrasi bocor ke browser | Penyaringan server berurutan: daftar putih eksternal → status modul → hak role. `is_external_allowed` default `false`; menu yang tidak diizinkan tidak pernah dikirim | Test payload user eksternal memastikan menu internal tidak ada, bukan hanya disabled; test internal memastikan aturan role tetap berlaku |
+| Menu internal terkirim ke user eksternal | Struktur internal atau fungsi administrasi bocor ke browser | Penyaringan server berurutan: daftar putih eksternal → status modul → hak role. `is_external_allowed` default `false`; menu yang tidak diizinkan tidak pernah dikirim | Test payload user eksternal memastikan menu internal tidak ada, bukan hanya disabled; test internal memastikan aturan role tetap berlaku. **Terpenuhi 2026-09-26 (Gelombang 2):** `menu-filter.test.ts` memeriksa setiap simpul payload eksternal — gagal bila ada satu simpul tanpa `is_external_allowed`, dalam keadaan apa pun — dan `menu-filter-unit.test.ts` membuktikan urutan langkahnya: pemanggil yang **memegang** izinnya tetap kehilangan menu itu, karena langkah 1 berjalan lebih dulu |
 | Migrasi menu mengubah perilaku tanpa sengaja | Menu hilang, salah induk, salah urutan, atau tujuan halaman berubah | Migrasikan dalam mode **parity first**. Bandingkan hasil server dengan 41 menu lama sebelum perubahan desain atau label | Snapshot/diff struktur: grup, modul, `code`, parent, urutan, action, dan target harus sama |
 | Developer menambah route tanpa mendaftar | Route terbuka, salah izin, atau tidak dapat dikunci role | Tambahkan pemeriksaan build/CI yang membandingkan route dengan kamus. Status `belum terdaftar` menjadi error pada gate rilis, bukan warning yang diabaikan | CI gagal jika route baru belum memiliki status dan hak yang sah; daftar pengecualian hanya untuk tiga alur luar shell |
 | Penjaga terpusat menjadi satu titik kegagalan | Satu bug dapat membuka atau menutup banyak halaman sekaligus | Pisahkan mode fail-closed, unit test matrix, integration test, dan smoke test untuk setiap kelas status. Jangan memberi bypass produksi berbasis URL atau flag klien | Test guard gagal tertutup saat kamus/API error; hasil smoke test route utama dan route sensitif tersimpan |
@@ -1166,6 +1266,66 @@ Aturan `same-assignment` tetap berlaku. Memiliki `config.read` dari satu assignm
 8. Copy Role detached: definisi saja, tanpa user atau assignment.
 9. Edit Role dengan impact preview dan optimistic version check.
 10. Deactivate/delete guard sesuai status pemakaian role.
+11a. **Konfigurasi `role_window_access`** — tabel `role_id`, `window_code`, `is_read_write`, `is_active`; picker Window pada layar Role. `window_code` selalu dipilih dari Window kamus yang terdaftar; browser tidak pernah mengirim identitas Window untuk keputusan enforcement.
+11b. **Penegakan `role_window_access` bertahap per modul** — petakan API Resource ke Window secara eksplisit di server, lalu tolak POST/PUT/PATCH/DELETE dengan 403 bila seluruh assignment efektif role untuk Window itu read-only atau inactive. Tidak ada fallback diam-diam sebelum pemetaan modul selesai; user dengan beberapa role mendapat union allow (`is_read_write = true` pada satu assignment efektif sudah cukup).
+
+**Catatan Gelombang 1 — mengapa langkah 11 ada di sini.** Mode hanya-baca per role adalah lapis ketiga dari model otorisasi (aktivasi modul → permission → `role_window_access` → scope data). Ia dipindahkan ke sini oleh penutupan item terbuka 3 Epic 3 pada 2026-09-26: §4.3 meminta “identitas Window sendiri dengan mode read-only”, dan permintaan itu tidak dapat dijawab oleh daftar izin route, karena daftar izin menjawab “boleh membuka atau tidak”, bukan “boleh menulis atau tidak”. Halaman rincian yang menulis tetap harus dapat dibuka oleh role yang hanya berhak baca; tanpa langkah ini tidak ada satu pun tempat yang menyatakan itu.
+
+Empat tabel saudara (`role_process_access`, `role_table_access`, `role_column_access`, `role_record_access`) **tetap di luar Gelombang 1**, dengan dasar terukur pada database pembangunan:
+
+| Tabel | Objek untuk dikunci | Alasan belum dibangun |
+|---|---|---|
+| `role_window_access` | 70 kode Window (`app_windows`) | Dibangun di Gelombang 1 |
+| `role_process_access` | 165 kode Process | `app_processes.code` identik **165 dari 165** dengan `permissions.code`; mengunci Process berarti mengunci objek yang sudah dikunci `role_permissions` |
+| `role_table_access` | 0 | `app_tables` ada tetapi **kosong** |
+| `role_column_access` | — | Tabel dictionary kolom **belum ada**; tidak ada kunci untuk `column_code` |
+| `role_record_access` | 0 | Dictionary record belum ada; aturan record saat ini berbasis `scope_type` di `user_role_assignments` |
+
+Tiga dari empat tabel tidak memiliki objek untuk dikunci dan satu menduplikasi `role_permissions`. Menambahkannya sebelum dictionary Process/Table/Column/Record memiliki identitas operasional akan menghasilkan tabel kosong tanpa picker yang dapat diisi. Urutan yang benar: bangun identitas objeknya dulu, lalu kuncinya.
+
+**Gelombang 1 langkah 5–11a selesai 2026-09-27.** Langkah 11b — penegakannya — menyusul di bagian berikutnya pada hari yang sama. Yang dibangun, dan keputusan yang mengikat:
+
+| Bagian | Wujudnya |
+|---|---|
+| Create Role (§4.4 langkah 5) | `POST /admin/roles`. Keunikan code per tenant dijaga constraint database, bukan pemeriksaan aplikasi. Skema create tidak membawa `version`; versi pertama ditetapkan server. |
+| Permission picker (§4.4 langkah 6) | `GET /admin/role-definition-options` mengembalikan katalog permission dan Window yang sudah disaring di server. `PermissionOption.selectable` benar hanya bila kode modul dikenal, terdaftar, dan — untuk modul bisnis — modulnya aktif bagi tenant, serta delegable bagi aktor. |
+| Plafon modul dan delegasi (§4.4 langkah 7) | `validateProposedGrants` dan `validateProposedWindows` dijalankan pada setiap jalur tulis. Kode yang tidak boleh diberikan aktor ditolak beserta alasannya, bukan dibuang diam-diam. |
+| Copy Role detached (§4.4 langkah 8) | `POST /admin/roles/:roleCode/copy` hanya menyalin baris eksplisit sumbernya; `is_full_access` tidak pernah diwarisi. Hasil salinan tetap melewati dua validator yang sama, sehingga menyalin peran yang memegang permission modul nonaktif gagal dengan sebab yang terbaca alih-alih kehilangan hibah tanpa kabar. |
+| Edit dengan impact preview (§4.4 langkah 9) | `POST /admin/roles/:roleCode/preview` dan `PUT /admin/roles/:roleCode/definition`. Pemeriksaan versi optimistis memakai `computeDefinitionHash` — permissionCode dideduplikasi dan diurutkan, Window diurutkan per `windowCode`, sha256. Update tanpa perubahan mengembalikan definisi tersimpan tanpa menulis baris. |
+| Deactivate/delete guard (§4.4 langkah 10) | `DELETE /admin/roles/:roleCode/definition` menolak selama masih ada satu baris assignment yang menunjuk Role itu, dan menyebut jumlahnya di pesan. |
+| Otoritas tulis | `requireTransactionRoleDefinitionAuthority` menuntut `admin.console.read` dari assignment efektif mana pun **dan** `role.manage` **dan** `config.read` dari **satu** assignment ber-scope tenant. Aturan `same-assignment` yang sama berlaku: `config.read` dari satu assignment dan scope tenant dari assignment lain tidak dapat digabungkan untuk memperoleh kewenangan tulis ini. |
+| Konfigurasi Window (§4.4 langkah 11a) | Migrasi `1787800000000_epic-4-wave-1-role-window-access.cjs` membangun `role_window_access` — `role_id`, `window_code`, `is_read_write`, `is_active` — dengan FK komposit ke `roles(id, tenant_id)` ON DELETE CASCADE dan ke `app_windows(tenant_id, code)` ON DELETE RESTRICT, sehingga menghapus Window kamus yang masih dikonfigurasi Role gagal bersuara alih-alih menjatuhkan konfigurasinya. |
+| Pilihan Window | `loadWindowOptions` menyaring di server: `route:*` dikecualikan dan hanya Window ber-`registration_status IN ('di_menu','tersembunyi')` yang masuk daftar. Browser memilih dari daftar itu; ia tidak pernah mengirim identitas Window untuk keputusan enforcement. |
+| Status penegakan | `enforcementStatus` **diturunkan** dari pemetaan API Resource → Window (`WINDOW_ENFORCEMENT_STATUS`), bukan literal. Bernilai `"partial"` selama masih ada route penulis yang tidak menyelesaikan ke Window mana pun, dan `"enforced"` hanya setelah yang terakhir ditutup. Literal `"not_enforced"` dihapus dari API, port repositori, cermin web, dan layar Role. |
+| Bukti tahap 11a | `apps/api/tests/integration/role-definition.test.ts` pada database terisolasi `abixell_one_epic3_wave4`: 14 dari 14 lulus. `tsc --noEmit` dan `eslint src --ext .ts,.tsx` bersih di `apps/web`. Verifikasi peramban atas alur hidup penuh: create, simpan flag Window (versi 1 → 2, `{isActive:false, isReadWrite:true, windowCode:"route:/admin"}`), hapus, guard hapus ADMIN (409, `Cannot delete Role 'ADMIN': 1 User assignment(s) still reference it`), dan gating kapabilitas `roleManage` atas tombol New role/Copy. Satu penulisan sengaja dilakukan lalu dibalik (`QA_CREATE_CHECK`), meninggalkan 0 baris. |
+
+**Dua cacat lingkungan ditemukan saat verifikasi, bukan cacat kode.** Migrasi `1787800000000_epic-4-wave-1-role-window-access` dan `1788000000000` belum pernah diterapkan ke `abixell_one_dev`, sehingga pembacaan definisi mengembalikan 500; dan peran ADMIN demo belum memegang `role.manage` yang baru diperkenalkan gelombang ini, sehingga pembacaan opsi mengembalikan 403. Keduanya diperbaiki dengan menerapkan migrasi dan menjalankan `npm run sync-permissions -w apps/api` (175 hibah baru). Database pembangunan itu perlu `--check-order false` karena urutan migrasinya sudah terbalik sejak sebelumnya; database segar diurutkan per nama berkas dan tidak terpengaruh.
+
+**Dasar design system Epic 13 dipasang lebih awal pada gelombang ini**, karena shell Admin Console adalah tempat pertama token dipakai: token warna, densitas (`--row 32px`, `--control 28px`, `--radius 3px`), dan tipografi angka tabular kini lengkap untuk terang **dan** gelap di `apps/web/src/index.css`, dipakai lewat nama semantik di Tailwind (`bg-panel`, `text-ink-dim`, `border-line`). Sakelar tema tersedia dan pilihannya tersimpan di `abixell.theme.v1`. Bawaan yang dikirim tetap **terang**; membalik bawaan ke gelap adalah perubahan satu baris setelah halaman modul lain ikut bermigrasi.
+
+**Gelombang 1 langkah 11b selesai 2026-09-27 — penegakan baca-saja per Window.** Yang dibangun, dan keputusan yang mengikat:
+
+| Bagian | Wujudnya |
+|---|---|
+| Pemetaan eksplisit (§4.4 langkah 11b) | `apps/api/src/domain/configuration/window-enforcement.ts` memegang `WINDOW_RULES`: setiap route penulis dipetakan ke `windowCode` dari Window kamus. Pencocokan **hanya menerima pola route Fastify** (`request.routeOptions.url`, mis. `/assets/:id`), tidak pernah URL kongkret: URL kongkret (`/assets/3f2a`) akan diam-diam jatuh ke Window induk dan mengunci halaman yang salah. |
+| Titik penegakan | `registerWindowAccessEnforcement` di `apps/api/src/interfaces/http/plugins/window-access-plugin.ts` menyisipkan `preHandler` lewat `addHook("onRoute", …)` sehingga pemeriksaan berjalan **setelah** `app.authenticate` mengisi `request.actor`. Urutan registrasi di `app.ts:128` lalu `:135` menetapkan gerbang modul-aktif lebih dulu, gerbang Window kedua. |
+| Keputusan | `evaluateWindowWriteAccess` berjalan berurutan: (1) metode bukan penulis → izinkan; (2) tidak ada aturan yang mengklaim path → izinkan; (3) Role tidak pernah dikonfigurasi untuk Window itu → izinkan; (4) Window terkonfigurasi dan seluruh assignment efektif read-only → 403 `Peran Anda hanya berhak membaca pada halaman ini.` |
+| Union allow | Satu baris assignment efektif dengan `is_read_write = true AND is_active = true` sudah cukup membuka tulis. Read-only hanya berlaku bila **seluruh** assignment read-only — bukan bila salah satunya. |
+| Baca tetap terbuka (§4.4) | GET/HEAD/OPTIONS tidak pernah diblokir, apa pun isi Window. Role read-only **tetap dapat membuka** halamannya; yang ditolak hanya tulisnya, dan ditolak di server, bukan dengan menyembunyikan tombol. |
+| Tanpa pengecualian platform | Berbeda dari gerbang modul-aktif, gerbang Window tidak mengecualikan `platform`. Kunci Window bersifat per Role dan dapat dicabut oleh Role lain; pengecualian akan membuat `route:/admin` dekoratif justru bagi Role yang paling mungkin kelebihan wewenang. |
+| Tidak ada fallback diam-diam (§4.4) | Route tanpa aturan **lolos**, bukan dikunci: "belum dipetakan" bukan klaim yang sama dengan "hanya-baca". Konsekuensinya route tak terpetakan tidak terlihat, jadi jumlahnya dihitung uji, bukan diandaikan. |
+| Cakupan terukur | 909 route yang benar-benar dilayani; 340 di antaranya penulis. Pemetaan menutup **334 route penulis ke 47 Window**. Enam sisanya dikecualikan eksplisit di `WINDOW_ENFORCEMENT_EXEMPTIONS` — tiga prefiks (`/auth`, `/documents`, `/integration/webhook`), masing-masing dengan sifat yang membuat pemetaan tidak mungkin, bukan sekadar belum dikerjakan. Nol route tak terhitung. |
+| Sensus, bukan konstanta | `enforcementStatus` tidak lagi dibaca dari daftar celah, melainkan dari **sensus route yang server benar-benar deklarasikan**: hook `onRoute` yang sama yang memasang gerbang memanggil `registerServedMutatingRoute` untuk tiap route penulis, mencatatnya sebagai `governed`, `exempt`, atau `unaccounted`. Angka itu tidak dapat melenceng dari kenyataan, karena tidak ada tempat kedua yang menyimpannya. |
+| Pengecualian yang dapat difalsifikasi | Tiap entri membawa `property` yang menentukan kelayakannya. `unauthenticated` **diuji terhadap deklarasi route itu sendiri**: route yang membawa `app.authenticate` ditolak sebagai pengecualian, karena ia punya actor dan karenanya seharusnya dapat dipetakan. `window-from-request` menuntut arah sebaliknya — actornya ada, Window-nya yang berasal dari body — sehingga kedua sifat itu tidak dapat dipertukarkan diam-diam. |
+| Status jujur dua arah | `enforcementStatus` kini bacaan, bukan pernyataan: `"enforced"` selama tidak ada route penulis yang tak terhitung, dan kembali `"partial"` begitu ada satu saja yang muncul tanpa aturan dan tanpa pengecualian. Layar Role menampilkan pita yang sesuai dengan nilai itu. |
+| Window Role Definition | Migrasi `1788100000000_epic-4-wave-1-role-definition-route-window.cjs` menambahkan `route:/admin/roles/:roleCode` ke `config_route_window_seed()`. Rute itu sudah ada di `App.tsx` tetapi tidak ada di kamus, yang dilaporkan dua uji sebagai drift; komposisinya sama dengan `1788000000000` (fungsi lama dinamai ulang, nama kanonis didefinisikan ulang sebagai gabungan `UNION`). Tidak ada permission baru, tidak ada baris `role_permissions`. |
+| Bukti | `apps/api/tests/window-enforcement-unit.test.ts` (32 lulus, matriks aturan plus sensus tanpa DB) dan `apps/api/tests/window-enforcement-coverage.test.ts` (8 lulus, enumerasi route yang benar-benar dilayani lewat `onRoute` dan gagal di **empat** arah: route tak terhitung, sensus yang tidak sepakat dengan permukaan nyata, pengecualian basi, dan pengecualian yang sifatnya dibantah deklarasi route itu sendiri). End-to-end: `apps/api/tests/integration/window-enforcement.test.ts` pada `abixell_one_epic3_wave4`, 9 dari 9 — termasuk baca yang tetap 200 pada Window read-only, header `x-window-code` karangan browser yang diabaikan, union allow, kontrol positif penulis, dan gerbang modul yang mendahului gerbang Window. |
+
+**Penutupan celah 11b pada hari yang sama.** Gelombang ini semula meninggalkan enam prefiks pipa platform sebagai celah dan membuat `enforcementStatus` berbunyi `"partial"`. Enam itu ternyata bukan satu jenis. Empat di antaranya — `/auth/login`, `/auth/refresh`, `/auth/logout`, dan `/integration/webhook/:tenantCode/:endpointCode` — tidak punya actor sama sekali, sehingga aturan Window di sana tidak akan pernah dieksekusi: gerbangnya berhenti lebih dulu di `if (!actor) return`. Yang tersisa punya actor **dan** halaman yang menaikkannya: `SharedServicesPanel` memanggil `/notifications/*`, `/scheduler/jobs`, dan `/integration/endpoints` dari dalam `/administration`; `WorkflowPanel` memanggil setiap route runtime `/workflow/*` dari tempat yang sama; definisi workflow adalah permukaan console, dibaca `/admin/workflows`. Keenam prefiks itu kini dipetakan per sub-prefiks, dan yang benar-benar tidak dapat dipetakan tinggal tiga, masing-masing dengan sifatnya di `WINDOW_ENFORCEMENT_EXEMPTIONS`.
+
+`/documents` tetap di luar pemetaan meski actornya ada, dan alasannya yang membuat baris gate ini berbeda dari sekadar "belum dikerjakan": Window sebuah lampiran adalah sifat dari entitas yang ditumpanginya (`entityType`/`entityId` di body multipart), lintas modul. Menurunkannya di server tetap berarti membiarkan browser memilih kuncinya — persis yang dilarang §4.4. Karena itu ia masuk pengecualian dengan sifat `window-from-request`, bukan dipetakan ke Window tebakan.
+
+Konsekuensinya `enforcementStatus` berbunyi `"enforced"` — dan itu benar dalam arti yang dapat diperiksa: **setiap** route penulis yang server layani entah dikunci sebuah Window atau dikecualikan dengan sifat yang dapat difalsifikasi. Uji cakupan yang menegakkannya, bukan kalimat ini.
 
 **Gelombang 2 — User dan assignment internal**
 
@@ -1266,6 +1426,10 @@ Status: **Needs interview — session Service Operation terpisah**.
 - Super Admin dapat membuat, menyalin, mengubah, dan menghapus role yang memenuhi guardrail.
 - Admin Tenant hanya melihat target dalam scope dan tidak dapat memperluas otoritasnya sendiri.
 - Permission picker hanya menampilkan fungsi dari modul aktif; modul inactive menghasilkan notifikasi yang jelas.
+- **(11a — terpenuhi)** Role dapat dikonfigurasi per Window: picker menyimpan `is_read_write` per `window_code` dari Window kamus yang terdaftar. Definisi Role tidak lagi mengembalikan literal `not_enforced`; ia mengembalikan status turunan dari pemetaan API Resource → Window.
+- **(11b — terpenuhi)** Role dapat dikunci per Window: role dengan `is_read_write = false` **tetap dapat membuka** Window-nya, tetapi setiap permintaan tulis (POST/PUT/PATCH/DELETE) ditolak server dengan 403 — bukan sekadar tombol yang disembunyikan. Setiap route penulis yang server layani kini terkunci sebuah Window; yang tidak dapat dikunci terdaftar eksplisit beserta sifat yang membuatnya demikian, dan `enforcementStatus` membaca daftar itu dari sensus route, bukan dari konstanta.
+- **(11b — terpenuhi)** `window_code` pada keputusan enforcement selalu berasal dari resolusi route di server, tidak pernah dari nilai yang dikirim browser. Diuji dengan header `x-window-code` karangan klien: resolusi tetap mengikuti pola route.
+- **(11a + 11b — hijau)** Dari 340 route penulis yang server layani, 334 terkunci sebuah Window (47 Window kamus, 14 modul) dan 6 sisanya terdaftar di `WINDOW_ENFORCEMENT_EXEMPTIONS` dengan sifat yang dapat difalsifikasi — tiga di antaranya dibuktikan uji benar-benar tanpa actor, dan satu (`/documents`) karena Window-nya berasal dari body, bukan dari route. Nol route tak terhitung, jadi `enforcementStatus` berbunyi `"enforced"`. Pengecualian yang menyelinap demi menghindari pemetaan akan gagal: uji menolak entri ber-`unauthenticated` yang route-nya ternyata membawa `app.authenticate`.
 - Copy Role tidak membawa user atau assignment.
 - Edit Role menampilkan jumlah user terdampak dan diff permission sebelum commit.
 - User dapat dibuat tanpa assignment.
