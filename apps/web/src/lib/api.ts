@@ -1841,6 +1841,14 @@ export const api = {
       method: "DELETE",
       token,
     }),
+  /** Deactivate or reactivate a Role (Epic 4 open item 2). Deactivation is
+   * refused (409) while any live assignment still references the Role. */
+  setRoleDefinitionActive: (token: string, roleCode: string, isActive: boolean) =>
+    request<RoleDefinition>(`/admin/roles/${encodeURIComponent(roleCode)}/active-state`, {
+      method: "POST",
+      token,
+      body: { isActive },
+    }),
   addAdminUserRoleAssignment: (
     token: string,
     userId: string,
@@ -2140,7 +2148,13 @@ export type CreateAdminUserResult = {
 export type AdminRoleSummary = {
   code: string;
   name: string;
+  /** `null` means the Role never had a description — a different fact from an
+   * empty one, and the list shows it as such. */
+  description: string | null;
   isFullAccess: boolean;
+  /** False for a deactivated Role: still listed, because it owns history, but
+   * not offerable as a grant target. */
+  isActive: boolean;
   permissionCount: number;
   assignedUserCount: number;
 };
@@ -2192,7 +2206,13 @@ export type RoleDefinition = {
   tenantId: string;
   code: string;
   name: string;
+  /** Operator-authored metadata (Epic 4 open item 1). Never read by
+   * authorization. */
+  description: string | null;
   isFullAccess: boolean;
+  /** Lifecycle switch (Epic 4 open item 2): false means the Role may not be
+   * granted again and live grants referencing it stop authorizing. */
+  isActive: boolean;
   version: number;
   permissionCodes: string[];
   windows: WindowAccessInput[];
@@ -2239,6 +2259,9 @@ export type RoleDefinitionPreview = {
 export type RoleDefinitionFields = {
   version: number;
   name: string;
+  /** Required and nullable, not optional: preview and update state the whole
+   * definition, so an omitted field would silently clear the description. */
+  description: string | null;
   permissionCodes: string[];
   windows: WindowAccessInput[];
 };
@@ -2248,9 +2271,16 @@ export type RoleDefinitionFields = {
  * this type is what stops one being sent by accident. */
 export type CreateRoleDefinitionInput = Omit<RoleDefinitionFields, "version"> & {
   code: string;
+  /** Omitted or `null` both mean "no description". */
+  description?: string | null;
 };
 
-export type CopyRoleDefinitionInput = { code: string; name: string };
+export type CopyRoleDefinitionInput = {
+  code: string;
+  name: string;
+  /** Omitted means "carry the source Role's description". */
+  description?: string | null;
+};
 
 export type UpdateRoleDefinitionInput = RoleDefinitionFields & {
   previewHash: string;

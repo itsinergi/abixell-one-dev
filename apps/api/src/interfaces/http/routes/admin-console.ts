@@ -103,6 +103,7 @@ const createGovernedUserSchema = z
 
 const MAX_ROLE_CODE_LENGTH = 100;
 const MAX_ROLE_NAME_LENGTH = 200;
+const MAX_ROLE_DESCRIPTION_LENGTH = 500;
 const MAX_GRANT_CODES = 500;
 const MAX_WINDOWS = 500;
 
@@ -146,9 +147,19 @@ const definitionFields = {
   windows: z.array(windowAccessSchema).max(MAX_WINDOWS),
 };
 
+/** Epic 4 open item 1 — operator-authored Role metadata. `.nullable()` because
+ * `null` (never had a description) is a fact the API preserves and never
+ * flattens into `""`. The length cap matches the column's CHECK constraint, so
+ * the database never sees a value the schema would have refused. */
+const roleDescriptionSchema = z
+  .string()
+  .max(MAX_ROLE_DESCRIPTION_LENGTH)
+  .nullable();
+
 const createRoleDefinitionSchema = z
   .object({
     code: z.string().min(1).max(MAX_ROLE_CODE_LENGTH),
+    description: roleDescriptionSchema.optional(),
     ...definitionFields,
   })
   .strict()
@@ -158,12 +169,20 @@ const copyRoleDefinitionSchema = z
   .object({
     code: z.string().min(1).max(MAX_ROLE_CODE_LENGTH),
     name: z.string().min(1).max(MAX_ROLE_NAME_LENGTH),
+    /** Omitted means "carry the source's description". */
+    description: roleDescriptionSchema.optional(),
   })
   .strict();
 
+// Preview and update state the WHOLE definition, so `description` is required
+// here (nullable, not optional). Omitting it would otherwise clear the field
+// silently — and because the preview hash deliberately covers only the
+// authorization fields, nothing downstream would catch the accidental blank.
+// A 400 is the honest failure; a quiet clear is not.
 const previewRoleDefinitionSchema = z
   .object({
     version: z.number().int().positive(),
+    description: roleDescriptionSchema,
     ...definitionFields,
   })
   .strict()
@@ -172,12 +191,19 @@ const previewRoleDefinitionSchema = z
 const updateRoleDefinitionSchema = z
   .object({
     version: z.number().int().positive(),
+    description: roleDescriptionSchema,
     ...definitionFields,
     previewHash: z.string().min(1).max(MAX_HASH_LENGTH),
     confirm: z.literal(true),
   })
   .strict()
   .superRefine(rejectDuplicates);
+
+const setRoleActiveSchema = z
+  .object({
+    isActive: z.boolean(),
+  })
+  .strict();
 
 /** Business Admin Console routes. Phase 11F adds only governed User Role
  * assignment access; all pre-existing Phase 11C reads remain unchanged. */
@@ -436,6 +462,26 @@ export function registerAdminConsoleRoutes(
       const { roleCode } = roleCodeParamsSchema.parse(request.params);
       await svc().deleteRoleDefinition(request.actor!, roleCode);
       return reply.status(204).send();
+    },
+  );
+
+  // Epic 4 open item 2 — one route for both directions, because a Role's
+  // lifecycle state is a single fact, not two independent ones. Deactivation is
+  // refused (409) while any live assignment still references the Role;
+  // activation has no precondition beyond the write authority.
+  app.post(
+    "/admin/roles/:roleCode/active-state",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { roleCode } = roleCodeParamsSchema.parse(request.params);
+      const { isActive } = setRoleActiveSchema.parse(request.body);
+      return reply.send(
+        await svc().setRoleDefinitionActive(
+          request.actor!,
+          roleCode,
+          isActive,
+        ),
+      );
     },
   );
 }

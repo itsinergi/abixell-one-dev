@@ -814,28 +814,23 @@ describe("Phase 11F — governed Admin access management", () => {
       });
     });
 
-    it("creates, lists, and deletes tenant, organization-unit, and customer scopes", async () => {
+    it("mixes internal scopes freely but never customer with internal, in either direction", async () => {
       const scopedTarget = await createUser(
         tenantId,
         "all-scopes",
         passwordHash,
       );
-      const payloads = [
+      const internalPayloads = [
         tenantPayload(assignableRole.code),
         {
           roleCode: assignableRole.code,
           scopeType: "organization_unit" as const,
           scopeOrganizationUnitId: organizationUnitId,
         },
-        {
-          roleCode: assignableRole.code,
-          scopeType: "customer" as const,
-          scopeCustomerId: customerId,
-        },
       ];
 
       const created: Array<Record<string, unknown>> = [];
-      for (const payload of payloads) {
+      for (const payload of internalPayloads) {
         const response = await post(
           assignmentUrl(scopedTarget.id),
           managerToken,
@@ -872,19 +867,6 @@ describe("Phase 11F — governed Admin access management", () => {
           scopeCustomerName: null,
           ...lifecycleFields("active", manager.id),
         },
-        {
-          id: expect.any(String),
-          roleState: "available",
-          roleCode: assignableRole.code,
-          roleName: assignableRole.name,
-          scopeType: "customer",
-          scopeState: "available",
-          scopeOrganizationUnitId: null,
-          scopeOrganizationUnitName: null,
-          scopeCustomerId: customerId,
-          scopeCustomerName: "P11F Customer PRIMARY",
-          ...lifecycleFields("active", manager.id),
-        },
       ]);
 
       const listed = (await get("/admin/users", managerToken)).json() as Array<{
@@ -896,6 +878,30 @@ describe("Phase 11F — governed Admin access management", () => {
         expect.arrayContaining(created),
       );
 
+      // §4.4 decision 6 — customer scope on a user holding a live internal
+      // grant is refused 409, not 201, and writes nothing.
+      const customerWhileInternal = await post(
+        assignmentUrl(scopedTarget.id),
+        managerToken,
+        {
+          roleCode: assignableRole.code,
+          scopeType: "customer",
+          scopeCustomerId: customerId,
+        },
+      );
+      expect(customerWhileInternal.statusCode).toBe(409);
+      expect(customerWhileInternal.json().error).toBe(
+        "A User may not hold customer-scope and internal assignments at the same time",
+      );
+      const customerRowsWhileInternal = await pool.query(
+        `SELECT id FROM user_role_assignments
+          WHERE user_id = $1 AND scope_type = 'customer'`,
+        [scopedTarget.id],
+      );
+      expect(customerRowsWhileInternal.rows).toHaveLength(0);
+
+      // A revoked internal grant blocks nothing: soft revocation is exactly
+      // what makes the exclusivity rule live-row based.
       for (const assignment of created) {
         const response = await remove(
           removalUrl(scopedTarget.id, assignment.id as string),
@@ -904,7 +910,67 @@ describe("Phase 11F — governed Admin access management", () => {
         expect(response.statusCode).toBe(204);
         expect(response.body).toBe("");
       }
+
+      const customer = await post(assignmentUrl(scopedTarget.id), managerToken, {
+        roleCode: assignableRole.code,
+        scopeType: "customer",
+        scopeCustomerId: customerId,
+      });
+      expect(customer.statusCode).toBe(201);
+      const customerAssignmentId = customer.json().id as string;
+      expect(customer.json()).toMatchObject({
+        scopeCustomerId: customerId,
+        scopeCustomerName: "P11F Customer PRIMARY",
+      });
+
+      // The mirrored direction: internal scope on a customer-scoped user.
+      for (const payload of internalPayloads) {
+        const response = await post(
+          assignmentUrl(scopedTarget.id),
+          managerToken,
+          payload,
+        );
+        expect(response.statusCode, JSON.stringify(payload)).toBe(409);
+        expect(response.json().error).toBe(
+          "A User may not hold customer-scope and internal assignments at the same time",
+        );
+      }
+      const internalRowsWhileCustomer = await pool.query(
+        `SELECT id FROM user_role_assignments
+          WHERE user_id = $1
+            AND scope_type <> 'customer'
+            AND revoked_at IS NULL`,
+        [scopedTarget.id],
+      );
+      expect(internalRowsWhileCustomer.rows).toHaveLength(0);
+
+      // And back again: revoke the customer grant, internal is allowed.
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, customerAssignmentId),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+      const internalAgain = await post(
+        assignmentUrl(scopedTarget.id),
+        managerToken,
+        tenantPayload(assignableRole.code),
+      );
+      expect(internalAgain.statusCode).toBe(201);
+
+      expect(
+        (
+          await remove(
+            removalUrl(scopedTarget.id, internalAgain.json().id as string),
+            managerToken,
+          )
+        ).statusCode,
+      ).toBe(204);
+
       // Wave 3 — revocation retains every row as history; none grants access.
+      // Three internal grants plus one customer grant, all revoked.
       const remaining = await pool.query(
         `SELECT revoked_at, revoked_by, revoke_reason
            FROM user_role_assignments
@@ -912,12 +978,119 @@ describe("Phase 11F — governed Admin access management", () => {
           ORDER BY revoked_at`,
         [scopedTarget.id],
       );
-      expect(remaining.rows).toHaveLength(3);
+      expect(remaining.rows).toHaveLength(4);
       for (const row of remaining.rows) {
         expect(row.revoked_at).toBeInstanceOf(Date);
         expect(row.revoked_by).toBe(manager.id);
         expect(row.revoke_reason).toBe("integration test revoke");
       }
+    });
+
+    it("enforces the customer-scope Service Operation ceiling and its feature-flag override", async () => {
+      // The manager's own Role does not carry customer.read, so its delegation
+      // set cannot authorize a Role that does — a ceiling probe through that
+      // actor would die on delegation first and assert the wrong message. A
+      // dedicated assigner holds exactly the customer-portal shape.
+      const ceilingAssignerRole = await createRole(
+        tenantId,
+        `CEILING_MANAGER_${codeStamp}`,
+        "Ceiling assigner",
+        [
+          "admin.console.read",
+          "user.role.manage",
+          "user.read",
+          "customer.read",
+          "service_operations.read",
+          "service_operations.optimization.read",
+          "service_operations.optimization.apply",
+        ],
+      );
+      const ceilingAssigner = await createUser(
+        tenantId,
+        "ceiling-manager",
+        passwordHash,
+      );
+      await createAssignment(ceilingAssigner.id, ceilingAssignerRole.id, {
+        scopeType: "tenant",
+      });
+      const ceilingToken = tokenFor(tenantId, ceilingAssigner);
+
+      const ceilingTarget = await createUser(
+        tenantId,
+        "ceiling-target",
+        passwordHash,
+      );
+      const allowed = await post(assignmentUrl(ceilingTarget.id), ceilingToken, {
+        roleCode: assignableRole.code,
+        scopeType: "customer",
+        scopeCustomerId: customerId,
+      });
+      expect(allowed.statusCode).toBe(201);
+
+      // Roles carrying Service Operation codes, built directly (fixture
+      // convention): one inside the allowlist, one beyond it.
+      const ceilingRole = await createRole(
+        tenantId,
+        `CEILING_${codeStamp}`,
+        "Ceiling probe role",
+        ["customer.read", "service_operations.read"],
+      );
+      const fullSetRole = await createRole(
+        tenantId,
+        `FULL_SET_${codeStamp}`,
+        "Full set probe role",
+        ["customer.read", "service_operations.optimization.apply"],
+      );
+      // The in-allowlist Role proves the boundary is the code set, not
+      // "customer scope + any Service Operation grant".
+      const insideTarget = await createUser(
+        tenantId,
+        "ceiling-inside",
+        passwordHash,
+      );
+      const inside = await post(assignmentUrl(insideTarget.id), ceilingToken, {
+        roleCode: ceilingRole.code,
+        scopeType: "customer",
+        scopeCustomerId: customerId,
+      });
+      expect(inside.statusCode).toBe(201);
+
+      const secondTarget = await createUser(
+        tenantId,
+        "ceiling-second",
+        passwordHash,
+      );
+      const refused = await post(assignmentUrl(secondTarget.id), ceilingToken, {
+        roleCode: fullSetRole.code,
+        scopeType: "customer",
+        scopeCustomerId: customerId,
+      });
+      expect(refused.statusCode).toBe(400);
+      expect(refused.json().error).toContain(
+        "customer scope is limited to service_operations.read and service_operations.optimization.read",
+      );
+
+      // Open the ceiling for this tenant and the same pair lands.
+      await pool.query(
+        `INSERT INTO tenant_feature_flags (tenant_id, feature_flag_id, is_enabled, scope_type)
+         SELECT $1, ff.id, true, 'tenant'
+           FROM feature_flags ff
+          WHERE ff.code = 'customer_scope_full_permission_set'`,
+        [tenantId],
+      );
+      const opened = await post(assignmentUrl(secondTarget.id), ceilingToken, {
+        roleCode: fullSetRole.code,
+        scopeType: "customer",
+        scopeCustomerId: customerId,
+      });
+      expect(opened.statusCode).toBe(201);
+
+      // Leaving the flag on would change every later tenant-grant test; the
+      // fixture restores the settled default.
+      await pool.query(
+        `DELETE FROM tenant_feature_flags WHERE tenant_id = $1`,
+        [tenantId],
+      );
     });
 
     it("keeps two-tenant user and role projections isolated", async () => {

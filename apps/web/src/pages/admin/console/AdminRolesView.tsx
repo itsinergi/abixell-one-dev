@@ -127,6 +127,19 @@ export function AdminRolesView({
         ) : (
           <StatusPill tone="neutral">Scoped</StatusPill>
         ),
+    },
+    {
+      // Epic 4 open item 2 — lifecycle is a SEPARATE fact from access breadth,
+      // so it gets its own column rather than overloading the Access pill. A
+      // deactivated Role still appears here (it owns assignment history); what
+      // changes is that it can no longer be granted.
+      header: "Status",
+      cell: (role) =>
+        role.isActive ? (
+          <StatusPill tone="success">Active</StatusPill>
+        ) : (
+          <StatusPill tone="neutral">Inactive</StatusPill>
+        ),
       mobileRole: "status",
     },
     {

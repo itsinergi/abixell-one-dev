@@ -58,10 +58,22 @@ type WindowFlag = keyof WindowDraft;
 
 interface DefinitionDraft {
   name: string;
+  /** Raw textarea value: `""` is what an emptied description looks like while
+   *  editing, and `toDescription()` is what turns it back into the `null` the
+   *  server stores. Keeping the two apart is why the draft holds a string. */
+  description: string;
   permissionCodes: string[];
   /** Keyed by Window code, so membership is one lookup and a removal cannot
    *  leave a stale per-Window flag behind. */
   windows: Record<string, WindowDraft>;
+}
+
+/** `null` (never had a description) and `""` (someone typed nothing) both
+ *  render as an empty textarea, because that is the same editing experience —
+ *  but `null` round-trips as `null` unless the operator actually types. */
+function toDescription(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
 }
 
 function draftFromDefinition(definition: RoleDefinition): DefinitionDraft {
@@ -74,15 +86,17 @@ function draftFromDefinition(definition: RoleDefinition): DefinitionDraft {
   }
   return {
     name: definition.name,
+    description: definition.description ?? "",
     permissionCodes: [...definition.permissionCodes].sort(),
     windows,
   };
 }
 
 /** The server hashes the definition itself, so the client only has to send the
- *  same three fields back. Comparison here decides whether Save is offered. */
+ *  same fields back. Comparison here decides whether Save is offered. */
 function sameDraft(a: DefinitionDraft, b: DefinitionDraft): boolean {
   if (a.name !== b.name) return false;
+  if (a.description !== b.description) return false;
   if (a.permissionCodes.length !== b.permissionCodes.length) return false;
   if (a.permissionCodes.some((code, index) => code !== b.permissionCodes[index])) return false;
   const codes = Object.keys(a.windows);
@@ -135,6 +149,12 @@ export function AdminRoleDefinitionView({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Epic 4 open item 2 — the lifecycle switch. Deactivation is a separate
+  // action from editing the definition, so it keeps its own dialog, pending
+  // flag, and error line rather than riding the preview/commit flow.
+  const [lifecycleOpen, setLifecycleOpen] = useState(false);
+  const [lifecyclePending, setLifecyclePending] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
   const [permissionQuery, setPermissionQuery] = useState("");
   const [permissionModule, setPermissionModule] = useState("all");
@@ -233,6 +253,7 @@ export function AdminRoleDefinitionView({
         const result = await api.previewRoleDefinition(token, roleCode, {
           version: definition.version,
           name,
+          description: toDescription(draft.description),
           permissionCodes: draft.permissionCodes,
           windows: toWindows(),
         });
@@ -260,6 +281,7 @@ export function AdminRoleDefinitionView({
       const updated = await api.updateRoleDefinition(token, roleCode, {
         version: preview.version,
         name: draft.name.trim(),
+        description: toDescription(draft.description),
         permissionCodes: draft.permissionCodes,
         windows: toWindows(),
         previewHash: preview.previewHash,
@@ -299,6 +321,40 @@ export function AdminRoleDefinitionView({
     }
   }, [deletePending, token, roleCode, onBack]);
 
+  const confirmLifecycle = useCallback(async () => {
+    if (lifecyclePending || !definition) return;
+    const life = lifetime.current;
+    setLifecyclePending(true);
+    setLifecycleError(null);
+    try {
+      // The definition is replaced with what the server returned rather than
+      // patched locally, so `version` and `isActive` come from the write that
+      // produced them — the same rule the definition save follows.
+      const updated = await api.setRoleDefinitionActive(
+        token,
+        roleCode,
+        !definition.isActive,
+      );
+      if (lifetime.current !== life) return;
+      setDefinition(updated);
+      setDraft(draftFromDefinition(updated));
+      setPreview(null);
+      setLifecycleOpen(false);
+      setSaved(
+        updated.isActive
+          ? `Reactivated at version ${updated.version}. It can be assigned again.`
+          : `Deactivated at version ${updated.version}. It can no longer be assigned, and existing grants stop authorizing.`,
+      );
+    } catch (err) {
+      if (lifetime.current !== life) return;
+      setLifecycleError(
+        err instanceof ApiError ? err.message : "Failed to change the Role lifecycle",
+      );
+    } finally {
+      if (lifetime.current === life) setLifecyclePending(false);
+    }
+  }, [lifecyclePending, definition, token, roleCode]);
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -309,15 +365,27 @@ export function AdminRoleDefinitionView({
           <code className="font-mono text-xs text-ink-dim">{roleCode}</code>
         </div>
         {canManage && definition && (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setDeleteError(null);
-              setDeleteOpen(true);
-            }}
-          >
-            Delete role
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              disabled={lifecyclePending}
+              onClick={() => {
+                setLifecycleError(null);
+                setLifecycleOpen(true);
+              }}
+            >
+              {definition.isActive ? "Deactivate role" : "Reactivate role"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen(true);
+              }}
+            >
+              Delete role
+            </Button>
+          </div>
         )}
       </div>
 
@@ -348,13 +416,18 @@ export function AdminRoleDefinitionView({
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   {definition.isFullAccess && <StatusPill tone="warning">Full access</StatusPill>}
+                  {definition.isActive ? (
+                    <StatusPill tone="success">Active</StatusPill>
+                  ) : (
+                    <StatusPill tone="neutral">Inactive</StatusPill>
+                  )}
                   <StatusPill tone={dirty ? "warning" : "neutral"}>
                     {dirty ? "Unsaved changes" : "Matches stored version"}
                   </StatusPill>
                 </div>
               </div>
 
-              <div className="mt-4 max-w-md">
+              <div className="mt-4 max-w-md space-y-3">
                 <Field label="Name" required hint="Shown wherever this Role is assigned.">
                   <Input
                     value={draft.name}
@@ -368,6 +441,26 @@ export function AdminRoleDefinitionView({
                     required
                   />
                 </Field>
+                <Field
+                  label="Description"
+                  hint="Optional. What this Role is for, in the operator's own words. Never affects what the Role grants."
+                >
+                  <textarea
+                    value={draft.description}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current ? { ...current, description: event.target.value } : current,
+                      )
+                    }
+                    disabled={!canManage}
+                    maxLength={500}
+                    rows={3}
+                    className="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm text-ink focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+                  />
+                </Field>
+                <p className="text-xs text-ink-dim tabular-nums">
+                  <span>{draft.description.length}</span>/500
+                </p>
               </div>
 
               {definition.enforcementStatus === "enforced" ? (
@@ -524,6 +617,10 @@ export function AdminRoleDefinitionView({
             <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
               <dt className="text-ink-dim">Name</dt>
               <dd className="break-words text-ink">{draft.name.trim()}</dd>
+              <dt className="text-ink-dim">Description</dt>
+              <dd className="break-words text-ink">
+                {toDescription(draft.description) ?? <span className="text-ink-faint">none</span>}
+              </dd>
               <dt className="text-ink-dim">Permissions</dt>
               <dd className="tabular-nums text-ink">{draft.permissionCodes.length}</dd>
               <dt className="text-ink-dim">Windows</dt>
@@ -579,6 +676,40 @@ export function AdminRoleDefinitionView({
       >
         {deleteError && <Alert tone="error">{deleteError}</Alert>}
       </OverlayDialog>
+
+      {definition && (
+        <OverlayDialog
+          open={lifecycleOpen}
+          title={definition.isActive ? `Deactivate ${roleCode}?` : `Reactivate ${roleCode}?`}
+          description={
+            definition.isActive
+              ? "A deactivated Role keeps its definition and history: existing grants stay listed but stop authorizing, and it can no longer be assigned. Refused while any live assignment still references the Role."
+              : "Reactivating makes the Role assignable again. Grants that referenced it while inactive start authorizing on their next permission check."
+          }
+          pending={lifecyclePending}
+          onClose={() => setLifecycleOpen(false)}
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setLifecycleOpen(false)}
+                disabled={lifecyclePending}
+              >
+                Cancel
+              </Button>
+              <Button onClick={() => void confirmLifecycle()} disabled={lifecyclePending}>
+                {lifecyclePending
+                  ? "Saving…"
+                  : definition.isActive
+                    ? "Deactivate role"
+                    : "Reactivate role"}
+              </Button>
+            </>
+          }
+        >
+          {lifecycleError && <Alert tone="error">{lifecycleError}</Alert>}
+        </OverlayDialog>
+      )}
     </>
   );
 }
@@ -1034,6 +1165,7 @@ export function CreateRoleDialog({
       const data = new FormData(formRef.current);
       const code = String(data.get("code") ?? "").trim();
       const name = String(data.get("name") ?? "").trim();
+      const description = toDescription(String(data.get("description") ?? ""));
       if (code.length === 0 || name.length === 0) {
         setError("A Role needs both a code and a name.");
         return;
@@ -1043,11 +1175,14 @@ export function CreateRoleDialog({
       setPending(true);
       try {
         if (mode === "copy") {
+          // No description sent: the copy carries the source's, which is the
+          // documented meaning of an omitted field on that route.
           await api.copyRoleDefinition(token, sourceCode ?? "", { code, name });
         } else {
           await api.createRoleDefinition(token, {
             code,
             name,
+            description,
             permissionCodes: [],
             windows: [],
           });
@@ -1070,7 +1205,7 @@ export function CreateRoleDialog({
       title={mode === "copy" ? "Copy role" : "New role"}
       description={
         mode === "copy"
-          ? `Copies the definition of ${sourceCode} — permissions and Window modes — with no user assignments.`
+          ? `Copies the definition of ${sourceCode} — permissions, Window modes, and its description — with no user assignments.`
           : "Creates an empty Role definition. You choose permissions and Windows next, on the Role screen."
       }
       pending={pending}
@@ -1094,6 +1229,17 @@ export function CreateRoleDialog({
         <Field label="Name" required>
           <Input name="name" maxLength={200} autoComplete="off" required disabled={pending} />
         </Field>
+        {mode === "create" && (
+          <Field label="Description" hint="Optional. A copy carries its source's description.">
+            <textarea
+              name="description"
+              maxLength={500}
+              rows={3}
+              disabled={pending}
+              className="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm text-ink focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+            />
+          </Field>
+        )}
       </form>
     </OverlayDialog>
   );

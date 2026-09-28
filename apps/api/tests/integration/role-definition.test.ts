@@ -246,6 +246,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const preview = await post(`/admin/roles/${copyCode}/preview`, managerToken, {
       version: 1,
       name: "Lifecycle copy updated",
+      description: null,
       permissionCodes: ["config.read", "role.manage"],
       windows: [],
     });
@@ -264,6 +265,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const updated = await put(`/admin/roles/${copyCode}/definition`, managerToken, {
       version: 1,
       name: "Lifecycle copy updated",
+      description: null,
       permissionCodes: ["config.read", "role.manage"],
       windows: [],
       previewHash: previewBody.previewHash,
@@ -294,6 +296,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const stalePreview = await post(`/admin/roles/${code}/preview`, managerToken, {
       version: 2,
       name: "Concurrency role changed",
+      description: null,
       permissionCodes: ["config.read"],
       windows: [],
     });
@@ -302,6 +305,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const badHash = await put(`/admin/roles/${code}/definition`, managerToken, {
       version: 1,
       name: "Concurrency role changed",
+      description: null,
       permissionCodes: ["config.read"],
       windows: [],
       previewHash: "not-the-server-preview-hash",
@@ -312,6 +316,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const staleUpdate = await put(`/admin/roles/${code}/definition`, managerToken, {
       version: 2,
       name: "Concurrency role changed",
+      description: null,
       permissionCodes: ["config.read"],
       windows: [],
       previewHash: "not-the-server-preview-hash",
@@ -333,6 +338,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const preview = await post(`/admin/roles/${code}/preview`, managerToken, {
       version: 1,
       name: "No-op role",
+      description: null,
       permissionCodes: ["config.read"],
       windows: [],
     });
@@ -349,6 +355,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const updated = await put(`/admin/roles/${code}/definition`, managerToken, {
       version: 1,
       name: "No-op role",
+      description: null,
       permissionCodes: ["config.read"],
       windows: [],
       previewHash: preview.json().previewHash,
@@ -392,6 +399,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const preview = await post(`/admin/roles/${code}/preview`, managerToken, {
       version: 1,
       name: "Assignment drift role changed",
+      description: null,
       permissionCodes: ["config.read", "role.manage"],
       windows: [],
     });
@@ -404,6 +412,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     const updated = await put(`/admin/roles/${code}/definition`, managerToken, {
       version: 1,
       name: "Assignment drift role changed",
+      description: null,
       permissionCodes: ["config.read", "role.manage"],
       windows: [],
       previewHash: preview.json().previewHash,
@@ -489,6 +498,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
         {
           version: role.rows[0].version,
           name: role.rows[0].name,
+          description: null,
           permissionCodes,
           windows: currentBody.windows,
         },
@@ -501,6 +511,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
         {
           version: role.rows[0].version,
           name: role.rows[0].name,
+          description: null,
           permissionCodes,
           windows: currentBody.windows,
           previewHash: preview.json().previewHash,
@@ -634,6 +645,309 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     expect(response.json().error).toContain("Role definition management authority is missing");
   });
 
+  it("round-trips description through create, copy, preview, and update", async () => {
+    const sourceCode = roleCode("DESCRIPTION_SOURCE");
+    const copyCode = roleCode("DESCRIPTION_COPY");
+    const created = await post("/admin/roles", managerToken, {
+      code: sourceCode,
+      name: "Description source",
+      description: "Owns the first-level approval for purchase requests.",
+      permissionCodes: ["config.read"],
+      windows: [],
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().description).toBe(
+      "Owns the first-level approval for purchase requests.",
+    );
+
+    // Omitted on copy means "carry the source's description".
+    const copied = await post(`/admin/roles/${sourceCode}/copy`, managerToken, {
+      code: copyCode,
+      name: "Description copy",
+    });
+    expect(copied.statusCode).toBe(201);
+    expect(copied.json().description).toBe(
+      "Owns the first-level approval for purchase requests.",
+    );
+
+    // A supplied description overrides the carried one.
+    const copyCodeTwo = roleCode("DESCRIPTION_COPY_TWO");
+    const copiedTwo = await post(`/admin/roles/${sourceCode}/copy`, managerToken, {
+      code: copyCodeTwo,
+      name: "Description copy two",
+      description: "Overridden on copy.",
+    });
+    expect(copiedTwo.statusCode).toBe(201);
+    expect(copiedTwo.json().description).toBe("Overridden on copy.");
+
+    // An empty string is operator-authored text, preserved as-is; it is NOT
+    // flattened to null. Null is the only "never had one" value.
+    const previewEmpty = await post(
+      `/admin/roles/${copyCode}/preview`,
+      managerToken,
+      {
+        version: 1,
+        name: "Description copy",
+        description: "",
+        permissionCodes: ["config.read"],
+        windows: [],
+      },
+    );
+    expect(previewEmpty.statusCode).toBe(200);
+    expect(previewEmpty.json().role.description).toBe("");
+
+    const updatedEmpty = await put(
+      `/admin/roles/${copyCode}/definition`,
+      managerToken,
+      {
+        version: 1,
+        name: "Description copy",
+        description: "",
+        permissionCodes: ["config.read"],
+        windows: [],
+        previewHash: previewEmpty.json().previewHash,
+        confirm: true,
+      },
+    );
+    expect(updatedEmpty.statusCode).toBe(200);
+    // Version bumps on a description-only change...
+    expect(updatedEmpty.json().version).toBe(2);
+    expect(updatedEmpty.json().description).toBe("");
+
+    const readBack = await get(`/admin/roles/${copyCode}/definition`, managerToken);
+    expect(readBack.statusCode).toBe(200);
+    expect(readBack.json().description).toBe("");
+
+    // ...and null is preserved as null on the way back too.
+    const previewNull = await post(
+      `/admin/roles/${copyCode}/preview`,
+      managerToken,
+      {
+        version: 2,
+        name: "Description copy",
+        description: null,
+        permissionCodes: ["config.read"],
+        windows: [],
+      },
+    );
+    expect(previewNull.statusCode).toBe(200);
+    const updatedNull = await put(
+      `/admin/roles/${copyCode}/definition`,
+      managerToken,
+      {
+        version: 2,
+        name: "Description copy",
+        description: null,
+        permissionCodes: ["config.read"],
+        windows: [],
+        previewHash: previewNull.json().previewHash,
+        confirm: true,
+      },
+    );
+    expect(updatedNull.statusCode).toBe(200);
+    expect(updatedNull.json().version).toBe(3);
+    expect(updatedNull.json().description).toBeNull();
+  });
+
+  it("rejects an over-long description and omits nothing on the whole-definition routes", async () => {
+    const overlong = await post("/admin/roles", managerToken, {
+      code: roleCode("DESCRIPTION_OVERLONG"),
+      name: "Over-long description",
+      description: "x".repeat(501),
+      permissionCodes: ["config.read"],
+      windows: [],
+    });
+    expect(overlong.statusCode).toBe(400);
+    expect(
+      (
+        await pool.query(
+          `SELECT COUNT(*)::int AS count FROM roles
+            WHERE tenant_id = $1 AND code = $2`,
+          [tenantId, roleCode("DESCRIPTION_OVERLONG")],
+        )
+      ).rows[0].count,
+    ).toBe(0);
+
+    // A 500-character description is exactly at the cap and accepted.
+    const atCap = await post("/admin/roles", managerToken, {
+      code: roleCode("DESCRIPTION_AT_CAP"),
+      name: "At-cap description",
+      description: "y".repeat(500),
+      permissionCodes: ["config.read"],
+      windows: [],
+    });
+    expect(atCap.statusCode).toBe(201);
+    expect((atCap.json().description as string).length).toBe(500);
+
+    // The preview states the whole definition, so an omitted description is a
+    // 400 — an accidental blank must not slip through the hash, which covers
+    // only the authorization fields.
+    const omitted = await post(
+      `/admin/roles/${roleCode("DESCRIPTION_AT_CAP")}/preview`,
+      managerToken,
+      {
+        version: 1,
+        name: "At-cap description",
+        permissionCodes: ["config.read"],
+        windows: [],
+      },
+    );
+    expect(omitted.statusCode).toBe(400);
+  });
+
+  it("refuses to deactivate a Role while a live assignment references it", async () => {
+    const code = roleCode("DEACTIVATION");
+    const created = await post("/admin/roles", managerToken, {
+      code,
+      name: "Deactivation role",
+      permissionCodes: ["config.read"],
+      windows: [],
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().isActive).toBe(true);
+
+    const role = await pool.query(
+      `SELECT id FROM roles WHERE tenant_id = $1 AND code = $2`,
+      [tenantId, code],
+    );
+    const holder = await createUser(tenantId, "deactivation-holder");
+    const assignmentId = await assignTenantRole(holder.id, role.rows[0].id);
+
+    const refused = await post(`/admin/roles/${code}/active-state`, managerToken, {
+      isActive: false,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toContain("1 live User assignment(s)");
+    expect(
+      (
+        await pool.query(`SELECT is_active FROM roles WHERE id = $1`, [
+          role.rows[0].id,
+        ])
+      ).rows[0].is_active,
+    ).toBe(true);
+
+    // The guard counts LIVE rows only. A revoked grant keeps its row (Wave 3
+    // revocation is soft) and must not block deactivation.
+    await pool.query(
+      `UPDATE user_role_assignments
+          SET revoked_at = now(), revoked_by = $2, revoke_reason = 'test'
+        WHERE id = $1`,
+      [assignmentId, holder.id],
+    );
+
+    const deactivated = await post(`/admin/roles/${code}/active-state`, managerToken, {
+      isActive: false,
+    });
+    expect(deactivated.statusCode).toBe(200);
+    expect(deactivated.json().isActive).toBe(false);
+
+    // Idempotent: the same request returns the stored definition, no error.
+    const again = await post(`/admin/roles/${code}/active-state`, managerToken, {
+      isActive: false,
+    });
+    expect(again.statusCode).toBe(200);
+    expect(again.json().isActive).toBe(false);
+
+    // A deactivated Role cannot be granted through the governed surface. The
+    // grant path needs user.role.manage, which the role-definition manager
+    // above deliberately does not hold — so a dedicated assigner acts here.
+    const probeCode = roleCode("DEACTIVATION_PROBE");
+    const probeCreated = await post("/admin/roles", managerToken, {
+      code: probeCode,
+      name: "Deactivation probe role",
+      permissionCodes: ["config.read"],
+      windows: [],
+    });
+    expect(probeCreated.statusCode).toBe(201);
+    // Nothing references it, so it deactivates immediately.
+    const probeDeactivated = await post(
+      `/admin/roles/${probeCode}/active-state`,
+      managerToken,
+      { isActive: false },
+    );
+    expect(probeDeactivated.statusCode).toBe(200);
+
+    const assignerRole = await createRole(tenantId, roleCode("DEACTIVATION_ASSIGNER"), [
+      "admin.console.read",
+      "user.role.manage",
+    ]);
+    const assigner = await createUser(tenantId, "deactivation-assigner");
+    await assignTenantRole(assigner.id, assignerRole.id);
+    const assignerToken = tokenFor(tenantId, assigner);
+
+    const probeUser = await createUser(tenantId, "deactivation-probe");
+    const probeGrant = await post(
+      `/admin/users/${probeUser.id}/role-assignments`,
+      assignerToken,
+      { roleCode: probeCode, scopeType: "tenant" },
+    );
+    expect(probeGrant.statusCode).toBe(400);
+    expect(probeGrant.json().error).toContain("is deactivated and cannot be assigned");
+
+    const reactivated = await post(`/admin/roles/${code}/active-state`, managerToken, {
+      isActive: true,
+    });
+    expect(reactivated.statusCode).toBe(200);
+    expect(reactivated.json().isActive).toBe(true);
+  });
+
+  it("keeps a live grant inert when its Role is deactivated, through the projection join", async () => {
+    const code = roleCode("DEACTIVATION_EFFECT");
+    const created = await post("/admin/roles", managerToken, {
+      code,
+      name: "Deactivation effect role",
+      permissionCodes: ["config.read"],
+      windows: [],
+    });
+    expect(created.statusCode).toBe(201);
+    const role = await pool.query(
+      `SELECT id FROM roles WHERE tenant_id = $1 AND code = $2`,
+      [tenantId, code],
+    );
+
+    // The deactivate guard refuses while a live assignment exists, so the row
+    // this test needs is written directly — the same fixture convention as
+    // the rest of this suite. The view's is_active join predicate is what
+    // keeps such a row (drift, restore, a write that bypassed the governed
+    // surface) from granting anything.
+    const holder = await createUser(tenantId, "deactivation-effect-holder");
+    const assignmentId = await assignTenantRole(holder.id, role.rows[0].id);
+
+    const effectiveBefore = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM authorization_effective_user_role_assignments
+        WHERE user_id = $1 AND role_id = $2`,
+      [holder.id, role.rows[0].id],
+    );
+    expect(effectiveBefore.rows[0].count).toBe(1);
+
+    await pool.query(`UPDATE roles SET is_active = false WHERE id = $1`, [
+      role.rows[0].id,
+    ]);
+
+    // The user row stays administratively visible — the row does not vanish,
+    // the grant stops authorizing. That is the JOIN-vs-WHERE distinction.
+    const effectiveAfter = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM authorization_effective_user_role_assignments
+        WHERE user_id = $1 AND role_id = $2`,
+      [holder.id, role.rows[0].id],
+    );
+    expect(effectiveAfter.rows[0].count).toBe(0);
+
+    // And back: reactivation re-projects the same untouched row.
+    await pool.query(`UPDATE roles SET is_active = true WHERE id = $1`, [
+      role.rows[0].id,
+    ]);
+    const effectiveRestored = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM authorization_effective_user_role_assignments
+        WHERE user_id = $1 AND role_id = $2`,
+      [holder.id, role.rows[0].id],
+    );
+    expect(effectiveRestored.rows[0].count).toBe(1);
+  });
+
   // Runs last on purpose: it deliberately strips the shared `managerToken`
   // actor's own authority, so every earlier test that depends on that token
   // has already run.
@@ -663,6 +977,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
       {
         version: role.rows[0].version,
         name: role.rows[0].name,
+        description: null,
         permissionCodes,
         windows: current.windows,
       },
@@ -675,6 +990,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
       {
         version: role.rows[0].version,
         name: role.rows[0].name,
+        description: null,
         permissionCodes,
         windows: current.windows,
         previewHash: preview.json().previewHash,

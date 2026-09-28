@@ -11,6 +11,7 @@
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
 | Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and **Wave A5 are COMPLETED**; no wave is currently active. Waves A6–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
+| Design-only additions outside the denominator | **Epic 15 (Panel Admin) opened 2026-09-28** in `docs/plans/CORE-ROADMAP.md` §4.15 — configuration category structure locked, design interview not started. Design work only; moves no point in this document (see §14) |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -400,3 +401,12 @@ Full Approved Roadmap         353 / 353  100.0%
 - Do not let Advanced features become hidden prerequisites for Business Core usability.
 - Keep Data Scope, tenant isolation, RBAC, audit, Workflow Engine ownership, and Document Core authorization intact.
 - Validate with targeted tests, full API regression, typecheck, lint, build, and whitespace checks before closure.
+
+## 14. Design-Only Work Outside the Denominator
+
+The Core Roadmap (`docs/plans/CORE-ROADMAP.md`) hosts a design-interview program (Epics 1–15) that runs independently of the point-based waves above. It earns no points here and never changes a denominator, matching the "No denominator change unless Founder approves new roadmap scope" rule.
+
+| Epic | Opened | State | Effect on this document |
+|---|---|---|---|
+| 1–14 | 2026-09-23 … 2026-09-25 | Design interviews complete; execution tracked separately in the Core Roadmap | None |
+| **15 — Panel Admin (single configuration center)** | 2026-09-28 | Structure locked: 8 configuration categories, 13 module slots (module list includes Finance, HSE, Project Delivery with status "not yet executed — slot prepared"); design interview not started; implementation not authorized | None. Panel Admin is a consolidation surface over configuration capabilities that already exist or are contracted per-epic; it adds no new roadmap scope. Any future implementation follows the governance rules in §13 and needs an explicit Founder directive |

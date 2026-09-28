@@ -54,6 +54,11 @@ const ROLE_MANAGE = "role.manage";
 const CONFIG_READ = "config.read";
 const ADMIN_CONSOLE_READ = "admin.console.read";
 const UNIQUE_VIOLATION = "23505";
+/** The customer-scope exclusivity trigger's own constraint name. A BEFORE
+ * trigger raises with this CONSTRAINT, so the write path can recognise it the
+ * same way it recognises the exact-assignment unique index. */
+const SCOPE_EXCLUSIVITY_CONSTRAINT =
+  "user_role_assignments_scope_exclusivity_check";
 
 /** Permissions whose combined presence defines Role Definition authority.
  * Removing any of them from a Role is the class of edit that can strand a
@@ -64,6 +69,69 @@ const ROLE_DEFINITION_AUTHORITY_PERMISSIONS = [
   CONFIG_READ,
   ROLE_MANAGE,
 ] as const;
+
+/** §4.4 decision 2 — the Service Operation permission set governed by the
+ * customer-scope ceiling. Only these eight are bounded: permissions from
+ * other modules (customer.read, contract.read, project.read, site.read,
+ * service.read) are what the Customer User portal is built on, and reading
+ * a customer's own row is not what this ceiling bounds. */
+/** Message for scope exclusivity, shared by the pre-check and the trigger
+ * backstop so the client cannot tell which one refused. */
+const SCOPE_EXCLUSIVITY_MESSAGE =
+  "A User may not hold customer-scope and internal assignments at the same time";
+
+/** §4.4 decision 6 — customer scope never coexists with tenant or
+ * organization-unit scope for one user. The trigger
+ * (user_role_assignments_customer_scope_exclusivity) enforces it in the
+ * database; this pre-check gives the write path a clean 409 with the same
+ * message instead of a raw trigger error surfacing as a 500, and is the
+ * race backstop's counterpart, not its replacement. Only LIVE rows
+ * conflict: a revoked or invalidated grant grants nothing. */
+async function assertNoScopeExclusivityConflict(
+  client: { query: PoolClient["query"] },
+  targetUserId: string,
+  scopeType: "tenant" | "organization_unit" | "customer",
+): Promise<void> {
+  const conflicting = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS(
+              SELECT 1
+                FROM user_role_assignments ura
+               WHERE ura.user_id = $1
+                 AND ura.scope_invalidated_at IS NULL
+                 AND ura.revoked_at IS NULL
+                 AND ura.scope_type ${scopeType === "customer" ? "<>" : "="} 'customer'
+           ) AS exists`,
+    [targetUserId],
+  );
+  if (conflicting.rows[0]?.exists) {
+    throw new ConflictError(SCOPE_EXCLUSIVITY_MESSAGE);
+  }
+}
+
+/** The default customer-scope ceiling: exactly these two Service Operation
+ * permissions are grantable at customer scope while the flag is off, and the
+ * other six are refused. Decision 2's "default read ceiling" is the pair, not
+ * the whole module, so this list is the allowlist and the list below is the
+ * governed set it is drawn from. */
+const CUSTOMER_SCOPE_DEFAULT_PERMISSION_CODES: readonly string[] = [
+  "service_operations.read",
+  "service_operations.optimization.read",
+];
+
+/** Every Service Operation permission the ceiling governs. A code in this set
+ * that is NOT in the default allowlist is refused at customer scope while the
+ * flag is off. Permissions from other modules (customer.read, contract.read,
+ * project.read, site.read, service.read) are never bounded here. */
+const CUSTOMER_SCOPE_SERVICE_OPERATION_PERMISSION_CODES: readonly string[] = [
+  "service_operations.read",
+  "service_operations.optimization.read",
+  "service_operations.manage",
+  "service_operations.execute",
+  "service_operations.configure",
+  "service_operations.verify",
+  "service_operations.pack.manage",
+  "service_operations.optimization.apply",
+];
 
 /** Registration statuses under which a window is a real, addressable surface.
  * `belum_terdaftar` is reported by the guard but is not lockable (§4.2/§4.3). */
@@ -447,6 +515,8 @@ export class PgRbacRepository implements RbacRepository {
       `SELECT r.id,
               r.code,
               r.name,
+              r.description,
+              r.is_active,
               COALESCE(r.is_full_access, false) AS is_full_access,
               (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id = r.id)::int
                 AS permission_count,
@@ -466,6 +536,8 @@ export class PgRbacRepository implements RbacRepository {
       id: row.id,
       code: row.code,
       name: row.name,
+      description: row.description,
+      isActive: row.is_active,
       isFullAccess: row.is_full_access,
       permissionCount: row.permission_count,
       assignedUserCount: row.assigned_user_count,
@@ -697,7 +769,11 @@ export class PgRbacRepository implements RbacRepository {
                   ura.revoked_at,
                   ura.revoked_by,
                   ura.revoke_reason,
-                  CASE WHEN r.id IS NOT NULL THEN 'available' ELSE 'unavailable' END
+                  -- Inactive Roles read as "unavailable" here, the same generic
+                  -- state as missing/foreign Roles: the projection keeps naming
+                  -- the Role while the grant it carries stops authorizing, which
+                  -- is exactly the same split revocation established.
+                  CASE WHEN r.id IS NOT NULL AND r.is_active THEN 'available' ELSE 'unavailable' END
                     AS role_state,
                   r.code AS role_code,
                   r.name AS role_name,
@@ -706,6 +782,7 @@ export class PgRbacRepository implements RbacRepository {
                     WHEN ura.scope_invalidated_at IS NULL
                      AND ura.revoked_at IS NULL
                      AND r.id IS NOT NULL
+                     AND r.is_active
                      AND (
                        (
                          ura.scope_type = 'tenant'
@@ -723,6 +800,7 @@ export class PgRbacRepository implements RbacRepository {
                     WHEN ura.scope_invalidated_at IS NULL
                       AND ura.revoked_at IS NULL
                       AND r.id IS NOT NULL
+                      AND r.is_active
                       THEN ou.name
                     ELSE NULL
                   END AS scope_organization_unit_name,
@@ -731,6 +809,7 @@ export class PgRbacRepository implements RbacRepository {
                     WHEN ura.scope_invalidated_at IS NULL
                       AND ura.revoked_at IS NULL
                       AND r.id IS NOT NULL
+                      AND r.is_active
                       THEN c.name
                     ELSE NULL
                   END AS scope_customer_name
@@ -883,7 +962,7 @@ export class PgRbacRepository implements RbacRepository {
       }
 
       const roleResult = await client.query(
-        `SELECT id, code, name
+        `SELECT id, code, name, is_active
            FROM roles
           WHERE tenant_id = $1
             AND code = $2`,
@@ -891,6 +970,14 @@ export class PgRbacRepository implements RbacRepository {
       );
       const role = roleResult.rows[0];
       if (!role) throw new NotFoundError("Role", input.roleCode);
+      // Epic 4 open item 2 — the picker marks a deactivated Role
+      // `selectable: false`; this is the same refusal on the write path, so a
+      // direct API call cannot do what the console will not offer.
+      if (!role.is_active) {
+        throw new ValidationError(
+          `Role '${input.roleCode}' is deactivated and cannot be assigned`,
+        );
+      }
 
       if (input.scopeType === "organization_unit" && visibility.kind === "units") {
         // ADR-0009: authority on a unit reaches everything beneath it, so the
@@ -919,7 +1006,35 @@ export class PgRbacRepository implements RbacRepository {
           WHERE rp.role_id = $1`,
         [role.id],
       );
+      // §4.4 decision 2 — the customer-scope permission ceiling, checked on
+      // the same pass as the delegation and module questions. Tenant-wide
+      // override wins, catalog default otherwise; default is false, so a
+      // tenant that never touches the flag gets the restricted set.
+      const fullSetOpen = await client.query<{ is_enabled: boolean | null }>(
+        `SELECT COALESCE(
+                  (SELECT tff.is_enabled
+                     FROM tenant_feature_flags tff
+                     JOIN feature_flags ff ON ff.id = tff.feature_flag_id
+                    WHERE tff.tenant_id = $1
+                      AND ff.code = 'customer_scope_full_permission_set'
+                      AND tff.scope_type = 'tenant'),
+                  (SELECT ff.default_enabled
+                     FROM feature_flags ff
+                    WHERE ff.code = 'customer_scope_full_permission_set')
+                ) AS is_enabled`,
+        [actor.tenantId],
+      );
       for (const { code } of granted.rows) {
+        if (
+          input.scopeType === "customer" &&
+          !fullSetOpen.rows[0]?.is_enabled &&
+          CUSTOMER_SCOPE_SERVICE_OPERATION_PERMISSION_CODES.includes(code) &&
+          !CUSTOMER_SCOPE_DEFAULT_PERMISSION_CODES.includes(code)
+        ) {
+          throw new ValidationError(
+            `Role '${role.code}' cannot be assigned at customer scope while it carries '${code}' — customer scope is limited to service_operations.read and service_operations.optimization.read unless the customer permission set is opened in Feature Flags`,
+          );
+        }
         if (!delegable.has(code)) {
           throw new ValidationError(
             `Role '${role.code}' carries permission '${code}' outside your delegation authority`,
@@ -973,6 +1088,15 @@ export class PgRbacRepository implements RbacRepository {
         customerName = customer.rows[0].name;
       }
 
+      // §4.4 decision 6 — refuse the mix before the INSERT so the client gets
+      // the same 409 both directions, instead of only the customer-after-
+      // internal direction firing the trigger.
+      await assertNoScopeExclusivityConflict(
+        client,
+        targetUserId,
+        input.scopeType,
+      );
+
       let inserted;
       try {
         inserted = await client.query(
@@ -999,6 +1123,11 @@ export class PgRbacRepository implements RbacRepository {
             "user_role_assignments_exact_assignment_unique"
         ) {
           throw new ConflictError("This exact Role assignment already exists");
+        }
+        // Race backstop for the exclusivity trigger: two grants passing the
+        // pre-check concurrently both land here, exactly one row at a time.
+        if (databaseError.constraint === SCOPE_EXCLUSIVITY_CONSTRAINT) {
+          throw new ConflictError(SCOPE_EXCLUSIVITY_MESSAGE);
         }
         throw error;
       }
@@ -1259,12 +1388,14 @@ export class PgRbacRepository implements RbacRepository {
         code: string;
         role_code: string;
         role_name: string;
+        is_active: boolean;
         permission_code: string;
       }>(
         `SELECT r.id AS role_id,
                 r.code,
                 r.name AS role_name,
                 r.code AS role_code,
+                r.is_active,
                 p.code AS permission_code
            FROM roles r
            JOIN role_permissions rp ON rp.role_id = r.id
@@ -1273,8 +1404,8 @@ export class PgRbacRepository implements RbacRepository {
           ORDER BY r.code, p.code`,
         [actor.tenantId],
       );
-      const emptyRoles = await client.query<{ role_id: string; role_code: string; role_name: string }>(
-        `SELECT r.id AS role_id, r.code AS role_code, r.name AS role_name
+      const emptyRoles = await client.query<{ role_id: string; role_code: string; role_name: string; is_active: boolean }>(
+        `SELECT r.id AS role_id, r.code AS role_code, r.name AS role_name, r.is_active
            FROM roles r
           WHERE r.tenant_id = $1
             AND NOT EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id)
@@ -1284,16 +1415,16 @@ export class PgRbacRepository implements RbacRepository {
 
       const delegable = await this.assignmentDelegablePermissionCodes(client, actor);
       const codesByRole = new Map<string, string[]>();
-      const labelByRole = new Map<string, { code: string; name: string }>();
+      const labelByRole = new Map<string, { code: string; name: string; isActive: boolean }>();
       for (const row of rolePermissions.rows) {
         const codes = codesByRole.get(row.role_id) ?? [];
         codes.push(row.permission_code);
         codesByRole.set(row.role_id, codes);
-        labelByRole.set(row.role_id, { code: row.code, name: row.role_name });
+        labelByRole.set(row.role_id, { code: row.code, name: row.role_name, isActive: row.is_active });
       }
       for (const row of emptyRoles.rows) {
         codesByRole.set(row.role_id, []);
-        labelByRole.set(row.role_id, { code: row.role_code, name: row.role_name });
+        labelByRole.set(row.role_id, { code: row.role_code, name: row.role_name, isActive: row.is_active });
       }
 
       const roles: AssignmentRoleOption[] = [...codesByRole.entries()]
@@ -1301,7 +1432,12 @@ export class PgRbacRepository implements RbacRepository {
           code: labelByRole.get(roleId)!.code,
           name: labelByRole.get(roleId)!.name,
           permissionCount: codes.length,
-          selectable: codes.every((code) => delegable.has(code)),
+          // Deactivated Roles stay VISIBLE (an operator comparing options needs
+          // to see them) but are not offered: the picker never offers a grant
+          // the API would refuse.
+          selectable:
+            labelByRole.get(roleId)!.isActive &&
+            codes.every((code) => delegable.has(code)),
         }))
         .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
 
@@ -1413,10 +1549,18 @@ export class PgRbacRepository implements RbacRepository {
         // Out of visibility is indistinguishable from missing (§4.4 risk row 1).
         throw new NotFoundError("User", targetUserId);
       }
+      // §4.4 decision 6 — this surface only writes internal scopes, so the
+      // conflict it can create is the internal-after-customer one. Refused
+      // before the INSERT; the trigger stays the race backstop.
+      await assertNoScopeExclusivityConflict(
+        client,
+        targetUserId,
+        "organization_unit",
+      );
     }
 
-    const roleRows = await client.query<{ id: string; code: string; name: string }>(
-      `SELECT id, code, name
+    const roleRows = await client.query<{ id: string; code: string; name: string; is_active: boolean }>(
+      `SELECT id, code, name, is_active
          FROM roles
         WHERE tenant_id = $1 AND code = ANY($2::text[])`,
       [actor.tenantId, [...new Set(pairs.map((p) => p.roleCode))]],
@@ -1456,6 +1600,12 @@ export class PgRbacRepository implements RbacRepository {
     for (const pair of pairs) {
       const role = roleByCode.get(pair.roleCode);
       if (!role) throw new NotFoundError("Role", pair.roleCode);
+      // Epic 4 open item 2 — same refusal as the single-assignment path.
+      if (!role.is_active) {
+        throw new ValidationError(
+          `Role '${pair.roleCode}' is deactivated and cannot be assigned`,
+        );
+      }
 
       if (pair.scopeType === "tenant") {
         if (visibility.kind !== "tenant") {
@@ -1665,6 +1815,10 @@ export class PgRbacRepository implements RbacRepository {
           throw new ConflictError(
             "One or more of these Role assignments already exist for this User",
           );
+        }
+        // Race backstop for the exclusivity trigger, same as the single path.
+        if (databaseError.constraint === SCOPE_EXCLUSIVITY_CONSTRAINT) {
+          throw new ConflictError(SCOPE_EXCLUSIVITY_MESSAGE);
         }
         throw error;
       }
@@ -1894,7 +2048,7 @@ export class PgRbacRepository implements RbacRepository {
     roleCode: string,
   ): Promise<RoleDefinition | null> {
     const role = await this.pool.query(
-      `SELECT id, tenant_id, code, name, COALESCE(is_full_access, false) AS is_full_access, version
+      `SELECT id, tenant_id, code, name, description, is_active, COALESCE(is_full_access, false) AS is_full_access, version
          FROM roles
         WHERE tenant_id = $1 AND code = $2`,
       [tenantId, roleCode],
@@ -1990,10 +2144,10 @@ export class PgRbacRepository implements RbacRepository {
       );
 
       const inserted = await client.query(
-        `INSERT INTO roles (tenant_id, code, name)
-         VALUES ($1, $2, $3)
+        `INSERT INTO roles (tenant_id, code, name, description)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [actor.tenantId, input.code, input.name],
+        [actor.tenantId, input.code, input.name, input.description ?? null],
       );
       const roleId = inserted.rows[0].id as string;
       await this.writeRoleGrants(
@@ -2009,6 +2163,8 @@ export class PgRbacRepository implements RbacRepository {
         tenant_id: actor.tenantId,
         code: input.code,
         name: input.name,
+        description: input.description ?? null,
+        is_active: true,
         is_full_access: false,
         version: 1,
       });
@@ -2034,7 +2190,7 @@ export class PgRbacRepository implements RbacRepository {
       await this.requireTransactionRoleDefinitionAuthority(client, actor);
 
       const source = await client.query(
-        `SELECT id, COALESCE(is_full_access, false) AS is_full_access
+        `SELECT id, description, COALESCE(is_full_access, false) AS is_full_access
            FROM roles WHERE tenant_id = $1 AND code = $2`,
         [actor.tenantId, sourceCode],
       );
@@ -2091,11 +2247,21 @@ export class PgRbacRepository implements RbacRepository {
         forNew,
       );
 
+      // A copy carries the source's description unless the caller supplied one:
+      // the copy dialog asks for a name, and a Role named after its source with
+      // no text explaining what it is would be worse documented than what it
+      // was cloned from. `description` is copied as METADATA only — it never
+      // reaches the permission or window rows below.
+      const copyDescription =
+        input.description !== undefined
+          ? input.description
+          : (source.rows[0].description as string | null);
+
       const inserted = await client.query(
-        `INSERT INTO roles (tenant_id, code, name)
-         VALUES ($1, $2, $3)
+        `INSERT INTO roles (tenant_id, code, name, description)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [actor.tenantId, input.code, input.name],
+        [actor.tenantId, input.code, input.name, copyDescription],
       );
       const roleId = inserted.rows[0].id as string;
       await this.writeRoleGrants(
@@ -2111,6 +2277,8 @@ export class PgRbacRepository implements RbacRepository {
         tenant_id: actor.tenantId,
         code: input.code,
         name: input.name,
+        description: copyDescription,
+        is_active: true,
         is_full_access: false,
         version: 1,
       });
@@ -2168,7 +2336,9 @@ export class PgRbacRepository implements RbacRepository {
         tenantId: actor.tenantId,
         code: roleCode,
         name: input.name,
+        description: input.description ?? null,
         isFullAccess: current.isFullAccess,
+        isActive: current.isActive,
         version: input.version,
         permissionCodes,
         windows,
@@ -2176,6 +2346,11 @@ export class PgRbacRepository implements RbacRepository {
       };
       return {
         role: preview,
+        // The hash deliberately covers ONLY the authorization fields (name,
+        // permissions, windows). `description` is metadata: a typo fix must not
+        // invalidate a preview that was approved for its permission change.
+        // Version still moves on a description-only update, which is the token
+        // keeping a stale preview out.
         previewHash: computeDefinitionHash(input.name, permissionCodes, windows),
         affectedUserCount,
       };
@@ -2228,8 +2403,10 @@ export class PgRbacRepository implements RbacRepository {
       // nothing changed, so the token must not advance — moving it would
       // invalidate every other administrator's in-flight preview for no
       // reason. Return the stored definition untouched (no rewrite, no audit).
+      const nextDescription = input.description ?? null;
       if (
         input.name === current.name &&
+        nextDescription === current.description &&
         sameStringArrays(permissionCodes, current.permissionCodes) &&
         sameWindows(windows, current.windows)
       ) {
@@ -2245,8 +2422,8 @@ export class PgRbacRepository implements RbacRepository {
       );
 
       await client.query(
-        `UPDATE roles SET name = $1, version = version + 1 WHERE id = $2`,
-        [input.name, role.id],
+        `UPDATE roles SET name = $1, description = $2, version = version + 1 WHERE id = $3`,
+        [input.name, nextDescription, role.id],
       );
       await client.query(`DELETE FROM role_permissions WHERE role_id = $1`, [
         role.id,
@@ -2268,6 +2445,8 @@ export class PgRbacRepository implements RbacRepository {
         tenant_id: actor.tenantId,
         code: roleCode,
         name: input.name,
+        description: nextDescription,
+        is_active: current.isActive,
         is_full_access: current.isFullAccess,
         version: current.version + 1,
       });
@@ -2335,6 +2514,85 @@ export class PgRbacRepository implements RbacRepository {
     });
   }
 
+  /**
+   * Epic 4 open item 2 — deactivate / reactivate a Role (§4.4).
+   *
+   * The guard is the mirror image of the delete guard, and the difference is
+   * the point. Delete counts every RETAINED row because the FK would cascade
+   * them away with no trace; deactivation keeps its rows, so only LIVE ones
+   * matter — a revoked or scope-invalidated row grants nothing and must not
+   * make a Role undeactivatable.
+   *
+   * The reference count on its own covers the lockout risk. A Role holding
+   * Role-definition authority does so through an effective assignment, and an
+   * effective assignment is live, so the last manager is already inside this
+   * count. Checking `roleDefinitionAuthorityCountSql` on top would re-derive
+   * the same refusal from a narrower population.
+   *
+   * Both directions are idempotent: asking for the state the Role is already
+   * in returns the stored definition without advancing `version` or writing an
+   * audit row, for the same reason the definition no-op path does — a token
+   * that moves on nothing invalidates other administrators' previews for free.
+   */
+  async setRoleDefinitionActive(
+    actor: { tenantId: string; userId: string },
+    roleCode: string,
+    isActive: boolean,
+  ): Promise<RoleDefinition> {
+    return this.inGovernedTransaction(actor.tenantId, async (client) => {
+      await this.requireTransactionRoleDefinitionAuthority(client, actor);
+
+      const role = await this.loadRoleRow(client, actor.tenantId, roleCode);
+      const current = await this.loadRoleDefinition(client, role);
+
+      if (current.isActive === isActive) return current;
+
+      if (!isActive) {
+        const live = await this.countLiveAssignments(
+          client,
+          actor.tenantId,
+          role.id,
+        );
+        if (live > 0) {
+          throw new ConflictError(
+            `Cannot deactivate Role '${roleCode}': ${live} live User assignment(s) still reference it`,
+          );
+        }
+      }
+
+      // `version` advances here too. Deactivation is not a metadata edit: it
+      // changes whether the Role authorizes at all, so any in-flight preview
+      // approved against the previous state must be refused.
+      await client.query(
+        `UPDATE roles SET is_active = $1, version = version + 1 WHERE id = $2`,
+        [isActive, role.id],
+      );
+
+      const after = await this.loadRoleDefinition(client, {
+        id: role.id,
+        tenant_id: actor.tenantId,
+        code: roleCode,
+        name: current.name,
+        description: current.description,
+        is_active: isActive,
+        is_full_access: current.isFullAccess,
+        version: current.version + 1,
+      });
+      await this.recordRoleDefinitionAudit(client, {
+        tenantId: actor.tenantId,
+        actorUserId: actor.userId,
+        roleCode,
+        roleId: role.id,
+        action: isActive
+          ? "role.definition_activated"
+          : "role.definition_deactivated",
+        before: current,
+        after,
+      });
+      return after;
+    });
+  }
+
   private async loadRoleRow(
     client: PoolClient | Pool,
     tenantId: string,
@@ -2344,11 +2602,13 @@ export class PgRbacRepository implements RbacRepository {
     tenant_id: string;
     code: string;
     name: string;
+    description: string | null;
+    is_active: boolean;
     is_full_access: boolean;
     version: number;
   }> {
     const result = await client.query(
-      `SELECT id, tenant_id, code, name, COALESCE(is_full_access, false) AS is_full_access, version
+      `SELECT id, tenant_id, code, name, description, is_active, COALESCE(is_full_access, false) AS is_full_access, version
          FROM roles
         WHERE tenant_id = $1 AND code = $2`,
       [tenantId, roleCode],
@@ -2375,6 +2635,8 @@ export class PgRbacRepository implements RbacRepository {
       tenant_id: string;
       code: string;
       name: string;
+      description: string | null;
+      is_active: boolean;
       is_full_access: boolean;
       version: number;
     },
@@ -2399,6 +2661,8 @@ export class PgRbacRepository implements RbacRepository {
       tenantId: role.tenant_id,
       code: role.code,
       name: role.name,
+      description: role.description,
+      isActive: role.is_active,
       isFullAccess: role.is_full_access,
       version: role.version,
       permissionCodes: permissions.rows.map((r: { code: string }) => r.code),
@@ -2788,6 +3052,27 @@ export class PgRbacRepository implements RbacRepository {
     return result.rows[0].count as number;
   }
 
+  /** LIVE assignment rows for a Role: not revoked, not scope-invalidated. The
+   * deactivation guard's population — unlike the delete guard's retained-row
+   * count, dead rows do not block deactivation because deactivation keeps
+   * them, and they grant nothing. */
+  private async countLiveAssignments(
+    client: PoolClient,
+    tenantId: string,
+    roleId: string,
+  ): Promise<number> {
+    const result = await client.query(
+      `SELECT COUNT(*)::int AS count
+         FROM user_role_assignments ura
+         JOIN users u ON u.id = ura.user_id AND u.tenant_id = $1
+        WHERE ura.role_id = $2
+          AND ura.revoked_at IS NULL
+          AND ura.scope_invalidated_at IS NULL`,
+      [tenantId, roleId],
+    );
+    return result.rows[0].count as number;
+  }
+
   /**
    * How many active Users still hold Role definition authority once the Role
    * under edit ($2) carries the proposed permission set ($3).
@@ -2961,7 +3246,9 @@ export class PgRbacRepository implements RbacRepository {
         | "role.definition_created"
         | "role.definition_copied"
         | "role.definition_updated"
-        | "role.definition_deleted";
+        | "role.definition_deleted"
+        | "role.definition_deactivated"
+        | "role.definition_activated";
       before: RoleDefinition | null;
       after: RoleDefinition | null;
       affectedUserCount?: number;
@@ -2972,6 +3259,8 @@ export class PgRbacRepository implements RbacRepository {
       before: input.before
         ? {
             name: input.before.name,
+            description: input.before.description,
+            isActive: input.before.isActive,
             permissionCodes: input.before.permissionCodes,
             windows: input.before.windows,
             version: input.before.version,
@@ -2980,6 +3269,8 @@ export class PgRbacRepository implements RbacRepository {
       after: input.after
         ? {
             name: input.after.name,
+            description: input.after.description,
+            isActive: input.after.isActive,
             permissionCodes: input.after.permissionCodes,
             windows: input.after.windows,
             version: input.after.version,

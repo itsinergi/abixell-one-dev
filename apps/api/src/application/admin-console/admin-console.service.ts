@@ -598,4 +598,22 @@ export class AdminConsoleService {
     );
     await this.rbacRepo.deleteRoleDefinition(actor, roleCode);
   }
+
+  /** Epic 4 open item 2 — deactivate/activate. Gated exactly like the other
+   * Role-definition writes: this changes whether the Role authorizes, so it
+   * needs the same authority as editing its permission set. The live-assignment
+   * guard for deactivation lives in the repository, inside the tenant lock. */
+  async setRoleDefinitionActive(
+    actor: ActorContext,
+    roleCode: string,
+    isActive: boolean,
+  ): Promise<RoleDefinition> {
+    await this.requireConsoleAccess(actor);
+    await this.rbac.requireTenantScopedPermission(
+      actor.tenantId,
+      actor.userId,
+      ROLE_MANAGE,
+    );
+    return this.rbacRepo.setRoleDefinitionActive(actor, roleCode, isActive);
+  }
 }

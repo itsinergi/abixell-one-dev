@@ -1,8 +1,8 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.10
+**Versi:** 1.13
 **Tanggal:** 2026-09-28
-**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. **Wawancara customer scope selesai 2026-09-28 — enam keputusan terkunci (eksternal saja, default baca dua permission dengan opsi set penuh, permukaan internal tertutup, Admin Tenant pemberi, pencabutan manual plus penjaring sistem, tidak boleh campur scope); item terbuka 1, 2, 5, 6, 7 juga terkunci.** Sisa: pekerjaan implementasi, menunggu modul Service Operation dibuka
+**Status:** Epic 1 siap eksekusi; Epic 2–6 sudah digali; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. **Wawancara customer scope selesai 2026-09-28 — enam keputusan terkunci (eksternal saja, default baca dua permission dengan opsi set penuh, permukaan internal tertutup, Admin Tenant pemberi, pencabutan manual plus penjaring sistem, tidak boleh campur scope); item terbuka 1–7 seluruhnya terkunci, termasuk item 4 (batch atomic all-or-nothing) dan item 5–7.** Implementasi seluruh pekerjaan yang lahir dari keputusan itu selesai 2026-09-28 (migration 1788300000000–1788700000000), termasuk penutupan utang kamus rute Wave 2/3. **Sisa Epic 4: hanya filter permukaan internal customer, yang menjadi deliverable wajib modul Service Operation karena belum ada query customer-facing untuk dipasangi filter.** **Epic 15 (Panel Admin) dibuka 2026-09-28 — struktur kategori konfigurasi dan slot modul terkunci sebagai bahan wawancara; detail di §4.15.**
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
 
 ---
@@ -185,8 +185,9 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 | 12 | Reporting, Scheduler & Notification Artifacts | Epic 7, 11 | **Digali 2026-09-25 — detail di §4.12, siap desain setelah Epic 7 dan 11** |
 | 13 | UI/UX Theme System & Generic Rendering | Epic 2 | **Digali 2026-09-25 — detail di §4.13, siap desain setelah Epic 2; design system dibangun native di dalam repo (keputusan #6 direvisi 2026-09-25)** |
 | 14 | Finance & Accounting Posting | Epic 7 | **Digali 2026-09-25 — detail di §4.14 (kernel posting saja); sisanya Wave A6 sesi terpisah; siap desain setelah Epic 7, 8, 9, 11 + tinjauan akuntan untuk template bagan akun** |
+| 15 | Panel Admin — Pusat Konfigurasi Tunggal | Epic 2, 4, 5, 8, 9, 12, 13 | **Dibuka 2026-09-28 — struktur 8 kategori konfigurasi dan 13 slot modul terkunci sebagai bahan wawancara (§4.15); wawancara desain belum dilakukan** |
 
-Setiap Epic 2–14 digali lewat wawancara sebelum ditulis detail dan dieksekusi, mengikuti mekanisme yang sama dengan Epic 1.
+Setiap Epic 2–15 digali lewat wawancara sebelum ditulis detail dan dieksekusi, mengikuti mekanisme yang sama dengan Epic 1.
 
 ---
 
@@ -1184,7 +1185,7 @@ Halaman Users menampilkan hanya user yang berada dalam batas visibility actor. U
 - status awal sesuai aturan identity;
 - nol atau beberapa assignment awal.
 
-Create tanpa assignment sah dan menghasilkan user tanpa akses operasional. Bila assignment awal dipilih, beberapa pasangan role + scope diproses sebagai satu transaksi dan satu konfirmasi. Kegagalan satu pasangan menggagalkan seluruh batch, kecuali kelak founder memutuskan mode partial success secara eksplisit.
+Create tanpa assignment sah dan menghasilkan user tanpa akses operasional. Bila assignment awal dipilih, beberapa pasangan role + scope diproses sebagai satu transaksi dan satu konfirmasi. Kegagalan satu pasangan menggagalkan seluruh batch. **Keputusan dikunci 2026-09-28 (item terbuka 4): atomic all-or-nothing — mode partial success tidak dipakai.**
 
 ##### D. Dua permukaan assignment
 
@@ -1381,6 +1382,8 @@ Konsekuensinya `enforcementStatus` berbunyi `"enforced"` — dan itu benar dalam
 | Regression matrix (langkah 24) | Tenant-wide manager, region (OU-scoped) manager, dan user tanpa assignment: matriks diuji pada kedua permukaan. |
 | Dua permukaan satu kebijakan (langkah 25) | **Cacat nyata ditemukan dan diperbaiki saat pengujian ini**: dua lookup target jalur tulis (`createGovernedRoleAssignment` dan `resolveAssignmentBatch`) belum memfilter `revoked_at IS NULL`, sehingga grant OU yang telah dicabut masih memberi jangkauan tulis sementara jalur baca sudah mengecualikannya. Ketiga lookup target kini konsisten (grant, batch, revoke, baca). Uji identitas permukaan membandingkan set baris per target antara `/admin/users/:id/access` dan `/admin/assignments`. |
 
+**Penutupan 2026-09-28 — item terbuka 1, 2, 4, dan kamus rute.** Empat migration: `1788300000000` (kolom `roles.description`, NULL atau ≤500 karakter, dikecualikan dari preview hash tapi menaikkan versi), `1788400000000` (`roles.is_active` + predicate JOIN pada view `authorization_effective_user_role_assignments`), `1788500000000` (trigger `enforce_customer_scope_exclusivity` + katalog feature flag `customer_scope_full_permission_set`), `1788600000000` (kamus rute `active-state`), dan `1788700000000` (kamus tujuh rute Waves 2–3 — assignment-options, assignments, access, POST users, assignment-batches, assignment-previews, revoke — plus penghapusan baris kamus `api:DELETE .../role-assignments/:assignmentId` untuk rute DELETE yang sudah pensiun saat Wave 3 menggantinya dengan POST revoke beralasan; `dictionary-seed-parity` kini hijau penuh). Uji setelah penutupan: `role-definition.test.ts` 18/18, `admin-access-management.test.ts` 32/32, `dictionary-seed-parity.test.ts` 7/7. Item terbuka 4 dikunci atomic all-or-nothing tanpa perubahan kode; tabel risiko dan bagian C.3 mengikuti.
+
 **Bukti Gelombang 3–4** (semua pada database terisolasi `abixell_one_epic3_wave4`):
 `tests/integration/epic4-wave3-revocation.test.ts` 10/10 — retensi baris + provenance, permission hilang pada check berikutnya, proyeksi revoked di kedua permukaan, audit before/after tunggal, double-revoke 409, re-grant baris baru dengan id berbeda, alasan wajib + batas 500 + strict, out-of-scope/foreign 404, gerbang permission ganda (403 tanpa `admin.console.read` maupun tanpa `user.role.manage`), trigger monoton (UPDATE mencoba menghapus provenance tetap ditolak), self-revoke dan final-manager 409. `tests/integration/epic4-wave4-hardening.test.ts` 9/9 — parity pesan modul inactive antar route, empat penolakan terbedakan, matriks regresi tiga aktor, identitas dua permukaan, dan revoked-OU-grant tidak lagi memberi jangkauan tulis di grant/batch/preview. `tests/integration/admin-access-management.test.ts` 31/31 setelah perubahan, `role-definition.test.ts` 14/14, `window-enforcement.test.ts` 9/9. `tsc --noEmit` bersih di `apps/api` dan `apps/web`.
 
@@ -1425,16 +1428,22 @@ Customer scope tidak dianggap selesai hanya karena kolom dan authorization helpe
 | 3 | Data apa yang tetap tertutup walaupun user memiliki role yang sama | **Permukaan internal tertutup.** Daftar tetap: catatan internal (`customers.notes`), audit trail dan riwayat perubahan, baris customer lain, direktori staf internal, dan data modul lain (finance, hse, dan seterusnya). Penegakan di query server, bukan penyembunyian di React; penolakan berbentuk 403/404 mengikuti aturan out-of-scope yang sudah berjalan. |
 | 4 | Siapa yang boleh memberi customer scope | **Admin Tenant.** Guard sama seperti assignment internal: `admin.console.read` plus `user.role.manage` pada grant tenant-scope, ditambah delegation ceiling. Super Admin memakai jalur yang sama dengan authority lebih tinggi. |
 | 5 | Kapan akses dicabut, siapa pelakunya, bagaimana auditnya | **Manual plus penjaring sistem.** Jalur resmi: Admin Tenant mencabut lewat UI Gelombang 3 (`revoked_at`, `revoked_by`, `revoke_reason`, audit `user.role_revoked`), sehingga audit selalu memiliki pelaku bernama dan alasan. Penjaring: bila customer dihapus lebih dulu, trigger `enforce_role_assignment_scope_invalidation` menandai `scope_invalidated_at` seperti sekarang. Tidak ada jalur backend baru. |
-| 6 | Apakah customer scope boleh dimiliki bersamaan dengan tenant atau organization-unit scope | **Tidak boleh.** Satu user tidak boleh memegang customer scope dan tenant atau organization-unit scope sekaligus. Ditegakkan di database lewat partial unique index pada `user_id`, bukan hanya validasi aplikasi. |
+| 6 | Apakah customer scope boleh dimiliki bersamaan dengan tenant atau organization-unit scope | **Tidak boleh.** Satu user tidak boleh memegang customer scope dan tenant atau organization-unit scope sekaligus. **Ditegakkan di database lewat trigger `enforce_customer_scope_exclusivity` (BEFORE INSERT OR UPDATE, hanya baris hidup — `revoked_at IS NULL AND scope_invalidated_at IS NULL`), bukan hanya validasi aplikasi.** Partial unique index tidak bisa menyatakan aturan ini: index pada `user_id` yang dibatasi ke baris customer akan melarang dua assignment customer untuk satu user (bukan aturannya), dan index `(user_id, is_customer)` akan melarang dua assignment internal (kejadian biasa yang sah). |
 
-Ketiga keputusan pada baris 1, 4, dan 6 memerlukan pekerjaan backend saat implementasi dibuka: constraint campur scope (partial unique index pada `user_id`), allowlist permission customer (plafon default dua permission dengan jalur pembukaan set penuh), dan daftar tetap permukaan internal yang harus difilter di setiap query customer-facing. Ketiganya belum dikerjakan dan tidak termasuk Epic 4.
+**Implementasi 2026-09-28 (migration `1788500000000`):** aturan campur scope (baris 6) dan plafon permission customer (baris 2) sudah dibangun. Yang tertunda hanya daftar tetap permukaan internal (baris 3), karena belum ada query customer-facing untuk dipasangi filter — modul Service Operation belum ada. Pekerjaan itu dicatat sebagai **deliverable wajib modul Service Operation**, bukan sebagai item Epic 4.
+
+Dua aturan yang sudah dibangun:
+
+- **Campur scope** — trigger `enforce_customer_scope_exclusivity` di `user_role_assignments`. Kedua arah (customer pada user internal, dan sebaliknya) ditolak dengan error code `23514` bertanda constraint `user_role_assignments_scope_exclusivity_check`; repository menambahkan pre-check yang menghasilkan 409 dengan pesan yang sama, sehingga klien tidak bisa membedakan mana yang menolak. Row yang di-revoke atau di-invalidate tidak ikut berkonflik — row yang tidak memberi akses tidak bisa berkonflik.
+- **Plafon permission customer** — allowlist default `{service_operations.read, service_operations.optimization.read}` dari delapan permission modul Service Operation; enam sisanya ditolak saat grant dengan pesan yang menyebut kedua permission yang diizinkan. Pembukaan set penuh lewat feature flag `customer_scope_full_permission_set` (`default_enabled = false`, override per tenant lewat surface `config.manage` yang sudah ada), sehingga pemilik produk dapat membukanya tanpa migration. Plafon hanya mengikat modul Service Operation; permission modul lain (`customer.read`, `contract.read`, `project.read`, `site.read`, `service.read`) tidak dibatasi.
 
 #### Keputusan item terbuka terkait (2026-09-28)
 
 | # | Item terbuka | Keputusan |
 |---|---|---|
-| 1 | Field metadata role yang boleh diedit tenant | **`name` dan `description`.** `code` tetap karena dipakai di pesan error dan audit; daftar permission diubah lewat jalur terpisah yang sudah ada. Perlu migration menambah kolom `description` pada `roles` dan field pada form role; belum dikerjakan. |
-| 2 | Role ber-assignment boleh di-deactivate atau tidak | **Tidak boleh selama masih ada assignment hidup.** Permintaan di-deactivate ditolak dengan pesan yang menyebut jumlah assignment, mengikuti bentuk guard delete role yang sudah ada. |
+| 1 | Field metadata role yang boleh diedit tenant | **`name` dan `description`.** `code` tetap karena dipakai di pesan error dan audit; daftar permission diubah lewat jalur terpisah yang sudah ada. **Diimplementasi 2026-09-28** (migration `1788300000000`, field form create/copy dan editor definisi; description dikecualikan dari preview hash tapi menaikkan versi). |
+| 2 | Role ber-assignment boleh di-deactivate atau tidak | **Tidak boleh selama masih ada assignment hidup.** Permintaan di-deactivate ditolak dengan pesan yang menyebut jumlah assignment, mengikuti bentuk guard delete role yang sudah ada. **Diimplementasi 2026-09-28** (migration `1788400000000`, route `active-state` dengan kamus `1788600000000`). |
+| 4 | Batch assignment gagal seluruhnya atau partial success | **Atomic all-or-nothing.** Gagal satu pasangan membatalkan seluruh batch; satu governed transaction, satu hasil, satu audit batch. **Dikunci 2026-09-28; implementasi sudah sesuai tanpa perubahan kode.** |
 | 5 | Retensi dan akses ke riwayat assignment revoked | **Disimpan selamanya** sampai Epic 10 menetapkan kebijakan retensi artefak yang berlaku untuk semua tabel riwayat, termasuk tabel ini. Tidak ada migration retensi dan tidak ada purge terjadwal sekarang. |
 
 Sampai session itu selesai:
@@ -1445,19 +1454,19 @@ Sampai session itu selesai:
 - menu/transaksi Service Operation yang memerlukan customer scope tetap mengikuti default tertutup;
 - keputusan customer scope tidak boleh ditebak dari kebutuhan internal tenant.
 
-Status: **Wawancara selesai 2026-09-28 — enam keputusan terkunci di atas.** Batasan di atas (UI tidak menawarkan customer scope, default tertutup) tetap berlaku sampai implementasi Service Operation menjalankan ketiga pekerjaan backend yang dicatat.
+Status: **Wawancara selesai 2026-09-28 — enam keputusan terkunci di atas.** Dua dari tiga pekerjaan backend tercatat sudah dibangun 2026-09-28 (trigger campur scope, plafon permission customer plus feature flag-nya); yang tertunda hanya filter permukaan internal, karena belum ada query customer-facing untuk dipasangi filter. Batasan yang masih berlaku: UI Epic 4 (jalur batch) tetap tidak menawarkan customer scope sampai modul Service Operation dibuka, dan default set permission tetap tertutup.
 
 #### Item terbuka Epic 4
 
 | # | Item | Perlu |
 |---|---|---|
-| 1 | ~~Field metadata role yang boleh diedit tenant selain code, nama, dan permission~~ **Selesai 2026-09-28:** `name` dan `description` boleh diedit tenant; `code` tetap; permission lewat jalur terpisah. Perlu migration kolom `description` pada `roles` dan field pada form role. | Keputusan saat desain kamus Epic 2/eksekusi Epic 4 |
-| 2 | ~~Apakah role yang masih memiliki assignment boleh di-deactivate tanpa revoke semua assignment~~ **Selesai 2026-09-28:** tidak boleh selama masih ada assignment hidup; permintaan ditolak dengan pesan yang menyebut jumlah assignment. | Keputusan lifecycle role sebelum implementasi |
+| 1 | ~~Field metadata role yang boleh diedit tenant selain code, nama, dan permission~~ **Selesai dan diimplementasi 2026-09-28:** `name` dan `description` boleh diedit tenant; `code` tetap; permission lewat jalur terpisah. Migration `1788300000000` menambah kolom `roles.description` (NULL atau ≤500 karakter) dan field textarea description ada di form create/copy serta editor definisi; description dikecualikan dari preview hash (perbaikan typo tidak membatalkan preview yang disetujui) tetapi perubahan description saja tetap menaikkan versi. | Keputusan saat desain kamus Epic 2/eksekusi Epic 4 |
+| 2 | ~~Apakah role yang masih memiliki assignment boleh di-deactivate tanpa revoke semua assignment~~ **Selesai dan diimplementasi 2026-09-28:** tidak boleh selama masih ada assignment hidup; permintaan ditolak dengan pesan yang menyebut jumlah assignment. Migration `1788400000000` menambah `roles.is_active`, predicate `r.is_active` masuk JOIN (bukan WHERE) view `authorization_effective_user_role_assignments`, dan route `POST /admin/roles/:roleCode/active-state` (dictionary row `1788600000000`) menjadi jalur lifecycle-nya; Role nonaktif tidak bisa di-grant, dan penonaktifan berlaku pada permission check berikutnya tanpa logout. | Keputusan lifecycle role sebelum implementasi |
 | 3 | ~~Bentuk alasan pencabutan dan apakah wajib untuk semua revoke~~ **Selesai 2026-09-28 (Gelombang 3):** alasan wajib, teks bebas 1–500 karakter, ditolak bila kosong/lewat batas/membawa kunci asing (`.strict()`); alasan masuk metadata audit `user.role_revoked`. Keputusan berlaku untuk permukaan assignment Epic 4. | Keputusan audit/lifecycle sebelum Gelombang 3 |
-| 4 | Apakah batch assignment gagal seluruhnya atau boleh partial success | Keputusan transaksi sebelum implementasi bulk |
+| 4 | ~~Apakah batch assignment gagal seluruhnya atau boleh partial success~~ **Selesai dan dikunci 2026-09-28: atomic all-or-nothing.** Gagal satu pasangan role+scope membatalkan seluruh batch; satu governed transaction, satu hasil, satu audit batch. Implementasi sekarang sudah begini (satu multi-row INSERT di `rbac.repository.pg.ts`, konflik satu pasangan membatalkan semuanya, `23505` sebagai backstop race), jadi tidak ada pekerjaan kode; keputusan ini hanya mengunci status quo. | Keputusan transaksi sebelum implementasi bulk |
 | 5 | ~~Retensi dan akses ke riwayat assignment revoked~~ **Selesai 2026-09-28:** disimpan selamanya sampai Epic 10 menetapkan kebijakan retensi artefak yang berlaku untuk semua tabel riwayat. Tanpa purge terjadwal sekarang. | Epic 10/audit policy, sebelum production |
-| 6 | ~~Enam aturan customer scope untuk Service Operation~~ **Selesai 2026-09-28:** enam keputusan terkunci pada tabel wawancara di atas (eksternal saja; default baca dua permission dengan opsi set penuh; permukaan internal tertutup; Admin Tenant pemberi; manual plus penjaring sistem; tidak boleh campur scope). Implementasi menunggu Service Operation. | Session terpisah; belum boleh diputuskan di Epic 4 |
-| 7 | ~~Perilaku customer scope bila user memiliki scope internal bersamaan~~ **Selesai 2026-09-28:** terjawab oleh keputusan 6 — tidak boleh dimiliki bersamaan, ditegakkan di database. | Session terpisah; jangan disimpulkan dari helper backend saat ini |
+| 6 | ~~Enam aturan customer scope untuk Service Operation~~ **Selesai 2026-09-28:** enam keputusan terkunci pada tabel wawancara di atas (eksternal saja; default baca dua permission dengan opsi set penuh; permukaan internal tertutup; Admin Tenant pemberi; manual plus penjaring sistem; tidak boleh campur scope). Dua aturan yang bisa dibangun tanpa query customer-facing sudah diimplementasi lewat migration `1788500000000`. **Sisa yang wajib: filter permukaan internal** (catatan internal, audit trail, baris customer lain, direktori staf internal) di setiap query customer-facing — tidak ada query seperti itu sampai modul Service Operation ada, jadi pekerjaan ini dicatat sebagai deliverable wajib modul tersebut. | Session terpisah; belum boleh diputuskan di Epic 4 |
+| 7 | ~~Perilaku customer scope bila user memiliki scope internal bersamaan~~ **Selesai 2026-09-28:** terjawab oleh keputusan 6 — tidak boleh dimiliki bersamaan, ditegakkan di database lewat trigger `enforce_customer_scope_exclusivity`. | Session terpisah; jangan disimpulkan dari helper backend saat ini |
 
 #### Strategi mitigasi risiko Epic 4
 
@@ -1470,7 +1479,7 @@ Status: **Wawancara selesai 2026-09-28 — enam keputusan terkunci di atas.** Ba
 | Copy Role menyalin user secara diam-diam | Banyak user menerima akses baru tanpa review | Salin role_permissions dan batasan saja; assignment selalu kosong | Test hasil copy memiliki nol assignment baru |
 | Edit role langsung mengubah banyak user tanpa pemahaman | Gangguan operasi dan privilege tak terduga | Impact preview, versi definisi, konfirmasi eksplisit, audit before/after | Test preview menghitung affected users dan diff permission |
 | Revoke menghapus histori | Investigasi dan audit kehilangan konteks | Soft revoke row; pisahkan dari scope invalidation; audit append-only | Riwayat user menampilkan revoked assignment lengkap |
-| Batch assignment hanya sebagian berhasil tanpa diketahui | User mendapat akses tidak lengkap atau salah | Default satu governed transaction, satu hasil, satu audit batch | Test kegagalan satu item membatalkan batch sesuai keputusan |
+| Batch assignment hanya sebagian berhasil tanpa diketahui | User mendapat akses tidak lengkap atau salah | Satu governed transaction, satu hasil, satu audit batch — dikunci 2026-09-28 (item terbuka 4) | Test kegagalan satu item membatalkan batch sesuai keputusan |
 | User baru menerima akses default tak disengaja | Akses terbuka sebelum review | Default tanpa assignment; assignment awal hanya eksplisit | Test create user tanpa assignment menghasilkan effective access kosong |
 | Customer scope dibuka terlalu dini | Data customer atau menu eksternal terbuka tanpa policy | Feature gate UI; session Service Operation wajib selesai lebih dulu | Test Admin Tenant tidak melihat opsi customer scope |
 | Dua permukaan UI memiliki aturan berbeda | Admin dapat melewati batas lewat halaman lain | Satu application service/policy dipakai Users dan Assignment List | Test mutation melalui dua route menghasilkan keputusan sama |
@@ -1495,7 +1504,7 @@ Status: **Wawancara selesai 2026-09-28 — enam keputusan terkunci di atas.** Ba
 - Customer scope tetap tertutup pada UI Epic 4 sampai session Service Operation menghasilkan keputusan lengkap.
 - Test dijalankan pada database terisolasi, bukan `abixell_one_dev`.
 
-**Epic 4 dinyatakan selesai sampai UI/UX pada 2026-09-28.** Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI dua permukaan), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun, diuji, dan tercatat. Wawancara customer scope dan item terbuka 1, 2, 5 juga selesai 2026-09-28 — seluruh keputusan terkunci di tabel di atas. Yang tersisa bukan keputusan melainkan pekerjaan implementasi: migration `description` pada `roles` plus form role (item 1), guard deactivate role (item 2), dan ketiga pekerjaan backend customer scope yang menunggu dibukanya modul Service Operation.
+**Epic 4 dinyatakan selesai sampai UI/UX pada 2026-09-28.** Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI dua permukaan), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun, diuji, dan tercatat. Wawancara customer scope dan seluruh item terbuka (1–7) juga selesai 2026-09-28 — setiap keputusan terkunci di tabel di atas, dan pekerjaan implementasi yang lahir darinya sudah dibangun (migration `1788300000000`–`1788700000000`). Sisa satu-satunya bukan pekerjaan Epic 4: filter permukaan internal pada query customer-facing, yang menunggu modul Service Operation dan sudah dicatat sebagai deliverable wajib modul itu.
 
 #### Catatan implementasi terhadap kondisi saat ini
 
@@ -4617,6 +4626,103 @@ Empat catatan yang harus dibaca sebelum pekerjaan dimulai:
 
 ---
 
+### 4.15 EPIC 15 — Panel Admin: Pusat Konfigurasi Tunggal
+
+#### Problem statement
+
+Konfigurasi Abixell One hari ini tersebar di tiga tempat dengan tiga sejarah berbeda: halaman Administration (`/administration`, permission `config.manage`, Phase 0) yang menampung panel Modules, Feature Flags, Terminology, Reference Data, Numbering, Workflow, dan Shared Services dalam satu halaman; halaman Complaint Configuration (`/administration/complaints`, permission `complaint.configure`, Phase 1B) yang menjadi satu-satunya konfigurasi per modul dengan halaman sendiri; dan Admin Console (`/admin`, permission `admin.console.read`, Phase 11C/11F) yang bersifat baca dengan dua pengecualian tulis (assignment user-role dan nama tenant).
+
+Pemilik produk menetapkan arah baru pada 2026-09-28: hanya boleh ada **satu menu pengaturan** — pusat administrasi, setup, konfigurasi, dan setting seluruh Abixell One, bernama **Panel Admin**. Admin Console yang sekarang menjadi dasbor detail: setiap tombol, angka, dan hasil di dalamnya merujuk ke informasi detail hingga ke konfigurasi terdalam. Klik menu Administration membuka satu halaman dasbor konfigurasi.
+
+Arsitektur target ini sejalan dengan `docs/architecture/dual-admin-console.md` §3.2, yang sejak 2026-08-23 sudah memuat daftar wewenang Business Admin Console: user dan role, hierarchy organisasi, terminology dan branding, reference data dan numbering, template notifikasi, workflow definition, feature flag dan aktivasi modul, validasi konfigurasi tenant, dan eksplorasi audit. Panel Admin bukan ide baru; dia adalah bentuk UI dari kontrak yang sudah disetujui. Yang belum ada adalah struktur menu kategorinya.
+
+#### Keputusan terkunci 2026-09-28 (disetujui pemilik produk dari pembahasan kategori)
+
+##### Putaran 1 — Struktur kategori
+
+1. **Delapan kategori konfigurasi, bukan sembilan.** Finance tidak menjadi kategori sendiri karena dia modul; konfigurasi finance masuk Module Config. Kategori: Module, Platform, Org, System, User & Akses, Workflow & Approval, Notification & Kanal, Document.
+2. **Kategori adalah rumah, bukan jadwal wave.** Rumah konfigurasi sebuah modul disiapkan walau isinya belum dieksekusi (contoh: Finance sebelum Wave A6, HSE dan Project Delivery sebelum Wave A7). Tidak ada kategori "nanti"; perbedaannya hanya penanda status isian, bukan keberadaan rumah.
+3. **Kategori 2–8 lintas modul; hanya Module Config yang per modul.** Itulah alasan pemisahan: Workflow, Notification, Document, dan kategori lainnya melayani semua modul sekaligus.
+4. **Module Config berisi slot terpisah per modul — tidak ada penggabungan.** Asset, Service Operations, Project Delivery, dan HSE masing-masing slot sendiri; digabung dalam satu baris dilarang.
+5. **Istilah Workforce berganti HRIS.** Label modul `workforce` di Panel Admin adalah HRIS. Penerapan (terminology override per tenant vs penggantian label platform) adalah keputusan implementasi yang dibahas saat wawancara desain — lihat open item #4.
+
+##### Putaran 2 — Tiga belas slot Module Config
+
+Sumber daftar: katalog modul nyata `MODULE_METADATA` (`apps/web/src/lib/capabilities.ts:165`), 13 kode modul.
+
+| # | Kode modul | Label di Panel Admin | Isi konfigurasi | Status isian |
+|---|---|---|---|---|
+| 1 | `customer_complaint` | Customer Complaints | Kategori, SLA, eskalasi | Existing — ComplaintConfigPage |
+| 2 | `survey_assessment` | Surveys & Assessments | Survey content (CFG-011), outcome policy (CFG-012) | API delivered, UI belum |
+| 3 | `service_operations` | Service Operations | Vertical service packs, route/roster/workload policy | Wave A3 delivered |
+| 4 | `customer_commercial` | Customers & Commercial | Sales pipeline, quotation & pricing policy, portal | Wave A1 delivered |
+| 5 | `workforce` | HRIS | Payroll policy, BPJS, PPh21, shift, leave, overtime | Wave A4 delivered |
+| 6 | `supply_chain` | Supply Chain | Valuation policy (FIFO/landed cost), reorder, supplier evaluation | Wave A5 delivered |
+| 7 | `warehouse_management` | Warehouse Management | Topologi gudang, bin/location, batch quarantine | Wave A5 delivered |
+| 8 | `procurement_management` | Procurement Management | RFQ/tender, kontrak pembelian, approval belanja | Wave A5 delivered |
+| 9 | `asset` | Asset Management | Preventive maintenance schedule, meter, spare part, reliability | Wave A3 delivered |
+| 10 | `finance` | Finance | Accounting policy, GL mapping, COA, fiscal period, posting/reversal | Belum dieksekusi (Wave A6) — slot tetap disiapkan |
+| 11 | `hse` | Health, Safety & Environment | Investigation, JSA/HIRA, Permit to Work, inspection programme | Belum dieksekusi (Wave A7) — slot tetap disiapkan |
+| 12 | `project_delivery` | Project Delivery | WBS/baseline, resource loading, earned value | Belum dieksekusi (Wave A7) — slot tetap disiapkan |
+| 13 | `reporting_insight` | Reporting & Insights | Governed BI registry, report/view definition | Wave A2 delivered |
+
+##### Putaran 3 — Isi kategori lintas modul
+
+| Kategori | Isi | Sumber |
+|---|---|---|
+| Platform Config | Branding client-facing (CFG-013, ADR-0003), terminology (CFG-001), theme system native (Epic 13), extension hooks registry (Epic 11), numbering global (pattern builder Epic 8 #3–#7), slot Wave A8 (partner API, AI readiness, marketplace) | Epic 11, 13; PRD 07; ADR-0003 |
+| Org Config | Tenant profile, Legal Entity (profil legal lengkap, lifecycle `draft → active → inactive → tombstone`), Organization Unit + hierarchy effective-dated, Department master, usulan perubahan struktur (draft → Super Admin publish/reject), scope `legal_entity` | Epic 5 §4.5 |
+| System Config | Parameter berjenjang System → Client → Organization dengan tampilan nilai efektif + level asal (Epic 8 #16, pola `AD_SysConfig.ConfigurationLevel`), password & session policy (Epic 10), audit retention, reference data (CFG-002) | Epic 8, 10; ADR-0006 |
+| User & Akses Config | User management + role assignment (Epic 4), role definition dari katalog permission (CFG-010), permission catalog, user security (reset password via admin, force logout) | Epic 4, 10; Phase 11F |
+| Workflow & Approval Config | Definisi workflow metadata-driven + versioning (Epic 9), approval matrix (approver role, batas nominal, akumulasi, anti self-approval — Epic 1), SLA per step (CFG-004), monitor approval instance | Epic 1, 9; CFG-003/014 |
+| Notification & Kanal Config | Kanal SMTP / Web Push / Telegram (Epic 12 — kanal dulu), template per event × kanal (CFG-006), parameter ambang & penerima default | Epic 12; CFG-006 |
+| Document Config | Document type registry + `config_extra` per modul (Epic 8 #1), document codes sebagai kunci klasifikasi GL (Epic 8 #2), sequence & audit penomoran dengan reset bulanan per kode (Epic 8 #5/#11), counter document (Epic 8 #19, eksekusi Epic 11), export/import JSON (Epic 8 #21) | Epic 7, 8 |
+
+##### Putaran 4 — Prinsip yang mengikat
+
+1. **Konfigurasi adalah data terstruktur, bukan permukaan pemrograman** (CFG-R3). Panel Admin adalah authoring UI atas nilai finite; tanpa script, SQL, atau DSL bebas — konsisten dengan larangan `dual-admin-console.md` §3.3.
+2. **Presedensi scope selalu tampak.** Tiap parameter berjenjang ditampilkan dengan nilai efektif + level asal (Organization → Client → System). Ini syarat UI, bukan opsi (ADR-0006, Epic 8 #16).
+3. **Panel Admin tidak hardcode daftar modul.** Daftar dibaca dari registry modul; tiap modul mendeklarasikan konfigurasinya lewat kontrak registrasi — pola yang sama dengan registrasi tipe dokumen Epic 8 #22. Modul belum dibangun → slot tampil terkunci/kosong dengan alasan, bukan tidak ada.
+4. **Server yang menentukan visibilitas slot terkunci.** Konsep `locked` + `lockedReason` sudah ada di payload menu (Epic 3 Wave 2, [servedNav.ts:76](apps/web/src/lib/servedNav.ts:76)); client tidak menebak.
+5. **Admin Console menjadi dasbor detail.** Setiap tombol, angka, dan hasilnya merujuk ke informasi detail hingga konfigurasi terdalam — tautan mengarah ke Panel Admin, bukan duplikasi kontrol tulis.
+
+#### Basis arsitektur dan bukti existing
+
+| Fakta | Sumber | Relevansi |
+|---|---|---|
+| Daftar wewenang Business Admin Console | `docs/architecture/dual-admin-console.md` §3.2 (2026-08-23, APPROVED) | Panel Admin adalah bentuk UI dari kontrak ini |
+| Larangan script/SQL/DSL bebas | `dual-admin-console.md` §3.3; CFG-R3 | Batas keras isi Panel Admin |
+| Konfigurasi adalah data per client | `docs/prd/abixell-one/07-client-configuration.md` CFG-001…015 | Peta kebutuhan; CFG-010 dan CFG-015 masih PARTIAL |
+| Presedensi scope + partial unique index | `docs/adr/0006-configuration-scope-precedence-0c.md` | Pola penyimpanan dan resolusi konfigurasi berjenjang |
+| Menu served dari server + `locked`/`lockedReason` | Epic 3 Wave 2; `apps/web/src/lib/servedNav.ts` | Mekanisme render tree dan slot terkunci |
+| Guard kedalaman menu 4 level | Trigger `config_guard_menu_depth` (migrasi 1787400000000): Grup > Modul > Sub-menu > Halaman | Panel Admin = Modul, kategori = Sub-menu, halaman = Halaman |
+| Katalog modul nyata (13 kode) | `MODULE_METADATA` [capabilities.ts:165](apps/web/src/lib/capabilities.ts:165) | Sumber daftar slot Module Config |
+| Registry tipe/kode dokumen lewat kontrak registrasi | Epic 8 §4.8 keputusan #22 | Pola registrasi konfigurasi per modul |
+
+#### Yang belum diputuskan (bahan wawancara desain)
+
+1. **Model permission Panel Admin.** Satu `config.manage` untuk seluruh kategori, atau permission per kategori (`config.module.manage`, `config.platform.manage`, dst.), atau per modul (`<module>.configure` seperti pola `complaint.configure`)?
+2. **Nasib route `/administration` dan `/admin`.** Panel Admin menggantikan `/administration`; Admin Console tetap `/admin` sebagai dasbor detail baca? Apakah nama menu di tree berubah ("Administration" → "Panel Admin")?
+3. **Bentuk halaman Module Config.** Satu halaman kategori berisi daftar modul (klik modul → halaman konfigurasinya; modul tanpa isian render "belum tersedia"), atau setiap modul langsung jadi halaman di tree? Rekomendasi awal pembahasan: bentuk pertama — menghindari puluhan halaman stub di tree.
+4. **Penerapan istilah HRIS.** Terminology override per tenant (CFG-001, nol perubahan kode) atau penggantian label platform (`MODULE_METADATA` + seed menu + parity test — perubahan backend)?
+5. **Relasi dengan gelombang eksekusi Epics 2–14.** Panel Admin dibangun setelah Epics 2–5 ada (registry, menu, user, org) sebagai permukaan konsolidasi, atau bertahap per kategori mengikuti epic yang selesai?
+6. **Dashboard Panel Admin.** Apa yang tampil di halaman pertama: ringkasan status konfigurasi per kategori (terisi/belum), validasi konfigurasi (dual-admin-console §3.2 "tenant configuration validation"), atau keduanya?
+
+#### Out-of-scope Epic 15
+
+- Membangun konfigurasi yang epic-nya belum dieksekusi — Panel Admin hanya menyiapkan rumahnya (slot), isi mengikuti epic pemilik.
+- Melewati guardrail: parameter yang menyentuh keamanan/audit tetap dipaksa ke level konfigurasi lebih tinggi (Epic 8 prinsip).
+- Platform Architect / Builder Console — ranah `dual-admin-console.md` §4, bukan Panel Admin.
+- Eksekusi implementasi apa pun sebelum wawancara desain dan kontrak §4.15 final.
+
+#### Catatan implementasi terhadap keputusan roadmap
+
+- Bagian ini mengunci struktur kategori dan slot sebagai **bahan wawancara**; enam keputusan putaran 1–4 sudah disetujui pemilik produk pada 2026-09-28, enam item "yang belum diputuskan" menunggu wawancara desain.
+- Tidak ada migration, perubahan backend, atau commit implementasi yang diberi persetujuan oleh bagian ini.
+- Rekonsiliasi dengan kontrak CFG-010/CFG-015 (masih PARTIAL di PRD) dilakukan saat wawancara desain.
+
+---
+
 ## 5. Koreksi terhadap Riset
 
 Klaim riset di `D:\RESEARCH AREA\research\idempiere` yang **tidak sesuai** dengan source code. Dokumen riset perlu dikoreksi agar tidak menyesatkan pekerjaan berikutnya.
@@ -4652,11 +4758,12 @@ Catatan tambahan yang memperkaya tapi tidak mengoreksi:
 | 10 | Apakah `belum terdaftar` diberi tenggat, atau dilaporkan selamanya sebagai pekerjaan tertunda | 3 | Belum. Lihat §4.3 item terbuka nomor 2 |
 | 11 | Cara penyajian menu dari server ke klien: ikut `/me` atau endpoint tersendiri | 3 | Belum. Harus diputuskan lewat pengukuran, bukan asumsi. Lihat §4.3 item terbuka nomor 1 |
 | 12 | Lifecycle role yang masih memiliki assignment: deactivate, restore, dan syarat delete | 4 | Belum. Delete hanya jika tidak punya user sudah terkunci; detail deactivate/restore diputuskan sebelum implementasi. |
-| 13 | Atomic atau partial success untuk batch role+scope assignment | 4 | Belum. Roadmap memakai atomic sebagai default aman sampai keputusan lain dibuat. |
+| 13 | Atomic atau partial success untuk batch role+scope assignment | 4 | **Selesai 2026-09-28 — atomic all-or-nothing.** Item terbuka 4 Epic 4 dikunci: satu pasangan gagal membatalkan seluruh batch, satu governed transaction, satu hasil, satu audit batch. Implementasi sudah sesuai tanpa perubahan kode. |
 | 14 | Batas hari backdate: perubahan hierarchy Organization Unit dan Backdate Transaction | 5, 7, 8 | Sebagian dijawab Epic 14 (2026-09-25): dokumen tidak dapat di-backdate ke periode yang sudah `closed`; koreksi memakai periode terbuka berikutnya. **Angka batas hari tetap parameter policy** dan belum diputuskan. Lihat §4.14 keputusan #13. |
 | 15 | Definisi periode laporan tertutup dan prosedur koreksi saat hierarchy di-backdate | 5, 7, 12 | **Dijawab Epic 14 (2026-09-25):** periode tertutup = `finance_fiscal_periods.status = 'closed'`, dicapai hanya setelah daftar periksa penutupan lulus; koreksi memakai jurnal balik (Reverse Correct/Accrual) ke periode terbuka berikutnya bila periode asli tutup. Prosedur buka ulang = maker-checker + alasan + bukti dampak. Lihat §4.14 keputusan #10, #11, #13. |
 | 16 | Kebijakan file: storage, scan, versioning, expiry, retention, dan akses dokumen legal, identity file slot, maupun lampiran backdate | 5, 6, 7 | Belum. Epic 5 hanya menyiapkan slot metadata; identity file slot terkait Epic 6; dibahas pada session dokumen/file terpisah. |
 | 17 | Model User, Employee, Role, dan Business Partner beserta batas Epic 4, 5, dan 10 | 4, 5, 6, 10 | **Resolved di Epic 6 §4.6:** Business Partner canonical Individual/Organization; Employee role + profile; Department bukan scope; satu primary dan secondary placement terbatas, effective-dated. Customer Scope tetap pending karena external identity boundary sudah settled tetapi service portal belum dirinci. |
+| 18 | Model permission Panel Admin, nasib route `/administration` dan `/admin`, bentuk halaman Module Config, penerapan istilah HRIS, urutan eksekusi, dan isi dashboard | 15 | **Dibuka Epic 15 (2026-09-28)** — struktur 8 kategori dan 13 slot modul terkunci; enam butir ini menunggu wawancara desain. Lihat §4.15 "Yang belum diputuskan". |
 
 ---
 

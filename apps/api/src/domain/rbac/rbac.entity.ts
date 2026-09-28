@@ -221,7 +221,16 @@ export interface RoleDefinition {
   tenantId: string;
   code: string;
   name: string;
+  /** Epic 4 open item 1 — operator-authored metadata, nullable on purpose:
+   * "never had a description" (null) is a different fact from "someone typed
+   * an empty string", and the API surfaces that distinction. Metadata only;
+   * nothing in authorization reads it. */
+  description: string | null;
   isFullAccess: boolean;
+  /** Epic 4 open item 2 — lifecycle switch: false means the Role exists
+   * (history resolves, projections name it) but may not be granted again and
+   * live grants referencing it stop authorizing on the next permission check. */
+  isActive: boolean;
   version: number;
   permissionCodes: string[];
   windows: WindowAccessInput[];
@@ -246,6 +255,9 @@ export interface RoleDefinitionPreview {
 export interface CreateRoleDefinitionInput {
   code: string;
   name: string;
+  /** Omitted or null both mean "no description"; the console form sends the
+   * field only when the operator typed something. */
+  description?: string | null;
   permissionCodes: string[];
   windows: WindowAccessInput[];
 }
@@ -253,11 +265,16 @@ export interface CreateRoleDefinitionInput {
 export interface CopyRoleDefinitionInput {
   code: string;
   name: string;
+  /** A copy carries the source's description: the new Role starts as a copy
+   * of the original in every operator-visible respect, and the copy dialog's
+   * name field is the only thing the operator is asked for. */
+  description?: string | null;
 }
 
 export interface RoleDefinitionPreviewInput {
   version: number;
   name: string;
+  description?: string | null;
   permissionCodes: string[];
   windows: WindowAccessInput[];
 }
@@ -299,6 +316,14 @@ export interface RoleDefinitionRepository {
     actor: { tenantId: string; userId: string },
     roleCode: string,
   ): Promise<void>;
+  /** Epic 4 open item 2 — deactivate/activate. Deactivation is refused while
+   * any LIVE assignment references the Role; a retained revoked or
+   * scope-invalidated row does not block it, because it grants nothing. */
+  setRoleDefinitionActive(
+    actor: { tenantId: string; userId: string },
+    roleCode: string,
+    isActive: boolean,
+  ): Promise<RoleDefinition>;
 }
 
 /** A Role plus the counts an administrator needs to understand it at a
@@ -309,7 +334,11 @@ export interface RoleSummary {
   id: string;
   code: string;
   name: string;
+  description: string | null;
   isFullAccess: boolean;
+  /** False while deactivated: the list must show inactive Roles (they still
+   * own history) but the console must not offer them as grant targets. */
+  isActive: boolean;
   permissionCount: number;
   assignedUserCount: number;
 }
