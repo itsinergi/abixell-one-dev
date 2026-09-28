@@ -29,3 +29,6 @@ backups/
 *.partial
 *.pre-restore
 *.restore-staging
+
+# Session scratch output (analysis dumps, scans, staging scripts)
+_*
