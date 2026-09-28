@@ -63,9 +63,12 @@ async function enforceWindowWriteAccess(
   const windowCode = resolveWindowForApiPath(method, routeUrl);
   if (windowCode === undefined) return;
 
-  const access = await container.rbac.getWindowAccessState(
-    actor.tenantId,
-    actor.userId,
+  // Epic 1 (§4.1 C) — the lock is evaluated against the ACTIVE Role. A
+  // read-only Assignment must not be able to write through because another
+  // Role the user holds is writable, and a writable Assignment must not be
+  // silenced because a switched-away Role is read-only.
+  const access = await container.rbac.getWindowAccessStateForActor(
+    actor,
     windowCode,
   );
 

@@ -54,7 +54,7 @@ export class SurveyAnalyticsService {
       priority?: number;
     },
   ): Promise<SurveyBranchingRule> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const { version } = await this.getEditableVersionOrThrow(actor, versionId);
 
     const questions = await this.repo.listQuestions(version.id);
@@ -105,13 +105,13 @@ export class SurveyAnalyticsService {
   }
 
   async listBranchingRules(actor: ActorContext, versionId: string): Promise<SurveyBranchingRule[]> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     await this.getVersionOrThrow(actor, versionId);
     return this.repoAdvanced.listBranchingRules(versionId);
   }
 
   async deleteBranchingRule(actor: ActorContext, versionId: string, ruleId: string): Promise<void> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     await this.getEditableVersionOrThrow(actor, versionId);
     const deleted = await this.repoAdvanced.deleteBranchingRule(actor.tenantId, ruleId);
     if (!deleted) throw new NotFoundError("SurveyBranchingRule", ruleId);
@@ -131,7 +131,7 @@ export class SurveyAnalyticsService {
     questionId: string,
     input: { code: string; label: string; sortOrder?: number },
   ): Promise<SurveyMatrixRow> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const question = await this.repo.findQuestionById(questionId);
     if (!question) throw new NotFoundError("SurveyQuestion", questionId);
     await this.getEditableVersionOrThrow(actor, question.surveyVersionId);
@@ -152,7 +152,7 @@ export class SurveyAnalyticsService {
   }
 
   async listMatrixRows(actor: ActorContext, questionId: string): Promise<SurveyMatrixRow[]> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const question = await this.repo.findQuestionById(questionId);
     if (!question) throw new NotFoundError("SurveyQuestion", questionId);
     await this.getVersionOrThrow(actor, question.surveyVersionId);
@@ -174,7 +174,7 @@ export class SurveyAnalyticsService {
       metadata?: Record<string, unknown>;
     },
   ): Promise<{ token: SurveyDistributionToken; rawToken: string }> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const version = await this.getVersionOrThrow(actor, versionId);
     if (version.status !== "published") {
       throw new ConflictError("Distribution tokens can only be created for published survey versions");
@@ -213,13 +213,13 @@ export class SurveyAnalyticsService {
   }
 
   async listDistributionTokens(actor: ActorContext, versionId: string): Promise<SurveyDistributionToken[]> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     await this.getVersionOrThrow(actor, versionId);
     return this.repoAdvanced.listDistributionTokens(actor.tenantId, versionId);
   }
 
   async revokeDistributionToken(actor: ActorContext, tokenId: string): Promise<void> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const token = await this.repoAdvanced.findDistributionTokenById(actor.tenantId, tokenId);
     if (!token) throw new NotFoundError("SurveyDistributionToken", tokenId);
 
@@ -251,7 +251,7 @@ export class SurveyAnalyticsService {
       translatedText: string;
     },
   ): Promise<SurveyTranslation> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const { version } = await this.getEditableVersionOrThrow(actor, versionId);
 
     const translation = await this.repoAdvanced.upsertTranslation({
@@ -286,7 +286,7 @@ export class SurveyAnalyticsService {
     versionId: string,
     locale?: string,
   ): Promise<SurveyTranslation[]> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     await this.getVersionOrThrow(actor, versionId);
     return this.repoAdvanced.listTranslations(versionId, locale);
   }
@@ -296,7 +296,7 @@ export class SurveyAnalyticsService {
     versionId: string,
     translationId: string,
   ): Promise<void> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     await this.getEditableVersionOrThrow(actor, versionId);
     const deleted = await this.repoAdvanced.deleteTranslation(actor.tenantId, translationId);
     if (!deleted) throw new NotFoundError("SurveyTranslation", translationId);
@@ -307,7 +307,7 @@ export class SurveyAnalyticsService {
   // =========================================================================
 
   async getAnalyticsOverview(actor: ActorContext, definitionCode: string): Promise<SurveyAnalyticsOverview> {
-    await this.rbac.requirePermission(actor.userId, "survey.analytics.read");
+    await this.rbac.requirePermission(actor, "survey.analytics.read");
     const definition = await this.repo.findDefinitionByCode(actor.tenantId, definitionCode);
     if (!definition) throw new NotFoundError("SurveyDefinition", definitionCode);
 
@@ -315,7 +315,7 @@ export class SurveyAnalyticsService {
   }
 
   async getBenchmark(actor: ActorContext, definitionCode: string): Promise<SurveyBenchmarkResult> {
-    await this.rbac.requirePermission(actor.userId, "survey.analytics.read");
+    await this.rbac.requirePermission(actor, "survey.analytics.read");
     const definition = await this.repo.findDefinitionByCode(actor.tenantId, definitionCode);
     if (!definition) throw new NotFoundError("SurveyDefinition", definitionCode);
 

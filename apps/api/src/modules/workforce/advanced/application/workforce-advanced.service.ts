@@ -150,7 +150,7 @@ export class WorkforceAdvancedService {
       isOvernight?: boolean;
     },
   ): Promise<WorkforceShift> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
+    await this.rbac.requirePermission(actor, "workforce.attendance.manage");
     await this.assertOrganizationUnitInScope(actor, null);
     this.validateTimeString(input.startTime, "startTime");
     this.validateTimeString(input.endTime, "endTime");
@@ -188,13 +188,13 @@ export class WorkforceAdvancedService {
   }
 
   async listShifts(actor: ActorContext, includeInactive = false): Promise<WorkforceShift[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
+    await this.rbac.requirePermission(actor, "workforce.attendance.read");
     await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listShifts(actor.tenantId, includeInactive);
   }
 
   async getShift(actor: ActorContext, id: string): Promise<WorkforceShift> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
+    await this.rbac.requirePermission(actor, "workforce.attendance.read");
     await this.assertOrganizationUnitInScope(actor, null);
     const shift = await this.repo.findShiftById(actor.tenantId, id);
     if (!shift) throw new NotFoundError("WorkforceShift", id);
@@ -202,7 +202,7 @@ export class WorkforceAdvancedService {
   }
 
   async setShiftActive(actor: ActorContext, id: string, isActive: boolean): Promise<WorkforceShift> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
+    await this.rbac.requirePermission(actor, "workforce.attendance.manage");
     await this.assertOrganizationUnitInScope(actor, null);
     const shift = await this.repo.findShiftById(actor.tenantId, id);
     if (!shift) throw new NotFoundError("WorkforceShift", id);
@@ -231,7 +231,7 @@ export class WorkforceAdvancedService {
       notes?: string | null;
     },
   ): Promise<WorkforceRoster> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
+    await this.rbac.requirePermission(actor, "workforce.attendance.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const shift = await this.repo.findShiftById(actor.tenantId, input.shiftId);
@@ -241,7 +241,7 @@ export class WorkforceAdvancedService {
     const rosterDate = this.validateDateOnly(input.rosterDate, "rosterDate");
 
     if (input.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.organizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, input.organizationUnitId);
     }
 
     const roster = await this.repo.upsertRoster({
@@ -267,7 +267,7 @@ export class WorkforceAdvancedService {
   }
 
   async listRosters(actor: ActorContext, filter: RosterListFilter = {}): Promise<WorkforceRoster[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
+    await this.rbac.requirePermission(actor, "workforce.attendance.read");
     if (filter.employeeId) {
       await this.assertEmployeeInScope(actor, filter.employeeId);
     }
@@ -288,7 +288,7 @@ export class WorkforceAdvancedService {
       notes?: string | null;
     },
   ): Promise<WorkforceAttendanceRecord> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.manage");
+    await this.rbac.requirePermission(actor, "workforce.attendance.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const attendanceDate = this.validateDateOnly(input.attendanceDate, "attendanceDate");
@@ -323,7 +323,7 @@ export class WorkforceAdvancedService {
   }
 
   async listAttendance(actor: ActorContext, filter: AttendanceListFilter = {}): Promise<WorkforceAttendanceRecord[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.attendance.read");
+    await this.rbac.requirePermission(actor, "workforce.attendance.read");
     if (filter.employeeId) {
       await this.assertEmployeeInScope(actor, filter.employeeId);
     }
@@ -345,7 +345,7 @@ export class WorkforceAdvancedService {
       requiresAttachment?: boolean;
     },
   ): Promise<WorkforceLeaveType> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
+    await this.rbac.requirePermission(actor, "workforce.leave.manage");
     await this.assertOrganizationUnitInScope(actor, null);
 
     const leaveType = await this.repo.createLeaveType({
@@ -371,7 +371,7 @@ export class WorkforceAdvancedService {
   }
 
   async listLeaveTypes(actor: ActorContext, includeInactive = false): Promise<WorkforceLeaveType[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+    await this.rbac.requirePermission(actor, "workforce.leave.read");
     await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listLeaveTypes(actor.tenantId, includeInactive);
   }
@@ -385,7 +385,7 @@ export class WorkforceAdvancedService {
       allocatedDays: number;
     },
   ): Promise<WorkforceLeaveBalance> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
+    await this.rbac.requirePermission(actor, "workforce.leave.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     if (input.allocatedDays < 0) {
@@ -414,7 +414,7 @@ export class WorkforceAdvancedService {
   }
 
   async listLeaveBalances(actor: ActorContext, employeeId: string, balanceYear?: number): Promise<WorkforceLeaveBalance[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+    await this.rbac.requirePermission(actor, "workforce.leave.read");
     await this.assertEmployeeInScope(actor, employeeId);
     const year = balanceYear ?? new Date().getFullYear();
     return this.repo.listLeaveBalances(actor.tenantId, employeeId, year);
@@ -432,7 +432,7 @@ export class WorkforceAdvancedService {
       attachmentDocumentId?: string | null;
     },
   ): Promise<WorkforceLeaveRequest> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
+    await this.rbac.requirePermission(actor, "workforce.leave.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const startDate = this.validateDateOnly(input.startDate, "startDate");
@@ -535,7 +535,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     filter: LeaveRequestListFilter = {},
   ): Promise<{ leaveRequest: WorkforceLeaveRequest; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+    await this.rbac.requirePermission(actor, "workforce.leave.read");
     if (filter.employeeId) {
       await this.assertEmployeeInScope(actor, filter.employeeId);
     }
@@ -545,7 +545,7 @@ export class WorkforceAdvancedService {
   }
 
   async getLeaveRequest(actor: ActorContext, id: string): Promise<LeaveRequestDetailView> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+    await this.rbac.requirePermission(actor, "workforce.leave.read");
     const leaveRequest = await this.repo.findLeaveRequestById(actor.tenantId, id);
     if (!leaveRequest) throw new NotFoundError("WorkforceLeaveRequest", id);
     await this.assertEmployeeInScope(actor, leaveRequest.employeeId);
@@ -567,7 +567,7 @@ export class WorkforceAdvancedService {
     actionCode: string,
     comment: string | null = null,
   ): Promise<{ leaveRequest: WorkforceLeaveRequest; workflowResult: unknown }> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.approve");
+    await this.rbac.requirePermission(actor, "workforce.leave.approve");
     const leaveRequest = await this.repo.findLeaveRequestById(actor.tenantId, id);
     if (!leaveRequest) throw new NotFoundError("WorkforceLeaveRequest", id);
     await this.assertEmployeeInScope(actor, leaveRequest.employeeId);
@@ -650,7 +650,7 @@ export class WorkforceAdvancedService {
       reason?: string | null;
     },
   ): Promise<WorkforceOvertimeRequest> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
+    await this.rbac.requirePermission(actor, "workforce.leave.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const overtimeDate = this.validateDateOnly(input.overtimeDate, "overtimeDate");
@@ -722,7 +722,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     filter: OvertimeRequestListFilter = {},
   ): Promise<{ overtimeRequest: WorkforceOvertimeRequest; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+    await this.rbac.requirePermission(actor, "workforce.leave.read");
     if (filter.employeeId) {
       await this.assertEmployeeInScope(actor, filter.employeeId);
     }
@@ -732,7 +732,7 @@ export class WorkforceAdvancedService {
   }
 
   async getOvertimeRequest(actor: ActorContext, id: string): Promise<OvertimeRequestDetailView> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+    await this.rbac.requirePermission(actor, "workforce.leave.read");
     const overtimeRequest = await this.repo.findOvertimeRequestById(actor.tenantId, id);
     if (!overtimeRequest) throw new NotFoundError("WorkforceOvertimeRequest", id);
     await this.assertEmployeeInScope(actor, overtimeRequest.employeeId);
@@ -753,7 +753,7 @@ export class WorkforceAdvancedService {
     id: string,
     actualHours: number,
   ): Promise<WorkforceOvertimeRequest> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.manage");
+    await this.rbac.requirePermission(actor, "workforce.leave.manage");
     if (actualHours < 0) throw new ValidationError("actualHours cannot be negative");
     const overtimeRequest = await this.repo.findOvertimeRequestById(actor.tenantId, id);
     if (!overtimeRequest) throw new NotFoundError("WorkforceOvertimeRequest", id);
@@ -784,7 +784,7 @@ export class WorkforceAdvancedService {
     actionCode: string,
     comment: string | null = null,
   ): Promise<{ overtimeRequest: WorkforceOvertimeRequest; workflowResult: unknown }> {
-    await this.rbac.requirePermission(actor.userId, "workforce.leave.approve");
+    await this.rbac.requirePermission(actor, "workforce.leave.approve");
     const overtimeRequest = await this.repo.findOvertimeRequestById(actor.tenantId, id);
     if (!overtimeRequest) throw new NotFoundError("WorkforceOvertimeRequest", id);
     await this.assertEmployeeInScope(actor, overtimeRequest.employeeId);
@@ -839,7 +839,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     input: Omit<CreateStatutoryPolicyInput, "tenantId" | "createdBy">,
   ): Promise<WorkforceStatutoryPolicy> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.manage");
+    await this.rbac.requirePermission(actor, "workforce.payroll.manage");
     await this.assertOrganizationUnitInScope(actor, null);
 
     const policy = await this.repo.createStatutoryPolicy({
@@ -861,13 +861,13 @@ export class WorkforceAdvancedService {
   }
 
   async listStatutoryPolicies(actor: ActorContext): Promise<WorkforceStatutoryPolicy[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.rbac.requirePermission(actor, "workforce.payroll.read");
     await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listStatutoryPolicies(actor.tenantId);
   }
 
   async getActiveStatutoryPolicy(actor: ActorContext, asOfDate?: string): Promise<WorkforceStatutoryPolicy | null> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.rbac.requirePermission(actor, "workforce.payroll.read");
     await this.assertOrganizationUnitInScope(actor, null);
     const targetDate = asOfDate ? this.validateDateOnly(asOfDate, "asOfDate") : new Date().toISOString().slice(0, 10);
     return this.repo.findActiveStatutoryPolicy(actor.tenantId, targetDate);
@@ -877,7 +877,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     input: Omit<SetSalaryProfileInput, "tenantId" | "actorUserId">,
   ): Promise<WorkforceEmployeeSalaryProfile> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.manage");
+    await this.rbac.requirePermission(actor, "workforce.payroll.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const effectiveFrom = this.validateDateOnly(input.effectiveFrom, "effectiveFrom");
@@ -903,7 +903,7 @@ export class WorkforceAdvancedService {
   }
 
   async getCurrentSalaryProfile(actor: ActorContext, employeeId: string): Promise<WorkforceEmployeeSalaryProfile | null> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.rbac.requirePermission(actor, "workforce.payroll.read");
     await this.assertEmployeeInScope(actor, employeeId);
     return this.repo.findCurrentSalaryProfile(actor.tenantId, employeeId);
   }
@@ -916,7 +916,7 @@ export class WorkforceAdvancedService {
       organizationUnitId?: string | null;
     },
   ): Promise<WorkforcePayrollRun> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.manage");
+    await this.rbac.requirePermission(actor, "workforce.payroll.manage");
 
     if (input.periodMonth < 1 || input.periodMonth > 12) {
       throw new ValidationError("periodMonth must be between 1 and 12");
@@ -983,7 +983,7 @@ export class WorkforceAdvancedService {
   }
 
   async getPayrollRun(actor: ActorContext, id: string): Promise<PayrollRunDetailView> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.rbac.requirePermission(actor, "workforce.payroll.read");
     const payrollRun = await this.repo.findPayrollRunById(actor.tenantId, id);
     if (!payrollRun) throw new NotFoundError("WorkforcePayrollRun", id);
     await this.assertOrganizationUnitInScope(actor, payrollRun.organizationUnitId);
@@ -1005,7 +1005,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     filter: PayrollRunListFilter = {},
   ): Promise<{ payrollRun: WorkforcePayrollRun; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.rbac.requirePermission(actor, "workforce.payroll.read");
     const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitId);
     const runs = await this.repo.listPayrollRuns(actor.tenantId, filter, organizationUnitIds);
     return this.withWorkflowStatus(actor, runs, (r) => r.workflowInstanceId, (payrollRun, status) => ({ payrollRun, status }));
@@ -1019,7 +1019,7 @@ export class WorkforceAdvancedService {
     payslipCount: number;
     totals: { totalGross: number; totalDeductions: number; totalNet: number; totalEmployerContributions: number };
   }> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.manage");
+    await this.rbac.requirePermission(actor, "workforce.payroll.manage");
     const run = await this.repo.findPayrollRunById(actor.tenantId, id);
     if (!run) throw new NotFoundError("WorkforcePayrollRun", id);
     await this.assertOrganizationUnitInScope(actor, run.organizationUnitId);
@@ -1140,7 +1140,7 @@ export class WorkforceAdvancedService {
     actionCode: string,
     comment: string | null = null,
   ): Promise<{ payrollRun: WorkforcePayrollRun; workflowResult: unknown }> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.approve");
+    await this.rbac.requirePermission(actor, "workforce.payroll.approve");
     const payrollRun = await this.repo.findPayrollRunById(actor.tenantId, id);
     if (!payrollRun) throw new NotFoundError("WorkforcePayrollRun", id);
     await this.assertOrganizationUnitInScope(actor, payrollRun.organizationUnitId);
@@ -1186,7 +1186,7 @@ export class WorkforceAdvancedService {
   }
 
   async listPayslipsByRun(actor: ActorContext, payrollRunId: string): Promise<WorkforcePayslip[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.payroll.read");
+    await this.rbac.requirePermission(actor, "workforce.payroll.read");
     const run = await this.repo.findPayrollRunById(actor.tenantId, payrollRunId);
     if (!run) throw new NotFoundError("WorkforcePayrollRun", payrollRunId);
     await this.assertOrganizationUnitInScope(actor, run.organizationUnitId);
@@ -1208,7 +1208,7 @@ export class WorkforceAdvancedService {
       jobDescription?: string | null;
     },
   ): Promise<WorkforceJobPosting> {
-    await this.rbac.requirePermission(actor.userId, "workforce.recruitment.manage");
+    await this.rbac.requirePermission(actor, "workforce.recruitment.manage");
 
     if (input.positionId) {
       const posExists = await this.repo.positionExists(actor.tenantId, input.positionId);
@@ -1274,7 +1274,7 @@ export class WorkforceAdvancedService {
   }
 
   async getJobPosting(actor: ActorContext, id: string): Promise<JobPostingDetailView> {
-    await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
+    await this.rbac.requirePermission(actor, "workforce.recruitment.read");
     const jobPosting = await this.repo.findJobPostingById(actor.tenantId, id);
     if (!jobPosting) throw new NotFoundError("WorkforceJobPosting", id);
     await this.assertOrganizationUnitInScope(actor, jobPosting.organizationUnitId);
@@ -1301,7 +1301,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     filter: JobPostingListFilter = {},
   ): Promise<{ jobPosting: WorkforceJobPosting; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
+    await this.rbac.requirePermission(actor, "workforce.recruitment.read");
     const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitId);
     const postings = await this.repo.listJobPostings(actor.tenantId, filter, organizationUnitIds);
     return this.withWorkflowStatus(actor, postings, (r) => r.workflowInstanceId, (jobPosting, status) => ({ jobPosting, status }));
@@ -1313,7 +1313,7 @@ export class WorkforceAdvancedService {
     actionCode: string,
     comment: string | null = null,
   ): Promise<{ jobPosting: WorkforceJobPosting; workflowResult: unknown }> {
-    await this.rbac.requirePermission(actor.userId, "workforce.recruitment.manage");
+    await this.rbac.requirePermission(actor, "workforce.recruitment.manage");
     const jobPosting = await this.repo.findJobPostingById(actor.tenantId, id);
     if (!jobPosting) throw new NotFoundError("WorkforceJobPosting", id);
     await this.assertOrganizationUnitInScope(actor, jobPosting.organizationUnitId);
@@ -1370,7 +1370,7 @@ export class WorkforceAdvancedService {
       resumeDocumentId?: string | null;
     },
   ): Promise<WorkforceJobApplication> {
-    await this.rbac.requirePermission(actor.userId, "workforce.recruitment.manage");
+    await this.rbac.requirePermission(actor, "workforce.recruitment.manage");
     const posting = await this.repo.findJobPostingById(actor.tenantId, input.jobPostingId);
     if (!posting) throw new NotFoundError("WorkforceJobPosting", input.jobPostingId);
     await this.assertOrganizationUnitInScope(actor, posting.organizationUnitId);
@@ -1398,7 +1398,7 @@ export class WorkforceAdvancedService {
   }
 
   async listJobApplications(actor: ActorContext, filter: JobApplicationListFilter = {}): Promise<WorkforceJobApplication[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
+    await this.rbac.requirePermission(actor, "workforce.recruitment.read");
     if (filter.jobPostingId) {
       const posting = await this.repo.findJobPostingById(actor.tenantId, filter.jobPostingId);
       if (!posting) throw new NotFoundError("WorkforceJobPosting", filter.jobPostingId);
@@ -1412,7 +1412,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     input: Omit<AdvanceJobApplicationInput, "tenantId" | "actorUserId">,
   ): Promise<WorkforceJobApplication> {
-    await this.rbac.requirePermission(actor.userId, "workforce.recruitment.manage");
+    await this.rbac.requirePermission(actor, "workforce.recruitment.manage");
     const application = await this.repo.findJobApplicationById(actor.tenantId, input.id);
     if (!application) throw new NotFoundError("WorkforceJobApplication", input.id);
     const posting = await this.repo.findJobPostingById(actor.tenantId, application.jobPostingId);
@@ -1456,7 +1456,7 @@ export class WorkforceAdvancedService {
       scaleMax?: number;
     },
   ): Promise<WorkforceCompetency> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     await this.assertOrganizationUnitInScope(actor, null);
 
     const competency = await this.repo.createCompetency({
@@ -1483,7 +1483,7 @@ export class WorkforceAdvancedService {
   }
 
   async listCompetencies(actor: ActorContext, includeInactive = false): Promise<WorkforceCompetency[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.rbac.requirePermission(actor, "workforce.performance.read");
     await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listCompetencies(actor.tenantId, includeInactive);
   }
@@ -1497,7 +1497,7 @@ export class WorkforceAdvancedService {
       notes?: string | null;
     },
   ): Promise<WorkforceEmployeeCompetency> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const assessed = await this.repo.assessEmployeeCompetency({
@@ -1522,7 +1522,7 @@ export class WorkforceAdvancedService {
   }
 
   async listEmployeeCompetencies(actor: ActorContext, employeeId: string): Promise<WorkforceEmployeeCompetency[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.rbac.requirePermission(actor, "workforce.performance.read");
     await this.assertEmployeeInScope(actor, employeeId);
     return this.repo.listEmployeeCompetencies(actor.tenantId, employeeId);
   }
@@ -1538,7 +1538,7 @@ export class WorkforceAdvancedService {
       description?: string | null;
     },
   ): Promise<WorkforceTrainingCourse> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     await this.assertOrganizationUnitInScope(actor, null);
 
     const course = await this.repo.createTrainingCourse({
@@ -1565,7 +1565,7 @@ export class WorkforceAdvancedService {
   }
 
   async listTrainingCourses(actor: ActorContext, includeInactive = false): Promise<WorkforceTrainingCourse[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.rbac.requirePermission(actor, "workforce.performance.read");
     await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listTrainingCourses(actor.tenantId, includeInactive);
   }
@@ -1577,7 +1577,7 @@ export class WorkforceAdvancedService {
       employeeId: string;
     },
   ): Promise<WorkforceTrainingEnrollment> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const enrollment = await this.repo.enrollTraining({
@@ -1600,7 +1600,7 @@ export class WorkforceAdvancedService {
   }
 
   async listTrainingEnrollments(actor: ActorContext, employeeId: string): Promise<WorkforceTrainingEnrollment[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.rbac.requirePermission(actor, "workforce.performance.read");
     await this.assertEmployeeInScope(actor, employeeId);
     return this.repo.listTrainingEnrollments(actor.tenantId, employeeId);
   }
@@ -1609,7 +1609,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     input: Omit<CompleteTrainingInput, "tenantId" | "actorUserId">,
   ): Promise<WorkforceTrainingEnrollment> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     const enrollment = await this.repo.findTrainingEnrollmentById(actor.tenantId, input.id);
     if (!enrollment) throw new NotFoundError("WorkforceTrainingEnrollment", input.id);
     await this.assertEmployeeInScope(actor, enrollment.employeeId);
@@ -1649,7 +1649,7 @@ export class WorkforceAdvancedService {
       developmentPlan?: string | null;
     },
   ): Promise<WorkforcePerformanceReview> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     await this.assertEmployeeInScope(actor, input.employeeId);
 
     const periodStart = this.validateDateOnly(input.periodStart, "periodStart");
@@ -1717,7 +1717,7 @@ export class WorkforceAdvancedService {
   }
 
   async getPerformanceReview(actor: ActorContext, id: string): Promise<PerformanceReviewDetailView> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.rbac.requirePermission(actor, "workforce.performance.read");
     const review = await this.repo.findPerformanceReviewById(actor.tenantId, id);
     if (!review) throw new NotFoundError("WorkforcePerformanceReview", id);
     await this.assertEmployeeInScope(actor, review.employeeId);
@@ -1737,7 +1737,7 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     filter: PerformanceReviewListFilter = {},
   ): Promise<{ review: WorkforcePerformanceReview; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.rbac.requirePermission(actor, "workforce.performance.read");
     if (filter.employeeId) {
       await this.assertEmployeeInScope(actor, filter.employeeId);
     }
@@ -1752,7 +1752,7 @@ export class WorkforceAdvancedService {
     actionCode: string,
     comment: string | null = null,
   ): Promise<{ review: WorkforcePerformanceReview; workflowResult: unknown }> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     const review = await this.repo.findPerformanceReviewById(actor.tenantId, id);
     if (!review) throw new NotFoundError("WorkforcePerformanceReview", id);
     await this.assertEmployeeInScope(actor, review.employeeId);
@@ -1807,7 +1807,7 @@ export class WorkforceAdvancedService {
       guidelines?: string | null;
     },
   ): Promise<WorkforceCareerPath> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.manage");
+    await this.rbac.requirePermission(actor, "workforce.performance.manage");
     await this.assertOrganizationUnitInScope(actor, null);
 
     if (input.fromPositionId === input.toPositionId) {
@@ -1844,7 +1844,7 @@ export class WorkforceAdvancedService {
   }
 
   async listCareerPaths(actor: ActorContext, fromPositionId?: string): Promise<WorkforceCareerPath[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+    await this.rbac.requirePermission(actor, "workforce.performance.read");
     await this.assertOrganizationUnitInScope(actor, null);
     return this.repo.listCareerPaths(actor.tenantId, fromPositionId);
   }
@@ -1862,7 +1862,7 @@ export class WorkforceAdvancedService {
       parameters?: Record<string, unknown>;
     },
   ): Promise<WorkforceManpowerPlan> {
-    await this.rbac.requirePermission(actor.userId, "workforce.planning.manage");
+    await this.rbac.requirePermission(actor, "workforce.planning.manage");
 
     if (input.planYear < 2000 || input.planYear > 2100) {
       throw new ValidationError("planYear is out of valid range");
@@ -1901,7 +1901,7 @@ export class WorkforceAdvancedService {
   }
 
   async getManpowerPlan(actor: ActorContext, id: string): Promise<WorkforceManpowerPlan> {
-    await this.rbac.requirePermission(actor.userId, "workforce.planning.read");
+    await this.rbac.requirePermission(actor, "workforce.planning.read");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", id);
     await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
@@ -1909,7 +1909,7 @@ export class WorkforceAdvancedService {
   }
 
   async listManpowerPlans(actor: ActorContext, filter: ManpowerPlanListFilter = {}): Promise<WorkforceManpowerPlan[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.planning.read");
+    await this.rbac.requirePermission(actor, "workforce.planning.read");
     const organizationUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitId);
     return this.repo.listManpowerPlans(actor.tenantId, filter, organizationUnitIds);
   }
@@ -1921,7 +1921,7 @@ export class WorkforceAdvancedService {
       targetHeadcountByPosition: Record<string, number>;
     },
   ): Promise<WorkforceManpowerPlan> {
-    await this.rbac.requirePermission(actor.userId, "workforce.planning.manage");
+    await this.rbac.requirePermission(actor, "workforce.planning.manage");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, input.id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", input.id);
     await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
@@ -2003,7 +2003,7 @@ export class WorkforceAdvancedService {
   }
 
   async applyManpowerPlan(actor: ActorContext, id: string): Promise<WorkforceManpowerPlan> {
-    await this.rbac.requirePermission(actor.userId, "workforce.planning.apply");
+    await this.rbac.requirePermission(actor, "workforce.planning.apply");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", id);
     await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
@@ -2026,7 +2026,7 @@ export class WorkforceAdvancedService {
   }
 
   async dismissManpowerPlan(actor: ActorContext, id: string): Promise<WorkforceManpowerPlan> {
-    await this.rbac.requirePermission(actor.userId, "workforce.planning.manage");
+    await this.rbac.requirePermission(actor, "workforce.planning.manage");
     const plan = await this.repo.findManpowerPlanById(actor.tenantId, id);
     if (!plan) throw new NotFoundError("WorkforceManpowerPlan", id);
     await this.assertOrganizationUnitInScope(actor, plan.organizationUnitId);
@@ -2060,12 +2060,12 @@ export class WorkforceAdvancedService {
 
   private async assertEmployeeInScope(actor: ActorContext, employeeId: string): Promise<EmployeeReference> {
     const employee = await this.assertEmployeeExists(actor.tenantId, employeeId);
-    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    const hasTenant = await this.rbac.hasTenantScope(actor);
     if (!hasTenant) {
       if (!employee.organizationUnitId) {
         throw new ForbiddenError("Your assigned Data Scope does not cover unassigned employees");
       }
-      await this.rbac.requireOrganizationUnitScope(actor.userId, employee.organizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, employee.organizationUnitId);
     }
     return employee;
   }
@@ -2075,9 +2075,9 @@ export class WorkforceAdvancedService {
     organizationUnitId: string | null | undefined,
   ): Promise<void> {
     if (organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, organizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, organizationUnitId);
     } else {
-      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      const hasTenant = await this.rbac.hasTenantScope(actor);
       if (!hasTenant) {
         throw new ForbiddenError("Tenant-wide scope required for tenant-level entities");
       }
@@ -2088,9 +2088,9 @@ export class WorkforceAdvancedService {
     actor: ActorContext,
     requestedOrgUnitId?: string | null,
   ): Promise<string[] | null> {
-    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    const hasTenant = await this.rbac.hasTenantScope(actor);
     if (requestedOrgUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, requestedOrgUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, requestedOrgUnitId);
       const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, [requestedOrgUnitId]);
       return descendantIds.length > 0 ? descendantIds : [requestedOrgUnitId];
     }
@@ -2156,7 +2156,7 @@ export class WorkforceAdvancedService {
     const req = await this.repo.findLeaveRequestById(actor.tenantId, entityId);
     if (!req) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "workforce.leave.read");
+      await this.rbac.requirePermission(actor, "workforce.leave.read");
       await this.assertEmployeeInScope(actor, req.employeeId);
       return true;
     } catch {
@@ -2170,7 +2170,7 @@ export class WorkforceAdvancedService {
     const posting = await this.repo.findJobPostingById(actor.tenantId, app.jobPostingId);
     if (!posting) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "workforce.recruitment.read");
+      await this.rbac.requirePermission(actor, "workforce.recruitment.read");
       await this.assertOrganizationUnitInScope(actor, posting.organizationUnitId);
       return true;
     } catch {
@@ -2182,7 +2182,7 @@ export class WorkforceAdvancedService {
     const enrollment = await this.repo.findTrainingEnrollmentById(actor.tenantId, entityId);
     if (!enrollment) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "workforce.performance.read");
+      await this.rbac.requirePermission(actor, "workforce.performance.read");
       await this.assertEmployeeInScope(actor, enrollment.employeeId);
       return true;
     } catch {

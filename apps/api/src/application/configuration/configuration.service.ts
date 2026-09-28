@@ -30,7 +30,7 @@ export class ConfigurationService {
   // --- Module Activation ---------------------------------------------------
 
   async listModuleActivations(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     return this.repo.listModuleActivations(actor.tenantId);
   }
 
@@ -39,7 +39,7 @@ export class ConfigurationService {
   }
 
   async setModuleActivation(actor: ActorContext, moduleCode: string, isActive: boolean) {
-    await this.rbac.requirePermission(actor.userId, "config.manage");
+    await this.rbac.requirePermission(actor, "config.manage");
     const status = await this.repo.setModuleActivation(
       actor.tenantId,
       moduleCode,
@@ -60,7 +60,7 @@ export class ConfigurationService {
   // --- Feature Flags ---------------------------------------------------------
 
   async listFeatureFlags(actor: ActorContext): Promise<EffectiveFeatureFlag[]> {
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     const [catalog, assignments] = await Promise.all([
       this.repo.listFeatureFlagCatalog(),
       this.repo.listFeatureFlagAssignments(actor.tenantId),
@@ -89,7 +89,7 @@ export class ConfigurationService {
     actor: ActorContext,
     organizationUnitId: string,
   ): Promise<EffectiveFeatureFlag[]> {
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     const [catalog, assignments] = await Promise.all([
       this.repo.listFeatureFlagCatalog(),
       this.repo.listFeatureFlagAssignments(actor.tenantId),
@@ -135,7 +135,7 @@ export class ConfigurationService {
     isEnabled: boolean,
     scope: ConfigScope,
   ) {
-    await this.rbac.requirePermission(actor.userId, "config.manage");
+    await this.rbac.requirePermission(actor, "config.manage");
     await this.validator.validate("feature_flag", "value", isEnabled);
 
     // Setting an Organization-Unit-scoped override requires the actor's
@@ -143,7 +143,7 @@ export class ConfigurationService {
     // OrganizationUnitService, applied here to Configuration Scope so a
     // Supervisor cannot flip a flag for a Site outside their assignment.
     if (scope.type === "organization_unit") {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, scope.organizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, scope.organizationUnitId);
     }
 
     const assignment = await this.repo.upsertFeatureFlagAssignment(
@@ -167,7 +167,7 @@ export class ConfigurationService {
   // --- Terminology -------------------------------------------------------------
 
   async listTerminology(actor: ActorContext): Promise<EffectiveTerminology[]> {
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     const [catalog, overrides] = await Promise.all([
       this.repo.listTerminologyCatalog(),
       this.repo.listTerminologyOverrides(actor.tenantId),
@@ -184,7 +184,7 @@ export class ConfigurationService {
   }
 
   async setTerminologyOverride(actor: ActorContext, code: string, value: string) {
-    await this.rbac.requirePermission(actor.userId, "config.manage");
+    await this.rbac.requirePermission(actor, "config.manage");
     // Two bounded shapes, chosen by which field the key feeds: a short label
     // (60, `terminology.value`) or a longer description (240,
     // `terminology.description_value`, added for menu descriptions in
@@ -211,12 +211,12 @@ export class ConfigurationService {
   // --- Reference Data -----------------------------------------------------------
 
   async listReferenceDataTypes(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     return this.repo.listReferenceDataTypeCatalog();
   }
 
   async listReferenceDataItems(actor: ActorContext, typeCode: string) {
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     return this.repo.listReferenceDataItems(actor.tenantId, typeCode);
   }
 
@@ -239,7 +239,7 @@ export class ConfigurationService {
     typeCode: string,
     item: { code: string; label: string; sortOrder?: number },
   ) {
-    await this.rbac.requirePermission(actor.userId, "config.manage");
+    await this.rbac.requirePermission(actor, "config.manage");
     await this.validator.validate("reference_data", "item", item);
 
     try {
@@ -311,7 +311,7 @@ export class ConfigurationService {
     itemId: string,
     isActive: boolean,
   ) {
-    await this.rbac.requirePermission(actor.userId, "config.manage");
+    await this.rbac.requirePermission(actor, "config.manage");
     return this.setReferenceDataItemActiveInternal(actor.tenantId, actor.userId, typeCode, itemId, isActive);
   }
 
@@ -354,14 +354,14 @@ export class ConfigurationService {
   // --- Numbering -------------------------------------------------------------
 
   async getOrCreateSequenceInfo(actor: ActorContext, code: string) {
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     const seq = await this.repo.getNumberingSequence(actor.tenantId, code);
     if (!seq) throw new NotFoundError("NumberingSequence", code);
     return seq;
   }
 
   async createNumberingSequence(actor: ActorContext, code: string, pattern: string) {
-    await this.rbac.requirePermission(actor.userId, "config.manage");
+    await this.rbac.requirePermission(actor, "config.manage");
     await this.validator.validate("numbering", "pattern", pattern);
 
     const existing = await this.repo.getNumberingSequence(actor.tenantId, code);
@@ -388,7 +388,7 @@ export class ConfigurationService {
 
   /** Atomically generates the next formatted number for a sequence. */
   async generateNumber(actor: ActorContext, code: string): Promise<{ number: string; sequence: number }> {
-    await this.rbac.requirePermission(actor.userId, "config.manage");
+    await this.rbac.requirePermission(actor, "config.manage");
     return this.generateNumberForTenant(actor.tenantId, code, actor.userId);
   }
 

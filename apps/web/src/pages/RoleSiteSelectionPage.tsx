@@ -22,8 +22,13 @@ function scopeLabel(assignment: MyRoleAssignment): string {
 /**
  * Post-login work-context picker. Shows only role+scope pairs the signed-in
  * user already holds, so choosing one narrows what the workspace displays and
- * can never widen authority — every backend route keeps evaluating the full
- * assignment set regardless of the choice (ADR-0009 / ADR-0007).
+ * can never widen authority.
+ *
+ * Epic 1 (§4.1 C) changed what "choosing" means: the active Role is
+ * server-side session state, so Continue calls POST /auth/switch-role and
+ * the sessions row is rewritten. Nothing here can grant a Role the server
+ * does not already recognise — the endpoint answers "is this mine and
+ * currently effective" in the same statement that performs the write.
  */
 export function RoleSiteSelectionPage() {
   const { session, updateSession } = useAuth();
@@ -35,6 +40,7 @@ export function RoleSiteSelectionPage() {
   const [error, setError] = useState<string | null>(null);
   const [roleCode, setRoleCode] = useState("");
   const [assignmentId, setAssignmentId] = useState("");
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -45,7 +51,8 @@ export function RoleSiteSelectionPage() {
         if (cancelled) return;
         setAssignments(me.assignments);
         const preferred =
-          me.assignments.find((a) => a.id === currentAssignmentId) ?? me.assignments[0];
+          me.assignments.find((a) => a.id === (currentAssignmentId ?? me.activeAssignmentId)) ??
+          me.assignments[0];
         if (preferred) {
           setRoleCode(preferred.roleCode);
           setAssignmentId(preferred.id);
@@ -79,8 +86,22 @@ export function RoleSiteSelectionPage() {
     setAssignmentId(first?.id ?? "");
   }
 
-  function handleContinue() {
-    if (!assignmentId) return;
+  async function handleContinue() {
+    if (!assignmentId || !token) return;
+    // Epic 1 (§4.1 C): the choice is written to the session server-side.
+    // Skipping the call when the server already has this assignment active
+    // (single-Role users) is a round-trip saved, not an authority decision.
+    if (assignmentId !== currentAssignmentId) {
+      setPending(true);
+      try {
+        await api.switchRole(token, assignmentId);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Could not set your work context");
+        setPending(false);
+        return;
+      }
+      setPending(false);
+    }
     updateSession({ assignmentId });
     navigate("/", { replace: true });
   }
@@ -130,8 +151,12 @@ export function RoleSiteSelectionPage() {
               </Select>
             </Field>
 
-            <Button className="min-h-[44px] w-full" disabled={!assignmentId} onClick={handleContinue}>
-              Continue
+            <Button
+              className="min-h-[44px] w-full"
+              disabled={!assignmentId || pending}
+              onClick={() => void handleContinue()}
+            >
+              {pending ? "Setting up…" : "Continue"}
             </Button>
           </>
         )}

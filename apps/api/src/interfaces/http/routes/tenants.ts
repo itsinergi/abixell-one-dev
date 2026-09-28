@@ -25,7 +25,7 @@ export function registerTenantRoutes(app: FastifyInstance, container: Container)
   // deployment: a user only ever belongs to one Tenant).
   app.get("/tenants/me", { preHandler: app.authenticate }, async (request, reply) => {
     const actor = request.actor!;
-    await container.rbac.requirePermission(actor.userId, "tenant.read");
+    await container.rbac.requirePermission(actor, "tenant.read");
     const tenant = await container.tenant.getById(actor.tenantId);
     return reply.send(tenant);
   });

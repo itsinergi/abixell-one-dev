@@ -3,6 +3,10 @@
  *
  * Repainted onto the DESIGN.md tokens (Epic 4 Wave 1). Uses an initials
  * circle on the accent, never an invented profile asset.
+ *
+ * Epic 1 (§4.1 C) adds the active work context (the role and scope the
+ * session currently runs as) and the "Switch role" entry, so the dropdown
+ * answers "who am I right now" without a page of its own.
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
@@ -21,10 +25,18 @@ function initialsOf(fullName?: string, email?: string): string {
 export function UserMenu({
   fullName,
   email,
+  activeRoleName,
+  activeScopeName,
+  onSwitchRole,
   onSignOut,
 }: {
   fullName?: string;
   email?: string;
+  /** The session's ACTIVE Role display name (Epic 1 §4.1 C), or undefined
+   * when the session holds no active assignment. */
+  activeRoleName?: string;
+  activeScopeName?: string;
+  onSwitchRole: () => void;
   onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -104,7 +116,14 @@ export function UserMenu({
         </span>
         <span className="hidden min-w-0 flex-col items-start text-left sm:flex">
           <span className="max-w-[10rem] truncate text-sm font-medium text-ink">{displayName}</span>
-          {email && <span className="max-w-[10rem] truncate text-xs text-ink-dim">{email}</span>}
+          {activeRoleName ? (
+            <span className="max-w-[10rem] truncate text-xs text-ink-dim" title={activeScopeName ?? undefined}>
+              {activeRoleName}
+              {activeScopeName ? ` · ${activeScopeName}` : ""}
+            </span>
+          ) : (
+            email && <span className="max-w-[10rem] truncate text-xs text-ink-dim">{email}</span>
+          )}
         </span>
       </button>
       {open && (
@@ -115,10 +134,29 @@ export function UserMenu({
           aria-label="User menu"
           className="absolute right-0 z-30 mt-2 w-56 rounded border border-line bg-panel py-1 shadow-lg"
         >
-          <div className="border-b border-line px-3 py-2 sm:hidden">
+          <div className="border-b border-line px-3 py-2">
             <div className="truncate text-sm font-medium text-ink">{displayName}</div>
-            {email && <div className="truncate text-xs text-ink-dim">{email}</div>}
+            {activeRoleName ? (
+              <div className="truncate text-xs text-ink-dim" title={activeScopeName ?? undefined}>
+                Working as {activeRoleName}
+                {activeScopeName ? ` (${activeScopeName})` : ""}
+              </div>
+            ) : (
+              email && <div className="truncate text-xs text-ink-dim">{email}</div>
+            )}
           </div>
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            onClick={() => {
+              close();
+              onSwitchRole();
+            }}
+            className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-none"
+          >
+            Switch role…
+          </button>
           <NavLink
             to="/profile"
             role="menuitem"

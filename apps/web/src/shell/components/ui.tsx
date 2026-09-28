@@ -34,21 +34,20 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   ghost: "text-ink-dim hover:bg-panel-2 hover:text-ink disabled:opacity-50",
 };
 
-export function Button({
-  variant = "primary",
-  className = "",
-  children,
-  ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }
+>(function Button({ variant = "primary", className = "", children, ...rest }, ref) {
   return (
     <button
+      ref={ref}
       className={`inline-flex min-h-[44px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground sm:min-h-[36px] ${BUTTON_VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {children}
     </button>
   );
-}
+});
 
 /* -------------------------------------------------------------------- Card */
 

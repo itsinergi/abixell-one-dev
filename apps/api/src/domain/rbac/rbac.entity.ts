@@ -1,8 +1,18 @@
 import type { WindowEnforcementStatus } from "../configuration/window-enforcement.js";
+import type { ActorContext } from "../shared-kernel/audit-context.js";
 import type {
   AdministrativeVisibility,
   AssignmentBatchPreview,
 } from "./visibility-scope.js";
+
+/** Epic 1 (§4.1 C) — the subset of ActorContext governed writes need: who
+ * they act for and which assignment is ACTIVE. Kept as an alias so a caller
+ * holding a full ActorContext passes it unchanged, while the structural type
+ * still accepts test harnesses that construct only these three fields. */
+export type GovernedActor = Pick<
+  ActorContext,
+  "tenantId" | "userId" | "assignmentId"
+>;
 
 export interface Role {
   id: string;
@@ -345,8 +355,20 @@ export interface RoleSummary {
 
 export interface RbacRepository extends RoleDefinitionRepository {
   /** All permission codes from actual role_permissions rows carried by an
-   * authorization-effective assignment. Unavailable scopes grant nothing. */
+   * authorization-effective assignment. Unavailable scopes grant nothing.
+   * Epic 1: this is the UNION across every assignment the user holds — the
+   * informational set `/me` reports. Enforcement uses
+   * `getEffectivePermissionCodesForAssignment`, which pins the session's
+   * active assignment instead. */
   getEffectivePermissionCodes(userId: string): Promise<Set<string>>;
+  /** Epic 1 (§4.1 C) — the enforcement read: permission codes of exactly one
+   * assignment. A null `assignmentId` (session holds no effective
+   * assignment) yields the empty set, so every permissioned route fails
+   * closed. */
+  getEffectivePermissionCodesForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
+  ): Promise<Set<string>>;
   /** Only authorization-effective assignments. Administrative reconciliation
    * uses listAdminUserAccess so retained unavailable rows remain visible. */
   getAssignments(userId: string): Promise<UserRoleAssignment[]>;
@@ -389,12 +411,29 @@ export interface RbacRepository extends RoleDefinitionRepository {
     permissionCodes: readonly string[],
   ): Promise<boolean>;
 
+  /** Epic 1 (§4.1 C) — enforcement variant: the same "all codes on one
+   * assignment" question asked about the session's ACTIVE assignment. The
+   * `userId` form above stays for callers asking about a user in the
+   * abstract (queue routing, admin review). */
+  hasPermissionSetForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
+    permissionCodes: readonly string[],
+  ): Promise<boolean>;
+
   /** Canonical tenant-scope permission predicate. Permission and tenant Data
    * Scope must be carried by the same assignment; capabilities from separate
    * assignments are never combined. */
   hasTenantScopedPermission(
     tenantId: string,
     userId: string,
+    permissionCode: string,
+  ): Promise<boolean>;
+
+  /** Epic 1 (§4.1 C) — enforcement variant, pinned to the active assignment. */
+  hasTenantScopedPermissionForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
     permissionCode: string,
   ): Promise<boolean>;
 
@@ -406,6 +445,15 @@ export interface RbacRepository extends RoleDefinitionRepository {
   getWindowAccessState(
     tenantId: string,
     userId: string,
+    windowCode: string,
+  ): Promise<{ configured: boolean; writable: boolean }>;
+
+  /** Epic 1 (§4.1 C) — enforcement variant of the Window lock, read against
+   * the active assignment's Role only. A read-only Assignment must not be
+   * written through merely because the user's OTHER Role is writable. */
+  getWindowAccessStateForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
     windowCode: string,
   ): Promise<{ configured: boolean; writable: boolean }>;
 
@@ -467,15 +515,16 @@ export interface RbacRepository extends RoleDefinitionRepository {
     rootOrganizationUnitIds: readonly string[],
   ): Promise<string[]>;
   /** The actor's own Organization Unit anchors, unexpanded — the assignable
-   * universe for the scope picker (ancestors are context, not choices). */
+   * universe for the scope picker (ancestors are context, not choices).
+   * Epic 1 (§4.1 C): read from the ACTIVE assignment only. */
   listActorOrganizationUnitAnchors(
-    userId: string,
+    actor: GovernedActor,
     permissionCode: string,
   ): Promise<string[]>;
-  /** Resolve the caller's administrative visibility for one permission. */
+  /** Resolve the caller's administrative visibility for one permission.
+   * Epic 1 (§4.1 C): read from the ACTIVE assignment only. */
   resolveAdministrativeVisibility(
-    tenantId: string,
-    userId: string,
+    actor: GovernedActor,
     permissionCode: string,
   ): Promise<AdministrativeVisibility>;
 

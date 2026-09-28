@@ -621,11 +621,12 @@ export class PgWorkflowRepository implements WorkflowRepository {
     actorUserId: string | null;
     comment: string | null;
     metadata: Record<string, unknown> | null;
+    decisionAmount?: string | null;
   }): Promise<WorkflowHistoryEntry> {
     const result = await this.pool.query(
       `INSERT INTO workflow_history
-         (workflow_instance_id, from_step_id, to_step_id, action_code, actor_user_id, comment, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (workflow_instance_id, from_step_id, to_step_id, action_code, actor_user_id, comment, metadata, decision_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         input.workflowInstanceId,
@@ -635,6 +636,7 @@ export class PgWorkflowRepository implements WorkflowRepository {
         input.actorUserId,
         input.comment,
         input.metadata ? JSON.stringify(input.metadata) : null,
+        input.decisionAmount ?? null,
       ],
     );
     return mapHistory(result.rows[0]);
@@ -803,6 +805,7 @@ function mapHistory(row: QueryResultRow): WorkflowHistoryEntry {
     actorUserId: row.actor_user_id,
     comment: row.comment,
     metadata: row.metadata,
+    decisionAmount: row.decision_amount,
     occurredAt: row.occurred_at,
   };
 }

@@ -48,7 +48,7 @@ export class IntegrationService {
     actor: ActorContext,
     input: { code: string; name: string; direction: IntegrationDirection; baseUrl: string | null; webhookSecret: string | null },
   ): Promise<IntegrationEndpoint> {
-    await this.rbac.requirePermission(actor.userId, "integration.manage");
+    await this.rbac.requirePermission(actor, "integration.manage");
     const endpoint = await this.repo.createEndpoint({ tenantId: actor.tenantId, ...input });
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -62,12 +62,12 @@ export class IntegrationService {
   }
 
   async listEndpoints(actor: ActorContext): Promise<IntegrationEndpoint[]> {
-    await this.rbac.requirePermission(actor.userId, "integration.read");
+    await this.rbac.requirePermission(actor, "integration.read");
     return this.repo.listEndpoints(actor.tenantId);
   }
 
   async setEndpointActive(actor: ActorContext, code: string, isActive: boolean): Promise<IntegrationEndpoint> {
-    await this.rbac.requirePermission(actor.userId, "integration.manage");
+    await this.rbac.requirePermission(actor, "integration.manage");
     const endpoint = await this.repo.findEndpointByCode(actor.tenantId, code);
     if (!endpoint) throw new NotFoundError("IntegrationEndpoint", code);
     const updated = await this.repo.setEndpointActive(endpoint.id, isActive);
@@ -75,7 +75,7 @@ export class IntegrationService {
   }
 
   async listLog(actor: ActorContext, limit = 100): Promise<IntegrationLogEntry[]> {
-    await this.rbac.requirePermission(actor.userId, "integration.read");
+    await this.rbac.requirePermission(actor, "integration.read");
     return this.repo.listLog(actor.tenantId, limit);
   }
 

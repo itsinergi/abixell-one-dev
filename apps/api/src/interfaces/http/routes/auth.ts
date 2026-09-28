@@ -5,6 +5,7 @@ import { hashPassword } from "../../../infrastructure/security/password.js";
 import {
   getLoginRateLimitConfig,
   getProfileUpdateRateLimitConfig,
+  getSwitchRoleRateLimitConfig,
 } from "../../../infrastructure/security/http-hardening.js";
 import { ValidationError } from "../../../domain/shared-kernel/errors.js";
 
@@ -30,6 +31,10 @@ const refreshSchema = z.object({
 
 const logoutSchema = z.object({
   refreshToken: z.string().min(1),
+});
+
+const switchRoleSchema = z.object({
+  assignmentId: z.string().uuid(),
 });
 
 export function registerAuthRoutes(app: FastifyInstance, container: Container) {
@@ -67,9 +72,33 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
     return reply.status(204).send();
   });
 
-  const meQuerySchema = z.object({
-    assignmentId: z.string().uuid().optional(),
-  });
+  // Epic 1 (§4.1 E) — switch the session's active Role without re-login.
+  // The assignment must be one the caller holds AND that is currently
+  // effective; `switchRole` answers both in the same statement that performs
+  // the write, so a foreign or just-revoked assignment cannot be probed.
+  // The response is the new actor context, not a token: the access token
+  // identifies the session, and the session now names a different Role.
+  app.post(
+    "/auth/switch-role",
+    {
+      preHandler: app.authenticate,
+      config: { rateLimit: getSwitchRoleRateLimitConfig() },
+    },
+    async (request, reply) => {
+      const actor = request.actor!;
+      const body = switchRoleSchema.parse(request.body);
+      const next = await container.auth.switchRole(actor, body.assignmentId);
+      return reply.send({
+        sessionId: next.sessionId,
+        activeAssignmentId: next.assignmentId,
+        roleId: next.roleId,
+        roleCode: next.roleCode,
+        scopeType: next.scopeType,
+        scopeOrganizationUnitId: next.scopeOrganizationUnitId,
+        scopeCustomerId: next.scopeCustomerId,
+      });
+    },
+  );
 
   // Self-service profile edit. Deliberately narrower than the admin
   // PATCH /users/:id: `email` is not accepted here at all (it stays an
@@ -94,38 +123,36 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
 
   app.get("/me", { preHandler: app.authenticate }, async (request, reply) => {
     const actor = request.actor!;
-    const { assignmentId } = meQuerySchema.parse(request.query ?? {});
-    const [user, permissions, assignments, myAssignments, activeModuleCodes] =
-      await Promise.all([
-        container.user.getMe(actor),
-        container.rbac.getEffectivePermissions(actor.userId),
-        container.rbac.getAssignments(actor.userId),
-        container.rbac.getMyAssignmentsWithScopeNames(actor.userId),
-        container.configuration.listActiveModuleCodesForTenant(actor.tenantId),
-      ]);
+    const [user, myAssignments, activeModuleCodes] = await Promise.all([
+      container.user.getMe(actor),
+      container.rbac.getMyAssignmentsWithScopeNames(actor.userId),
+      container.configuration.listActiveModuleCodesForTenant(actor.tenantId),
+    ]);
 
-    // Post-login context picker: when the caller names one of their OWN
-    // assignments, narrow the reported capability set to that Role. This is
-    // UI shaping only — an unknown or foreign assignmentId is ignored (the
-    // caller simply keeps their full union), and per-route authorization in
-    // the backend continues to evaluate every assignment regardless.
-    const picked = assignmentId
-      ? myAssignments.find((a) => a.id === assignmentId) ?? null
+    // Epic 1 (§4.1 B/C) — the active Role is SERVER-SIDE session state. The
+    // response reports the session's active assignment, resolved by the auth
+    // plugin from the `sessions` row, and the ACTIVE Role's permission codes.
+    // The `?assignmentId=` query narrowing is gone: the client switches
+    // context through POST /auth/switch-role, which changes the session row
+    // itself, and the next /me reflects it. The full assignment list is still
+    // reported so the picker can offer the switch.
+    const picked = actor.assignmentId
+      ? myAssignments.find((a) => a.id === actor.assignmentId) ?? null
       : null;
     const effectivePermissions = picked
       ? await container.rbac.getPermissionsForRole(actor.tenantId, picked.roleCode)
-      : permissions;
-    const effectiveAssignments = picked
-      ? assignments.filter((a) => a.id === picked.id)
-      : assignments;
+      : new Set<string>();
+    const activeAssignmentName = picked?.roleName ?? null;
+    const activeScopeName =
+      picked?.scopeType === "tenant"
+        ? picked.scopeType
+        : picked?.scopeOrganizationUnitName ?? picked?.scopeCustomerName ?? null;
 
-    // Checkpoint 1C.3 — expose the distinct Data-Scope types the actor holds
-    // ("customer" vs "organization_unit"/"tenant"). This is what lets the
-    // experience layer tell an external Customer User apart from an internal
-    // operational user for navigation — a distinction permissions alone
-    // cannot make (both hold complaint.read/manage). Authorization is still
-    // enforced per-route in the backend; this only shapes the UI.
-    const scopeTypes = Array.from(new Set(effectiveAssignments.map((a) => a.scopeType)));
+    // Checkpoint 1C.3 — the distinct Data-Scope types of the ACTIVE
+    // assignment only. The pre-Epic-1 union form would have told a Customer
+    // User "internal" menus exist because some other Role the user holds
+    // carries an internal scope.
+    const scopeTypes = picked ? [picked.scopeType] : [];
 
     // Wave 2 (§4.3 step 7): the menu is filtered SERVER-SIDE, in the fixed
     // order external whitelist → module status → role rights, from exactly
@@ -149,20 +176,17 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
     return reply.send({
       userId: actor.userId,
       tenantId: actor.tenantId,
+      sessionId: actor.sessionId,
       fullName: user.fullName,
       email: user.email,
       permissions: Array.from(effectivePermissions),
-      // Checkpoint 1C.3 — expose the distinct Data-Scope types the actor holds
-      // ("customer" vs "organization_unit"/"tenant"). This is what lets the
-      // experience layer tell an external Customer User apart from an internal
-      // operational user for navigation — a distinction permissions alone
-      // cannot make (both hold complaint.read/manage). Authorization is still
-      // enforced per-route in the backend; this only shapes the UI.
       scopeTypes,
       activeModuleCodes,
       menu,
       assignments: myAssignments,
-      activeAssignmentId: picked?.id ?? null,
+      activeAssignmentId: actor.assignmentId,
+      activeAssignmentName,
+      activeScopeName,
     });
   });
 

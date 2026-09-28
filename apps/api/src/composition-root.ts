@@ -8,6 +8,7 @@ import { PgAuditLogRepository } from "./infrastructure/persistence/repositories/
 import { PgConfigurationRepository } from "./infrastructure/persistence/repositories/configuration.repository.pg.js";
 import { PgAppMetadataRepository } from "./infrastructure/persistence/repositories/app-metadata.repository.pg.js";
 import { PgWorkflowRepository } from "./infrastructure/persistence/repositories/workflow.repository.pg.js";
+import { PgApprovalAuthorityRepository } from "./infrastructure/persistence/repositories/approval-authority.repository.pg.js";
 import { PgDomainEventRepository } from "./infrastructure/persistence/repositories/domain-event.repository.pg.js";
 import { PgNotificationRepository } from "./infrastructure/persistence/repositories/notification.repository.pg.js";
 import { PgDocumentRepository } from "./infrastructure/persistence/repositories/document.repository.pg.js";
@@ -31,6 +32,7 @@ import { LocalFileStorage } from "./infrastructure/storage/local-file-storage.js
 
 import { AuditService } from "./application/audit/audit.service.js";
 import { RbacService } from "./application/rbac/rbac.service.js";
+import { ApprovalAuthorityService } from "./domain/rbac/approval-authority.service.js";
 import { TenantService } from "./application/tenant/tenant.service.js";
 import { LegalEntityService } from "./application/legal-entity/legal-entity.service.js";
 import { OrganizationUnitService } from "./application/organization-unit/organization-unit.service.js";
@@ -154,6 +156,11 @@ export function buildContainer() {
 
   const audit = new AuditService(auditRepo);
   const rbac = new RbacService(rbacRepo, organizationUnitRepo);
+  // Epic 1 (§4.1 D) — approval authority & separation of duties. Reads role
+  // limits, the supervisor chain, org-unit supervisor, the currency table and
+  // the accumulated-approval window; wired here so the document workflows of
+  // Epics 7+ resolve an approver through one place.
+  const approvalAuthority = new ApprovalAuthorityService(new PgApprovalAuthorityRepository(pool));
   const configuration = new ConfigurationService(configurationRepo, audit, rbac);
   // Epic 2 Wave 1 — Application Dictionary. configurationRepo is reused as the
   // Schema Registry source so Ajv validation of rule payloads reads the real
@@ -681,6 +688,7 @@ export function buildContainer() {
     pool,
     audit,
     rbac,
+    approvalAuthority,
     eventBus,
     scheduler,
     tenant: new TenantService(tenantRepo, audit, rbac),

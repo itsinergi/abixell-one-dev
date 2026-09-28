@@ -85,7 +85,7 @@ export class ServiceOperationsService {
     actor: ActorContext,
     input: { code: string; name: string; description?: string | null; category?: string | null },
   ): Promise<ServiceDefinition> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.configure");
+    await this.rbac.requirePermission(actor, "service_operations.configure");
     const existing = await this.repo.findServiceDefinitionByCode(actor.tenantId, input.code);
     if (existing) throw new ConflictError(`Service Definition '${input.code}' already exists`);
 
@@ -113,7 +113,7 @@ export class ServiceOperationsService {
     definitionCode: string,
     input: { code: string; label: string; isRequired?: boolean; sortOrder?: number },
   ): Promise<ServiceDefinitionChecklistItem> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.configure");
+    await this.rbac.requirePermission(actor, "service_operations.configure");
     const definition = await this.getServiceDefinitionOrThrow(actor.tenantId, definitionCode);
     return this.repo.addChecklistTemplateItem({
       serviceDefinitionId: definition.id,
@@ -129,14 +129,14 @@ export class ServiceOperationsService {
     definitionCode: string,
     isActive: boolean,
   ): Promise<ServiceDefinition> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.configure");
+    await this.rbac.requirePermission(actor, "service_operations.configure");
     const definition = await this.getServiceDefinitionOrThrow(actor.tenantId, definitionCode);
     const updated = await this.repo.setServiceDefinitionActive(definition.id, isActive, actor.userId);
     return updated!;
   }
 
   async listServiceDefinitions(actor: ActorContext): Promise<ServiceDefinition[]> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.read");
+    await this.rbac.requirePermission(actor, "service_operations.read");
     return this.repo.listServiceDefinitions(actor.tenantId);
   }
 
@@ -144,7 +144,7 @@ export class ServiceOperationsService {
     actor: ActorContext,
     definitionCode: string,
   ): Promise<{ definition: ServiceDefinition; checklist: ServiceDefinitionChecklistItem[] }> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.read");
+    await this.rbac.requirePermission(actor, "service_operations.read");
     const definition = await this.getServiceDefinitionOrThrow(actor.tenantId, definitionCode);
     return { definition, checklist: await this.repo.listChecklistTemplateItems(definition.id) };
   }
@@ -165,7 +165,7 @@ export class ServiceOperationsService {
       priority?: string | null;
     },
   ): Promise<WorkRequest> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.manage");
+    await this.rbac.requirePermission(actor, "service_operations.manage");
     // Customer Data Scope — identical posture to the Complaint Engine: works
     // whether the actor is a Customer User or an internal coordinator.
     const customer = await this.customers.getAuthorized(actor, input.customerId);
@@ -211,20 +211,20 @@ export class ServiceOperationsService {
   }
 
   async listWorkRequests(actor: ActorContext): Promise<{ request: WorkRequest; state: string }[]> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.read");
+    await this.rbac.requirePermission(actor, "service_operations.read");
     const customerIds = await this.customers.listScopedCustomerIds(actor);
     const requests = await this.repo.listWorkRequests(actor.tenantId, { customerIds });
     return requests.map((request) => ({ request, state: workRequestState(request) }));
   }
 
   async getWorkRequest(actor: ActorContext, id: string): Promise<{ request: WorkRequest; state: string }> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.read");
+    await this.rbac.requirePermission(actor, "service_operations.read");
     const request = await this.getAuthorizedWorkRequest(actor, id);
     return { request, state: workRequestState(request) };
   }
 
   async cancelWorkRequest(actor: ActorContext, id: string, reason: string | null): Promise<WorkRequest> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.manage");
+    await this.rbac.requirePermission(actor, "service_operations.manage");
     const request = await this.getAuthorizedWorkRequest(actor, id);
     const cancelled = await this.repo.cancelWorkRequest(request.id, reason, actor.userId);
     if (!cancelled) {
@@ -252,7 +252,7 @@ export class ServiceOperationsService {
     requestId: string,
     input: { title?: string; plannedStartAt?: string | null; plannedEndAt?: string | null; dueAt?: string | null },
   ): Promise<WorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.manage");
+    await this.rbac.requirePermission(actor, "service_operations.manage");
     const request = await this.getAuthorizedWorkRequest(actor, requestId);
     if (workRequestState(request) !== "open") {
       throw new ConflictError(`Only an open Work Request can be converted (is '${workRequestState(request)}')`);
@@ -301,7 +301,7 @@ export class ServiceOperationsService {
       dueAt?: string | null;
     },
   ): Promise<WorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.manage");
+    await this.rbac.requirePermission(actor, "service_operations.manage");
     const customer = await this.customers.getAuthorized(actor, input.customerId);
     const definition = await this.getActiveServiceDefinitionOrThrow(actor.tenantId, input.serviceDefinitionCode);
     return this.createWorkOrderInternal(actor, {
@@ -324,7 +324,7 @@ export class ServiceOperationsService {
    * role+scope routing remains available for queue-based assignment; this
    * records the named individual responsible for the work. */
   async assignWorkOrder(actor: ActorContext, id: string, assigneeUserId: string): Promise<WorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.manage");
+    await this.rbac.requirePermission(actor, "service_operations.manage");
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     const assigneeTenant = await this.repo.findUserTenantId(assigneeUserId);
     if (!assigneeTenant) throw new NotFoundError("User", assigneeUserId);
@@ -363,7 +363,7 @@ export class ServiceOperationsService {
     id: string,
     input: { plannedStartAt?: string | null; plannedEndAt?: string | null; dueAt?: string | null },
   ): Promise<WorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.manage");
+    await this.rbac.requirePermission(actor, "service_operations.manage");
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     const plannedStartAt = parseDate(input.plannedStartAt, "plannedStartAt");
     const plannedEndAt = parseDate(input.plannedEndAt, "plannedEndAt");
@@ -404,7 +404,7 @@ export class ServiceOperationsService {
     // so the module gate is "holds any operational capability" and the
     // PRECISE gate remains the Workflow Engine's own assignment eligibility
     // (role+scope / specific_user), exactly as in the Complaint Engine.
-    await this.rbac.requirePermission(actor.userId, "service_operations.read");
+    await this.rbac.requirePermission(actor, "service_operations.read");
     await this.requireAnyOperationalCapability(actor);
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     if (!workOrder.workflowInstanceId) {
@@ -448,7 +448,7 @@ export class ServiceOperationsService {
    * start is a no-op rather than an error, and never overwrites the original
    * executor/timestamp. */
   async startWork(actor: ActorContext, id: string): Promise<WorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.execute");
+    await this.rbac.requirePermission(actor, "service_operations.execute");
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     this.assertExecutor(actor, workOrder);
     if (workOrder.completedAt) throw new ConflictError("This Work Order is already completed");
@@ -482,7 +482,7 @@ export class ServiceOperationsService {
     itemId: string,
     input: { isCompleted: boolean; note?: string | null },
   ): Promise<WorkOrderChecklistItem> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.execute");
+    await this.rbac.requirePermission(actor, "service_operations.execute");
     const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
     this.assertExecutor(actor, workOrder);
     if (workOrder.completedAt) throw new ConflictError("This Work Order is already completed");
@@ -505,7 +505,7 @@ export class ServiceOperationsService {
    * overwrite the original facts or re-publish the event.
    */
   async completeWork(actor: ActorContext, id: string, notes: string | null): Promise<WorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.execute");
+    await this.rbac.requirePermission(actor, "service_operations.execute");
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     this.assertExecutor(actor, workOrder);
 
@@ -542,7 +542,7 @@ export class ServiceOperationsService {
   /** Supervisor verification (SO-CORE-010). Requires a distinct capability
    * from execution, so segregation of duties is possible. */
   async verifyWork(actor: ActorContext, id: string, notes: string | null): Promise<WorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.verify");
+    await this.rbac.requirePermission(actor, "service_operations.verify");
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     if (!workOrder.completedAt) throw new ConflictError("Only completed work can be verified");
 
@@ -578,7 +578,7 @@ export class ServiceOperationsService {
     actor: ActorContext,
     filter: { siteId?: string } = {},
   ): Promise<{ workOrder: WorkOrder; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.read");
+    await this.rbac.requirePermission(actor, "service_operations.read");
     const customerIds = await this.customers.listScopedCustomerIds(actor);
     const orders = await this.repo.listWorkOrders(actor.tenantId, { customerIds, siteId: filter.siteId });
     return this.withStatus(actor, orders);
@@ -587,13 +587,13 @@ export class ServiceOperationsService {
   /** Field surface (SO-CORE-014): the work assigned to this actor. Reachable
    * without Customer Data Scope — an executor is authorised by assignment. */
   async listMyWork(actor: ActorContext): Promise<{ workOrder: WorkOrder; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.execute");
+    await this.rbac.requirePermission(actor, "service_operations.execute");
     const orders = await this.repo.listWorkOrders(actor.tenantId, { assignedToUserId: actor.userId });
     return this.withStatus(actor, orders);
   }
 
   async getWorkOrderDetail(actor: ActorContext, id: string): Promise<WorkOrderDetailView> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.read");
+    await this.rbac.requirePermission(actor, "service_operations.read");
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     const [serviceDefinition, checklist] = await Promise.all([
       this.repo.findServiceDefinitionById(workOrder.serviceDefinitionId),
@@ -740,7 +740,7 @@ export class ServiceOperationsService {
   }
 
   private async requireAnyOperationalCapability(actor: ActorContext): Promise<void> {
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     const allowed = ["service_operations.manage", "service_operations.execute", "service_operations.verify"];
     if (!allowed.some((code) => permissions.has(code))) {
       throw new ForbiddenError("You do not hold an operational capability for Service Operations");

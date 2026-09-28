@@ -179,7 +179,7 @@ export class ServiceOperationsAdvancedService {
   // =========================================================================
 
   async listPacks(actor: ActorContext): Promise<ServicePackView[]> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.pack.manage");
+    await this.rbac.requirePermission(actor, "service_operations.pack.manage");
     const activations = await this.repo.listPackActivations(actor.tenantId);
     const activationByCode = new Map<ServicePackCode, ServicePackActivation>(
       activations.map((a) => [a.packCode, a]),
@@ -201,7 +201,7 @@ export class ServiceOperationsAdvancedService {
   }
 
   async getPack(actor: ActorContext, packCode: string): Promise<ServicePackView & { preset: ServicePackPreset }> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.pack.manage");
+    await this.rbac.requirePermission(actor, "service_operations.pack.manage");
     const code = this.parsePackCode(packCode);
     const preset = SERVICE_PACK_PRESETS[code];
     const activation = await this.repo.getPackActivation(actor.tenantId, code);
@@ -223,7 +223,7 @@ export class ServiceOperationsAdvancedService {
     packCode: string,
     options: { seedPresets?: boolean } = {},
   ): Promise<ServicePackActivation> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.pack.manage");
+    await this.rbac.requirePermission(actor, "service_operations.pack.manage");
     const code = this.parsePackCode(packCode);
     const preset = SERVICE_PACK_PRESETS[code];
 
@@ -262,7 +262,7 @@ export class ServiceOperationsAdvancedService {
   }
 
   async deactivatePack(actor: ActorContext, packCode: string): Promise<ServicePackActivation> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.pack.manage");
+    await this.rbac.requirePermission(actor, "service_operations.pack.manage");
     const code = this.parsePackCode(packCode);
     const preset = SERVICE_PACK_PRESETS[code];
 
@@ -302,11 +302,11 @@ export class ServiceOperationsAdvancedService {
     actor: ActorContext,
     input: GenerateOptimizationRunInput,
   ): Promise<OptimizationRun> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.optimization.read");
+    await this.rbac.requirePermission(actor, "service_operations.optimization.read");
     const targetDate = this.validateTargetDate(input.targetDate);
 
     if (input.organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.organizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, input.organizationUnitId);
     }
 
     const [workers, workOrders] = await Promise.all([
@@ -355,12 +355,12 @@ export class ServiceOperationsAdvancedService {
   }
 
   async listOptimizationRuns(actor: ActorContext, limit?: number): Promise<OptimizationRun[]> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.optimization.read");
+    await this.rbac.requirePermission(actor, "service_operations.optimization.read");
     return this.repo.listOptimizationRuns(actor.tenantId, limit);
   }
 
   async getOptimizationRun(actor: ActorContext, id: string): Promise<OptimizationRun> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.optimization.read");
+    await this.rbac.requirePermission(actor, "service_operations.optimization.read");
     const run = await this.repo.findOptimizationRunById(actor.tenantId, id);
     if (!run) throw new NotFoundError("OptimizationRun", id);
     return run;
@@ -377,7 +377,7 @@ export class ServiceOperationsAdvancedService {
     actor: ActorContext,
     id: string,
   ): Promise<{ run: OptimizationRun; appliedCount: number; skippedCount: number }> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.optimization.apply");
+    await this.rbac.requirePermission(actor, "service_operations.optimization.apply");
     const run = await this.repo.findOptimizationRunById(actor.tenantId, id);
     if (!run) throw new NotFoundError("OptimizationRun", id);
     if (run.status !== "proposed") {
@@ -442,7 +442,7 @@ export class ServiceOperationsAdvancedService {
   }
 
   async dismissOptimizationRun(actor: ActorContext, id: string): Promise<OptimizationRun> {
-    await this.rbac.requirePermission(actor.userId, "service_operations.optimization.apply");
+    await this.rbac.requirePermission(actor, "service_operations.optimization.apply");
     const run = await this.repo.findOptimizationRunById(actor.tenantId, id);
     if (!run) throw new NotFoundError("OptimizationRun", id);
     if (run.status !== "proposed") {

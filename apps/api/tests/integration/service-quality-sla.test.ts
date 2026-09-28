@@ -246,16 +246,6 @@ describe.sequential("Wave A1 — multidimensional Service Quality SLA", () => {
       )
     ).rows[0].id;
 
-    const noPermissionRole = await createReadOnlyRole(
-      tenantId,
-      "SQ_BROAD_NO_PERMISSION",
-      [],
-    );
-    await pool.query(
-      `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
-       VALUES ($1, $2, 'tenant')`,
-      [customerUserId, noPermissionRole],
-    );
     customerToken = (
       await login(
         app,

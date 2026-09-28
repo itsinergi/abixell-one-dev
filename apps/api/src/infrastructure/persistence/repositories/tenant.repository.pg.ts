@@ -58,8 +58,7 @@ export class PgTenantRepository implements TenantRepository {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
       await requireTransactionActorPermission(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         "tenant.update",
       );
 

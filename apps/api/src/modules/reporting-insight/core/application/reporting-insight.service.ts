@@ -98,15 +98,15 @@ export class ReportingInsightService {
   ) {}
 
   async listReports(actor: ActorContext): Promise<ReportDefinition[]> {
-    await this.rbac.requirePermission(actor.userId, "reporting.read");
+    await this.rbac.requirePermission(actor, "reporting.read");
     const active = await this.activeModuleSet(actor.tenantId);
     return REPORT_DEFINITIONS.filter((report) => active.has(report.moduleCode));
   }
 
   async getReport(actor: ActorContext, code: string): Promise<StandardReportResult> {
     const requiredPermissionCodes = ["reporting.read"];
-    await this.rbac.requirePermissionsOnSameAssignment(
-      actor.userId,
+    await this.rbac.      requirePermissionsOnActiveAssignment(
+      actor,
       requiredPermissionCodes,
     );
     const definition = await this.requireActiveReport(actor.tenantId, code);
@@ -115,8 +115,8 @@ export class ReportingInsightService {
 
   async dashboard(actor: ActorContext): Promise<ExecutiveDashboard> {
     const requiredPermissionCodes = ["reporting.read"];
-    await this.rbac.requirePermissionsOnSameAssignment(
-      actor.userId,
+    await this.rbac.      requirePermissionsOnActiveAssignment(
+      actor,
       requiredPermissionCodes,
     );
     const definitions = await this.listReports(actor);
@@ -137,8 +137,8 @@ export class ReportingInsightService {
 
   async exportCsv(actor: ActorContext, code: string): Promise<{ filename: string; content: string }> {
     const requiredPermissionCodes = ["reporting.read", "reporting.export"];
-    await this.rbac.requirePermissionsOnSameAssignment(
-      actor.userId,
+    await this.rbac.      requirePermissionsOnActiveAssignment(
+      actor,
       requiredPermissionCodes,
     );
     const definition = await this.requireActiveReport(actor.tenantId, code);

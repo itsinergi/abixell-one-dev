@@ -208,6 +208,65 @@ async function main() {
     [workflowManager.id, workflowManagerRole.id],
   );
 
+  // Epic 1 (§4.1 C) demo fixture — separation of duties. This user holds TWO
+  // Roles with DIFFERENT Data Scopes: CREATOR tenant-wide, APPROVER scoped to
+  // Site A. Before §4.1, authorization read the union of every assignment, so
+  // switching context changed only what the UI showed. After §4.1 the active
+  // Role is server-side session state: signed in as APPROVER, the tenant-wide
+  // reach CREATOR would have granted is gone, and vice versa. The integration
+  // suite signs in as this user to pin exactly that.
+  const creatorRole = (
+    await pool.query(
+      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'CREATOR', 'Creator') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const approverRole = (
+    await pool.query(
+      `INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'APPROVER', 'Approver') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const dualPermissions = (
+    await pool.query(`SELECT id, code FROM permissions WHERE code = ANY($1)`, [
+      [
+        "organization_unit.read",
+        "user.read",
+        "tenant.read",
+        "config.read",
+      ],
+    ])
+  ).rows;
+  const dualRoleIds = [creatorRole.id, approverRole.id];
+  for (const roleId of dualRoleIds) {
+    for (const p of dualPermissions) {
+      await pool.query(
+        `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`,
+        [roleId, p.id],
+      );
+    }
+  }
+
+  const dualPasswordHash = await hashPassword("Dual12345!");
+  const dual = (
+    await pool.query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name)
+       VALUES ($1, 'dual@demo.local', $2, 'Demo Dual Role') RETURNING id`,
+      [tenant.id, dualPasswordHash],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
+     VALUES ($1, $2, 'tenant')`,
+    [dual.id, creatorRole.id],
+  );
+  await pool.query(
+    `INSERT INTO user_role_assignments
+       (user_id, role_id, scope_type, scope_organization_unit_id)
+     VALUES ($1, $2, 'organization_unit', $3)`,
+    [dual.id, approverRole.id, siteA.id],
+  );
+
   await pool.query(
     `INSERT INTO audit_log (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
      VALUES ($1, NULL, 'tenant.seeded', 'tenant', $1, $2)`,
@@ -943,6 +1002,9 @@ async function main() {
   );
   console.log(
     `  Manager login:      manager@demo.local / Manager12345! (WORKFLOW_MANAGER, tenant-wide scope)`,
+  );
+  console.log(
+    `  Dual Role login:    dual@demo.local / Dual12345! (CREATOR tenant-wide + APPROVER Site A — Epic 1 §4.1 SoD fixture)`,
   );
   console.log(`  Workflow demo:      demo_approval_workflow v1 (published)`);
   console.log(`  Inbound webhook:    POST /integration/webhook/${DEMO_TENANT_CODE}/demo-inbound`);

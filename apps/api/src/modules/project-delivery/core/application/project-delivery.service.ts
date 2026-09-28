@@ -36,7 +36,7 @@ export class ProjectDeliveryService {
   ) {}
 
   async listProjects(actor: ActorContext): Promise<ProjectDeliveryProjectSummary[]> {
-    await this.rbac.requirePermission(actor.userId, "project_delivery.read");
+    await this.rbac.requirePermission(actor, "project_delivery.read");
     const projects = await this.repo.listProjectsByTenant(actor.tenantId);
     const visible: ProjectDeliveryProjectSummary[] = [];
     for (const project of projects) {
@@ -48,7 +48,7 @@ export class ProjectDeliveryService {
   }
 
   async getProjectDelivery(actor: ActorContext, projectId: string): Promise<ProjectDeliveryDetailView> {
-    await this.rbac.requirePermission(actor.userId, "project_delivery.read");
+    await this.rbac.requirePermission(actor, "project_delivery.read");
     const project = await this.requireProjectAccess(actor, projectId);
     const [activities, milestones] = await Promise.all([
       this.repo.listActivities(projectId),
@@ -74,7 +74,7 @@ export class ProjectDeliveryService {
       progressPercent?: number;
     },
   ): Promise<ProjectDeliveryActivity> {
-    await this.rbac.requirePermission(actor.userId, "project_delivery.manage");
+    await this.rbac.requirePermission(actor, "project_delivery.manage");
     await this.requireProjectAccess(actor, projectId);
     requirePic(input.picUserId, input.picEmployeeId);
     await this.validatePic(actor, input.picUserId, input.picEmployeeId);
@@ -138,7 +138,7 @@ export class ProjectDeliveryService {
       progressPercent?: number;
     },
   ): Promise<ProjectDeliveryActivity> {
-    await this.rbac.requirePermission(actor.userId, "project_delivery.manage");
+    await this.rbac.requirePermission(actor, "project_delivery.manage");
     const existing = await this.repo.findActivityById(id);
     if (!existing) throw new NotFoundError("ProjectDeliveryActivity", id);
     if (existing.tenantId !== actor.tenantId) throw new ForbiddenError("Access denied");
@@ -200,7 +200,7 @@ export class ProjectDeliveryService {
       status?: string;
     },
   ): Promise<ProjectDeliveryMilestone> {
-    await this.rbac.requirePermission(actor.userId, "project_delivery.manage");
+    await this.rbac.requirePermission(actor, "project_delivery.manage");
     await this.requireProjectAccess(actor, projectId);
     const status = parseMilestoneStatus(input.status ?? "pending");
     if (status === "achieved") throw new ValidationError("Create milestone as pending, then record achievement");
@@ -239,7 +239,7 @@ export class ProjectDeliveryService {
       achievementNote?: string | null;
     },
   ): Promise<ProjectDeliveryMilestone> {
-    await this.rbac.requirePermission(actor.userId, "project_delivery.manage");
+    await this.rbac.requirePermission(actor, "project_delivery.manage");
     const existing = await this.repo.findMilestoneById(id);
     if (!existing) throw new NotFoundError("ProjectDeliveryMilestone", id);
     if (existing.tenantId !== actor.tenantId) throw new ForbiddenError("Access denied");
@@ -280,7 +280,7 @@ export class ProjectDeliveryService {
   }
 
   async canAccessForDocument(actor: ActorContext, entityType: string, entityId: string): Promise<boolean> {
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     if (!permissions.has("project_delivery.documents.read") && !permissions.has("project_delivery.manage")) {
       return false;
     }
@@ -311,7 +311,7 @@ export class ProjectDeliveryService {
   }
 
   private async canAccessProject(actor: ActorContext, project: ProjectReference): Promise<boolean> {
-    return this.rbac.isCustomerContextScopeCovered(actor.userId, {
+    return this.rbac.isActiveCustomerContextScopeCovered(actor, {
       customerId: project.customerId,
       ownerOrganizationUnitId: project.ownerOrganizationUnitId,
     });

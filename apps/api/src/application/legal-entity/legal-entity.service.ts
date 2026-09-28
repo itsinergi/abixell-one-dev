@@ -16,7 +16,7 @@ export class LegalEntityService {
   ) {}
 
   async create(actor: ActorContext, input: Omit<CreateLegalEntityInput, "tenantId">) {
-    await this.rbac.requirePermission(actor.userId, "legal_entity.create");
+    await this.rbac.requirePermission(actor, "legal_entity.create");
 
     const legalEntity = await this.repo.create(
       { ...input, tenantId: actor.tenantId },
@@ -36,12 +36,12 @@ export class LegalEntityService {
   }
 
   async listForTenant(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, "legal_entity.read");
+    await this.rbac.requirePermission(actor, "legal_entity.read");
     return this.repo.listByTenant(actor.tenantId);
   }
 
   async update(actor: ActorContext, id: string, input: UpdateLegalEntityInput) {
-    await this.rbac.requirePermission(actor.userId, "legal_entity.update");
+    await this.rbac.requirePermission(actor, "legal_entity.update");
     const legalEntity = await this.repo.findById(id);
     if (!legalEntity || legalEntity.tenantId !== actor.tenantId) {
       throw new NotFoundError("LegalEntity", id);
@@ -51,7 +51,7 @@ export class LegalEntityService {
 
   async setActive(actor: ActorContext, id: string, isActive: boolean) {
     await this.rbac.requirePermission(
-      actor.userId,
+      actor,
       isActive ? "legal_entity.activate" : "legal_entity.deactivate",
     );
     const legalEntity = await this.repo.findById(id);

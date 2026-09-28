@@ -60,7 +60,7 @@ export class NotificationService {
       bodyTemplate: string;
     },
   ): Promise<NotificationTemplate> {
-    await this.rbac.requirePermission(actor.userId, "notification.template.manage");
+    await this.rbac.requirePermission(actor, "notification.template.manage");
     const template = await this.repo.createTemplate({ tenantId: actor.tenantId, ...input });
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -74,7 +74,7 @@ export class NotificationService {
   }
 
   async listTemplates(actor: ActorContext): Promise<NotificationTemplate[]> {
-    await this.rbac.requirePermission(actor.userId, "notification.template.manage");
+    await this.rbac.requirePermission(actor, "notification.template.manage");
     return this.repo.listTemplates(actor.tenantId);
   }
 
@@ -86,12 +86,12 @@ export class NotificationService {
   }
 
   async listMyNotifications(actor: ActorContext, limit = 50): Promise<Notification[]> {
-    await this.rbac.requirePermission(actor.userId, "notification.read");
+    await this.rbac.requirePermission(actor, "notification.read");
     return this.repo.listForRecipient(actor.tenantId, actor.userId, limit);
   }
 
   async listTenantNotifications(actor: ActorContext, limit = 100): Promise<Notification[]> {
-    await this.rbac.requirePermission(actor.userId, "notification.read");
+    await this.rbac.requirePermission(actor, "notification.read");
     return this.repo.listForTenant(actor.tenantId, limit);
   }
 

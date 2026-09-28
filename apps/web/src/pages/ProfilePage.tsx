@@ -1,8 +1,9 @@
 /**
  * Epic 2 Wave 1 — self-service profile.
  *
- * Draft without direction (no DESIGN.md) — dials ENERGY 1 / RHYTHM 1 /
- * MOTION 1. Form uses existing shell primitives and no decorative assets.
+ * Rebuilt onto the design tokens (Epic 4 Wave 1), same as the shell: no
+ * Tailwind palette literals, so the dark theme holds here too. No decorative
+ * assets.
  */
 import { useId, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -138,9 +139,9 @@ export function ProfilePage() {
           >
             <Input value={session?.email ?? ""} readOnly aria-readonly="true" />
           </Field>
-          <div className="border-t border-slate-200 pt-5">
-            <h2 className="text-sm font-semibold text-slate-800">Change password</h2>
-            <p className="mt-1 text-sm text-slate-500">
+          <div className="border-t border-line pt-5">
+            <h2 className="text-sm font-semibold text-ink">Change password</h2>
+            <p className="mt-1 text-sm text-ink-dim">
               Leave both password fields empty to keep your current password.
             </p>
             <div className="mt-4 space-y-4">

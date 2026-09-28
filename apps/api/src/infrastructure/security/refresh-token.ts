@@ -11,11 +11,16 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function issueRefreshToken(pool: Pool, userId: string): Promise<string> {
+export async function issueRefreshToken(
+  pool: Pool,
+  userId: string,
+  sessionId?: string,
+): Promise<string> {
   const token = generateOpaqueToken();
   await pool.query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
-    [userId, hashToken(token), newRefreshTokenExpiry()],
+    `INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, sessionId ?? null, hashToken(token), newRefreshTokenExpiry()],
   );
   return token;
 }
@@ -23,9 +28,9 @@ export async function issueRefreshToken(pool: Pool, userId: string): Promise<str
 export async function consumeRefreshToken(
   pool: Pool,
   token: string,
-): Promise<{ userId: string } | null> {
-  const result = await pool.query(
-    `SELECT id, user_id FROM refresh_tokens
+): Promise<{ userId: string; sessionId: string | null } | null> {
+  const result = await pool.query<{ id: string; user_id: string; session_id: string | null }>(
+    `SELECT id, user_id, session_id FROM refresh_tokens
       WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()`,
     [hashToken(token)],
   );
@@ -36,19 +41,30 @@ export async function consumeRefreshToken(
     result.rows[0].id,
   ]);
 
-  return { userId: result.rows[0].user_id };
+  return { userId: result.rows[0].user_id, sessionId: result.rows[0].session_id };
 }
 
 /** Explicit logout (Checkpoint 0F): revoke a refresh token on request
  * rather than waiting for it to be consumed/rotated or to expire.
  * Idempotent by design — revoking an already-revoked or unknown token is
  * a silent no-op, since logout should never leak whether a token was
- * valid (same principle as login's generic "invalid credentials"). */
-export async function revokeRefreshToken(pool: Pool, token: string): Promise<void> {
-  await pool.query(
-    `UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL`,
+ * valid (same principle as login's generic "invalid credentials").
+ *
+ * Returns the token's session id when the row carried one, so logout can
+ * revoke the session too (Epic 1): otherwise a sibling refresh token from
+ * the same login would keep re-minting access tokens after sign-out. */
+export async function revokeRefreshToken(
+  pool: Pool,
+  token: string,
+): Promise<{ sessionId: string | null } | null> {
+  const result = await pool.query<{ session_id: string | null }>(
+    `UPDATE refresh_tokens SET revoked_at = now()
+      WHERE token_hash = $1 AND revoked_at IS NULL
+      RETURNING session_id`,
     [hashToken(token)],
   );
+  const row = result.rows[0];
+  return row ? { sessionId: row.session_id } : null;
 }
 
 /** Inactive-user lifecycle hardening (Phase 11F): revoke every still-active

@@ -11,6 +11,14 @@ import {
   revokeAllRefreshTokensForUser,
   revokeRefreshToken,
 } from "../../infrastructure/security/refresh-token.js";
+import {
+  createSession,
+  revokeSession,
+  sessionForRefresh,
+  switchSessionRole,
+  touchSession,
+} from "./session.service.js";
+import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 
 /** Email is unique per-tenant only (`users_tenant_email_unique`), never
  * globally, so an email-only login can legitimately match the same address
@@ -33,6 +41,10 @@ export interface LoginSuccess {
   tenantId: string;
   tenantCode: string;
   tenantName: string;
+  /** Epic 1 (§4.1 B): the server-side session the access token resolves
+   * against. The client echoes it back nowhere — it travels inside the token
+   * — but the shell keeps it so "switch role" can name its own session. */
+  sessionId: string;
 }
 
 /** Returned instead of tokens when the verified email exists in more than
@@ -187,8 +199,17 @@ export class AuthService {
       throw new UnauthorizedError(GENERIC_DENIAL);
     }
 
-    const accessToken = signAccessToken({ sub: user.id, tenantId: tenant.id });
-    const refreshToken = await issueRefreshToken(this.pool, user.id);
+    // Epic 1 (§4.1 B): the session row is created here, and the access token
+    // carries only its id. The default active assignment is pinned inside
+    // createSession (first row of the picker order), so a user with exactly
+    // one Role logs straight into it.
+    const sessionId = await createSession(this.pool, {
+      userId: user.id,
+      tenantId: tenant.id,
+      remoteAddr: ip,
+    });
+    const accessToken = signAccessToken({ sub: user.id, tenantId: tenant.id, sessionId });
+    const refreshToken = await issueRefreshToken(this.pool, user.id, sessionId);
 
     await this.audit.record({
       tenantId: tenant.id,
@@ -196,7 +217,7 @@ export class AuthService {
       action: "auth.login.success",
       entityType: "auth",
       entityId: user.id,
-      metadata: { ip },
+      metadata: { ip, sessionId },
     });
 
     return {
@@ -207,6 +228,7 @@ export class AuthService {
       tenantId: tenant.id,
       tenantCode: tenant.code,
       tenantName: tenant.name,
+      sessionId,
     };
   }
 
@@ -227,8 +249,25 @@ export class AuthService {
       throw new UnauthorizedError("Invalid or expired refresh token");
     }
 
-    const accessToken = signAccessToken({ sub: user.id, tenantId: user.tenantId });
-    const newRefreshToken = await issueRefreshToken(this.pool, user.id);
+    // Epic 1 (§4.1 B): the session must still be alive for the token pair to
+    // re-mint. A logged-out or admin-revoked session ends the refresh chain
+    // even with a valid refresh token, so "sign out" actually signs out on
+    // every device that shares the session. A missing `sessionId` means the
+    // refresh token predates Epic 1 — hard cutover, same denial.
+    const sessionId = consumed.sessionId
+      ? await sessionForRefresh(this.pool, {
+          sessionId: consumed.sessionId,
+          userId: user.id,
+        })
+      : null;
+    if (!sessionId) {
+      await revokeAllRefreshTokensForUser(this.pool, consumed.userId);
+      throw new UnauthorizedError("Invalid or expired refresh token");
+    }
+    await touchSession(this.pool, sessionId);
+
+    const accessToken = signAccessToken({ sub: user.id, tenantId: user.tenantId, sessionId });
+    const newRefreshToken = await issueRefreshToken(this.pool, user.id, sessionId);
     return { accessToken, refreshToken: newRefreshToken };
   }
 
@@ -236,7 +275,32 @@ export class AuthService {
     return verifyAccessToken(token);
   }
 
+  /** Epic 1 (§4.1 E) — switch the session's active Role in place.
+   *
+   * No re-login and no new token pair: the session row IS the context, so
+   * changing it changes what the next request is authorized as. The caller's
+   * existing access token stays valid because it carries only `sessionId`.
+   *
+   * `switchSessionRole` answers "is this assignment mine and currently
+   * effective" and writes in one statement, so a revocation racing the switch
+   * cannot slip between the check and the update.
+   */
+  async switchRole(
+    actor: ActorContext,
+    assignmentId: string,
+  ): Promise<ActorContext> {
+    return switchSessionRole(this.pool, {
+      sessionId: actor.sessionId,
+      userId: actor.userId,
+      tenantId: actor.tenantId,
+      assignmentId,
+    });
+  }
+
   async logout(refreshToken: string): Promise<void> {
-    await revokeRefreshToken(this.pool, refreshToken);
+    const sessionInfo = await revokeRefreshToken(this.pool, refreshToken);
+    if (sessionInfo?.sessionId) {
+      await revokeSession(this.pool, sessionInfo.sessionId);
+    }
   }
 }

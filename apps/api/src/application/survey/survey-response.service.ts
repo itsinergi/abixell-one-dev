@@ -63,7 +63,7 @@ export class SurveyResponseService {
   async listMyAssignments(
     actor: ActorContext,
   ): Promise<{ assignment: SurveyAssignment; surveyName: string | null; versionNumber: number | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "survey.respond");
+    await this.rbac.requirePermission(actor, "survey.respond");
     const assignments = await this.repo.listAssignmentsByRespondentUser(actor.tenantId, actor.userId);
     const out = [];
     for (const assignment of assignments) {
@@ -79,7 +79,7 @@ export class SurveyResponseService {
   }
 
   async getAssignment(actor: ActorContext, assignmentId: string) {
-    await this.rbac.requirePermission(actor.userId, "survey.respond");
+    await this.rbac.requirePermission(actor, "survey.respond");
     const assignment = await this.getOwnedAssignmentOrThrow(actor, assignmentId);
     const [sections, questions, options, answers, matrixRows, matrixAnswers, branchingRules] = await Promise.all([
       this.repo.listSections(assignment.surveyVersionId),
@@ -128,7 +128,7 @@ export class SurveyResponseService {
     answers: AnswerInput[],
     matrixAnswers?: MatrixAnswerInput[],
   ): Promise<void> {
-    await this.rbac.requirePermission(actor.userId, "survey.respond");
+    await this.rbac.requirePermission(actor, "survey.respond");
     const assignment = await this.getOwnedAssignmentOrThrow(actor, assignmentId);
     this.assertEditable(assignment);
 
@@ -235,7 +235,7 @@ export class SurveyResponseService {
   }
 
   async submit(actor: ActorContext, assignmentId: string): Promise<SurveyAssignment> {
-    await this.rbac.requirePermission(actor.userId, "survey.respond");
+    await this.rbac.requirePermission(actor, "survey.respond");
     const assignment = await this.getOwnedAssignmentOrThrow(actor, assignmentId);
     this.assertEditable(assignment);
 

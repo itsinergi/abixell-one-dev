@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { ForbiddenError, NotFoundError } from "../../../domain/shared-kernel/errors.js";
+import type { GovernedActor } from "../../../domain/rbac/rbac.entity.js";
 
 // Cooperating lifecycle and RBAC writers serialize on the tenant row.
 export async function inGovernedTransaction<T>(
@@ -47,13 +48,23 @@ export async function listOrganizationUnitAncestorIds(
 
 // Permission and scope must belong to the same effective assignment.
 // Without an OU target, mutations govern tenant-wide resources (users/LEs).
+//
+// Epic 1 (§4.1 C): the assignment is named explicitly (`$5`) rather than
+// being re-derived from the user, so this write gate consults the SESSION'S
+// ACTIVE Role. Without the pin, a user who holds a permission through any
+// switched-away Role would satisfy this check inside a transaction whose
+// other reads were already scoped to the active Role.
 export async function requireTransactionActorPermission(
   client: PoolClient,
-  tenantId: string,
-  userId: string,
+  actor: GovernedActor,
   permissionCode: string,
   organizationUnitId?: string,
 ): Promise<void> {
+  if (actor.assignmentId === null) {
+    throw new ForbiddenError(
+      `No active Role in this session; switch to a Role that grants permission '${permissionCode}'`,
+    );
+  }
   const ancestors = organizationUnitId
     ? await listOrganizationUnitAncestorIds(client, organizationUnitId)
     : [];
@@ -64,6 +75,7 @@ export async function requireTransactionActorPermission(
          JOIN authorization_effective_user_role_assignments aura
            ON aura.user_id = u.id
           AND aura.tenant_id = u.tenant_id
+          AND aura.id = $5
          JOIN role_permissions rp ON rp.role_id = aura.role_id
          JOIN permissions p ON p.id = rp.permission_id
         WHERE u.id = $2
@@ -77,7 +89,7 @@ export async function requireTransactionActorPermission(
                 AND aura.scope_organization_unit_id = ANY($4::uuid[]))
           )
      ) AS allowed`,
-    [tenantId, userId, permissionCode, ancestors],
+    [actor.tenantId, actor.userId, permissionCode, ancestors, actor.assignmentId],
   );
   if (result.rows[0]?.allowed !== true) {
     throw new ForbiddenError(`Missing permission or Data Scope for '${permissionCode}'`);

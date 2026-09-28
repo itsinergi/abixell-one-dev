@@ -82,7 +82,7 @@ export class ComplaintConfigurationService {
   }
 
   async getConfiguration(actor: ActorContext): Promise<ComplaintConfigurationView> {
-    await this.rbac.requirePermission(actor.userId, "complaint.configure");
+    await this.rbac.requirePermission(actor, "complaint.configure");
 
     const [categories, severities, priorities, numbering, templates, workflow] = await Promise.all([
       this.configuration.listReferenceDataItemsForTrustedCaller(actor.tenantId, COMPLAINT_CATEGORY_REF_TYPE),
@@ -129,7 +129,7 @@ export class ComplaintConfigurationService {
     typeCode: string,
     item: { code: string; label: string; sortOrder?: number },
   ) {
-    await this.rbac.requirePermission(actor.userId, "complaint.configure");
+    await this.rbac.requirePermission(actor, "complaint.configure");
     this.assertComplaintRefType(typeCode);
     return this.configuration.createReferenceDataItemForTrustedCaller(
       actor.tenantId,
@@ -145,7 +145,7 @@ export class ComplaintConfigurationService {
     itemId: string,
     isActive: boolean,
   ) {
-    await this.rbac.requirePermission(actor.userId, "complaint.configure");
+    await this.rbac.requirePermission(actor, "complaint.configure");
     this.assertComplaintRefType(typeCode);
     return this.configuration.setReferenceDataItemActiveForTrustedCaller(
       actor.tenantId,

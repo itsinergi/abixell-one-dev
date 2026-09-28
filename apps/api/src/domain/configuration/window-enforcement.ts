@@ -262,6 +262,11 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/tenants", windowCode: "route:/admin" },
   { method: "*", apiPath: "/users", windowCode: "route:/administration" },
   { method: "*", apiPath: "/me", windowCode: "route:/profile" },
+  // Epic 1 (§4.1 E): switching the session's active Role is authenticated
+  // (`app.authenticate` resolves the actor, then the assignment must be one
+  // it holds). It is the write behind the "Switch role" control in the user
+  // menu, which is part of the profile surface.
+  { method: "POST", apiPath: "/auth/switch-role", windowCode: "route:/profile" },
 
   // Cross-module platform surfaces, each mapped to the page that raises the
   // write. These were the six prefixes step 11b left declared as gaps; only
@@ -319,10 +324,22 @@ export interface WindowEnforcementExemption {
 
 export const WINDOW_ENFORCEMENT_EXEMPTIONS: WindowEnforcementExemption[] = [
   {
-    apiPath: "/auth",
+    apiPath: "/auth/login",
     property: "unauthenticated",
     reason:
-      "Session plumbing (login, refresh, logout), not a Windowed surface. Sign-in has no actor, so no Role could be consulted; gating the other two would make a session unable to end. The credential each route resolves is what bounds these writes.",
+      "Sign-in has no actor, so no Role could be consulted. The credential the route resolves itself (email + password) is what bounds the write.",
+  },
+  {
+    apiPath: "/auth/refresh",
+    property: "unauthenticated",
+    reason:
+      "Refresh carries a rotating token, not a bearer session: there is no actor at decision time. The consumed refresh token is the bound.",
+  },
+  {
+    apiPath: "/auth/logout",
+    property: "unauthenticated",
+    reason:
+      "Gating logout on a Window would make a session unable to end. The refresh token the body names is the bound, and the route revokes exactly it.",
   },
   {
     apiPath: "/documents",

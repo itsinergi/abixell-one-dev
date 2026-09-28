@@ -13,8 +13,12 @@ import { activateAllModules, authHeader, bootstrapTenant, login, provisionFirstA
  *  - when the SAME email exists in several tenants, no token is issued and
  *    the verified tenant list comes back instead — and only after the
  *    password verifies, so it never becomes an enumeration oracle;
- *  - `/me` exposes the caller's own assignments (with scope names) and can
- *    narrow the reported capability set to one chosen context.
+ *  - `/me` exposes the caller's own assignments (with scope names).
+ *
+ * Epic 1 (§4.1 B/C) replaced the `?assignmentId=` query narrowing with a
+ * session write: the ACTIVE Role is server-side session state, changed
+ * through POST /auth/switch-role, and `/me` reports it. The last two cases
+ * exercise the switch, including the refused foreign assignment.
  *
  * `tenantCode` stays required exactly as before for every pre-existing
  * caller, so the backward-compatibility test comes first.
@@ -198,43 +202,60 @@ describe("Login workspace selection", () => {
     expect(site.roleCode).toBe("SITE_ROLE");
   });
 
-  it("narrows /me permissions to the chosen assignment", async () => {
+  it("reports the session's ACTIVE assignment on /me, and switches it via the API", async () => {
     const result = await login(app, TENANT_A, SHARED_EMAIL, PASSWORD);
     const token = result.body.accessToken;
-    const all = (
+
+    const before = (
       await app.inject({ method: "GET", url: "/me", headers: authHeader(token) })
     ).json();
-    const site = all.assignments.find(
+    // The login picked a default (the first effective assignment); the
+    // session — not the client — decides which one is active.
+    expect(before.activeAssignmentId).toBeTruthy();
+    expect(before.sessionId).toBeTruthy();
+    const site = before.assignments.find(
       (a: { scopeType: string }) => a.scopeType === "organization_unit",
     );
 
-    const narrowed = (
-      await app.inject({
-        method: "GET",
-        url: `/me?assignmentId=${site.id}`,
-        headers: authHeader(token),
-      })
-    ).json();
+    // Epic 1 §4.1 B/C: switching is a session write, not a query narrowing.
+    const switched = await app.inject({
+      method: "POST",
+      url: "/auth/switch-role",
+      headers: authHeader(token),
+      payload: { assignmentId: site.id },
+    });
+    expect(switched.statusCode).toBe(200);
+    expect(switched.json().activeAssignmentId).toBe(site.id);
+    expect(switched.json().roleCode).toBe("SITE_ROLE");
 
-    expect(narrowed.activeAssignmentId).toBe(site.id);
-    expect(narrowed.permissions).toEqual(["organization_unit.read"]);
-    expect(narrowed.scopeTypes).toEqual(["organization_unit"]);
-    // The full set is unchanged — narrowing is per-request, not a revocation.
-    expect(all.permissions.length).toBeGreaterThan(narrowed.permissions.length);
+    // The SAME token now reports the new Role — no re-login, no new token.
+    const after = (
+      await app.inject({ method: "GET", url: "/me", headers: authHeader(token) })
+    ).json();
+    expect(after.activeAssignmentId).toBe(site.id);
+    expect(after.permissions).toEqual(["organization_unit.read"]);
+    expect(after.scopeTypes).toEqual(["organization_unit"]);
+    expect(after.activeAssignmentName).toBe("Site Role");
   });
 
-  it("ignores an assignmentId that belongs to someone else", async () => {
+  it("refuses to switch to an assignment the caller does not hold", async () => {
     const result = await login(app, TENANT_A, SHARED_EMAIL, PASSWORD);
     const token = result.body.accessToken;
     const foreign = "00000000-0000-0000-0000-000000000000";
-    const body = (
-      await app.inject({
-        method: "GET",
-        url: `/me?assignmentId=${foreign}`,
-        headers: authHeader(token),
-      })
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/switch-role",
+      headers: authHeader(token),
+      payload: { assignmentId: foreign },
+    });
+    // Not a silent no-op: an assignment the caller does not hold is refused,
+    // so the session keeps whatever active Role it already had.
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+
+    const me = (
+      await app.inject({ method: "GET", url: "/me", headers: authHeader(token) })
     ).json();
-    expect(body.activeAssignmentId).toBeNull();
-    expect(body.permissions.length).toBeGreaterThan(0);
+    expect(me.activeAssignmentId).not.toBe(foreign);
   });
 });

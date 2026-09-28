@@ -19,16 +19,18 @@
  * test would prove nothing about 11b. The one test that NEEDS the module gate
  * turns `hse` off explicitly.
  *
- * Positive and union controls close the loop: the same write with a writable
- * row, or with one writable Role among several, must succeed. Without them a
- * gate that rejected everything would pass.
+ * Positive controls close the loop: the same write with a writable row must
+ * succeed. Without them a gate that rejected everything would pass. The
+ * pre-Epic1 "union allow" case — one writable Role among several held by the
+ * user — no longer opens the write: since Epic 1 (§4.1 C) the lock is judged
+ * on the ACTIVE assignment only, so a read-only active Role is refused and a
+ * switch to the writable Role is what reopens the Window.
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
-import { activateAllModules, authHeader, bootstrapTenant } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, sessionTokenFor } from "./helpers.js";
 
 const REQUIRED_DATABASE = "abixell_one_epic3_wave4";
 const stamp = `${Date.now().toString(36)}${randomUUID().replaceAll("-", "").slice(0, 6)}`;
@@ -109,22 +111,27 @@ async function createUser(tenantId: string, name: string): Promise<UserFixture> 
   return user.rows[0] as UserFixture;
 }
 
-async function assignTenantRole(userId: string, roleId: string) {
-  await pool.query(
-    `INSERT INTO user_role_assignments (user_id, role_id, scope_type) VALUES ($1, $2, 'tenant')`,
+async function assignTenantRole(userId: string, roleId: string): Promise<string> {
+  const result = await pool.query(
+    `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
+     VALUES ($1, $2, 'tenant') RETURNING id`,
     [userId, roleId],
   );
+  return result.rows[0].id as string;
 }
 
-function tokenFor(tenantId: string, user: UserFixture) {
-  return signAccessToken({ sub: user.id, tenantId });
+function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
+  // Epic 1 (�4.1 F): a bearer token must name a session, so fixtures create
+  // one the way the login endpoint does instead of signing a bare payload.
+  return sessionTokenFor({ userId: user.id, tenantId });
 }
 
 describe("Epic 4 Wave 1 — Window read-only enforcement", () => {
   let tenantId: string;
   let readOnlyToken: string;
   let writerToken: string;
-  let unionToken: string;
+  let unionReadOnlyToken: string;
+  let unionWriterToken: string;
   let readOnlyRoleId: string;
   let writerRoleId: string;
   let writerRoleCode: string;
@@ -165,16 +172,27 @@ describe("Epic 4 Wave 1 — Window read-only enforcement", () => {
 
     const readOnly = await createUser(tenantId, "read-only");
     await assignTenantRole(readOnly.id, readOnlyRoleId);
-    readOnlyToken = tokenFor(tenantId, readOnly);
+    readOnlyToken = await tokenFor(tenantId, readOnly);
 
     const writer = await createUser(tenantId, "writer");
     await assignTenantRole(writer.id, writerRoleId);
-    writerToken = tokenFor(tenantId, writer);
+    writerToken = await tokenFor(tenantId, writer);
 
     const union = await createUser(tenantId, "union");
-    await assignTenantRole(union.id, readOnlyRoleId);
-    await assignTenantRole(union.id, writerRoleId);
-    unionToken = tokenFor(tenantId, union);
+    const unionReadOnlyAssignmentId = await assignTenantRole(union.id, readOnlyRoleId);
+    const unionWriterAssignmentId = await assignTenantRole(union.id, writerRoleId);
+    // Epic 1 (§4.1 B): two sessions for the two-role user, each pinned to
+    // one assignment — the same choice the role picker offers after login.
+    unionReadOnlyToken = await sessionTokenFor({
+      userId: union.id,
+      tenantId,
+      activeAssignmentId: unionReadOnlyAssignmentId,
+    });
+    unionWriterToken = await sessionTokenFor({
+      userId: union.id,
+      tenantId,
+      activeAssignmentId: unionWriterAssignmentId,
+    });
   });
 
   afterAll(async () => {
@@ -253,19 +271,29 @@ describe("Epic 4 Wave 1 — Window read-only enforcement", () => {
     expect(response.json().error).toBe(WINDOW_READ_ONLY_REASON);
   });
 
-  it("applies the union allow: one writable Role among several keeps the write open", async () => {
-    // The union user holds the read-only Role AND the writable one. The
-    // read-only row alone would refuse; one writable effective assignment is
-    // enough (§4.4 step 11b: "union allow").
+  it("judges the lock on the ACTIVE Role: a read-only active Role refuses, switching to the writable Role reopens", async () => {
+    // The user holds both the read-only Role and the writable one. Since
+    // Epic 1 (§4.1 C) the lock reads only the session's active assignment, so
+    // the read-only session is refused — holding a writable Role elsewhere is
+    // not a union that opens this write.
     await setWindowAccess(tenantId, writerRoleId, CUSTOMER_WINDOW, true);
 
-    const response = await app.inject({
+    const refused = await app.inject({
       method: "POST",
       url: "/customers",
-      headers: authHeader(unionToken),
-      payload: { code: `WE-UNION-${stamp}`, name: "Union allow" },
+      headers: authHeader(unionReadOnlyToken),
+      payload: { code: `WE-ACTIVE-RO-${stamp}`, name: "Read-only active Role" },
     });
-    expect(response.statusCode).toBe(201);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error).toBe(WINDOW_READ_ONLY_REASON);
+
+    const opened = await app.inject({
+      method: "POST",
+      url: "/customers",
+      headers: authHeader(unionWriterToken),
+      payload: { code: `WE-ACTIVE-RW-${stamp}`, name: "Writable active Role" },
+    });
+    expect(opened.statusCode).toBe(201);
   });
 
   it("positive control: the writer's own write succeeds on the same Window", async () => {

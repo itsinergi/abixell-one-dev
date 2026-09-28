@@ -58,9 +58,9 @@ export class CustomerService {
   ) {}
 
   async create(actor: ActorContext, input: CreateCustomerInput): Promise<Customer> {
-    await this.rbac.requirePermission(actor.userId, "customer.manage");
+    await this.rbac.requirePermission(actor, "customer.manage");
     if (input.ownerOrganizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.ownerOrganizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, input.ownerOrganizationUnitId);
     }
 
     const customer = await this.repo.create(
@@ -81,10 +81,10 @@ export class CustomerService {
   }
 
   async update(actor: ActorContext, id: string, input: UpdateCustomerInput): Promise<Customer> {
-    await this.rbac.requirePermission(actor.userId, "customer.manage");
+    await this.rbac.requirePermission(actor, "customer.manage");
     const current = await this.getAuthorized(actor, id);
     if (input.ownerOrganizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.ownerOrganizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, input.ownerOrganizationUnitId);
     }
 
     const customer = await this.repo.update(current.id, input, actor.userId);
@@ -103,7 +103,7 @@ export class CustomerService {
   }
 
   async listForTenant(actor: ActorContext): Promise<Customer[]> {
-    await this.rbac.requirePermission(actor.userId, "customer.read");
+    await this.rbac.requirePermission(actor, "customer.read");
     const all = await this.repo.listByTenant(actor.tenantId);
 
     // Checkpoint 1B hardening: `GET /customers` now applies Customer Data
@@ -189,7 +189,7 @@ export class CustomerService {
     if (!customer || customer.tenantId !== actor.tenantId) {
       throw new NotFoundError("Customer", customerId);
     }
-    await this.rbac.requireCustomerContextScope(actor.userId, {
+    await this.rbac.requireCustomerContextScopeForActor(actor, {
       customerId: customer.id,
       ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
     });
@@ -236,14 +236,14 @@ export class CustomerService {
   async canAccessForDocument(actor: ActorContext, customerId: string): Promise<boolean> {
     const customer = await this.repo.findById(customerId);
     if (!customer || customer.tenantId !== actor.tenantId) return false;
-    return this.rbac.isCustomerContextScopeCovered(actor.userId, {
+    return this.rbac.isActiveCustomerContextScopeCovered(actor, {
       customerId: customer.id,
       ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
     });
   }
 
   async createContact(actor: ActorContext, input: CreateCustomerContactInput) {
-    await this.rbac.requirePermission(actor.userId, "customer.manage");
+    await this.rbac.requirePermission(actor, "customer.manage");
     const customer = await this.getAuthorized(actor, input.customerId);
 
     const contact = await this.contactRepo.create(
@@ -268,7 +268,7 @@ export class CustomerService {
     id: string,
     input: UpdateCustomerContactInput,
   ): Promise<CustomerContact> {
-    await this.rbac.requirePermission(actor.userId, "customer.manage");
+    await this.rbac.requirePermission(actor, "customer.manage");
     const current = await this.contactRepo.findById(id);
     if (!current || current.tenantId !== actor.tenantId) {
       throw new NotFoundError("CustomerContact", id);
@@ -291,13 +291,13 @@ export class CustomerService {
   }
 
   async listContacts(actor: ActorContext, customerId: string) {
-    await this.rbac.requirePermission(actor.userId, "customer.read");
+    await this.rbac.requirePermission(actor, "customer.read");
     await this.getAuthorized(actor, customerId);
     return this.contactRepo.listByCustomer(customerId);
   }
 
   async getCustomer(actor: ActorContext, customerId: string): Promise<Customer> {
-    await this.rbac.requirePermission(actor.userId, "customer.read");
+    await this.rbac.requirePermission(actor, "customer.read");
     return this.getAuthorized(actor, customerId);
   }
 }

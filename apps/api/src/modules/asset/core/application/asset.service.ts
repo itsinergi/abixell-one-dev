@@ -101,7 +101,7 @@ export class AssetService {
       acquiredAt?: string | null;
     },
   ): Promise<AssetDetailView> {
-    await this.rbac.requirePermission(actor.userId, "asset.manage");
+    await this.rbac.requirePermission(actor, "asset.manage");
 
     const assetTag = this.normaliseTag(input.assetTag);
     if (assetTag && (await this.repo.findAssetByTag(actor.tenantId, assetTag))) {
@@ -170,7 +170,7 @@ export class AssetService {
       includeTerminal?: boolean;
     } = {},
   ): Promise<{ assets: Asset[]; custodians: CustodianReference[] }> {
-    await this.rbac.requirePermission(actor.userId, "asset.read");
+    await this.rbac.requirePermission(actor, "asset.read");
     const repoFilter: AssetListFilter = {
       search: filter.search,
       category: filter.category,
@@ -188,7 +188,7 @@ export class AssetService {
   }
 
   async getAsset(actor: ActorContext, id: string): Promise<AssetDetailView> {
-    await this.rbac.requirePermission(actor.userId, "asset.read");
+    await this.rbac.requirePermission(actor, "asset.read");
     const asset = await this.getAuthorizedAsset(actor, id);
     const [custodian, movements, pending] = await Promise.all([
       asset.custodianEmployeeId
@@ -224,7 +224,7 @@ export class AssetService {
       acquiredAt?: string | null;
     },
   ): Promise<AssetDetailView> {
-    await this.rbac.requirePermission(actor.userId, "asset.manage");
+    await this.rbac.requirePermission(actor, "asset.manage");
     const asset = await this.getAuthorizedAsset(actor, id);
 
     if (input.assetTag !== undefined) {
@@ -349,7 +349,7 @@ export class AssetService {
     actionCode: string,
     comment: string | null,
   ): Promise<AssetDetailView> {
-    await this.rbac.requirePermission(actor.userId, "asset.read");
+    await this.rbac.requirePermission(actor, "asset.read");
     const movement = await this.repo.findMovementById(movementId);
     if (!movement || movement.tenantId !== actor.tenantId) throw new NotFoundError("AssetMovement", movementId);
     const asset = await this.getAuthorizedAsset(actor, movement.assetId);
@@ -411,7 +411,7 @@ export class AssetService {
   async canAccessForDocument(actor: ActorContext, assetId: string): Promise<boolean> {
     const asset = await this.repo.findAssetById(assetId);
     if (!asset || asset.tenantId !== actor.tenantId) return false;
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     if (!permissions.has("asset.documents.read")) return false;
     return this.isWithinOrganizationScope(actor, asset.organizationUnitId);
   }
@@ -430,7 +430,7 @@ export class AssetService {
     reason: string | null,
     effectiveDate: string | null,
   ): Promise<AssetDetailView> {
-    await this.rbac.requirePermission(actor.userId, "asset.move");
+    await this.rbac.requirePermission(actor, "asset.move");
     const asset = await this.getAuthorizedAsset(actor, assetId);
     if (isTerminalAssetStatus(asset.status)) {
       throw new ConflictError("A " + asset.status + " asset can no longer be moved");
@@ -601,7 +601,7 @@ export class AssetService {
     }
     // Moving an asset INTO a unit the actor cannot see would put it beyond
     // their own reach and outside their authority — refuse it (§32).
-    await this.rbac.requireOrganizationUnitScope(actor.userId, unitId);
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, unitId);
     return unitId;
   }
 
@@ -646,11 +646,11 @@ export class AssetService {
    */
   private async isWithinOrganizationScope(actor: ActorContext, unitId: string | null): Promise<boolean> {
     if (!unitId) return true;
-    return this.rbac.isOrganizationUnitScopeCovered(actor.userId, unitId);
+    return this.rbac.isActiveOrganizationUnitScopeCovered(actor, unitId);
   }
 
   private async filterByOrganizationScope(actor: ActorContext, assets: Asset[]): Promise<Asset[]> {
-    if (await this.rbac.hasTenantScope(actor.userId)) return assets;
+    if (await this.rbac.hasTenantScope(actor)) return assets;
     const decisions = new Map<string, boolean>();
     const allowed: Asset[] = [];
     for (const asset of assets) {
@@ -660,7 +660,7 @@ export class AssetService {
       }
       let ok = decisions.get(asset.organizationUnitId);
       if (ok === undefined) {
-        ok = await this.rbac.isOrganizationUnitScopeCovered(actor.userId, asset.organizationUnitId);
+        ok = await this.rbac.isActiveOrganizationUnitScopeCovered(actor, asset.organizationUnitId);
         decisions.set(asset.organizationUnitId, ok);
       }
       if (ok) allowed.push(asset);

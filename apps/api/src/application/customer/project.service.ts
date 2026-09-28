@@ -22,7 +22,7 @@ export class ProjectService {
   ) {}
 
   async create(actor: ActorContext, input: CreateProjectInput): Promise<Project> {
-    await this.rbac.requirePermission(actor.userId, "project.manage");
+    await this.rbac.requirePermission(actor, "project.manage");
     await this.customers.getAuthorized(actor, input.customerId);
 
     const project = await this.repo.create({ ...input, tenantId: actor.tenantId }, actor.userId);
@@ -40,7 +40,7 @@ export class ProjectService {
   }
 
   async update(actor: ActorContext, id: string, input: UpdateProjectInput): Promise<Project> {
-    await this.rbac.requirePermission(actor.userId, "project.manage");
+    await this.rbac.requirePermission(actor, "project.manage");
     const current = await this.repo.findById(id);
     if (!current || current.tenantId !== actor.tenantId) {
       throw new NotFoundError("Project", id);
@@ -63,7 +63,7 @@ export class ProjectService {
   }
 
   async listByCustomer(actor: ActorContext, customerId: string): Promise<Project[]> {
-    await this.rbac.requirePermission(actor.userId, "project.read");
+    await this.rbac.requirePermission(actor, "project.read");
     await this.customers.getAuthorized(actor, customerId);
     return this.repo.listByCustomer(customerId);
   }

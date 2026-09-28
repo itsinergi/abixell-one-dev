@@ -122,3 +122,14 @@ export function getProfileUpdateRateLimitConfig(): { max: number; timeWindow: st
     timeWindow: process.env.PROFILE_UPDATE_RATE_LIMIT_WINDOW ?? "1 minute",
   };
 }
+
+/** Epic 1 (§4.1 E) — role switching (POST /auth/switch-role). One governed
+ * write with a row lock per call; hammering it gains an attacker nothing, so
+ * the ceiling is generous compared with login. Still its own budget so a
+ * runaway client loop cannot crowd out the global one. */
+export function getSwitchRoleRateLimitConfig(): { max: number; timeWindow: string } {
+  return {
+    max: readPositiveIntegerEnv("SWITCH_ROLE_RATE_LIMIT_MAX", 60),
+    timeWindow: process.env.SWITCH_ROLE_RATE_LIMIT_WINDOW ?? "1 minute",
+  };
+}

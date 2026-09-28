@@ -100,7 +100,7 @@ export class FinanceService {
       organizationUnitId?: string | null;
     },
   ): Promise<FinanceAccount> {
-    await this.rbac.requirePermission(actor.userId, "finance.configure");
+    await this.rbac.requirePermission(actor, "finance.configure");
     if (await this.repo.findAccountByCode(actor.tenantId, input.code)) {
       throw new ConflictError("Account code already exists: " + input.code);
     }
@@ -133,13 +133,13 @@ export class FinanceService {
   }
 
   async listAccounts(actor: ActorContext, filter: { activeOnly?: boolean } = {}): Promise<FinanceAccount[]> {
-    await this.rbac.requirePermission(actor.userId, "finance.read");
+    await this.rbac.requirePermission(actor, "finance.read");
     const accounts = await this.repo.listAccounts(actor.tenantId, filter);
     return this.filterByOrganizationScope(actor, accounts);
   }
 
   async getAccount(actor: ActorContext, code: string): Promise<FinanceAccount> {
-    await this.rbac.requirePermission(actor.userId, "finance.read");
+    await this.rbac.requirePermission(actor, "finance.read");
     const account = await this.repo.findAccountByCode(actor.tenantId, code);
     if (!account) throw new NotFoundError("FinanceAccount", code);
     if (!(await this.isWithinOrganizationScope(actor, account.organizationUnitId))) {
@@ -155,7 +155,7 @@ export class FinanceService {
     code: string,
     input: { name?: string; description?: string | null; isActive?: boolean },
   ): Promise<FinanceAccount> {
-    await this.rbac.requirePermission(actor.userId, "finance.configure");
+    await this.rbac.requirePermission(actor, "finance.configure");
     const account = await this.getAccount(actor, code);
     const updated = await this.repo.updateAccount(account.id, input, actor.userId);
     await this.audit.record({
@@ -177,7 +177,7 @@ export class FinanceService {
    * through the trusted-caller projection rather than owning a second
    * configurable-list mechanism. Categories are NOT a chart of accounts. */
   async listCategories(actor: ActorContext): Promise<{ code: string; label: string }[]> {
-    await this.rbac.requirePermission(actor.userId, "finance.read");
+    await this.rbac.requirePermission(actor, "finance.read");
     const items = await this.configuration.listReferenceDataItemsForTrustedCaller(
       actor.tenantId,
       FINANCE_CATEGORY_REF_TYPE,
@@ -206,7 +206,7 @@ export class FinanceService {
       customerId?: string | null;
     },
   ): Promise<TransactionDetailView> {
-    await this.rbac.requirePermission(actor.userId, "finance.manage");
+    await this.rbac.requirePermission(actor, "finance.manage");
 
     const direction = this.parseDirection(input.direction);
     const amount = this.parseMoney(input.amount);
@@ -263,7 +263,7 @@ export class FinanceService {
       search?: string;
     } = {},
   ): Promise<FinanceTransaction[]> {
-    await this.rbac.requirePermission(actor.userId, "finance.read");
+    await this.rbac.requirePermission(actor, "finance.read");
     const repoFilter: TransactionListFilter = {
       direction: filter.direction ? this.parseDirection(filter.direction) : undefined,
       categoryCode: filter.categoryCode,
@@ -283,7 +283,7 @@ export class FinanceService {
   }
 
   async getTransaction(actor: ActorContext, id: string): Promise<TransactionDetailView> {
-    await this.rbac.requirePermission(actor.userId, "finance.read");
+    await this.rbac.requirePermission(actor, "finance.read");
     const transaction = await this.getAuthorizedTransaction(actor, id);
     const account = await this.repo.findAccountById(transaction.accountId);
 
@@ -310,7 +310,7 @@ export class FinanceService {
     actionCode: string,
     comment: string | null,
   ): Promise<TransactionDetailView> {
-    await this.rbac.requirePermission(actor.userId, "finance.approve");
+    await this.rbac.requirePermission(actor, "finance.approve");
     const transaction = await this.getAuthorizedTransaction(actor, id);
     if (!transaction.workflowInstanceId) throw new ConflictError("This transaction has no active Workflow Instance");
     if (transaction.appliedAt) throw new ConflictError("This transaction has already taken effect");
@@ -368,7 +368,7 @@ export class FinanceService {
     id: string,
     input: { reason?: string | null; transactionDate?: string | null },
   ): Promise<TransactionDetailView> {
-    await this.rbac.requirePermission(actor.userId, "finance.manage");
+    await this.rbac.requirePermission(actor, "finance.manage");
     const original = await this.getAuthorizedTransaction(actor, id);
     if (!original.appliedAt) {
       throw new ConflictError("Only a transaction that has taken effect can be corrected by reversal");
@@ -431,7 +431,7 @@ export class FinanceService {
     actor: ActorContext,
     filter: { from: string; to: string; accountCode?: string },
   ): Promise<CashflowView & { accounts: FinanceAccount[] }> {
-    await this.rbac.requirePermission(actor.userId, "finance.read");
+    await this.rbac.requirePermission(actor, "finance.read");
     const from = this.parseDate(filter.from, "from");
     const to = this.parseDate(filter.to, "to");
     if (from > to) throw new ValidationError("from must not be after to");
@@ -442,7 +442,7 @@ export class FinanceService {
     // A scoped user must not see tenant-wide totals; the same hierarchical
     // rule that filters the list filters the aggregate (FIN-CORE-010).
     let organizationUnitIds: string[] | undefined;
-    if (!(await this.rbac.hasTenantScope(actor.userId))) {
+    if (!(await this.rbac.hasTenantScope(actor))) {
       organizationUnitIds = await this.coveredOrganizationUnitIds(actor);
     }
 
@@ -463,7 +463,7 @@ export class FinanceService {
   async canAccessForDocument(actor: ActorContext, transactionId: string): Promise<boolean> {
     const transaction = await this.repo.findTransactionById(transactionId);
     if (!transaction || transaction.tenantId !== actor.tenantId) return false;
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     if (!permissions.has("finance.documents.read")) return false;
     return this.isWithinOrganizationScope(actor, transaction.organizationUnitId);
   }
@@ -697,7 +697,7 @@ export class FinanceService {
     }
     // Booking into a unit the actor cannot see would put the money beyond
     // their own visibility and outside their authority.
-    await this.rbac.requireOrganizationUnitScope(actor.userId, unitId);
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, unitId);
     return unitId;
   }
 
@@ -736,14 +736,14 @@ export class FinanceService {
    * is visible only within that unit's hierarchical scope (FIN-CORE-010). */
   private async isWithinOrganizationScope(actor: ActorContext, unitId: string | null): Promise<boolean> {
     if (!unitId) return true;
-    return this.rbac.isOrganizationUnitScopeCovered(actor.userId, unitId);
+    return this.rbac.isActiveOrganizationUnitScopeCovered(actor, unitId);
   }
 
   private async filterByOrganizationScope<T extends { organizationUnitId: string | null }>(
     actor: ActorContext,
     rows: T[],
   ): Promise<T[]> {
-    if (await this.rbac.hasTenantScope(actor.userId)) return rows;
+    if (await this.rbac.hasTenantScope(actor)) return rows;
     const decisions = new Map<string, boolean>();
     const allowed: T[] = [];
     for (const row of rows) {
@@ -753,7 +753,7 @@ export class FinanceService {
       }
       let ok = decisions.get(row.organizationUnitId);
       if (ok === undefined) {
-        ok = await this.rbac.isOrganizationUnitScopeCovered(actor.userId, row.organizationUnitId);
+        ok = await this.rbac.isActiveOrganizationUnitScopeCovered(actor, row.organizationUnitId);
         decisions.set(row.organizationUnitId, ok);
       }
       if (ok) allowed.push(row);
@@ -771,7 +771,7 @@ export class FinanceService {
     ];
     const covered: string[] = [];
     for (const unitId of units) {
-      if (await this.rbac.isOrganizationUnitScopeCovered(actor.userId, unitId)) covered.push(unitId);
+      if (await this.rbac.isActiveOrganizationUnitScopeCovered(actor, unitId)) covered.push(unitId);
     }
     return covered;
   }

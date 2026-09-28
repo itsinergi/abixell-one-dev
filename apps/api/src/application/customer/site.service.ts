@@ -23,7 +23,7 @@ export class SiteService {
   ) {}
 
   async create(actor: ActorContext, input: CreateSiteInput): Promise<Site> {
-    await this.rbac.requirePermission(actor.userId, "site.manage");
+    await this.rbac.requirePermission(actor, "site.manage");
     await this.customers.getAuthorized(actor, input.customerId);
 
     const site = await this.repo.create({ ...input, tenantId: actor.tenantId }, actor.userId);
@@ -41,7 +41,7 @@ export class SiteService {
   }
 
   async update(actor: ActorContext, id: string, input: UpdateSiteInput): Promise<Site> {
-    await this.rbac.requirePermission(actor.userId, "site.manage");
+    await this.rbac.requirePermission(actor, "site.manage");
     const current = await this.repo.findById(id);
     if (!current || current.tenantId !== actor.tenantId) {
       throw new NotFoundError("Site", id);
@@ -64,7 +64,7 @@ export class SiteService {
   }
 
   async listByCustomer(actor: ActorContext, customerId: string): Promise<Site[]> {
-    await this.rbac.requirePermission(actor.userId, "site.read");
+    await this.rbac.requirePermission(actor, "site.read");
     await this.customers.getAuthorized(actor, customerId);
     return this.repo.listByCustomer(customerId);
   }

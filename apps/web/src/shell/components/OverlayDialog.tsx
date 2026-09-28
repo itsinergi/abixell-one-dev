@@ -179,7 +179,7 @@ export function OverlayDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center overflow-y-auto bg-slate-950/50 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[70] flex items-end justify-center overflow-y-auto bg-black/50 p-0 sm:items-center sm:p-4"
       onMouseDown={handleBackdropClick}
     >
       <div

@@ -31,6 +31,7 @@ import type {
   UserRoleAssignment,
   WindowAccessInput,
   WindowOption,
+  GovernedActor,
 } from "../../../domain/rbac/rbac.entity.js";
 import type {
   AdministrativeVisibility,
@@ -261,23 +262,30 @@ function assignmentLifecycleState(
 
 /** The actor's own Organization Unit anchors for one permission, unexpanded.
  * Module-level so both the transaction-scoped and pool-scoped callers ask the
- * same question (§4.4 E: the hierarchy rule exists in exactly one place). */
+ * same question (§4.4 E: the hierarchy rule exists in exactly one place).
+ *
+ * Epic 1 (§4.1 C): pinned to the SESSION'S ACTIVE assignment. An admin who
+ * switched into a Customer-context Role must not keep region-admin visibility
+ * through an Organization-Unit Role they are no longer working as. */
 async function listActorOrganizationUnitAnchorsIn(
   client: Pool | PoolClient,
-  userId: string,
+  tenantId: string,
+  assignmentId: string | null,
   permissionCode: string,
 ): Promise<string[]> {
+  if (assignmentId === null) return [];
   const result = await client.query<{ id: string }>(
     `SELECT DISTINCT aura.scope_organization_unit_id AS id
        FROM authorization_effective_user_role_assignments aura
        JOIN role_permissions rp ON rp.role_id = aura.role_id
        JOIN permissions p ON p.id = rp.permission_id
-      WHERE aura.user_id = $1
+      WHERE aura.tenant_id = $1
+        AND aura.id = $2
         AND aura.scope_type = 'organization_unit'
         AND aura.scope_organization_unit_id IS NOT NULL
-        AND p.code = $2
+        AND p.code = $3
       ORDER BY aura.scope_organization_unit_id`,
-    [userId, permissionCode],
+    [tenantId, assignmentId, permissionCode],
   );
   return result.rows.map((row) => row.id);
 }
@@ -315,13 +323,17 @@ async function listOrganizationUnitSubtreeIdsIn(
 /** Same-assignment visibility (§4.4 risk row 3): only an assignment that
  * ALREADY CARRIES `permissionCode` may contribute scope. A tenant-wide grant
  * therefore has to carry the permission itself — the aggregate-token
- * regression pins exactly that. */
+ * regression pins exactly that.
+ *
+ * Epic 1 (§4.1 C): the single contributing assignment is the session's
+ * ACTIVE one, named by `assignmentId`. A tenant-wide admin visibility a user
+ * holds only through a switched-away Role is invisible here. */
 async function resolveAdministrativeVisibilityIn(
   client: Pool | PoolClient,
-  tenantId: string,
-  userId: string,
+  actor: GovernedActor,
   permissionCode: string,
 ): Promise<AdministrativeVisibility> {
+  if (actor.assignmentId === null) return { kind: "units", organizationUnitIds: [] };
   const tenantScope = await client.query<{ allowed: boolean }>(
     `SELECT EXISTS (
        SELECT 1
@@ -329,26 +341,27 @@ async function resolveAdministrativeVisibilityIn(
          JOIN role_permissions rp ON rp.role_id = aura.role_id
          JOIN permissions p ON p.id = rp.permission_id
         WHERE aura.tenant_id = $1
-          AND aura.user_id = $2
+          AND aura.id = $2
           AND aura.scope_type = 'tenant'
           AND aura.scope_organization_unit_id IS NULL
           AND aura.scope_customer_id IS NULL
           AND p.code = $3
      ) AS allowed`,
-    [tenantId, userId, permissionCode],
+    [actor.tenantId, actor.assignmentId, permissionCode],
   );
   if (tenantScope.rows[0]?.allowed === true) return { kind: "tenant" };
 
   const anchors = await listActorOrganizationUnitAnchorsIn(
     client,
-    userId,
+    actor.tenantId,
+    actor.assignmentId,
     permissionCode,
   );
   return {
     kind: "units",
     organizationUnitIds: await listOrganizationUnitSubtreeIdsIn(
       client,
-      tenantId,
+      actor.tenantId,
       anchors,
     ),
   };
@@ -360,14 +373,12 @@ async function resolveAdministrativeVisibilityIn(
  * §4.4 H step 3 puts this before any target resolution. */
 async function requireAdministrativeVisibilityIn(
   client: Pool | PoolClient,
-  tenantId: string,
-  userId: string,
+  actor: GovernedActor,
   permissionCode: string,
 ): Promise<AdministrativeVisibility> {
   const visibility = await resolveAdministrativeVisibilityIn(
     client,
-    tenantId,
-    userId,
+    actor,
     permissionCode,
   );
   if (visibility.kind === "units" && visibility.organizationUnitIds.length === 0) {
@@ -600,6 +611,55 @@ export class PgRbacRepository implements RbacRepository {
     return result.rows[0]?.allowed === true;
   }
 
+  async hasPermissionSetForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
+    permissionCodes: readonly string[],
+  ): Promise<boolean> {
+    const requiredCodes = [...new Set(permissionCodes)];
+    if (requiredCodes.length === 0) return true;
+    if (assignmentId === null) return false;
+    const result = await this.pool.query(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM authorization_effective_user_role_assignments aura
+           JOIN role_permissions rp ON rp.role_id = aura.role_id
+           JOIN permissions p ON p.id = rp.permission_id
+          WHERE aura.tenant_id = $1
+            AND aura.id = $2
+            AND p.code = ANY($3::text[])
+          GROUP BY aura.id
+         HAVING COUNT(DISTINCT p.code) = $4
+       ) AS allowed`,
+      [tenantId, assignmentId, requiredCodes, requiredCodes.length],
+    );
+    return result.rows[0]?.allowed === true;
+  }
+
+  async hasTenantScopedPermissionForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
+    permissionCode: string,
+  ): Promise<boolean> {
+    if (assignmentId === null) return false;
+    const result = await this.pool.query(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM authorization_effective_user_role_assignments aura
+           JOIN role_permissions rp ON rp.role_id = aura.role_id
+           JOIN permissions p ON p.id = rp.permission_id
+          WHERE aura.id = $2
+            AND aura.tenant_id = $1
+            AND aura.scope_type = 'tenant'
+            AND aura.scope_organization_unit_id IS NULL
+            AND aura.scope_customer_id IS NULL
+            AND p.code = $3
+       ) AS allowed`,
+      [tenantId, assignmentId, permissionCode],
+    );
+    return result.rows[0]?.allowed === true;
+  }
+
   /**
    * Epic 4 step 11b — the Window lock read, for one actor and one Window.
    *
@@ -636,6 +696,30 @@ export class PgRbacRepository implements RbacRepository {
           AND aura.tenant_id = $1
           AND rwa.window_code = $3`,
       [tenantId, userId, windowCode],
+    );
+    return {
+      configured: result.rows[0]?.configured === true,
+      writable: result.rows[0]?.writable === true,
+    };
+  }
+
+  async getWindowAccessStateForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
+    windowCode: string,
+  ): Promise<{ configured: boolean; writable: boolean }> {
+    if (assignmentId === null) return { configured: false, writable: false };
+    const result = await this.pool.query(
+      `SELECT COUNT(*) > 0 AS configured,
+              COALESCE(BOOL_OR(rwa.is_read_write AND rwa.is_active), false) AS writable
+         FROM authorization_effective_user_role_assignments aura
+         JOIN role_window_access rwa
+           ON rwa.tenant_id = aura.tenant_id
+          AND rwa.role_id = aura.role_id
+        WHERE aura.tenant_id = $1
+          AND aura.id = $2
+          AND rwa.window_code = $3`,
+      [tenantId, assignmentId, windowCode],
     );
     return {
       configured: result.rows[0]?.configured === true,
@@ -693,21 +777,24 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async listActorOrganizationUnitAnchors(
-    userId: string,
+    actor: GovernedActor,
     permissionCode: string,
   ): Promise<string[]> {
-    return listActorOrganizationUnitAnchorsIn(this.pool, userId, permissionCode);
+    return listActorOrganizationUnitAnchorsIn(
+      this.pool,
+      actor.tenantId,
+      actor.assignmentId,
+      permissionCode,
+    );
   }
 
   async resolveAdministrativeVisibility(
-    tenantId: string,
-    userId: string,
+    actor: GovernedActor,
     permissionCode: string,
   ): Promise<AdministrativeVisibility> {
     return resolveAdministrativeVisibilityIn(
       this.pool,
-      tenantId,
-      userId,
+      actor,
       permissionCode,
     );
   }
@@ -917,7 +1004,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async createGovernedRoleAssignment(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     targetUserId: string,
     input: GovernedRoleAssignmentInput,
   ): Promise<AdminRoleAssignmentSummary> {
@@ -926,10 +1013,9 @@ export class PgRbacRepository implements RbacRepository {
       // entry ticket at any scope, then the actor's own permission-bearing
       // visibility decides which targets exist for them.
       await this.requireTransactionConsoleEntry(client, actor);
-      const visibility = await requireAdministrativeVisibilityIn(
+      const visibility = await         requireAdministrativeVisibilityIn(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         USER_ROLE_MANAGE,
       );
 
@@ -1162,7 +1248,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async revokeGovernedRoleAssignment(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     targetUserId: string,
     assignmentId: string,
     reason: string,
@@ -1170,10 +1256,9 @@ export class PgRbacRepository implements RbacRepository {
     await this.inGovernedTransaction(actor.tenantId, async (client) => {
       // §4.4 D rewire — see createGovernedRoleAssignment.
       await this.requireTransactionConsoleEntry(client, actor);
-      const visibility = await requireAdministrativeVisibilityIn(
+      const visibility = await         requireAdministrativeVisibilityIn(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         USER_ROLE_MANAGE,
       );
 
@@ -1362,7 +1447,7 @@ export class PgRbacRepository implements RbacRepository {
   // ==========================================================================
 
   async listAssignmentOptions(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
   ): Promise<AssignmentOptions> {
     const client = await this.pool.connect();
     try {
@@ -1374,8 +1459,7 @@ export class PgRbacRepository implements RbacRepository {
       await this.requireTransactionConsoleEntry(client, actor);
       const visibility = await resolveAdministrativeVisibilityIn(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         USER_ROLE_MANAGE,
       );
       const canAssignTenantScope = visibility.kind === "tenant";
@@ -1501,7 +1585,7 @@ export class PgRbacRepository implements RbacRepository {
    */
   private async resolveAssignmentBatch(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     targetUserId: string | null,
     pairs: readonly GovernedRoleAssignmentInput[],
     resolvedVisibility?: AdministrativeVisibility,
@@ -1520,8 +1604,7 @@ export class PgRbacRepository implements RbacRepository {
       resolvedVisibility ??
       (await requireAdministrativeVisibilityIn(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         USER_ROLE_MANAGE,
       ));
 
@@ -1713,7 +1796,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async previewRoleAssignments(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     targetUserId: string,
     input: PreviewRoleAssignmentsInput,
   ): Promise<AssignmentBatchPreview> {
@@ -1742,7 +1825,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async updateRoleAssignments(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     targetUserId: string,
     input: UpdateRoleAssignmentsInput,
   ): Promise<AssignmentBatchResult> {
@@ -1864,7 +1947,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async createGovernedUserWithAssignments(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     input: CreateGovernedUserInput,
   ): Promise<{
     user: GovernedUserSummary;
@@ -1888,8 +1971,7 @@ export class PgRbacRepository implements RbacRepository {
       await this.requireTransactionConsoleEntry(client, actor);
       const visibility = await resolveAdministrativeVisibilityIn(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         USER_ROLE_MANAGE,
       );
       if (
@@ -2057,10 +2139,7 @@ export class PgRbacRepository implements RbacRepository {
     return this.loadRoleDefinition(this.pool, role.rows[0]);
   }
 
-  async listRoleDefinitionOptions(actor: {
-    tenantId: string;
-    userId: string;
-  }): Promise<RoleDefinitionOptions> {
+  async listRoleDefinitionOptions(actor: GovernedActor): Promise<RoleDefinitionOptions> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -2114,7 +2193,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async createRoleDefinition(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     input: CreateRoleDefinitionInput,
   ): Promise<RoleDefinition> {
     return this.inGovernedTransaction(actor.tenantId, async (client) => {
@@ -2182,7 +2261,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async copyRoleDefinition(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     sourceCode: string,
     input: CopyRoleDefinitionInput,
   ): Promise<RoleDefinition> {
@@ -2296,7 +2375,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async previewRoleDefinition(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     roleCode: string,
     input: RoleDefinitionPreviewInput,
   ): Promise<RoleDefinitionPreview> {
@@ -2358,7 +2437,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async updateRoleDefinition(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     roleCode: string,
     input: UpdateRoleDefinitionInput,
   ): Promise<RoleDefinition> {
@@ -2465,7 +2544,7 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   async deleteRoleDefinition(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     roleCode: string,
   ): Promise<void> {
     await this.inGovernedTransaction(actor.tenantId, async (client) => {
@@ -2535,7 +2614,7 @@ export class PgRbacRepository implements RbacRepository {
    * that moves on nothing invalidates other administrators' previews for free.
    */
   async setRoleDefinitionActive(
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     roleCode: string,
     isActive: boolean,
   ): Promise<RoleDefinition> {
@@ -2691,7 +2770,7 @@ export class PgRbacRepository implements RbacRepository {
    */
   private async requireTransactionRoleDefinitionAuthority(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
   ): Promise<void> {
     const result = await client.query(
       `SELECT EXISTS (
@@ -2752,7 +2831,7 @@ export class PgRbacRepository implements RbacRepository {
    */
   private async roleDefinitionDelegablePermissionCodes(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
   ): Promise<Set<string>> {
     const result = await client.query(
       `SELECT DISTINCT p.code
@@ -2809,7 +2888,7 @@ export class PgRbacRepository implements RbacRepository {
    */
   private async assignmentDelegablePermissionCodes(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
   ): Promise<Set<string>> {
     const result = await client.query(
       `SELECT DISTINCT p.code
@@ -2863,7 +2942,7 @@ export class PgRbacRepository implements RbacRepository {
    */
   private async validateProposedGrants(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     proposed: readonly string[],
     existing: Set<string>,
   ): Promise<string[]> {
@@ -2914,7 +2993,7 @@ export class PgRbacRepository implements RbacRepository {
   /** Same preservation rule as permissions, applied to window access rows. */
   private async validateProposedWindows(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     proposed: readonly WindowAccessInput[],
     existing: Set<string>,
   ): Promise<WindowAccessInput[]> {
@@ -3143,7 +3222,7 @@ export class PgRbacRepository implements RbacRepository {
    */
   private async protectTenantManagers(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
     roleId: string,
     proposed: readonly string[],
   ): Promise<void> {
@@ -3315,7 +3394,7 @@ export class PgRbacRepository implements RbacRepository {
 
   private async requireTransactionActorAuthority(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
   ): Promise<void> {
     const result = await client.query(
       `SELECT EXISTS (
@@ -3367,7 +3446,7 @@ export class PgRbacRepository implements RbacRepository {
    */
   private async requireTransactionConsoleEntry(
     client: PoolClient,
-    actor: { tenantId: string; userId: string },
+    actor: GovernedActor,
   ): Promise<void> {
     const result = await client.query(
       `SELECT EXISTS (
@@ -3469,6 +3548,25 @@ export class PgRbacRepository implements RbacRepository {
          JOIN permissions p ON p.id = rp.permission_id
         WHERE aura.user_id = $1`,
       [userId],
+    );
+    return new Set(result.rows.map((r) => r.code));
+  }
+
+  async getEffectivePermissionCodesForAssignment(
+    tenantId: string,
+    assignmentId: string | null,
+  ): Promise<Set<string>> {
+    // Null assignmentId = session holds no effective assignment: the empty
+    // set, so every permissioned route fails closed rather than opening up.
+    if (assignmentId === null) return new Set();
+    const result = await this.pool.query(
+      `SELECT DISTINCT p.code
+         FROM authorization_effective_user_role_assignments aura
+         JOIN role_permissions rp ON rp.role_id = aura.role_id
+         JOIN permissions p ON p.id = rp.permission_id
+        WHERE aura.tenant_id = $1
+          AND aura.id = $2`,
+      [tenantId, assignmentId],
     );
     return new Set(result.rows.map((r) => r.code));
   }

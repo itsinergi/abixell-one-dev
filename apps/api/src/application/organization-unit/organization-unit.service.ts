@@ -18,7 +18,7 @@ export class OrganizationUnitService {
   ) {}
 
   async create(actor: ActorContext, input: Omit<CreateOrganizationUnitInput, "tenantId">) {
-    await this.rbac.requirePermission(actor.userId, "organization_unit.create");
+    await this.rbac.requirePermission(actor, "organization_unit.create");
 
     // Data Scope check: creating a root unit (no parent) requires
     // tenant-wide scope; creating a child requires scope covering the
@@ -29,9 +29,9 @@ export class OrganizationUnitService {
       if (parent.tenantId !== actor.tenantId) {
         throw new ForbiddenError("Parent Organization Unit belongs to a different Tenant");
       }
-      await this.rbac.requireOrganizationUnitScope(actor.userId, input.parentId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, input.parentId);
     } else {
-      const hasTenantScope = await this.rbac.hasTenantScope(actor.userId);
+      const hasTenantScope = await this.rbac.hasTenantScope(actor);
       if (!hasTenantScope) {
         throw new ForbiddenError(
           "Creating a root Organization Unit requires tenant-wide Data Scope",
@@ -58,29 +58,29 @@ export class OrganizationUnitService {
     id: string,
     input: UpdateOrganizationUnitInput,
   ) {
-    await this.rbac.requirePermission(actor.userId, "organization_unit.update");
+    await this.rbac.requirePermission(actor, "organization_unit.update");
     const unit = await this.repo.findById(id);
     if (!unit || unit.tenantId !== actor.tenantId) throw new NotFoundError("OrganizationUnit", id);
-    await this.rbac.requireOrganizationUnitScope(actor.userId, id);
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, id);
     return this.repo.update(id, input, actor);
   }
 
   async setActive(actor: ActorContext, id: string, isActive: boolean) {
     await this.rbac.requirePermission(
-      actor.userId,
+      actor,
       isActive ? "organization_unit.activate" : "organization_unit.deactivate",
     );
     const unit = await this.repo.findById(id);
     if (!unit || unit.tenantId !== actor.tenantId) throw new NotFoundError("OrganizationUnit", id);
-    await this.rbac.requireOrganizationUnitScope(actor.userId, id);
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, id);
     return this.repo.setActive(id, isActive, actor);
   }
 
   async listForTenant(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, "organization_unit.read");
+    await this.rbac.requirePermission(actor, "organization_unit.read");
 
     const all = await this.repo.listByTenant(actor.tenantId);
-    const hasTenantScope = await this.rbac.hasTenantScope(actor.userId);
+    const hasTenantScope = await this.rbac.hasTenantScope(actor);
     if (hasTenantScope) return all;
 
     // Hierarchical scope filter (Checkpoint 0F / ADR-0009, supersedes the

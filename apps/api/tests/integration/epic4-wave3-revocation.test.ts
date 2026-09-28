@@ -7,13 +7,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgRbacRepository } from "../../src/infrastructure/persistence/repositories/rbac.repository.pg.js";
-import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
 import {
   activateAllModules,
   authHeader,
   bootstrapTenant,
   provisionFirstAdmin,
+  sessionTokenFor,
 } from "./helpers.js";
 
 /**
@@ -133,8 +133,10 @@ async function createAssignment(
   return result.rows[0].id as string;
 }
 
-function tokenFor(tenantId: string, user: UserFixture): string {
-  return signAccessToken({ sub: user.id, tenantId, email: user.email });
+function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
+  // Epic 1 (�4.1 F): a bearer token must name a session, so fixtures create
+  // one the way the login endpoint does instead of signing a bare payload.
+  return sessionTokenFor({ userId: user.id, tenantId });
 }
 
 async function get(url: string, token: string): Promise<LightMyRequestResponse> {
@@ -208,7 +210,7 @@ describe("Epic 4 Wave 3 — governed assignment revocation", () => {
     manager = await createUser(tenantId, "manager", passwordHash);
     target = await createUser(tenantId, "target", passwordHash);
     await createAssignment(manager.id, managerRole.id, { scopeType: "tenant" });
-    managerToken = tokenFor(tenantId, manager);
+    managerToken = await tokenFor(tenantId, manager);
 
     const other = await bootstrapTenant(
       app,
@@ -233,7 +235,7 @@ describe("Epic 4 Wave 3 — governed assignment revocation", () => {
     await createAssignment(otherManager.id, otherRole.id, {
       scopeType: "tenant",
     });
-    otherManagerToken = tokenFor(otherTenantId, otherManager);
+    otherManagerToken = await tokenFor(otherTenantId, otherManager);
   });
 
   afterAll(async () => {
@@ -567,7 +569,7 @@ describe("Epic 4 Wave 3 — governed assignment revocation", () => {
     const reader = await createUser(tenantId, "reader", await hashPassword(PASSWORD));
     await createAssignment(reader.id, readerRole.id, { scopeType: "tenant" });
     expect(
-      (await revoke(localTarget.id, assignmentId, tokenFor(tenantId, reader))).statusCode,
+      (await revoke(localTarget.id, assignmentId, await tokenFor(tenantId, reader))).statusCode,
     ).toBe(403);
 
     const areaOnlyRole = await createRole(
@@ -579,7 +581,7 @@ describe("Epic 4 Wave 3 — governed assignment revocation", () => {
     const areaOnly = await createUser(tenantId, "area-only", await hashPassword(PASSWORD));
     await createAssignment(areaOnly.id, areaOnlyRole.id, { scopeType: "tenant" });
     expect(
-      (await revoke(localTarget.id, assignmentId, tokenFor(tenantId, areaOnly))).statusCode,
+      (await revoke(localTarget.id, assignmentId, await tokenFor(tenantId, areaOnly))).statusCode,
     ).toBe(403);
 
     expect((await revoke(localTarget.id, assignmentId, managerToken)).statusCode).toBe(204);
@@ -650,7 +652,7 @@ describe("Epic 4 Wave 3 — governed assignment revocation", () => {
     const selfRevoke = await revoke(
       backup.id,
       ownAssignment,
-      tokenFor(tenantId, backup),
+      await tokenFor(tenantId, backup),
       "self attempt",
     );
     expect(selfRevoke.statusCode).toBe(409);
@@ -703,7 +705,7 @@ describe("Epic 4 Wave 3 — governed assignment revocation", () => {
     const finalManager = await revoke(
       lastManager.id,
       lastManagerAssignmentId,
-      tokenFor(guardTenantId, unitActor),
+      await tokenFor(guardTenantId, unitActor),
       "last manager attempt",
     );
     expect(finalManager.statusCode).toBe(409);
@@ -730,7 +732,7 @@ describe("Epic 4 Wave 3 — governed assignment revocation", () => {
         await revoke(
           lastManager.id,
           unitAssignmentId,
-          tokenFor(guardTenantId, unitActor),
+          await tokenFor(guardTenantId, unitActor),
           "unit grant revoke",
         )
       ).statusCode,

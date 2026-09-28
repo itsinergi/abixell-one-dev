@@ -68,7 +68,7 @@ export class WorkforceService {
     actor: ActorContext,
     input: { code: string; name: string; description?: string | null },
   ): Promise<Position> {
-    await this.rbac.requirePermission(actor.userId, "workforce.configure");
+    await this.rbac.requirePermission(actor, "workforce.configure");
     const existing = await this.repo.findPositionByCode(actor.tenantId, input.code);
     if (existing) throw new ConflictError("Position already exists: " + input.code);
 
@@ -91,12 +91,12 @@ export class WorkforceService {
   }
 
   async listPositions(actor: ActorContext): Promise<Position[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.read");
+    await this.rbac.requirePermission(actor, "workforce.read");
     return this.repo.listPositions(actor.tenantId);
   }
 
   async setPositionActive(actor: ActorContext, code: string, isActive: boolean): Promise<Position> {
-    await this.rbac.requirePermission(actor.userId, "workforce.configure");
+    await this.rbac.requirePermission(actor, "workforce.configure");
     const position = await this.repo.findPositionByCode(actor.tenantId, code);
     if (!position) throw new NotFoundError("Position", code);
     return (await this.repo.setPositionActive(position.id, isActive, actor.userId))!;
@@ -122,7 +122,7 @@ export class WorkforceService {
       userId?: string | null;
     },
   ): Promise<Employee> {
-    await this.rbac.requirePermission(actor.userId, "workforce.manage");
+    await this.rbac.requirePermission(actor, "workforce.manage");
 
     const employmentStatus = this.parseStatus(input.employmentStatus ?? "active");
     const joinedAt = this.parseDate(input.joinedAt, "joinedAt");
@@ -198,7 +198,7 @@ export class WorkforceService {
     actor: ActorContext,
     filter: { legalEntityId?: string; employmentStatus?: string; search?: string } = {},
   ): Promise<Employee[]> {
-    await this.rbac.requirePermission(actor.userId, "workforce.read");
+    await this.rbac.requirePermission(actor, "workforce.read");
     const employees = await this.repo.listEmployees(actor.tenantId, {
       legalEntityId: filter.legalEntityId,
       employmentStatus: filter.employmentStatus ? this.parseStatus(filter.employmentStatus) : undefined,
@@ -208,7 +208,7 @@ export class WorkforceService {
   }
 
   async getEmployee(actor: ActorContext, id: string): Promise<EmployeeDetailView> {
-    await this.rbac.requirePermission(actor.userId, "workforce.read");
+    await this.rbac.requirePermission(actor, "workforce.read");
     const employee = await this.getAuthorizedEmployee(actor, id);
     return this.buildDetail(employee);
   }
@@ -221,7 +221,7 @@ export class WorkforceService {
     id: string,
     input: UpdateEmployeeProfileInput,
   ): Promise<Employee> {
-    await this.rbac.requirePermission(actor.userId, "workforce.manage");
+    await this.rbac.requirePermission(actor, "workforce.manage");
     const employee = await this.getAuthorizedEmployee(actor, id);
     const updated = await this.repo.updateEmployeeProfile(employee.id, input, actor.userId);
     await this.audit.record({
@@ -252,7 +252,7 @@ export class WorkforceService {
       note?: string | null;
     },
   ): Promise<EmployeeDetailView> {
-    await this.rbac.requirePermission(actor.userId, "workforce.manage");
+    await this.rbac.requirePermission(actor, "workforce.manage");
     const employee = await this.getAuthorizedEmployee(actor, id);
 
     const effectiveFrom = this.parseDate(input.effectiveFrom ?? today(), "effectiveFrom")!;
@@ -335,7 +335,7 @@ export class WorkforceService {
    * creates, modifies, or deactivates the account itself: Identity remains a
    * separate domain and Workforce never becomes an auth system. */
   async setEmployeeUserLink(actor: ActorContext, id: string, userId: string | null): Promise<Employee> {
-    await this.rbac.requirePermission(actor.userId, "workforce.manage");
+    await this.rbac.requirePermission(actor, "workforce.manage");
     const employee = await this.getAuthorizedEmployee(actor, id);
     const resolved = await this.resolveUserLink(actor, userId, employee.id);
     const updated = await this.repo.setEmployeeUser(employee.id, resolved, actor.userId);
@@ -370,7 +370,7 @@ export class WorkforceService {
     const employee = await this.repo.findEmployeeById(employeeId);
     if (!employee || employee.tenantId !== actor.tenantId) return false;
     if (employee.userId && employee.userId === actor.userId) return true;
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     if (!permissions.has("workforce.documents.read")) return false;
     return this.isWithinDataScope(actor, employee);
   }
@@ -434,7 +434,7 @@ export class WorkforceService {
     // Reuses the platform's hierarchical Organization Unit Data Scope
     // (ADR-0009) instead of re-deriving scope here. This also prevents an
     // employee being moved into a unit outside the actor's own scope.
-    await this.rbac.requireOrganizationUnitScope(actor.userId, organizationUnitId);
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, organizationUnitId);
     return organizationUnitId;
   }
 
@@ -478,11 +478,11 @@ export class WorkforceService {
    * only within that unit's hierarchical scope. */
   private async isWithinDataScope(actor: ActorContext, employee: Employee): Promise<boolean> {
     if (!employee.organizationUnitId) return true;
-    return this.rbac.isOrganizationUnitScopeCovered(actor.userId, employee.organizationUnitId);
+    return this.rbac.isActiveOrganizationUnitScopeCovered(actor, employee.organizationUnitId);
   }
 
   private async filterByDataScope(actor: ActorContext, employees: Employee[]): Promise<Employee[]> {
-    if (await this.rbac.hasTenantScope(actor.userId)) return employees;
+    if (await this.rbac.hasTenantScope(actor)) return employees;
     // Resolve each DISTINCT organization unit once rather than per row.
     const decisions = new Map<string, boolean>();
     const allowed: Employee[] = [];
@@ -493,7 +493,7 @@ export class WorkforceService {
       }
       let ok = decisions.get(employee.organizationUnitId);
       if (ok === undefined) {
-        ok = await this.rbac.isOrganizationUnitScopeCovered(actor.userId, employee.organizationUnitId);
+        ok = await this.rbac.isActiveOrganizationUnitScopeCovered(actor, employee.organizationUnitId);
         decisions.set(employee.organizationUnitId, ok);
       }
       if (ok) allowed.push(employee);

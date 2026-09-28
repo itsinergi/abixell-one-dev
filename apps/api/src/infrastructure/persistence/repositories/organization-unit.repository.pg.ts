@@ -97,10 +97,9 @@ export class PgOrganizationUnitRepository implements OrganizationUnitRepository 
     actor: ActorContext,
   ): Promise<OrganizationUnit> {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
-      await requireTransactionActorPermission(
+      await         requireTransactionActorPermission(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         "organization_unit.update",
         id,
       );
@@ -152,10 +151,9 @@ export class PgOrganizationUnitRepository implements OrganizationUnitRepository 
     actor: ActorContext,
   ): Promise<OrganizationUnit> {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
-      await requireTransactionActorPermission(
+      await         requireTransactionActorPermission(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         isActive ? "organization_unit.activate" : "organization_unit.deactivate",
         id,
       );

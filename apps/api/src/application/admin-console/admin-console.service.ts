@@ -156,8 +156,10 @@ export class AdminConsoleService {
   private async requireConsoleAccess(
     actor: ActorContext,
   ): Promise<Set<string>> {
-    await this.rbac.requirePermission(actor.userId, ADMIN_CONSOLE_READ);
-    return this.rbac.getEffectivePermissions(actor.userId);
+    await this.rbac.requirePermission(actor, ADMIN_CONSOLE_READ);
+    // Epic 1 (§4.1 C) — the section gates below read the ACTIVE Role's codes,
+    // so a section only a switched-away Role would grant is not reported.
+    return this.rbac.getActivePermissions(actor);
   }
 
   /**
@@ -185,26 +187,30 @@ export class AdminConsoleService {
 
   async getOverview(actor: ActorContext): Promise<AdminOverview> {
     const held = await this.requireConsoleAccess(actor);
+    // Epic 1 (§4.1 C) — capabilities report what the ACTIVE Role may do. The
+    // pre-Epic1 form read the user's whole union of assignments, so a Role
+    // the user merely holds but has not switched into could light up a
+    // capability the active context cannot deliver.
     const [userRoleManage, userAccessRead, rolePermissionRead, roleManage] =
       await Promise.all([
-        this.rbacRepo.hasTenantScopedPermission(
+        this.rbacRepo.hasTenantScopedPermissionForAssignment(
           actor.tenantId,
-          actor.userId,
+          actor.assignmentId,
           "user.role.manage",
         ),
-        this.rbacRepo.hasTenantScopedPermission(
+        this.rbacRepo.hasTenantScopedPermissionForAssignment(
           actor.tenantId,
-          actor.userId,
+          actor.assignmentId,
           "user.read",
         ),
-        this.rbacRepo.hasTenantScopedPermission(
+        this.rbacRepo.hasTenantScopedPermissionForAssignment(
           actor.tenantId,
-          actor.userId,
+          actor.assignmentId,
           "config.read",
         ),
-        this.rbacRepo.hasTenantScopedPermission(
+        this.rbacRepo.hasTenantScopedPermissionForAssignment(
           actor.tenantId,
-          actor.userId,
+          actor.assignmentId,
           ROLE_MANAGE,
         ),
       ]);
@@ -272,7 +278,7 @@ export class AdminConsoleService {
 
   async listRoles(actor: ActorContext): Promise<AdminRoleSummaryView[]> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     const roles = await this.rbacRepo.listRoleSummaries(actor.tenantId);
     // `id` is intentionally dropped: the console identifies a Role by its
     // stable business code, and never hands out a mutation handle.
@@ -293,7 +299,7 @@ export class AdminConsoleService {
    */
   async listPermissions(actor: ActorContext): Promise<Permission[]> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requirePermission(actor.userId, "config.read");
+    await this.rbac.requirePermission(actor, "config.read");
     return this.rbacRepo.listPermissionCatalog();
   }
 
@@ -325,7 +331,7 @@ export class AdminConsoleService {
 
   async listRecentAudit(actor: ActorContext): Promise<AdminAuditEntryView[]> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requirePermission(actor.userId, "audit_log.read");
+    await this.rbac.requirePermission(actor, "audit_log.read");
     const entries = await this.audit.listRecentByTenant(
       actor.tenantId,
       RECENT_AUDIT_LIMIT,
@@ -352,11 +358,7 @@ export class AdminConsoleService {
     actor: ActorContext,
   ): Promise<AdministrativeVisibility> {
     await this.requireConsoleAccess(actor);
-    const visibility = await this.rbacRepo.resolveAdministrativeVisibility(
-      actor.tenantId,
-      actor.userId,
-      "user.read",
-    );
+    const visibility = await this.rbacRepo.resolveAdministrativeVisibility(actor, "user.read");
     if (visibility.kind === "units" && visibility.organizationUnitIds.length === 0) {
       throw new ForbiddenError("Missing permission or Data Scope for 'user.read'");
     }
@@ -390,11 +392,7 @@ export class AdminConsoleService {
     // Step 13's rows describe grants, so the actor needs the same mutation
     // authority that governs them: a viewer who cannot assign must not read
     // the grant inventory either.
-    const visibility = await this.rbacRepo.resolveAdministrativeVisibility(
-      actor.tenantId,
-      actor.userId,
-      "user.role.manage",
-    );
+    const visibility = await this.rbacRepo.resolveAdministrativeVisibility(actor, "user.role.manage");
     if (visibility.kind === "units" && visibility.organizationUnitIds.length === 0) {
       throw new ForbiddenError(
         "Missing permission or Data Scope for 'user.role.manage'",
@@ -439,9 +437,8 @@ export class AdminConsoleService {
     roleCode: string,
   ): Promise<RolePermissionDetail> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       "config.read",
     );
     const role = await this.rbacRepo.getRolePermissionDetail(
@@ -506,9 +503,8 @@ export class AdminConsoleService {
     roleCode: string,
   ): Promise<RoleDefinition> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       "config.read",
     );
     const definition = await this.rbacRepo.getRoleDefinition(
@@ -523,9 +519,8 @@ export class AdminConsoleService {
     actor: ActorContext,
   ): Promise<RoleDefinitionOptions> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       "config.read",
     );
     return this.rbacRepo.listRoleDefinitionOptions(actor);
@@ -536,9 +531,8 @@ export class AdminConsoleService {
     input: CreateRoleDefinitionInput,
   ): Promise<RoleDefinition> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       ROLE_MANAGE,
     );
     return this.rbacRepo.createRoleDefinition(actor, input);
@@ -550,9 +544,8 @@ export class AdminConsoleService {
     input: CopyRoleDefinitionInput,
   ): Promise<RoleDefinition> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       ROLE_MANAGE,
     );
     return this.rbacRepo.copyRoleDefinition(actor, sourceCode, input);
@@ -564,9 +557,8 @@ export class AdminConsoleService {
     input: RoleDefinitionPreviewInput,
   ): Promise<RoleDefinitionPreview> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       "config.read",
     );
     return this.rbacRepo.previewRoleDefinition(actor, roleCode, input);
@@ -578,9 +570,8 @@ export class AdminConsoleService {
     input: UpdateRoleDefinitionInput,
   ): Promise<RoleDefinition> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       ROLE_MANAGE,
     );
     return this.rbacRepo.updateRoleDefinition(actor, roleCode, input);
@@ -591,9 +582,8 @@ export class AdminConsoleService {
     roleCode: string,
   ): Promise<void> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       ROLE_MANAGE,
     );
     await this.rbacRepo.deleteRoleDefinition(actor, roleCode);
@@ -609,9 +599,8 @@ export class AdminConsoleService {
     isActive: boolean,
   ): Promise<RoleDefinition> {
     await this.requireConsoleAccess(actor);
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       ROLE_MANAGE,
     );
     return this.rbacRepo.setRoleDefinitionActive(actor, roleCode, isActive);

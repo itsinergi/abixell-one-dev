@@ -3,9 +3,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgWorkflowRepository } from "../../src/infrastructure/persistence/repositories/workflow.repository.pg.js";
-import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { activateAllModules, authHeader, bootstrapTenant, provisionFirstAdmin } from "./helpers.js";
+import {
+  activateAllModules,
+  authHeader,
+  bootstrapTenant,
+  provisionFirstAdmin,
+  sessionTokenFor,
+} from "./helpers.js";
 
 /**
  * Tahap B — Lifecycle soft-delete and activation/deactivation guards.
@@ -121,7 +126,9 @@ beforeAll(async () => {
     password: PASSWORD,
   });
   adminId = admin.userId;
-  adminToken = signAccessToken({ sub: adminId, tenantId });
+  // Epic 1 (�4.1 F): a bearer token must name a session, minted here the
+  // way the login endpoint does, since this suite never calls /auth/login.
+  adminToken = await sessionTokenFor({ userId: adminId, tenantId });
 });
 
 afterAll(async () => {

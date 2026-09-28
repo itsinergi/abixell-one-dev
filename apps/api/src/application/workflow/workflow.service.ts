@@ -113,6 +113,24 @@ export interface EntityWorkflowDefinitionView {
  * Tenant Configuration (see docs/decision-log.md open items). */
 const CLAIM_TTL_SECONDS = 15 * 60;
 
+/** Epic 1 (§4.1 D): the document amount an approve decision carries into
+ * `workflow_history.decision_amount`, read from the instance's caller-
+ * supplied `contextData`. The three keys are the conventions the existing
+ * document workflows already write (`sales`: `totalAmount`, `complaint`:
+ * `approvedAmount`) plus a plain `amount` fallback for any future caller.
+ * Only a well-formed decimal string is accepted — a malformed value must
+ * yield NULL, not a failed INSERT or a silently wrong sum. A document with
+ * no amount configured (no key present) yields NULL, and the accumulation
+ * step is then effectively a no-op for it. */
+function documentAmountOf(instance: { contextData: Record<string, unknown> }): string | null {
+  for (const key of ["approvedAmount", "totalAmount", "amount"]) {
+    const raw = instance.contextData[key];
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw.toFixed(2);
+    if (typeof raw === "string" && /^-?\d+(\.\d+)?$/.test(raw.trim())) return raw.trim();
+  }
+  return null;
+}
+
 /**
  * Application-layer orchestration for the Workflow & Approval Engine
  * (Checkpoint 0D), per 04-Workflow-Approval-Engine-Foundation.md.
@@ -154,7 +172,7 @@ export class WorkflowService {
     actor: ActorContext,
     input: { code: string; name: string; entityType: string; description: string },
   ) {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.manage");
+    await this.rbac.requirePermission(actor, "workflow.definition.manage");
     const definition = await this.repo.createDefinition({
       tenantId: actor.tenantId,
       code: input.code,
@@ -180,12 +198,12 @@ export class WorkflowService {
   }
 
   async listDefinitions(actor: ActorContext): Promise<WorkflowDefinition[]> {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.read");
+    await this.rbac.requirePermission(actor, "workflow.definition.read");
     return this.repo.listDefinitions(actor.tenantId);
   }
 
   async createVersion(actor: ActorContext, definitionCode: string) {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.manage");
+    await this.rbac.requirePermission(actor, "workflow.definition.manage");
     const definition = await this.getDefinitionOrThrow(actor.tenantId, definitionCode);
     const nextVersionNumber = await this.repo.getNextVersionNumber(definition.id);
     const version = await this.repo.createVersion({
@@ -205,7 +223,7 @@ export class WorkflowService {
   }
 
   async listVersions(actor: ActorContext, definitionCode: string): Promise<WorkflowVersion[]> {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.read");
+    await this.rbac.requirePermission(actor, "workflow.definition.read");
     const definition = await this.getDefinitionOrThrow(actor.tenantId, definitionCode);
     return this.repo.listVersions(definition.id);
   }
@@ -225,7 +243,7 @@ export class WorkflowService {
       sequenceOrder?: number;
     },
   ) {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.manage");
+    await this.rbac.requirePermission(actor, "workflow.definition.manage");
     const version = await this.getEditableVersionOrThrow(actor.tenantId, definitionCode, versionNumber);
     return this.repo.createStep({
       workflowVersionId: version.id,
@@ -253,7 +271,7 @@ export class WorkflowService {
       sortOrder?: number;
     },
   ) {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.manage");
+    await this.rbac.requirePermission(actor, "workflow.definition.manage");
     const version = await this.getEditableVersionOrThrow(actor.tenantId, definitionCode, versionNumber);
     const fromStep = await this.repo.findStepByCode(version.id, input.fromStepCode);
     const toStep = await this.repo.findStepByCode(version.id, input.toStepCode);
@@ -285,7 +303,7 @@ export class WorkflowService {
       sortOrder?: number;
     },
   ) {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.manage");
+    await this.rbac.requirePermission(actor, "workflow.definition.manage");
     const version = await this.getEditableVersionOrThrow(actor.tenantId, definitionCode, versionNumber);
     const step = await this.repo.findStepByCode(version.id, input.stepCode);
     if (!step) throw new NotFoundError("WorkflowStep", input.stepCode);
@@ -319,7 +337,7 @@ export class WorkflowService {
       note?: string | null;
     },
   ) {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.manage");
+    await this.rbac.requirePermission(actor, "workflow.definition.manage");
     const version = await this.getEditableVersionOrThrow(actor.tenantId, definitionCode, versionNumber);
     const step = await this.repo.findStepByCode(version.id, input.stepCode);
     if (!step) throw new NotFoundError("WorkflowStep", input.stepCode);
@@ -333,7 +351,7 @@ export class WorkflowService {
   }
 
   async publishVersion(actor: ActorContext, definitionCode: string, versionNumber: number) {
-    await this.rbac.requirePermission(actor.userId, "workflow.definition.manage");
+    await this.rbac.requirePermission(actor, "workflow.definition.manage");
     const definition = await this.getDefinitionOrThrow(actor.tenantId, definitionCode);
     const version = await this.repo.findVersion(definition.id, versionNumber);
     if (!version) throw new NotFoundError("WorkflowVersion", String(versionNumber));
@@ -383,7 +401,7 @@ export class WorkflowService {
   // ======================================================================
 
   async createDemoTransaction(actor: ActorContext, title: string) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.start");
+    await this.rbac.requirePermission(actor, "workflow.instance.start");
     const tx = await this.repo.createDemoTransaction({
       tenantId: actor.tenantId,
       title,
@@ -404,7 +422,7 @@ export class WorkflowService {
     actor: ActorContext,
     input: { definitionCode: string; entityId: string; contextData?: Record<string, unknown> },
   ) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.start");
+    await this.rbac.requirePermission(actor, "workflow.instance.start");
     const definition = await this.getDefinitionOrThrow(actor.tenantId, input.definitionCode);
     const version = await this.repo.findCurrentVersion(definition.id);
     if (!version) {
@@ -456,7 +474,7 @@ export class WorkflowService {
   }
 
   async getInstance(actor: ActorContext, id: string) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.read");
+    await this.rbac.requirePermission(actor, "workflow.instance.read");
     const instance = await this.getInstanceOrThrow(actor.tenantId, id);
     const assignments = await this.repo.listAssignmentsForInstance(instance.id);
     return { instance, assignments };
@@ -504,7 +522,6 @@ export class WorkflowService {
   async getEntityStatuses(actor: ActorContext, instanceIds: string[]): Promise<EntityWorkflowStatusByInstance[]> {
     if (instanceIds.length === 0) return [];
     const uniqueIds = Array.from(new Set(instanceIds));
-    const actorAssignments = await this.rbac.getAssignments(actor.userId);
     const instances = (await this.repo.findInstancesByIds(uniqueIds)).filter((instance) => instance.tenantId === actor.tenantId);
     const stepIds = Array.from(new Set(instances.map((instance) => instance.currentStepId).filter((id): id is string => id !== null)));
     const steps = await Promise.all(stepIds.map((id) => this.repo.findStepById(id)));
@@ -532,8 +549,8 @@ export class WorkflowService {
             isMine:
               pending.assignmentType === "specific_user"
                 ? pending.assignedUserId === actor.userId
-                : await this.rbac.doAssignmentsCoverRoleScope(
-                    actorAssignments,
+                : await this.rbac.hasActiveRoleCoveringScope(
+                    actor,
                     pending.assignedRoleCode!,
                     pending.assignedOrganizationUnitId,
                   ),
@@ -617,7 +634,7 @@ export class WorkflowService {
   }
 
   async listInstances(actor: ActorContext): Promise<WorkflowInstance[]> {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.read");
+    await this.rbac.requirePermission(actor, "workflow.instance.read");
     return this.repo.listInstances(actor.tenantId);
   }
 
@@ -682,7 +699,7 @@ export class WorkflowService {
   }
 
   async getHistory(actor: ActorContext, instanceId: string) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.read");
+    await this.rbac.requirePermission(actor, "workflow.instance.read");
     const instance = await this.getInstanceOrThrow(actor.tenantId, instanceId);
     return this.repo.listHistory(instance.id);
   }
@@ -691,7 +708,7 @@ export class WorkflowService {
    * on — either they hold the assigned Role within the assigned scope, or
    * the Assignment names them specifically. */
   async listMyAssignments(actor: ActorContext): Promise<WorkflowInstanceAssignment[]> {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.read");
+    await this.rbac.requirePermission(actor, "workflow.instance.read");
     const pending = await this.repo.listPendingAssignmentsByTenant(actor.tenantId);
     const mine: WorkflowInstanceAssignment[] = [];
     for (const assignment of pending) {
@@ -699,8 +716,8 @@ export class WorkflowService {
         if (assignment.assignedUserId === actor.userId) mine.push(assignment);
         continue;
       }
-      const covers = await this.rbac.hasRoleCoveringScope(
-        actor.userId,
+      const covers = await this.rbac.hasActiveRoleCoveringScope(
+        actor,
         assignment.assignedRoleCode!,
         assignment.assignedOrganizationUnitId,
       );
@@ -719,7 +736,7 @@ export class WorkflowService {
    * so a claim can never be taken by someone who couldn't act anyway.
    */
   async claimAssignment(actor: ActorContext, assignmentId: string) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.act");
+    await this.rbac.requirePermission(actor, "workflow.instance.act");
     const assignment = await this.repo.findAssignmentById(assignmentId);
     if (!assignment) throw new NotFoundError("WorkflowInstanceAssignment", assignmentId);
     await this.getInstanceOrThrow(actor.tenantId, assignment.workflowInstanceId);
@@ -733,7 +750,7 @@ export class WorkflowService {
   }
 
   async releaseClaim(actor: ActorContext, assignmentId: string) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.act");
+    await this.rbac.requirePermission(actor, "workflow.instance.act");
     const released = await this.repo.releaseClaim(assignmentId, actor.userId);
     if (!released) {
       throw new ConflictError("No active claim by you to release on this Assignment");
@@ -747,7 +764,7 @@ export class WorkflowService {
     actionCode: string,
     comment: string | null,
   ) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.act");
+    await this.rbac.requirePermission(actor, "workflow.instance.act");
 
     const assignment = await this.repo.findAssignmentById(assignmentId);
     if (!assignment) throw new NotFoundError("WorkflowInstanceAssignment", assignmentId);
@@ -802,6 +819,9 @@ export class WorkflowService {
       actorUserId: actor.userId,
       comment,
       metadata: null,
+      // Epic 1 (§4.1 D): the decision row the accumulation window sums.
+      // Only an approve carries an amount; reject/return rows stay NULL.
+      decisionAmount: actionCode === "approve" ? documentAmountOf(instance) : null,
     });
     await this.repo.recordNotificationHook({
       workflowInstanceId: instance.id,
@@ -977,8 +997,8 @@ export class WorkflowService {
         if (assignment.assignedUserId === actor.userId) return true;
         continue;
       }
-      const covers = await this.rbac.hasRoleCoveringScope(
-        actor.userId,
+      const covers = await this.rbac.hasActiveRoleCoveringScope(
+        actor,
         assignment.assignedRoleCode!,
         assignment.assignedOrganizationUnitId,
       );
@@ -988,7 +1008,7 @@ export class WorkflowService {
   }
 
   async escalateOverdueAssignments(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, "workflow.instance.manage");
+    await this.rbac.requirePermission(actor, "workflow.instance.manage");
     return this.runEscalationSweep(actor.tenantId);
   }
 
@@ -1136,8 +1156,8 @@ export class WorkflowService {
     if (assignment.assignmentType === "specific_user") {
       return assignment.assignedUserId === actor.userId;
     }
-    return this.rbac.hasRoleCoveringScope(
-      actor.userId,
+    return this.rbac.hasActiveRoleCoveringScope(
+      actor,
       assignment.assignedRoleCode!,
       assignment.assignedOrganizationUnitId,
     );
@@ -1153,8 +1173,8 @@ export class WorkflowService {
       }
       return;
     }
-    const covers = await this.rbac.hasRoleCoveringScope(
-      actor.userId,
+    const covers = await this.rbac.hasActiveRoleCoveringScope(
+      actor,
       assignment.assignedRoleCode!,
       assignment.assignedOrganizationUnitId,
     );

@@ -49,7 +49,7 @@ export class ComplaintDashboardService {
   ) {}
 
   async getDashboard(actor: ActorContext, request: DashboardRequest): Promise<DashboardResult> {
-    await this.rbac.requirePermission(actor.userId, "complaint.dashboard.read");
+    await this.rbac.requirePermission(actor, "complaint.dashboard.read");
 
     const now = new Date();
     const to = request.to ? new Date(request.to) : now;

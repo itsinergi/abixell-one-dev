@@ -285,7 +285,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmWarehouseInput, "createdBy">,
   ): Promise<ScmWarehouse> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.manage");
     await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
 
     const warehouse = await this.repo.createWarehouse(actor.tenantId, {
@@ -310,7 +310,7 @@ export class SupplyChainAdvancedService {
     warehouseId: string,
     input: UpdateScmWarehouseInput,
   ): Promise<ScmWarehouse> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.manage");
     const existing = await this.repo.findWarehouseById(actor.tenantId, warehouseId);
     if (!existing) {
       throw new NotFoundError("ScmWarehouse", warehouseId);
@@ -341,7 +341,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getWarehouse(actor: ActorContext, warehouseId: string): Promise<ScmWarehouse> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.read");
     const warehouse = await this.repo.findWarehouseById(actor.tenantId, warehouseId);
     if (!warehouse) {
       throw new NotFoundError("ScmWarehouse", warehouseId);
@@ -354,7 +354,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmWarehouseListFilter = {},
   ): Promise<ScmWarehouse[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.read");
     const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(
       actor,
       filter.organizationUnitIds && filter.organizationUnitIds.length > 0
@@ -372,7 +372,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmWarehouseLocationInput, "createdBy">,
   ): Promise<ScmWarehouseLocation> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     const location = await this.repo.createWarehouseLocation(actor.tenantId, {
@@ -397,7 +397,7 @@ export class SupplyChainAdvancedService {
     locationId: string,
     input: UpdateScmWarehouseLocationInput,
   ): Promise<ScmWarehouseLocation> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.manage");
     const existing = await this.repo.findWarehouseLocationById(actor.tenantId, locationId);
     if (!existing) {
       throw new NotFoundError("ScmWarehouseLocation", locationId);
@@ -425,7 +425,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getWarehouseLocation(actor: ActorContext, locationId: string): Promise<ScmWarehouseLocation> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.read");
     const location = await this.repo.findWarehouseLocationById(actor.tenantId, locationId);
     if (!location) {
       throw new NotFoundError("ScmWarehouseLocation", locationId);
@@ -438,7 +438,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmWarehouseLocationListFilter = {},
   ): Promise<ScmWarehouseLocation[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.read");
     if (filter.warehouseId) {
       await this.assertWarehouseInScope(actor, filter.warehouseId);
     }
@@ -453,7 +453,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmItemBatchInput, "createdBy" | "batchNumber"> & { batchNumber?: string },
   ): Promise<ScmItemBatch> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const batchNumber =
       (input.batchNumber ?? (await this.configuration.generateNumberForTenant(
         actor.tenantId,
@@ -480,7 +480,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getBatch(actor: ActorContext, batchId: string): Promise<ScmItemBatch> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const batch = await this.repo.findItemBatchById(actor.tenantId, batchId);
     if (!batch) {
       throw new NotFoundError("ScmItemBatch", batchId);
@@ -492,7 +492,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmItemBatchListFilter = {},
   ): Promise<ScmItemBatch[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     return this.repo.listItemBatches(actor.tenantId, filter);
   }
 
@@ -500,7 +500,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmItemSerialInput, "createdBy">,
   ): Promise<ScmItemSerial> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     if (input.warehouseId) {
       await this.assertWarehouseInScope(actor, input.warehouseId);
     }
@@ -527,7 +527,7 @@ export class SupplyChainAdvancedService {
     serialId: string,
     input: UpdateScmItemSerialInput,
   ): Promise<ScmItemSerial> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const existing = await this.repo.findItemSerialById(actor.tenantId, serialId);
     if (!existing) {
       throw new NotFoundError("ScmItemSerial", serialId);
@@ -560,7 +560,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getSerial(actor: ActorContext, serialId: string): Promise<ScmItemSerial> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const serial = await this.repo.findItemSerialById(actor.tenantId, serialId);
     if (!serial) {
       throw new NotFoundError("ScmItemSerial", serialId);
@@ -575,7 +575,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmItemSerialListFilter = {},
   ): Promise<ScmItemSerial[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listItemSerials(actor.tenantId, {
@@ -592,7 +592,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<RecordScmAdvancedStockMovementInput, "createdBy">,
   ): Promise<{ movement: ScmAdvancedStockMovement; balance: ScmAdvancedStockBalance }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     const result = await this.repo.recordAdvancedStockMovement(actor.tenantId, {
@@ -621,7 +621,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmAdvancedStockMovementFilter = {},
   ): Promise<ScmAdvancedStockMovement[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listAdvancedStockMovements(actor.tenantId, {
@@ -637,7 +637,7 @@ export class SupplyChainAdvancedService {
     locationId?: string,
     batchId?: string,
   ): Promise<ScmAdvancedStockBalance | null> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     await this.assertWarehouseInScope(actor, warehouseId);
     return this.repo.findAdvancedStockBalance(actor.tenantId, itemId, warehouseId, locationId, batchId);
   }
@@ -646,7 +646,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmAdvancedStockBalanceFilter = {},
   ): Promise<ScmAdvancedStockBalance[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listAdvancedStockBalances(actor.tenantId, {
@@ -663,7 +663,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<UpsertScmReorderPolicyInput, "updatedBy">,
   ): Promise<ScmReorderPolicy> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.manage");
     if (input.warehouseId) {
       await this.assertWarehouseInScope(actor, input.warehouseId);
     }
@@ -689,7 +689,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmReorderPolicyFilter = {},
   ): Promise<ScmReorderPolicy[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listReorderPolicies(actor.tenantId, {
@@ -702,7 +702,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     warehouseId?: string,
   ): Promise<Array<{ policy: ScmReorderPolicy; currentStock: number; suggestedOrderQuantity: number }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, warehouseId);
 
     const policies = await this.repo.listReorderPolicies(actor.tenantId, {
@@ -740,7 +740,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmStockReservationInput, "createdBy">,
   ): Promise<ScmStockReservation> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     const reservation = await this.repo.createStockReservation(actor.tenantId, {
@@ -768,7 +768,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     reservationId: string,
   ): Promise<ScmStockReservation> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const existing = await this.repo.findStockReservationById(actor.tenantId, reservationId);
     if (!existing) {
       throw new NotFoundError("ScmStockReservation", reservationId);
@@ -801,7 +801,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     reservationId: string,
   ): Promise<ScmStockReservation> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const existing = await this.repo.findStockReservationById(actor.tenantId, reservationId);
     if (!existing) {
       throw new NotFoundError("ScmStockReservation", reservationId);
@@ -834,7 +834,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmStockReservationFilter = {},
   ): Promise<ScmStockReservation[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listStockReservations(actor.tenantId, {
@@ -851,7 +851,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmStockTransferInput, "createdBy" | "transferNumber"> & { transferNumber?: string },
   ): Promise<StockTransferDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     await this.assertWarehouseInScope(actor, input.fromWarehouseId);
     await this.assertWarehouseInScope(actor, input.toWarehouseId);
 
@@ -912,7 +912,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getStockTransfer(actor: ActorContext, transferId: string): Promise<StockTransferDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const result = await this.repo.findStockTransferById(actor.tenantId, transferId);
     if (!result) {
       throw new NotFoundError("ScmStockTransfer", transferId);
@@ -945,7 +945,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmStockTransferFilter = {},
   ): Promise<Array<{ transfer: ScmStockTransfer; status: EntityWorkflowStatus | null }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(
       actor,
       filter.fromWarehouseId || filter.toWarehouseId,
@@ -970,7 +970,7 @@ export class SupplyChainAdvancedService {
     action: string,
     comment?: string,
   ): Promise<StockTransferDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const result = await this.repo.findStockTransferById(actor.tenantId, transferId);
     if (!result) {
       throw new NotFoundError("ScmStockTransfer", transferId);
@@ -1014,7 +1014,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: RecordScmStockTransferShipmentInput,
   ): Promise<StockTransferDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const result = await this.repo.findStockTransferById(actor.tenantId, input.transferId);
     if (!result) {
       throw new NotFoundError("ScmStockTransfer", input.transferId);
@@ -1039,7 +1039,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: RecordScmStockTransferReceiptInput,
   ): Promise<StockTransferDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const result = await this.repo.findStockTransferById(actor.tenantId, input.transferId);
     if (!result) {
       throw new NotFoundError("ScmStockTransfer", input.transferId);
@@ -1064,7 +1064,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmStockOpnameInput, "createdBy" | "opnameNumber"> & { opnameNumber?: string },
   ): Promise<StockOpnameDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     const opnameNumber =
@@ -1125,7 +1125,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: RecordScmStockOpnameCountInput,
   ): Promise<ScmStockOpnameLine> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const line = await this.repo.recordStockOpnameCount(actor.tenantId, input);
     if (!line) {
       throw new NotFoundError("ScmStockOpnameLine", input.lineId);
@@ -1134,7 +1134,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getStockOpname(actor: ActorContext, opnameId: string): Promise<StockOpnameDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const result = await this.repo.findStockOpnameById(actor.tenantId, opnameId);
     if (!result) {
       throw new NotFoundError("ScmStockOpname", opnameId);
@@ -1166,7 +1166,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmStockOpnameFilter = {},
   ): Promise<Array<{ opname: ScmStockOpname; status: EntityWorkflowStatus | null }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     const opnames = await this.repo.listStockOpnames(actor.tenantId, {
@@ -1188,7 +1188,7 @@ export class SupplyChainAdvancedService {
     action: string,
     comment?: string,
   ): Promise<StockOpnameDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     const result = await this.repo.findStockOpnameById(actor.tenantId, opnameId);
     if (!result) {
       throw new NotFoundError("ScmStockOpname", opnameId);
@@ -1242,11 +1242,11 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: CreateScmValuationLayerInput,
   ): Promise<ScmValuationLayer> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.valuation.manage");
     if (input.warehouseId) {
       await this.assertWarehouseInScope(actor, input.warehouseId);
     } else {
-      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      const hasTenant = await this.rbac.hasTenantScope(actor);
       if (!hasTenant) {
         throw new ForbiddenError("Tenant-wide scope required for global valuation layers");
       }
@@ -1284,7 +1284,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: ConsumeScmValuationLayerInput,
   ): Promise<ScmValuationLayer> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.valuation.manage");
     const existing = await this.repo.findValuationLayerById(actor.tenantId, input.layerId);
     if (!existing) {
       throw new NotFoundError("ScmValuationLayer", input.layerId);
@@ -1292,7 +1292,7 @@ export class SupplyChainAdvancedService {
     if (existing.warehouseId) {
       await this.assertWarehouseInScope(actor, existing.warehouseId);
     } else {
-      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      const hasTenant = await this.rbac.hasTenantScope(actor);
       if (!hasTenant) {
         throw new ForbiddenError("Tenant-wide scope required for global valuation layers");
       }
@@ -1319,7 +1319,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmValuationLayerFilter = {},
   ): Promise<ScmValuationLayer[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
+    await this.rbac.requirePermission(actor, "supply_chain.valuation.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listValuationLayers(actor.tenantId, {
@@ -1335,7 +1335,7 @@ export class SupplyChainAdvancedService {
       itemsToAllocate?: Array<{ itemId: string; quantity: number; baseAmount: number; weight?: number }>;
     },
   ): Promise<LandedCostDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.valuation.manage");
 
     const voucherNumber =
       (input.voucherNumber ?? (await this.configuration.generateNumberForTenant(
@@ -1383,7 +1383,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     landedCostId: string,
   ): Promise<LandedCostDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.valuation.manage");
     const existing = await this.repo.findLandedCostById(actor.tenantId, landedCostId);
     if (!existing) {
       throw new NotFoundError("ScmLandedCost", landedCostId);
@@ -1408,7 +1408,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getLandedCost(actor: ActorContext, landedCostId: string): Promise<LandedCostDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
+    await this.rbac.requirePermission(actor, "supply_chain.valuation.read");
     const result = await this.repo.findLandedCostById(actor.tenantId, landedCostId);
     if (!result) {
       throw new NotFoundError("ScmLandedCost", landedCostId);
@@ -1420,7 +1420,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmLandedCostFilter = {},
   ): Promise<ScmLandedCost[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
+    await this.rbac.requirePermission(actor, "supply_chain.valuation.read");
     return this.repo.listLandedCosts(actor.tenantId, filter);
   }
 
@@ -1432,7 +1432,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmRfqInput, "createdBy" | "rfqNumber"> & { rfqNumber?: string },
   ): Promise<RfqDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.manage");
     await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
 
     const rfqNumber =
@@ -1498,7 +1498,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getRfq(actor: ActorContext, rfqId: string): Promise<RfqDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
     const result = await this.repo.findRfqById(actor.tenantId, rfqId);
     if (!result) {
       throw new NotFoundError("ScmRfq", rfqId);
@@ -1534,7 +1534,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmRfqFilter = {},
   ): Promise<Array<{ rfq: ScmRfq; status: EntityWorkflowStatus | null }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
     const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(
       actor,
       filter.organizationUnitIds && filter.organizationUnitIds.length > 0
@@ -1561,7 +1561,7 @@ export class SupplyChainAdvancedService {
     action: string,
     comment?: string,
   ): Promise<RfqDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.manage");
     const result = await this.repo.findRfqById(actor.tenantId, rfqId);
     if (!result) {
       throw new NotFoundError("ScmRfq", rfqId);
@@ -1611,7 +1611,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmSupplierBidInput, "createdBy" | "bidNumber"> & { bidNumber?: string },
   ): Promise<SupplierBidDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.manage");
     const rfqResult = await this.repo.findRfqById(actor.tenantId, input.rfqId);
     if (!rfqResult) {
       throw new NotFoundError("ScmRfq", input.rfqId);
@@ -1648,7 +1648,7 @@ export class SupplyChainAdvancedService {
     bidId: string,
     input: Omit<UpdateScmSupplierBidScoreInput, "bidId" | "updatedBy">,
   ): Promise<ScmSupplierBid> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.manage");
     const existing = await this.repo.findSupplierBidById(actor.tenantId, bidId);
     if (!existing) {
       throw new NotFoundError("ScmSupplierBid", bidId);
@@ -1697,7 +1697,7 @@ export class SupplyChainAdvancedService {
     bidId: string,
     resultingPurchaseOrderId?: string,
   ): Promise<ScmSupplierBid> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.manage");
     const existing = await this.repo.findSupplierBidById(actor.tenantId, bidId);
     if (!existing) {
       throw new NotFoundError("ScmSupplierBid", bidId);
@@ -1739,7 +1739,7 @@ export class SupplyChainAdvancedService {
   }
 
   async getSupplierBid(actor: ActorContext, bidId: string): Promise<SupplierBidDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
     const result = await this.repo.findSupplierBidById(actor.tenantId, bidId);
     if (!result) {
       throw new NotFoundError("ScmSupplierBid", bidId);
@@ -1755,7 +1755,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmSupplierBidFilter = {},
   ): Promise<ScmSupplierBid[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
     if (filter.rfqId) {
       const rfq = await this.repo.findRfqById(actor.tenantId, filter.rfqId);
       if (rfq) {
@@ -1775,7 +1775,7 @@ export class SupplyChainAdvancedService {
       evaluationNumber?: string;
     },
   ): Promise<SupplierEvaluationDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
 
     const evaluationNumber =
       (input.evaluationNumber ?? (await this.configuration.generateNumberForTenant(
@@ -1856,7 +1856,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     evaluationId: string,
   ): Promise<SupplierEvaluationDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.read");
     const evaluation = await this.repo.findSupplierEvaluationById(actor.tenantId, evaluationId);
     if (!evaluation) {
       throw new NotFoundError("ScmSupplierEvaluation", evaluationId);
@@ -1882,7 +1882,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmSupplierEvaluationFilter = {},
   ): Promise<Array<{ evaluation: ScmSupplierEvaluation; status: EntityWorkflowStatus | null }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.read");
     const evaluations = await this.repo.listSupplierEvaluations(actor.tenantId, filter);
 
     return this.withWorkflowStatus(
@@ -1899,7 +1899,7 @@ export class SupplyChainAdvancedService {
     action: string,
     comment?: string,
   ): Promise<SupplierEvaluationDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
     const evaluation = await this.repo.findSupplierEvaluationById(actor.tenantId, evaluationId);
     if (!evaluation) {
       throw new NotFoundError("ScmSupplierEvaluation", evaluationId);
@@ -1943,7 +1943,7 @@ export class SupplyChainAdvancedService {
       contractNumber?: string;
     },
   ): Promise<SupplierContractDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
 
     const contractNumber =
       (input.contractNumber ?? (await this.configuration.generateNumberForTenant(
@@ -2006,7 +2006,7 @@ export class SupplyChainAdvancedService {
     contractId: string,
     additionalSpentAmount: number,
   ): Promise<SupplierContractDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
     const existing = await this.repo.findSupplierContractById(actor.tenantId, contractId);
     if (!existing) {
       throw new NotFoundError("ScmSupplierContract", contractId);
@@ -2033,7 +2033,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     contractId: string,
   ): Promise<SupplierContractDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.read");
     const result = await this.repo.findSupplierContractById(actor.tenantId, contractId);
     if (!result) {
       throw new NotFoundError("ScmSupplierContract", contractId);
@@ -2064,7 +2064,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmSupplierContractFilter = {},
   ): Promise<Array<{ contract: ScmSupplierContract; status: EntityWorkflowStatus | null }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.read");
     const contracts = await this.repo.listSupplierContracts(actor.tenantId, filter);
 
     return this.withWorkflowStatus(
@@ -2081,7 +2081,7 @@ export class SupplyChainAdvancedService {
     action: string,
     comment?: string,
   ): Promise<SupplierContractDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.contract.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
     const result = await this.repo.findSupplierContractById(actor.tenantId, contractId);
     if (!result) {
       throw new NotFoundError("ScmSupplierContract", contractId);
@@ -2139,7 +2139,7 @@ export class SupplyChainAdvancedService {
       organizationUnitId?: string;
     },
   ): Promise<ScmSpendAnalyticsSnapshot> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.analytics.read");
+    await this.rbac.requirePermission(actor, "supply_chain.analytics.read");
     await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
 
     const snapshot = await this.repo.computeSpendAnalyticsSnapshot(actor.tenantId, {
@@ -2170,7 +2170,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     snapshotId: string,
   ): Promise<ScmSpendAnalyticsSnapshot> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.analytics.read");
+    await this.rbac.requirePermission(actor, "supply_chain.analytics.read");
     const snapshot = await this.repo.findSpendAnalyticsSnapshotById(actor.tenantId, snapshotId);
     if (!snapshot) {
       throw new NotFoundError("ScmSpendAnalyticsSnapshot", snapshotId);
@@ -2183,7 +2183,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmSpendAnalyticsSnapshotFilter = {},
   ): Promise<ScmSpendAnalyticsSnapshot[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.analytics.read");
+    await this.rbac.requirePermission(actor, "supply_chain.analytics.read");
     const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(
       actor,
       filter.organizationUnitIds && filter.organizationUnitIds.length > 0
@@ -2205,7 +2205,7 @@ export class SupplyChainAdvancedService {
   // --- Account Assignment Governance ---
 
   async listAccountAssignmentConfigs(actor: ActorContext): Promise<ScmAccountAssignmentConfig[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
     return this.repo.listAccountAssignmentConfigs(actor.tenantId);
   }
 
@@ -2213,7 +2213,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     assignmentType: ScmAccountAssignmentType,
   ): Promise<ScmAccountAssignmentConfig> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
     const cfg = await this.repo.findAccountAssignmentConfig(actor.tenantId, assignmentType);
     if (!cfg) {
       throw new NotFoundError("ScmAccountAssignmentConfig", assignmentType);
@@ -2225,8 +2225,8 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: UpdateScmAccountAssignmentConfigInput,
   ): Promise<ScmAccountAssignmentConfig> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.manage");
-    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    await this.rbac.requirePermission(actor, "supply_chain.procurement.manage");
+    const hasTenant = await this.rbac.hasTenantScope(actor);
     if (!hasTenant) {
       throw new ForbiddenError("Tenant-wide scope required to update account assignment configuration");
     }
@@ -2257,7 +2257,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmReceivingRecordInput, "receiptNumber" | "createdBy"> & { receiptNumber?: string },
   ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     // Idempotent replay (ADR-0023): a retried receipt must not book a second
@@ -2310,7 +2310,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     receivingRecordId: string,
   ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const result = await this.repo.findReceivingRecordById(actor.tenantId, receivingRecordId);
     if (!result) {
       throw new NotFoundError("ScmReceivingRecord", receivingRecordId);
@@ -2323,7 +2323,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmReceivingRecordFilter = {},
   ): Promise<ScmReceivingRecord[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listReceivingRecords(actor.tenantId, {
@@ -2338,7 +2338,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmInspectionInput, "inspectionNumber" | "createdBy"> & { inspectionNumber?: string },
   ): Promise<ScmInspection> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
 
     // Idempotent replay (ADR-0023).
     const replayed = await this.repo.findInspectionByIdempotencyKey(
@@ -2390,7 +2390,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     receivingLineId: string,
   ): Promise<ScmInspection | null> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     return this.repo.findInspectionByReceivingLineId(actor.tenantId, receivingLineId);
   }
 
@@ -2400,7 +2400,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmDiscrepancyRecordInput, "createdBy">,
   ): Promise<ScmDiscrepancyRecord> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
 
     const discrepancy = await this.repo.createDiscrepancyRecord(actor.tenantId, {
       ...input,
@@ -2427,7 +2427,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<ResolveScmDiscrepancyRecordInput, "resolvedBy"> & { resolvedBy?: string | null },
   ): Promise<ScmDiscrepancyRecord> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
 
     const resolved = await this.repo.resolveDiscrepancyRecord(actor.tenantId, {
       ...input,
@@ -2453,7 +2453,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmDiscrepancyRecordFilter = {},
   ): Promise<ScmDiscrepancyRecord[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     return this.repo.listDiscrepancyRecords(actor.tenantId, filter);
   }
 
@@ -2463,7 +2463,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmReturnToVendorInput, "returnNumber" | "createdBy"> & { returnNumber?: string },
   ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     // Idempotent replay (ADR-0023).
@@ -2516,7 +2516,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     returnToVendorId: string,
   ): Promise<{ returnToVendor: ScmReturnToVendor; lines: ScmReturnToVendorLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const result = await this.repo.findReturnToVendorById(actor.tenantId, returnToVendorId);
     if (!result) {
       throw new NotFoundError("ScmReturnToVendor", returnToVendorId);
@@ -2529,7 +2529,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmReturnToVendorFilter = {},
   ): Promise<ScmReturnToVendor[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listReturnToVendors(actor.tenantId, {
@@ -2544,7 +2544,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmReceiptReversalInput, "reversalNumber" | "createdBy"> & { reversalNumber?: string },
   ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
 
     const recResult = await this.repo.findReceivingRecordById(actor.tenantId, input.receivingRecordId);
     if (!recResult) {
@@ -2617,7 +2617,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     receivingRecordId: string,
   ): Promise<{ reversal: ScmReceiptReversal; lines: ScmReceiptReversalLine[] } | null> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const recResult = await this.repo.findReceivingRecordById(actor.tenantId, receivingRecordId);
     if (recResult) {
       await this.assertWarehouseInScope(actor, recResult.receiving.warehouseId);
@@ -2631,7 +2631,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmAccountingReadyEventInput, "createdBy">,
   ): Promise<ScmAccountingReadyEvent> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
 
     // Idempotent replay (ADR-0023): "re-delivering an event must not create a
     // second accounting effect downstream".
@@ -2673,7 +2673,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     eventId: string,
   ): Promise<ScmAccountingReadyEvent> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const event = await this.repo.findAccountingReadyEventById(actor.tenantId, eventId);
     if (!event) {
       throw new NotFoundError("ScmAccountingReadyEvent", eventId);
@@ -2685,7 +2685,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmAccountingReadyEventFilter = {},
   ): Promise<ScmAccountingReadyEvent[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     return this.repo.listAccountingReadyEvents(actor.tenantId, filter);
   }
 
@@ -2693,7 +2693,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<UpdateScmAccountingReadyEventStateInput, "occurredBy">,
   ): Promise<{ event: ScmAccountingReadyEvent; transition: ScmAccountingReadyEventStateTransition }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
 
     const result = await this.repo.updateAccountingReadyEventState(actor.tenantId, {
       ...input,
@@ -2727,7 +2727,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmReplacementDeliveryInput, "replacementNumber" | "createdBy"> & { replacementNumber?: string },
   ): Promise<{ replacement: ScmReplacementDelivery; lines: ScmReplacementDeliveryLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     const replayed = await this.repo.findReplacementDeliveryByIdempotencyKey(
@@ -2778,7 +2778,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     replacementDeliveryId: string,
   ): Promise<{ replacement: ScmReplacementDelivery; lines: ScmReplacementDeliveryLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const result = await this.repo.findReplacementDeliveryById(actor.tenantId, replacementDeliveryId);
     if (!result) {
       throw new NotFoundError("ScmReplacementDelivery", replacementDeliveryId);
@@ -2791,7 +2791,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmReplacementDeliveryFilter = {},
   ): Promise<ScmReplacementDelivery[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listReplacementDeliveries(actor.tenantId, {
@@ -2808,7 +2808,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmServiceAcceptanceInput, "acceptanceNumber" | "createdBy"> & { acceptanceNumber?: string },
   ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.service_acceptance.manage");
     if (input.organizationUnitId) {
       await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
     }
@@ -2887,7 +2887,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     serviceAcceptanceId: string,
   ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.read");
+    await this.rbac.requirePermission(actor, "supply_chain.service_acceptance.read");
     const result = await this.repo.findServiceAcceptanceById(actor.tenantId, serviceAcceptanceId);
     if (!result) {
       throw new NotFoundError("ScmServiceAcceptance", serviceAcceptanceId);
@@ -2902,7 +2902,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmServiceAcceptanceFilter = {},
   ): Promise<Array<{ serviceAcceptance: ScmServiceAcceptance; status: EntityWorkflowStatus | null }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.read");
+    await this.rbac.requirePermission(actor, "supply_chain.service_acceptance.read");
     const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitIds?.[0]);
 
     const acceptances = await this.repo.listServiceAcceptances(actor.tenantId, {
@@ -2923,7 +2923,7 @@ export class SupplyChainAdvancedService {
     serviceAcceptanceId: string,
     comment?: string,
   ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.approve");
+    await this.rbac.requirePermission(actor, "supply_chain.service_acceptance.approve");
     const result = await this.repo.findServiceAcceptanceById(actor.tenantId, serviceAcceptanceId);
     if (!result) {
       throw new NotFoundError("ScmServiceAcceptance", serviceAcceptanceId);
@@ -2978,7 +2978,7 @@ export class SupplyChainAdvancedService {
     serviceAcceptanceId: string,
     comment?: string,
   ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.service_acceptance.approve");
+    await this.rbac.requirePermission(actor, "supply_chain.service_acceptance.approve");
     const result = await this.repo.findServiceAcceptanceById(actor.tenantId, serviceAcceptanceId);
     if (!result) {
       throw new NotFoundError("ScmServiceAcceptance", serviceAcceptanceId);
@@ -3092,7 +3092,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmConsignmentSettlementInput, "settlementNumber" | "createdBy"> & { settlementNumber?: string },
   ): Promise<{ settlement: ScmConsignmentSettlement; lines: ScmConsignmentSettlementLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.consignment.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.consignment.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     const replayed = await this.repo.findConsignmentSettlementByIdempotencyKey(
@@ -3143,7 +3143,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     settlementId: string,
   ): Promise<{ settlement: ScmConsignmentSettlement; lines: ScmConsignmentSettlementLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.consignment.read");
+    await this.rbac.requirePermission(actor, "supply_chain.consignment.read");
     const result = await this.repo.findConsignmentSettlementById(actor.tenantId, settlementId);
     if (!result) {
       throw new NotFoundError("ScmConsignmentSettlement", settlementId);
@@ -3156,7 +3156,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmConsignmentSettlementFilter = {},
   ): Promise<ScmConsignmentSettlement[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.consignment.read");
+    await this.rbac.requirePermission(actor, "supply_chain.consignment.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listConsignmentSettlements(actor.tenantId, {
@@ -3173,7 +3173,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmInventoryAgingFilter = {},
   ): Promise<ScmInventoryAgingBucket[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.getInventoryAgingBuckets(actor.tenantId, {
@@ -3190,7 +3190,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmInventoryDisposalInput, "disposalNumber" | "createdBy"> & { disposalNumber?: string },
   ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.disposal.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
     if (input.organizationUnitId) {
       await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
@@ -3268,7 +3268,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     disposalId: string,
   ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.read");
+    await this.rbac.requirePermission(actor, "supply_chain.disposal.read");
     const result = await this.repo.findInventoryDisposalById(actor.tenantId, disposalId);
     if (!result) {
       throw new NotFoundError("ScmInventoryDisposal", disposalId);
@@ -3284,7 +3284,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmInventoryDisposalFilter = {},
   ): Promise<Array<{ disposal: ScmInventoryDisposal; status: EntityWorkflowStatus | null }>> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.read");
+    await this.rbac.requirePermission(actor, "supply_chain.disposal.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
     const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter.organizationUnitIds?.[0]);
 
@@ -3307,7 +3307,7 @@ export class SupplyChainAdvancedService {
     disposalId: string,
     comment?: string,
   ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.approve");
+    await this.rbac.requirePermission(actor, "supply_chain.disposal.approve");
     const result = await this.repo.findInventoryDisposalById(actor.tenantId, disposalId);
     if (!result) {
       throw new NotFoundError("ScmInventoryDisposal", disposalId);
@@ -3361,7 +3361,7 @@ export class SupplyChainAdvancedService {
     disposalId: string,
     comment?: string,
   ): Promise<{ disposal: ScmInventoryDisposal; lines: ScmInventoryDisposalLine[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.disposal.approve");
+    await this.rbac.requirePermission(actor, "supply_chain.disposal.approve");
     const result = await this.repo.findInventoryDisposalById(actor.tenantId, disposalId);
     if (!result) {
       throw new NotFoundError("ScmInventoryDisposal", disposalId);
@@ -3513,7 +3513,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     input: Omit<CreateScmWarehouseTaskInput, "taskNumber" | "createdBy"> & { taskNumber?: string },
   ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse_task.manage");
     await this.assertWarehouseInScope(actor, input.warehouseId);
 
     const replayed = await this.repo.findWarehouseTaskByIdempotencyKey(
@@ -3565,7 +3565,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     taskId: string,
   ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse_task.read");
     const result = await this.repo.findWarehouseTaskById(actor.tenantId, taskId);
     if (!result) {
       throw new NotFoundError("ScmWarehouseTask", taskId);
@@ -3578,7 +3578,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     filter: ScmWarehouseTaskFilter = {},
   ): Promise<ScmWarehouseTask[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.read");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse_task.read");
     const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, filter.warehouseId);
 
     return this.repo.listWarehouseTasks(actor.tenantId, {
@@ -3592,7 +3592,7 @@ export class SupplyChainAdvancedService {
     taskId: string,
     assignedTo: string,
   ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse_task.manage");
     const result = await this.repo.findWarehouseTaskById(actor.tenantId, taskId);
     if (!result) {
       throw new NotFoundError("ScmWarehouseTask", taskId);
@@ -3630,7 +3630,7 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     taskId: string,
   ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.warehouse_task.execute");
+    await this.rbac.requirePermission(actor, "supply_chain.warehouse_task.execute");
     const result = await this.repo.findWarehouseTaskById(actor.tenantId, taskId);
     if (!result) {
       throw new NotFoundError("ScmWarehouseTask", taskId);
@@ -3682,9 +3682,9 @@ export class SupplyChainAdvancedService {
     organizationUnitId: string | null | undefined,
   ): Promise<void> {
     if (organizationUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, organizationUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, organizationUnitId);
     } else {
-      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      const hasTenant = await this.rbac.hasTenantScope(actor);
       if (!hasTenant) {
         throw new ForbiddenError("Tenant-wide scope required for tenant-level entities");
       }
@@ -3695,9 +3695,9 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     requestedOrgUnitId?: string | null,
   ): Promise<string[] | null> {
-    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    const hasTenant = await this.rbac.hasTenantScope(actor);
     if (requestedOrgUnitId) {
-      await this.rbac.requireOrganizationUnitScope(actor.userId, requestedOrgUnitId);
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, requestedOrgUnitId);
       const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, [requestedOrgUnitId]);
       return descendantIds.length > 0 ? descendantIds : [requestedOrgUnitId];
     }
@@ -3723,7 +3723,7 @@ export class SupplyChainAdvancedService {
       await this.assertWarehouseInScope(actor, requestedWarehouseId);
       return [requestedWarehouseId];
     }
-    const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+    const hasTenant = await this.rbac.hasTenantScope(actor);
     if (hasTenant) {
       return null;
     }
@@ -3791,7 +3791,7 @@ export class SupplyChainAdvancedService {
     const transferResult = await this.repo.findStockTransferById(actor.tenantId, entityId);
     if (!transferResult) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
       await this.assertWarehouseInScope(actor, transferResult.transfer.fromWarehouseId);
       return true;
     } catch {
@@ -3803,7 +3803,7 @@ export class SupplyChainAdvancedService {
     const opnameResult = await this.repo.findStockOpnameById(actor.tenantId, entityId);
     if (!opnameResult) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
       await this.assertWarehouseInScope(actor, opnameResult.opname.warehouseId);
       return true;
     } catch {
@@ -3815,7 +3815,7 @@ export class SupplyChainAdvancedService {
     const rfqResult = await this.repo.findRfqById(actor.tenantId, entityId);
     if (!rfqResult) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "supply_chain.procurement.read");
+      await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
       await this.assertOrganizationUnitInScope(actor, rfqResult.rfq.organizationUnitId);
       return true;
     } catch {
@@ -3827,8 +3827,8 @@ export class SupplyChainAdvancedService {
     const contractResult = await this.repo.findSupplierContractById(actor.tenantId, entityId);
     if (!contractResult) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "supply_chain.contract.read");
-      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      await this.rbac.requirePermission(actor, "supply_chain.contract.read");
+      const hasTenant = await this.rbac.hasTenantScope(actor);
       return hasTenant;
     } catch {
       return false;
@@ -3839,8 +3839,8 @@ export class SupplyChainAdvancedService {
     const lcResult = await this.repo.findLandedCostById(actor.tenantId, entityId);
     if (!lcResult) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "supply_chain.valuation.read");
-      const hasTenant = await this.rbac.hasTenantScope(actor.userId);
+      await this.rbac.requirePermission(actor, "supply_chain.valuation.read");
+      const hasTenant = await this.rbac.hasTenantScope(actor);
       return hasTenant;
     } catch {
       return false;
@@ -3851,7 +3851,7 @@ export class SupplyChainAdvancedService {
     const recResult = await this.repo.findReceivingRecordById(actor.tenantId, entityId);
     if (!recResult) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
       await this.assertWarehouseInScope(actor, recResult.receiving.warehouseId);
       return true;
     } catch {
@@ -3863,7 +3863,7 @@ export class SupplyChainAdvancedService {
     const retResult = await this.repo.findReturnToVendorById(actor.tenantId, entityId);
     if (!retResult) return false;
     try {
-      await this.rbac.requirePermission(actor.userId, "supply_chain.inventory.read");
+      await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
       await this.assertWarehouseInScope(actor, retResult.returnToVendor.warehouseId);
       return true;
     } catch {

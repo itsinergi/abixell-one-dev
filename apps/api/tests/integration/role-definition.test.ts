@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
-import { authHeader, bootstrapTenant } from "./helpers.js";
+import { authHeader, bootstrapTenant, sessionTokenFor } from "./helpers.js";
 
 const REQUIRED_DATABASE = "abixell_one_epic3_wave4";
 // The tenant bootstrap endpoint caps `code` at 32 characters and role codes at
@@ -34,8 +34,10 @@ function roleCode(name: string) {
   return `RD_${name}_${codeStamp}`;
 }
 
-function tokenFor(tenantId: string, user: UserFixture) {
-  return signAccessToken({ sub: user.id, tenantId });
+function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
+  // Epic 1 (§4.1 F): a bearer token must name a session, so fixtures create
+  // one the way the login endpoint does instead of signing a bare payload.
+  return sessionTokenFor({ userId: user.id, tenantId });
 }
 
 function assertIsolatedDatabase() {
@@ -136,7 +138,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     );
     const manager = await createUser(tenantId, "manager");
     await assignTenantRole(manager.id, managerRole.id);
-    managerToken = tokenFor(tenantId, manager);
+    managerToken = await tokenFor(tenantId, manager);
 
     const entryRole = await createRole(tenantId, roleCode("SPLIT_ENTRY"), [
       "admin.console.read",
@@ -148,10 +150,19 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
       "config.read",
     ]);
     const splitAuthority = await createUser(tenantId, "split-authority");
-    await assignTenantRole(splitAuthority.id, entryRole.id);
+    const entryAssignmentId = await assignTenantRole(splitAuthority.id, entryRole.id);
     await assignTenantRole(splitAuthority.id, manageRole.id);
     await assignTenantRole(splitAuthority.id, configRole.id);
-    splitAuthorityToken = tokenFor(tenantId, splitAuthority);
+    // Epic 1 (§4.1 B): the default active Role is the first by name, which
+    // here is the config-only Role and would refuse console entry before the
+    // assertions below could probe anything. The session is pinned to the
+    // entry Role instead — the only one of the three holding
+    // admin.console.read — the way a user would pick it in the role picker.
+    splitAuthorityToken = await sessionTokenFor({
+      userId: splitAuthority.id,
+      tenantId,
+      activeAssignmentId: entryAssignmentId,
+    });
 
     const otherTenant = await bootstrapTenant(
       app,
@@ -166,7 +177,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     );
     const otherManager = await createUser(otherTenantId, "other-manager");
     await assignTenantRole(otherManager.id, otherManagerRole.id);
-    otherManagerToken = tokenFor(otherTenantId, otherManager);
+    otherManagerToken = await tokenFor(otherTenantId, otherManager);
 
     await pool.query(
       `UPDATE tenant_module_activations tma
@@ -196,7 +207,10 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
 
     const splitOverview = await get("/admin/overview", splitAuthorityToken);
     expect(splitOverview.statusCode).toBe(200);
-    expect(splitOverview.json().capabilities.roleManage).toBe(true);
+    // Epic 1 (§4.1 C): the ACTIVE Role is what authorizes. The split user's
+    // active assignment carries only console entry, so roleManage is reported
+    // false even though the user also holds a (switched-away) role.manage.
+    expect(splitOverview.json().capabilities.roleManage).toBe(false);
   });
 
   it("creates, copies, previews, updates, and deletes detached role definitions", async () => {
@@ -642,7 +656,16 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
       windows: [],
     });
     expect(response.statusCode).toBe(403);
-    expect(response.json().error).toContain("Role definition management authority is missing");
+    // Epic 1 (§4.1 C): the refusal now fires at the active-Role precheck —
+    // the session's active assignment (console entry only) cannot carry the
+    // tenant-scoped role.manage the write requires, and a Role the user holds
+    // but has not switched into grants nothing. The deeper transactional
+    // authority check (same-assignment role.manage + config.read) still
+    // exists behind this gate for the case the precheck passes but the two
+    // permissions sit on different assignments.
+    expect(response.json().error).toContain(
+      "Missing tenant-scoped permission 'role.manage' in the active Role",
+    );
   });
 
   it("round-trips description through create, copy, preview, and update", async () => {
@@ -873,7 +896,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
     ]);
     const assigner = await createUser(tenantId, "deactivation-assigner");
     await assignTenantRole(assigner.id, assignerRole.id);
-    const assignerToken = tokenFor(tenantId, assigner);
+    const assignerToken = await tokenFor(tenantId, assigner);
 
     const probeUser = await createUser(tenantId, "deactivation-probe");
     const probeGrant = await post(

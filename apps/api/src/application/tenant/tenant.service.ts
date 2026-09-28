@@ -47,7 +47,7 @@ export class TenantService {
   }
 
   async updateName(actor: ActorContext, input: UpdateTenantInput) {
-    await this.rbac.requireTenantScopedPermission(actor.tenantId, actor.userId, "tenant.update");
+    await this.rbac.requireTenantScopedPermissionForActor(actor, "tenant.update");
     return this.repo.updateName(input, actor);
   }
 

@@ -162,6 +162,11 @@ export interface WorkflowHistoryEntry {
   actorUserId: string | null;
   comment: string | null;
   metadata: Record<string, unknown> | null;
+  /** Epic 1 (§4.1 D): the monetary amount of the document being approved,
+   * carried on the decision row so the approval-authority accumulation
+   * window (iDempiere getAmtAccum) has one table to sum. Set on 'approve'
+   * decisions, NULL for every other row. numeric(18,2) string. */
+  decisionAmount: string | null;
   occurredAt: Date;
 }
 
@@ -327,6 +332,9 @@ export interface WorkflowRepository {
     actorUserId: string | null;
     comment: string | null;
     metadata: Record<string, unknown> | null;
+    /** Epic 1 (§4.1 D): the approved document amount on an 'approve'
+     * decision — NULL everywhere else. */
+    decisionAmount?: string | null;
   }): Promise<WorkflowHistoryEntry>;
   listHistory(workflowInstanceId: string): Promise<WorkflowHistoryEntry[]>;
 

@@ -42,6 +42,7 @@ import { GUARD_ENFORCE, evaluateRouteAccess, isEntryFlowRoute } from "../../lib/
 import { Alert, Button, Spinner } from "../components/ui";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { UserMenu } from "../components/UserMenu";
+import { SwitchRoleDialog } from "../components/SwitchRoleDialog";
 import { useOnlineStatus } from "../useOnlineStatus";
 
 interface ShellContextValue {
@@ -395,6 +396,7 @@ export function AppShell() {
   const [error, setError] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navigationQuery, setNavigationQuery] = useState("");
+  const [switchRoleOpen, setSwitchRoleOpen] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const loadGeneration = useRef(0);
@@ -459,15 +461,24 @@ export function AppShell() {
     setError(null);
     try {
       // `/me` (permissions + active modules) is required — it drives navigation.
-      // Passing the chosen assignment narrows the reported set to that work
-      // context; it only ever hides navigation, never grants access.
-      const me = await api.me(token, { assignmentId });
+      // Epic 1 (§4.1 C): the server reports the SESSION's active assignment
+      // (resolved from the sessions row), not a client-chosen one. Switching
+      // context goes through POST /auth/switch-role, and the next /me — and
+      // thus this load — reflects it.
+      const me = await api.me(token);
       if (loadGeneration.current !== generation) return;
       setPermissions(me.permissions);
       setScopeTypes(me.scopeTypes);
       setActiveModuleCodes(me.activeModuleCodes ?? []);
       setMenu(me.menu ?? []);
-      updateSession({ fullName: me.fullName, email: me.email });
+      updateSession({
+        fullName: me.fullName,
+        email: me.email,
+        sessionId: me.sessionId,
+        assignmentId: me.activeAssignmentId ?? undefined,
+        activeRoleName: me.activeAssignmentName ?? undefined,
+        activeScopeName: me.activeScopeName ?? undefined,
+      });
       // The Tenant name is only the workspace title, and reading it needs
       // `tenant.read` — a permission a Customer User does NOT hold. Fetch it
       // best-effort so its absence never blocks the shell; fall back to the
@@ -486,11 +497,16 @@ export function AppShell() {
     } finally {
       if (loadGeneration.current === generation) setLoading(false);
     }
-  }, [token, assignmentId, updateSession]);
+  }, [token, updateSession]);
 
   useEffect(() => {
     load();
-  }, [load]);
+    // `assignmentId` re-runs the load on a Role switch: the server has
+    // already rewritten the session's active Role, `updateSession` recorded
+    // the new value, and this refresh is what pulls the new permission set
+    // and navigation (Epic 1 §4.1 C). Keeping it out of `load`'s own
+    // dependency list is deliberate — the callback body does not read it.
+  }, [load, assignmentId]);
 
   useEffect(() => {
     closeMobileNavigation();
@@ -562,7 +578,14 @@ export function AppShell() {
           filterId="desktop-navigation-filter"
         />
         <div className="border-t border-line p-3">
-          <UserMenu fullName={session?.fullName} email={session?.email} onSignOut={logout} />
+          <UserMenu
+            fullName={session?.fullName}
+            email={session?.email}
+            activeRoleName={session?.activeRoleName}
+            activeScopeName={session?.activeScopeName}
+            onSwitchRole={() => setSwitchRoleOpen(true)}
+            onSignOut={logout}
+          />
         </div>
       </aside>
 
@@ -613,7 +636,14 @@ export function AppShell() {
               />
             </div>
             <div className="border-t border-line p-3">
-              <UserMenu fullName={session?.fullName} email={session?.email} onSignOut={logout} />
+              <UserMenu
+            fullName={session?.fullName}
+            email={session?.email}
+            activeRoleName={session?.activeRoleName}
+            activeScopeName={session?.activeScopeName}
+            onSwitchRole={() => setSwitchRoleOpen(true)}
+            onSignOut={logout}
+          />
             </div>
           </aside>
         </div>
@@ -647,7 +677,14 @@ export function AppShell() {
             </div>
             <div className="hidden min-w-0 items-center gap-3 lg:flex">
               <ThemeToggle />
-              <UserMenu fullName={session?.fullName} email={session?.email} onSignOut={logout} />
+              <UserMenu
+            fullName={session?.fullName}
+            email={session?.email}
+            activeRoleName={session?.activeRoleName}
+            activeScopeName={session?.activeScopeName}
+            onSwitchRole={() => setSwitchRoleOpen(true)}
+            onSignOut={logout}
+          />
             </div>
           </header>
           {!online && (
@@ -735,6 +772,19 @@ export function AppShell() {
           </div>
         </main>
       </div>
+
+      {/* Epic 1 (§4.1 C): switching the session's active Role. Rendered once
+          at the shell level so every UserMenu instance (desktop sidebar,
+          mobile drawer, header) opens the same dialog. Recording the new
+          assignmentId re-runs `load` above, which is what refreshes the
+          permission set, the served menu and the scope label. */}
+      <SwitchRoleDialog
+        open={switchRoleOpen}
+        token={token}
+        currentAssignmentId={assignmentId}
+        onClose={() => setSwitchRoleOpen(false)}
+        onSwitched={(patch) => updateSession(patch)}
+      />
     </div>
   );
 }

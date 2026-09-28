@@ -69,6 +69,10 @@ export type LoginSuccess = {
   tenantId: string;
   tenantCode: string;
   tenantName: string;
+  /** Epic 1 (§4.1 B): the server-side session this login created. The access
+   * token names the session, and the session — not the token — carries the
+   * active Role, so switching Roles never needs a new token. */
+  sessionId: string;
 };
 
 /** Returned instead of tokens when the verified email exists in more than
@@ -125,13 +129,12 @@ export const api = {
     tenantId?: string;
   }) => request<LoginResult>("/auth/login", { method: "POST", body: payload }),
 
-  me: (
-    token: string,
-    options?: { assignmentId?: string },
-  ) =>
+  me: (token: string) =>
     request<{
       userId: string;
       tenantId: string;
+      /** Epic 1 (§4.1 B): the session id the access token carries. */
+      sessionId: string;
       fullName: string;
       email: string;
       permissions: string[];
@@ -143,12 +146,15 @@ export const api = {
       menu: MenuNode[];
       assignments: MyRoleAssignment[];
       activeAssignmentId: string | null;
-    }>(
-      `/me${queryString({ assignmentId: options?.assignmentId })}`,
-      {
-        token,
-      },
-    ),
+      /** Display name of the ACTIVE Role (Epic 1 §4.1: the session's
+       * active assignment, not a client-side choice). */
+      activeAssignmentName: string | null;
+      /** Display name of the ACTIVE assignment's scope, for the user
+       * menu. Null when the session has no active Role. */
+      activeScopeName: string | null;
+    }>("/me", {
+      token,
+    }),
 
   updateProfile: (
     token: string,
@@ -173,6 +179,21 @@ export const api = {
 
   logout: (refreshToken: string) =>
     request<void>("/auth/logout", { method: "POST", body: { refreshToken } }),
+
+  // Epic 1 (§4.1 B/C): change the session's ACTIVE Role. The assignment
+  // must be one the caller holds and that is currently effective; the
+  // server answers both. No new token is issued — the session row now
+  // names a different Role, and the next `/me` reflects it.
+  switchRole: (token: string, assignmentId: string) =>
+    request<{
+      sessionId: string;
+      activeAssignmentId: string | null;
+      roleId: string;
+      roleCode: string;
+      scopeType: "tenant" | "organization_unit" | "customer";
+      scopeOrganizationUnitId: string | null;
+      scopeCustomerId: string | null;
+    }>("/auth/switch-role", { method: "POST", token, body: { assignmentId } }),
 
   tenant: (token: string) =>
     request<{ id: string; code: string; name: string; status: string }>("/tenants/me", {

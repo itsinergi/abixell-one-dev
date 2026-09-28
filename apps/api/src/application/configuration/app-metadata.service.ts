@@ -78,12 +78,12 @@ export class AppMetadataService {
   // --- Windows (Pages/Routes) -----------------------------------------------
 
   async listWindows(actor: ActorContext): Promise<AppWindow[]> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     return this.repo.listWindowsByTenant(actor.tenantId);
   }
 
   async getWindow(actor: ActorContext, windowId: string): Promise<AppWindow> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     const window = await this.repo.getWindow(actor.tenantId, windowId);
     if (!window) throw new NotFoundError("AppWindow", windowId);
     return window;
@@ -104,7 +104,7 @@ export class AppMetadataService {
       | "parentPath"
     >,
   ): Promise<AppWindow> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.manage");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.manage");
 
     // Check uniqueness by code
     const existing = await this.repo.getWindowByCode(actor.tenantId, window.code);
@@ -133,7 +133,7 @@ export class AppMetadataService {
     windowId: string,
     updates: Partial<Omit<AppWindow, "id" | "tenantId" | "createdAt">>,
   ): Promise<AppWindow> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.manage");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.manage");
 
     // LOCKED DECISION: Super admin cannot edit access-controlling fields
     if ("isExternalAllowed" in updates) {
@@ -168,7 +168,7 @@ export class AppMetadataService {
   // --- Tabs (Sections within a Window) ------------------------------------
 
   async listTabsByWindow(actor: ActorContext, windowId: string): Promise<AppTab[]> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     // Verify window exists
     await this.getWindow(actor, windowId);
     return this.repo.listTabsByWindow(actor.tenantId, windowId);
@@ -178,7 +178,7 @@ export class AppMetadataService {
     actor: ActorContext,
     tab: Omit<AppTab, "id" | "tenantId" | "createdAt" | "updatedAt">,
   ): Promise<AppTab> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.manage");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.manage");
 
     // Verify window exists
     await this.getWindow(actor, tab.windowId);
@@ -205,19 +205,19 @@ export class AppMetadataService {
   // --- Tables (Data Entities) & Fields (Columns) -------------------------
 
   async listTables(actor: ActorContext): Promise<AppTable[]> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     return this.repo.listTablesByTenant(actor.tenantId);
   }
 
   async getTable(actor: ActorContext, tableId: string): Promise<AppTable> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     const table = await this.repo.getTable(actor.tenantId, tableId);
     if (!table) throw new NotFoundError("AppTable", tableId);
     return table;
   }
 
   async listFieldsByTable(actor: ActorContext, tableId: string): Promise<AppField[]> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     // Verify table exists
     await this.getTable(actor, tableId);
     return this.repo.listFieldsByTable(actor.tenantId, tableId);
@@ -226,21 +226,21 @@ export class AppMetadataService {
   // --- API Resources (HTTP Endpoints) ------------------------------------
 
   async listApiResources(actor: ActorContext): Promise<AppApiResource[]> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     return this.repo.listApiResourcesByTenant(actor.tenantId);
   }
 
   // --- Field Rules (Versioned Structured Rules) --------------------------
 
   async getCurrentRuleVersion(actor: ActorContext, tableId: string): Promise<AppFieldRuleVersion | null> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     // Verify table exists
     await this.getTable(actor, tableId);
     return this.repo.getCurrentRuleVersion(actor.tenantId, tableId);
   }
 
   async listRuleVersionsByTable(actor: ActorContext, tableId: string): Promise<AppFieldRuleVersion[]> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.read");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.read");
     // Verify table exists
     await this.getTable(actor, tableId);
     return this.repo.listRuleVersionsByTable(actor.tenantId, tableId);
@@ -251,7 +251,7 @@ export class AppMetadataService {
     tableId: string,
     rulesDefinition: AppFieldRuleVersion["rulesDefinition"],
   ): Promise<AppFieldRuleVersion> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.manage");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.manage");
 
     // Verify table exists
     await this.getTable(actor, tableId);
@@ -283,7 +283,7 @@ export class AppMetadataService {
   }
 
   async publishRuleVersion(actor: ActorContext, versionId: string): Promise<AppFieldRuleVersion> {
-    await this.rbac.requirePermission(actor.userId, "config.app_dictionary.manage");
+    await this.rbac.requirePermission(actor, "config.app_dictionary.manage");
 
     const version = await this.repo.getRuleVersion(actor.tenantId, versionId);
     if (!version) throw new NotFoundError("AppFieldRuleVersion", versionId);

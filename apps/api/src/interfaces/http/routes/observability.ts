@@ -17,7 +17,7 @@ import type { Container } from "../../../composition-root.js";
 export function registerObservabilityRoutes(app: FastifyInstance, container: Container) {
   app.get("/observability/events", { preHandler: app.authenticate }, async (request, reply) => {
     const actor = request.actor!;
-    await container.rbac.requirePermission(actor.userId, "observability.read");
+    await container.rbac.requirePermission(actor, "observability.read");
     const events = await container.eventBus.listRecentByTenant(actor.tenantId, 100);
     return reply.send(events);
   });

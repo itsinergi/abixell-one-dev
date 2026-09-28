@@ -91,7 +91,7 @@ export class SupplyChainService {
     actor: ActorContext,
     input: { code: string; name: string; description?: string | null; category?: string | null; unitOfMeasure: string },
   ): Promise<Item> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.configure");
+    await this.rbac.requirePermission(actor, "supply_chain.configure");
     const existing = await this.repo.findItemByCode(actor.tenantId, input.code);
     if (existing) throw new ConflictError("Item code already exists: " + input.code);
 
@@ -124,7 +124,7 @@ export class SupplyChainService {
   }
 
   async listItems(actor: ActorContext, filter: { search?: string; activeOnly?: boolean } = {}): Promise<Item[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     return this.repo.listItems(actor.tenantId, {
       search: filter.search,
       isActive: filter.activeOnly ? true : undefined,
@@ -132,7 +132,7 @@ export class SupplyChainService {
   }
 
   async getItem(actor: ActorContext, code: string): Promise<{ item: Item; balances: StockBalance[] }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     const item = await this.getItemByCodeOrThrow(actor, code);
     return { item, balances: await this.repo.listBalances(actor.tenantId, { itemId: item.id }) };
   }
@@ -142,7 +142,7 @@ export class SupplyChainService {
     code: string,
     input: { name?: string; description?: string | null; category?: string | null; isActive?: boolean },
   ): Promise<Item> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.configure");
+    await this.rbac.requirePermission(actor, "supply_chain.configure");
     const item = await this.getItemByCodeOrThrow(actor, code);
     const updated = await this.repo.updateItem(item.id, input, actor.userId);
     await this.audit.record({
@@ -172,7 +172,7 @@ export class SupplyChainService {
       address?: string | null;
     },
   ): Promise<Supplier> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.configure");
+    await this.rbac.requirePermission(actor, "supply_chain.configure");
     const existing = await this.repo.findSupplierByCode(actor.tenantId, input.code);
     if (existing) throw new ConflictError("Supplier code already exists: " + input.code);
 
@@ -189,7 +189,7 @@ export class SupplyChainService {
   }
 
   async listSuppliers(actor: ActorContext, filter: { search?: string } = {}): Promise<Supplier[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     return this.repo.listSuppliers(actor.tenantId, filter);
   }
 
@@ -206,7 +206,7 @@ export class SupplyChainService {
       isActive?: boolean;
     },
   ): Promise<Supplier> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.configure");
+    await this.rbac.requirePermission(actor, "supply_chain.configure");
     const supplier = await this.repo.findSupplierByCode(actor.tenantId, code);
     if (!supplier) throw new NotFoundError("Supplier", code);
     const updated = await this.repo.updateSupplier(supplier.id, input, actor.userId);
@@ -231,7 +231,7 @@ export class SupplyChainService {
     actor: ActorContext,
     input: { itemCode: string; siteId?: string | null; quantity: number; reference?: string | null; note?: string | null },
   ): Promise<{ movement: StockMovement; balance: StockBalance }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.stock.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.stock.manage");
     const item = await this.getActiveItemOrThrow(actor, input.itemCode);
     const siteId = await this.resolveSite(actor, input.siteId ?? null);
     const quantity = this.parseQuantity(input.quantity);
@@ -261,7 +261,7 @@ export class SupplyChainService {
     actor: ActorContext,
     input: { itemCode: string; siteId?: string | null; quantity: number; reference?: string | null; note?: string | null },
   ): Promise<{ movement: StockMovement; balance: StockBalance }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.stock.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.stock.manage");
     const item = await this.getActiveItemOrThrow(actor, input.itemCode);
     const siteId = await this.resolveSite(actor, input.siteId ?? null);
     const quantity = this.parseQuantity(input.quantity);
@@ -288,14 +288,14 @@ export class SupplyChainService {
   }
 
   async listBalances(actor: ActorContext, filter: { itemCode?: string; siteId?: string } = {}) {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     let itemId: string | undefined;
     if (filter.itemCode) itemId = (await this.getItemByCodeOrThrow(actor, filter.itemCode)).id;
     return this.repo.listBalances(actor.tenantId, { itemId, siteId: filter.siteId });
   }
 
   async listMovements(actor: ActorContext, filter: { itemCode?: string; limit?: number } = {}) {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     let itemId: string | undefined;
     if (filter.itemCode) itemId = (await this.getItemByCodeOrThrow(actor, filter.itemCode)).id;
     return this.repo.listMovements(actor.tenantId, { itemId, limit: filter.limit });
@@ -316,7 +316,7 @@ export class SupplyChainService {
       lines: { itemCode: string; quantity: number; note?: string | null }[];
     },
   ): Promise<PurchaseRequestDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.manage");
     if (!input.lines || input.lines.length === 0) {
       throw new ValidationError("A purchase request needs at least one line");
     }
@@ -385,13 +385,13 @@ export class SupplyChainService {
   }
 
   async listPurchaseRequests(actor: ActorContext): Promise<PurchaseRequest[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     const requests = await this.repo.listPurchaseRequests(actor.tenantId, {});
     return this.filterByOrganizationScope(actor, requests);
   }
 
   async getPurchaseRequest(actor: ActorContext, id: string): Promise<PurchaseRequestDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     const request = await this.getAuthorizedRequest(actor, id);
     const lines = await this.repo.listPurchaseRequestLines(request.id);
 
@@ -409,7 +409,7 @@ export class SupplyChainService {
   /** Generic lifecycle dispatch: this service never encodes the Step graph —
    * it forwards the action code and lets the Workflow Engine validate it. */
   async actOnPurchaseRequest(actor: ActorContext, id: string, actionCode: string, comment: string | null) {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     const request = await this.getAuthorizedRequest(actor, id);
     if (!request.workflowInstanceId) throw new ConflictError("This request has no active Workflow Instance");
 
@@ -460,7 +460,7 @@ export class SupplyChainService {
       lines?: { itemCode: string; quantity: number; unitPrice?: number | null }[];
     },
   ): Promise<PurchaseOrderDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.manage");
     const supplier = await this.repo.findSupplierByCode(actor.tenantId, input.supplierCode);
     if (!supplier) throw new NotFoundError("Supplier", input.supplierCode);
     if (!supplier.isActive) throw new ConflictError("Supplier is not active: " + input.supplierCode);
@@ -548,12 +548,12 @@ export class SupplyChainService {
   }
 
   async listPurchaseOrders(actor: ActorContext): Promise<PurchaseOrder[]> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     return this.repo.listPurchaseOrders(actor.tenantId, {});
   }
 
   async getPurchaseOrder(actor: ActorContext, id: string): Promise<PurchaseOrderDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.read");
+    await this.rbac.requirePermission(actor, "supply_chain.read");
     const order = await this.getAuthorizedOrder(actor, id);
     const [lines, supplier] = await Promise.all([
       this.repo.listPurchaseOrderLines(order.id),
@@ -565,7 +565,7 @@ export class SupplyChainService {
   /** One-way commitment. After issue the order's lines are immutable and it
    * can be received against (SCM-CORE-010). */
   async issuePurchaseOrder(actor: ActorContext, id: string): Promise<PurchaseOrderDetailView> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.manage");
     const order = await this.getAuthorizedOrder(actor, id);
     const issued = await this.repo.issuePurchaseOrder(order.id, actor.userId);
     if (!issued) throw new ConflictError("Only a draft purchase order can be issued");
@@ -590,7 +590,7 @@ export class SupplyChainService {
   }
 
   async cancelPurchaseOrder(actor: ActorContext, id: string, reason: string | null): Promise<PurchaseOrder> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.manage");
     const order = await this.getAuthorizedOrder(actor, id);
     const lines = await this.repo.listPurchaseOrderLines(order.id);
     if (lines.some((l) => l.quantityReceived > 0)) {
@@ -622,7 +622,7 @@ export class SupplyChainService {
     orderId: string,
     input: { lineId: string; quantity: number; note?: string | null },
   ): Promise<{ movement: StockMovement; balance: StockBalance; line: PurchaseOrderLine }> {
-    await this.rbac.requirePermission(actor.userId, "supply_chain.stock.manage");
+    await this.rbac.requirePermission(actor, "supply_chain.stock.manage");
     const order = await this.getAuthorizedOrder(actor, orderId);
     if (!order.issuedAt) throw new ConflictError("Only an issued purchase order can be received against");
     if (order.cancelledAt) throw new ConflictError("This purchase order is cancelled");
@@ -680,14 +680,14 @@ export class SupplyChainService {
   async canAccessOrderForDocument(actor: ActorContext, orderId: string): Promise<boolean> {
     const order = await this.repo.findPurchaseOrderById(orderId);
     if (!order || order.tenantId !== actor.tenantId) return false;
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     return permissions.has("supply_chain.read");
   }
 
   async canAccessRequestForDocument(actor: ActorContext, requestId: string): Promise<boolean> {
     const request = await this.repo.findPurchaseRequestById(requestId);
     if (!request || request.tenantId !== actor.tenantId) return false;
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     if (!permissions.has("supply_chain.read")) return false;
     return this.isWithinOrganizationScope(actor, request.organizationUnitId);
   }
@@ -767,7 +767,7 @@ export class SupplyChainService {
     if (!(await this.repo.organizationUnitExists(actor.tenantId, unitId))) {
       throw new NotFoundError("OrganizationUnit", unitId);
     }
-    await this.rbac.requireOrganizationUnitScope(actor.userId, unitId);
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, unitId);
     return unitId;
   }
 
@@ -808,14 +808,14 @@ export class SupplyChainService {
    * is visible only within that unit's hierarchical scope (SCM-CORE-012). */
   private async isWithinOrganizationScope(actor: ActorContext, unitId: string | null): Promise<boolean> {
     if (!unitId) return true;
-    return this.rbac.isOrganizationUnitScopeCovered(actor.userId, unitId);
+    return this.rbac.isActiveOrganizationUnitScopeCovered(actor, unitId);
   }
 
   private async filterByOrganizationScope(
     actor: ActorContext,
     requests: PurchaseRequest[],
   ): Promise<PurchaseRequest[]> {
-    if (await this.rbac.hasTenantScope(actor.userId)) return requests;
+    if (await this.rbac.hasTenantScope(actor)) return requests;
     const decisions = new Map<string, boolean>();
     const allowed: PurchaseRequest[] = [];
     for (const request of requests) {
@@ -825,7 +825,7 @@ export class SupplyChainService {
       }
       let ok = decisions.get(request.organizationUnitId);
       if (ok === undefined) {
-        ok = await this.rbac.isOrganizationUnitScopeCovered(actor.userId, request.organizationUnitId);
+        ok = await this.rbac.isActiveOrganizationUnitScopeCovered(actor, request.organizationUnitId);
         decisions.set(request.organizationUnitId, ok);
       }
       if (ok) allowed.push(request);

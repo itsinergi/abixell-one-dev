@@ -131,6 +131,23 @@ describe("Phase 9 — Reporting & Operational Insight Core", () => {
     scopedToken = await tok("north@p9.local");
     splitExportToken = await tok("split-export@p9.local");
 
+    // Epic 1 (§4.1 B): the session's active Role is what authorizes, and the
+    // default pick is the first Role by name — here NO_RPT_P9 ("No Reporting
+    // P9"). The split-export test needs the session pinned to the other
+    // assignment, exactly the way a user would via the role picker.
+    const splitAssignment = await pool.query(
+      `SELECT aura.id
+         FROM authorization_effective_user_role_assignments aura
+         JOIN roles r ON r.id = aura.role_id
+        WHERE aura.user_id = $1
+          AND r.code = 'RPT_VIEW_P9'`,
+      [splitUser.rows[0].id],
+    );
+    const switched = await post("/auth/switch-role", splitExportToken, {
+      assignmentId: splitAssignment.rows[0].id,
+    });
+    expect(switched.statusCode).toBe(200);
+
     const modules = [
       "customer_commercial",
       "customer_complaint",

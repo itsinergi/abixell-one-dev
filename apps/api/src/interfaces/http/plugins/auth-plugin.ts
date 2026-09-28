@@ -2,6 +2,10 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { verifyAccessToken } from "../../../infrastructure/security/jwt.js";
 import { pool } from "../../../infrastructure/persistence/db.js";
 import type { ActorContext } from "../../../domain/shared-kernel/audit-context.js";
+import {
+  resolveActor,
+  touchSession,
+} from "../../../application/identity/session.service.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -38,23 +42,41 @@ export function registerAuthDecorators(app: FastifyInstance): void {
       return reply.status(401).send(INVALID_TOKEN_RESPONSE);
     }
 
-    // Stale-JWT lifecycle hardening (Phase 11F): a valid signature is
-    // necessary but not sufficient. Re-fetch the current actor on every
-    // request so a deactivated/deleted/tenant-moved account loses access
-    // immediately rather than surviving until its 15-minute token expires
-    // (same precedent as jwt.ts: permissions are intentionally never
-    // trusted from the token itself, only re-checked against the current
-    // DB state). A single generic 401 covers every failure mode — deleted,
-    // inactive, tenant mismatch — so a caller cannot distinguish them.
-    const result = await pool.query<{ tenant_id: string; status: string }>(
-      `SELECT tenant_id, status FROM users WHERE id = $1 AND deleted_at IS NULL`,
-      [payload.sub],
-    );
-    const actor = result.rows[0];
-    if (!actor || actor.status !== "active" || actor.tenant_id !== payload.tenantId) {
+    // Epic 1 (§4.1 F) hard cutover: a token minted before sessions existed
+    // carries no `sessionId`, and there is no transition window for it. Every
+    // user re-logs in once; after that the active Role is always resolvable.
+    if (!payload.sessionId) {
       return reply.status(401).send(INVALID_TOKEN_RESPONSE);
     }
 
-    request.actor = { userId: payload.sub, tenantId: payload.tenantId };
+    // Stale-JWT lifecycle hardening (Phase 11F), now extended to the session:
+    // a valid signature is necessary but not sufficient. Re-resolve the actor
+    // on every request so a deactivated/deleted/tenant-moved account — and a
+    // revoked session or a revoked active assignment — loses access
+    // immediately rather than surviving until the 15-minute token expires
+    // (same precedent as jwt.ts: permissions are intentionally never trusted
+    // from the token itself, only re-checked against the current DB state).
+    // A single generic 401 covers every failure mode — deleted, inactive,
+    // tenant mismatch, revoked session — so a caller cannot distinguish them.
+    //
+    // An assignment that is merely no longer effective is NOT a 401: the actor
+    // still authenticates with `assignmentId: null`, and permissioned routes
+    // answer 403. That keeps "your Role was revoked" actionable, where an
+    // "invalid token" would send the user to re-login for nothing.
+    const actor = await resolveActor(pool, {
+      sessionId: payload.sessionId,
+      userId: payload.sub,
+      tenantId: payload.tenantId,
+    });
+    if (!actor) {
+      return reply.status(401).send(INVALID_TOKEN_RESPONSE);
+    }
+
+    request.actor = actor;
+
+    // Fire-and-forget: a lost `last_seen_at` update is not worth failing an
+    // authenticated request over, and awaiting it would add a write to every
+    // read.
+    void touchSession(pool, actor.sessionId).catch(() => {});
   });
 }

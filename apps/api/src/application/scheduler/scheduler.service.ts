@@ -126,7 +126,7 @@ export class SchedulerService {
     actor: ActorContext,
   ): Promise<ScheduledJob[]> {
     await this.rbac.requirePermission(
-      actor.userId,
+      actor,
       "scheduler.manage",
     );
     const jobs = await this.repo.listJobs();
@@ -169,7 +169,7 @@ export class SchedulerService {
     limit = 20,
   ): Promise<ScheduledJobRun[]> {
     await this.rbac.requirePermission(
-      actor.userId,
+      actor,
       "scheduler.manage",
     );
     const job =
@@ -192,7 +192,7 @@ export class SchedulerService {
     jobCode: string,
   ): Promise<ScheduledJobRun> {
     await this.rbac.requirePermission(
-      actor.userId,
+      actor,
       "scheduler.manage",
     );
     return this.runJob(

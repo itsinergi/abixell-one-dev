@@ -32,6 +32,10 @@ export function LoginPage() {
         userId: result.userId,
         tenantId: result.tenantId,
         tenantCode: result.tenantCode,
+        // Epic 1 (§4.1 B): the session the token names. The active Role
+        // lives on the server-side session row, so the picker below
+        // switches it through the API rather than storing it locally.
+        sessionId: result.sessionId,
       });
       // Always route through the role & site picker, even for a single
       // assignment — the user's chosen work context is what shapes the shell.

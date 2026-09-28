@@ -3,13 +3,13 @@ import type { InjectPayload } from "light-my-request";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
 import {
   activateAllModules,
   authHeader,
   bootstrapTenant,
   provisionFirstAdmin,
+  sessionTokenFor,
 } from "./helpers.js";
 
 /**
@@ -139,8 +139,10 @@ async function createAssignment(
   return result.rows[0].id as string;
 }
 
-function tokenFor(tenantId: string, user: UserFixture): string {
-  return signAccessToken({ sub: user.id, tenantId, email: user.email });
+function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
+  // Epic 1 (�4.1 F): a bearer token must name a session, so fixtures create
+  // one the way the login endpoint does instead of signing a bare payload.
+  return sessionTokenFor({ userId: user.id, tenantId });
 }
 
 async function inject(
@@ -225,7 +227,7 @@ describe("Epic 4 Wave 4 — module feedback and hardening", () => {
     await createAssignment(tenantManager.id, tenantManagerRole.id, {
       scopeType: "tenant",
     });
-    tenantManagerToken = tokenFor(tenantId, tenantManager);
+    tenantManagerToken = await tokenFor(tenantId, tenantManager);
 
     const regionManagerRole = await createRole(
       tenantId,
@@ -238,10 +240,10 @@ describe("Epic 4 Wave 4 — module feedback and hardening", () => {
       scopeType: "organization_unit",
       scopeOrganizationUnitId: nearUnit,
     });
-    regionManagerToken = tokenFor(tenantId, regionManager);
+    regionManagerToken = await tokenFor(tenantId, regionManager);
 
     bareUser = await createUser(tenantId, "bare", passwordHash);
-    bareUserToken = tokenFor(tenantId, bareUser);
+    bareUserToken = await tokenFor(tenantId, bareUser);
 
     // Roles ----------------------------------------------------------------
     plainRole = await createRole(
@@ -276,7 +278,7 @@ describe("Epic 4 Wave 4 — module feedback and hardening", () => {
     );
     grantor = await createUser(tenantId, "grantor", passwordHash);
     await createAssignment(grantor.id, grantorRole.id, { scopeType: "tenant" });
-    grantorToken = tokenFor(tenantId, grantor);
+    grantorToken = await tokenFor(tenantId, grantor);
 
     // Targets --------------------------------------------------------------
     nearTarget = await createUser(tenantId, "near-target", passwordHash);

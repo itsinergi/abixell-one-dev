@@ -68,8 +68,7 @@ export class PgLegalEntityRepository implements LegalEntityRepository {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
       await requireTransactionActorPermission(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         "legal_entity.update",
       );
 
@@ -112,8 +111,7 @@ export class PgLegalEntityRepository implements LegalEntityRepository {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
       await requireTransactionActorPermission(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         isActive ? "legal_entity.activate" : "legal_entity.deactivate",
       );
 

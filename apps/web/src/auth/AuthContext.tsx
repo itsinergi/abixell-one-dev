@@ -20,10 +20,17 @@ interface Session {
   fullName?: string;
   /** User's email address, populated from GET /me. */
   email?: string;
-  /** The role+scope pair chosen on the post-login selection screen. Set
-   * after login, before entering the workspace; absent on a session that
-   * has not yet passed through the picker. */
+  /** Epic 1 (§4.1 B): the server-side session this login created. The
+   * session row, not any client state, holds the active Role. */
+  sessionId?: string;
+  /** The ACTIVE role+scope pair (Epic 1 §4.1 C). Set at login (server
+   * default), updated only by POST /auth/switch-role — a client-side
+   * write alone grants nothing, every route evaluates the session row. */
   assignmentId?: string;
+  /** Display names of the ACTIVE Role and its scope, from /me — shown in
+   * the user menu and the switch dialog. */
+  activeRoleName?: string;
+  activeScopeName?: string;
 }
 
 interface AuthContextValue {

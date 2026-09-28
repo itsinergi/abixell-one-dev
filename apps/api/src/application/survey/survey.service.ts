@@ -94,7 +94,7 @@ export class SurveyService {
       defaultLocale?: string;
     },
   ): Promise<{ definition: SurveyDefinition; version: SurveyVersion }> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const existing = await this.repo.findDefinitionByCode(actor.tenantId, input.code);
     if (existing) throw new ConflictError(`Survey Definition '${input.code}' already exists`);
     if (input.scoringModel && !SCORING_MODELS.includes(input.scoringModel)) {
@@ -132,7 +132,7 @@ export class SurveyService {
     definitionCode: string,
     input?: { scoringModel?: SurveyScoringModel; defaultLocale?: string },
   ): Promise<SurveyVersion> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const definition = await this.getDefinitionOrThrow(actor, definitionCode);
     if (input?.scoringModel && !SCORING_MODELS.includes(input.scoringModel)) {
       throw new ValidationError(
@@ -170,7 +170,7 @@ export class SurveyService {
       weight?: number;
     },
   ): Promise<SurveySection> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const { version } = await this.getEditableVersionOrThrow(actor, versionId);
     if (input.scoringModel && !SCORING_MODELS.includes(input.scoringModel)) {
       throw new ValidationError(
@@ -205,7 +205,7 @@ export class SurveyService {
       weight?: number;
     },
   ): Promise<SurveyQuestion> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const { version } = await this.getEditableVersionOrThrow(actor, versionId);
 
     if (!SUPPORTED_QUESTION_TYPES.includes(input.questionType as SurveyQuestionType)) {
@@ -246,7 +246,7 @@ export class SurveyService {
     questionId: string,
     input: { code: string; label: string; score?: number | null; sortOrder?: number },
   ): Promise<SurveyQuestionOption> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const question = await this.repo.findQuestionById(questionId);
     if (!question) throw new NotFoundError("SurveyQuestion", questionId);
     await this.getEditableVersionOrThrow(actor, question.surveyVersionId);
@@ -269,7 +269,7 @@ export class SurveyService {
     definitionCode: string,
     versionNumber: number,
   ): Promise<SurveyVersion> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const definition = await this.getDefinitionOrThrow(actor, definitionCode);
     const version = await this.repo.findVersion(definition.id, versionNumber);
     if (!version) throw new NotFoundError("SurveyVersion", String(versionNumber));
@@ -347,7 +347,7 @@ export class SurveyService {
     definitionCode: string,
     versionNumber: number,
   ): Promise<SurveyVersion> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const definition = await this.getDefinitionOrThrow(actor, definitionCode);
     const version = await this.repo.findVersion(definition.id, versionNumber);
     if (!version) throw new NotFoundError("SurveyVersion", String(versionNumber));
@@ -367,7 +367,7 @@ export class SurveyService {
   }
 
   async listDefinitions(actor: ActorContext): Promise<SurveyDefinition[]> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     return this.repo.listDefinitions(actor.tenantId);
   }
 
@@ -375,7 +375,7 @@ export class SurveyService {
     actor: ActorContext,
     definitionCode: string,
   ): Promise<{ definition: SurveyDefinition; versions: SurveyVersion[]; current: SurveyVersionDetail | null }> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const definition = await this.getDefinitionOrThrow(actor, definitionCode);
     const versions = await this.repo.listVersions(definition.id);
     const current = await this.repo.findCurrentVersion(definition.id);
@@ -390,7 +390,7 @@ export class SurveyService {
    * the admin UI can author a DRAFT (getDefinition only returns the current
    * published version). survey.manage + tenant-guarded. */
   async getVersionDetail(actor: ActorContext, versionId: string): Promise<SurveyVersionDetail> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
     const version = await this.repo.findVersionById(versionId);
     if (!version) throw new NotFoundError("SurveyVersion", versionId);
     const definition = await this.repo.findDefinitionById(version.surveyDefinitionId);
@@ -415,7 +415,7 @@ export class SurveyService {
       dueAt?: string | null;
     },
   ): Promise<SurveyAssignment> {
-    await this.rbac.requirePermission(actor.userId, "survey.manage");
+    await this.rbac.requirePermission(actor, "survey.manage");
 
     const version = await this.resolveAssignableVersion(actor, input);
     // Respondent (v1: authenticated user only, FD-1D — must be same tenant).
@@ -612,7 +612,7 @@ export class SurveyService {
   // ===================================================================
 
   async getResult(actor: ActorContext, assignmentId: string) {
-    await this.rbac.requirePermission(actor.userId, "survey.results.read");
+    await this.rbac.requirePermission(actor, "survey.results.read");
     const assignment = await this.repo.findAssignmentById(assignmentId);
     if (!assignment || assignment.tenantId !== actor.tenantId) {
       throw new NotFoundError("SurveyAssignment", assignmentId);

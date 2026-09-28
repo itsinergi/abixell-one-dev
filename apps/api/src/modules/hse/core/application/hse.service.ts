@@ -107,7 +107,7 @@ export class HseService {
       responsibleOrgUnitId?: string | null;
     },
   ): Promise<HseRecord> {
-    await this.rbac.requirePermission(actor.userId, "hse.report");
+    await this.rbac.requirePermission(actor, "hse.report");
 
     if (!HSE_RECORD_TYPES.includes(input.recordType as HseRecordType)) {
       throw new ValidationError(
@@ -204,7 +204,7 @@ export class HseService {
   // ===================================================================
 
   async getRecord(actor: ActorContext, id: string): Promise<HseRecordDetailView> {
-    await this.rbac.requirePermission(actor.userId, "hse.read");
+    await this.rbac.requirePermission(actor, "hse.read");
 
     const record = await this.repo.findRecordById(id);
     if (!record) throw new NotFoundError("HseRecord", id);
@@ -236,7 +236,7 @@ export class HseService {
     actor: ActorContext,
     filter: HseRecordListFilter,
   ): Promise<HseRecord[]> {
-    await this.rbac.requirePermission(actor.userId, "hse.read");
+    await this.rbac.requirePermission(actor, "hse.read");
 
     const orgUnitIds = await this.resolveOrgUnitScope(actor);
     return this.repo.listRecords(actor.tenantId, filter, orgUnitIds);
@@ -265,7 +265,7 @@ export class HseService {
       responsibleOrgUnitId?: string | null;
     },
   ): Promise<HseRecord> {
-    await this.rbac.requirePermission(actor.userId, "hse.manage");
+    await this.rbac.requirePermission(actor, "hse.manage");
 
     const record = await this.repo.findRecordById(id);
     if (!record) throw new NotFoundError("HseRecord", id);
@@ -346,7 +346,7 @@ export class HseService {
    * by the tenant (Tenant Configuration). hse.manage permission required.
    */
   async startLifecycle(actor: ActorContext, id: string): Promise<HseRecord> {
-    await this.rbac.requirePermission(actor.userId, "hse.manage");
+    await this.rbac.requirePermission(actor, "hse.manage");
 
     const record = await this.repo.findRecordById(id);
     if (!record) throw new NotFoundError("HseRecord", id);
@@ -388,7 +388,7 @@ export class HseService {
   ): Promise<HseRecord> {
     const closingActions = ["close", "cancel"];
     const requiredPerm = closingActions.includes(actionCode) ? "hse.close" : "hse.manage";
-    await this.rbac.requirePermission(actor.userId, requiredPerm);
+    await this.rbac.requirePermission(actor, requiredPerm);
 
     const record = await this.repo.findRecordById(id);
     if (!record) throw new NotFoundError("HseRecord", id);
@@ -443,7 +443,7 @@ export class HseService {
       personRole?: string | null;
     },
   ): Promise<HsePersonInvolved> {
-    await this.rbac.requirePermission(actor.userId, "hse.manage");
+    await this.rbac.requirePermission(actor, "hse.manage");
 
     const record = await this.repo.findRecordById(hseRecordId);
     if (!record) throw new NotFoundError("HseRecord", hseRecordId);
@@ -481,7 +481,7 @@ export class HseService {
       dueDate?: string | null;
     },
   ): Promise<HseFollowUp> {
-    await this.rbac.requirePermission(actor.userId, "hse.manage");
+    await this.rbac.requirePermission(actor, "hse.manage");
 
     const record = await this.repo.findRecordById(hseRecordId);
     if (!record) throw new NotFoundError("HseRecord", hseRecordId);
@@ -546,7 +546,7 @@ export class HseService {
   ): Promise<HseFollowUp> {
     // hse.read holders + hse.manage holders can complete.
     // The assignee can complete their own follow-up with hse.read.
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     const hasManage = permissions.has("hse.manage");
     const hasRead = permissions.has("hse.read");
     if (!hasManage && !hasRead) throw new ForbiddenError("hse.read permission required");
@@ -612,18 +612,19 @@ export class HseService {
     const record = await this.repo.findRecordById(hseRecordId);
     if (!record || record.tenantId !== actor.tenantId) return false;
 
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    // Epic 1 (§4.1 C) — enforcement reads the ACTIVE Role, never the union.
+    const permissions = await this.rbac.getActivePermissions(actor);
     if (!permissions.has("hse.documents.read") && !permissions.has("hse.manage")) return false;
 
     // Reporter retains access to their own record's evidence (prompt §34)
     if (record.reportedByUserId === actor.userId) return true;
 
     if (!record.organizationUnitId) {
-      return this.rbac.hasTenantScope(actor.userId);
+      return this.rbac.hasTenantScope(actor);
     }
 
-    return this.rbac.isOrganizationUnitScopeCovered(
-      actor.userId,
+    return this.rbac.isActiveOrganizationUnitScopeCovered(
+      actor,
       record.organizationUnitId,
     );
   }
@@ -643,7 +644,7 @@ export class HseService {
   ): Promise<void> {
     if (!record.organizationUnitId) {
       // No anchor — require tenant-wide scope
-      const tenantWide = await this.rbac.hasTenantScope(actor.userId);
+      const tenantWide = await this.rbac.hasTenantScope(actor);
       if (!tenantWide) {
         throw new ForbiddenError(
           "Your Data Scope does not cover this HSE record (no organization unit set)",
@@ -651,7 +652,7 @@ export class HseService {
       }
       return;
     }
-    await this.rbac.requireOrganizationUnitScope(actor.userId, record.organizationUnitId);
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, record.organizationUnitId);
   }
 
   /**
@@ -659,7 +660,7 @@ export class HseService {
    * Returns null for tenant-wide actors (no filter applied).
    */
   private async resolveOrgUnitScope(actor: ActorContext): Promise<string[] | null> {
-    const tenantWide = await this.rbac.hasTenantScope(actor.userId);
+    const tenantWide = await this.rbac.hasTenantScope(actor);
     if (tenantWide) return null;
     const assignments = await this.rbac.getAssignments(actor.userId);
     const ids = assignments

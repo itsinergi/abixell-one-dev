@@ -2,6 +2,8 @@ import { config } from "dotenv";
 import { resolve } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { pool } from "../../src/infrastructure/persistence/db.js";
+import { createSession } from "../../src/application/identity/session.service.js";
+import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
 
 config({ path: resolve(__dirname, "../../.env") });
@@ -207,6 +209,41 @@ export async function deleteScheduledJobFixture(jobCode: string) {
 
 export function authHeader(token: string) {
   return { authorization: `Bearer ${token}` };
+}
+
+/**
+ * Epic 1 (§4.1 F) — mint a bearer token the way the login endpoint does.
+ *
+ * Before Epic 1 a test could sign `{ sub, tenantId }` and be authenticated;
+ * now the auth plugin refuses a token with no `sessionId` claim, because the
+ * active Role is server-side session state and there is no transition window
+ * for pre-session tokens. Fixtures that need a token without going through
+ * `/auth/login` (usually because they want a specific assignment active)
+ * create the session row here and sign the id into the token — the same two
+ * steps `AuthService.login` performs.
+ *
+ * `activeAssignmentId` optional: omit it to let `createSession` pin the
+ * first effective assignment (which is what a real login does), or pass one
+ * to land on a specific Role.
+ */
+export async function sessionTokenFor(params: {
+  userId: string;
+  tenantId: string;
+  /** Writes the session's active assignment. Defaults to createSession's
+   * own default (the first effective assignment by role name). */
+  activeAssignmentId?: string;
+}): Promise<string> {
+  const sessionId = await createSession(pool, {
+    userId: params.userId,
+    tenantId: params.tenantId,
+  });
+  if (params.activeAssignmentId !== undefined) {
+    await pool.query(
+      `UPDATE sessions SET active_assignment_id = $2 WHERE id = $1`,
+      [sessionId, params.activeAssignmentId],
+    );
+  }
+  return signAccessToken({ sub: params.userId, tenantId: params.tenantId, sessionId });
 }
 
 /**

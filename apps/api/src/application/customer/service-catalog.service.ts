@@ -45,7 +45,7 @@ export class ServiceCatalogService {
   ) {}
 
   async createService(actor: ActorContext, input: CreateServiceCatalogInput): Promise<Service> {
-    await this.rbac.requirePermission(actor.userId, "service.manage");
+    await this.rbac.requirePermission(actor, "service.manage");
     const service = await this.serviceRepo.create({ ...input, tenantId: actor.tenantId }, actor.userId);
 
     await this.audit.record({
@@ -61,12 +61,12 @@ export class ServiceCatalogService {
   }
 
   async listServices(actor: ActorContext): Promise<Service[]> {
-    await this.rbac.requirePermission(actor.userId, "service.read");
+    await this.rbac.requirePermission(actor, "service.read");
     return this.serviceRepo.listByTenant(actor.tenantId);
   }
 
   async updateService(actor: ActorContext, id: string, input: UpdateServiceInput): Promise<Service> {
-    await this.rbac.requirePermission(actor.userId, "service.manage");
+    await this.rbac.requirePermission(actor, "service.manage");
     const current = await this.serviceRepo.findById(id);
     if (!current || current.tenantId !== actor.tenantId) {
       throw new NotFoundError("Service", id);
@@ -91,7 +91,7 @@ export class ServiceCatalogService {
     actor: ActorContext,
     input: CreateServiceAssignmentInput,
   ): Promise<CustomerServiceLink> {
-    await this.rbac.requirePermission(actor.userId, "service.manage");
+    await this.rbac.requirePermission(actor, "service.manage");
     await this.customers.getAuthorized(actor, input.customerId);
 
     const link = await this.linkRepo.create({ ...input, tenantId: actor.tenantId }, actor.userId);
@@ -113,7 +113,7 @@ export class ServiceCatalogService {
     id: string,
     input: UpdateCustomerServiceLinkInput,
   ): Promise<CustomerServiceLink> {
-    await this.rbac.requirePermission(actor.userId, "service.manage");
+    await this.rbac.requirePermission(actor, "service.manage");
     const current = await this.linkRepo.findById(id);
     if (!current || current.tenantId !== actor.tenantId) {
       throw new NotFoundError("CustomerServiceLink", id);
@@ -146,7 +146,7 @@ export class ServiceCatalogService {
     actor: ActorContext,
     customerId: string,
   ): Promise<CustomerServiceLink[]> {
-    await this.rbac.requirePermission(actor.userId, "service.read");
+    await this.rbac.requirePermission(actor, "service.read");
     await this.customers.getAuthorized(actor, customerId);
     return this.linkRepo.listByCustomer(customerId);
   }

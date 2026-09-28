@@ -47,7 +47,7 @@ export class UserService {
     actor: ActorContext,
     input: CreateExternalCustomerUserInput,
   ) {
-    await this.rbac.requirePermission(actor.userId, "user.create");
+    await this.rbac.requirePermission(actor, "user.create");
 
     const existing = await this.repo.findByEmailInTenant(actor.tenantId, input.email);
     if (existing) {
@@ -66,7 +66,7 @@ export class UserService {
     if (!customer || customer.tenantId !== actor.tenantId) {
       throw new NotFoundError("Customer", input.scopeCustomerId);
     }
-    await this.rbac.requireCustomerContextScope(actor.userId, {
+    await this.rbac.requireCustomerContextScopeForActor(actor, {
       customerId: input.scopeCustomerId,
       ownerOrganizationUnitId: customer.ownerOrganizationUnitId,
     });
@@ -110,7 +110,7 @@ export class UserService {
   }
 
   async listForTenant(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, "user.read");
+    await this.rbac.requirePermission(actor, "user.read");
     return this.repo.listByTenant(actor.tenantId);
   }
 
@@ -141,15 +141,15 @@ export class UserService {
   ) {
     const update: UpdateUserProfileInput = {};
     if (input.fullName !== undefined) {
-      await this.rbac.requirePermission(actor.userId, "user.update");
+      await this.rbac.requirePermission(actor, "user.update");
       update.fullName = input.fullName;
     }
     if (input.email !== undefined) {
-      await this.rbac.requirePermission(actor.userId, "user.email.update");
+      await this.rbac.requirePermission(actor, "user.email.update");
       update.email = input.email;
     }
     if (input.password !== undefined) {
-      await this.rbac.requirePermission(actor.userId, "user.password.reset");
+      await this.rbac.requirePermission(actor, "user.password.reset");
       update.passwordHash = await hashPassword(input.password);
     }
     return this.repo.updateProfile(id, update, actor);
@@ -157,14 +157,14 @@ export class UserService {
 
   async setActive(actor: ActorContext, id: string, isActive: boolean) {
     await this.rbac.requirePermission(
-      actor.userId,
+      actor,
       isActive ? "user.activate" : "user.deactivate",
     );
     return this.repo.setActive(id, isActive, actor);
   }
 
   async softDelete(actor: ActorContext, id: string) {
-    await this.rbac.requirePermission(actor.userId, "user.delete");
+    await this.rbac.requirePermission(actor, "user.delete");
     return this.repo.softDelete(id, actor);
   }
 }

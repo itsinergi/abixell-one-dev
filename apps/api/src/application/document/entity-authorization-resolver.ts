@@ -22,13 +22,18 @@
  * way Customer did here, one `resolvers.set(entityType, resolver)` call
  * in the composition root.
  */
+import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
+
 export interface EntityAuthorizationResolver {
   /** Returns true iff `actor` may read/manage the Document's parent
    * entity — Data Scope only, no separate permission axis (per the
    * binding decision above). Should not throw for an ordinary "not
    * authorized" outcome; return false instead (DocumentService maps a
-   * false into a ForbiddenError with a document-appropriate message). */
-  canAccess(actor: { userId: string; tenantId: string }, entityId: string): Promise<boolean>;
+   * false into a ForbiddenError with a document-appropriate message).
+   *
+   * Epic 1 (§4.1 C): the full session-resolved ActorContext, so module
+   * resolvers read the ACTIVE assignment like every other scope check. */
+  canAccess(actor: ActorContext, entityId: string): Promise<boolean>;
 }
 
 export type EntityAuthorizationResolverRegistry = Map<string, EntityAuthorizationResolver>;

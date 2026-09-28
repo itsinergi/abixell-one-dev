@@ -110,7 +110,7 @@ export class PgUserRepository implements UserRepository {
         [input.passwordHash, "user.password.reset"],
       ] as const) {
         if (field !== undefined) {
-          await requireTransactionActorPermission(client, actor.tenantId, actor.userId, permission);
+          await requireTransactionActorPermission(client, actor, permission);
         }
       }
 
@@ -290,8 +290,7 @@ export class PgUserRepository implements UserRepository {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
       await requireTransactionActorPermission(
         client,
-        actor.tenantId,
-        actor.userId,
+        actor,
         isActive ? "user.activate" : "user.deactivate",
       );
 
@@ -389,7 +388,7 @@ export class PgUserRepository implements UserRepository {
 
   async softDelete(id: string, actor: ActorContext): Promise<User> {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
-      await requireTransactionActorPermission(client, actor.tenantId, actor.userId, "user.delete");
+      await requireTransactionActorPermission(client, actor, "user.delete");
 
       const target = await client.query(
         `SELECT id, status

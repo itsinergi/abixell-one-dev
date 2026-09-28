@@ -38,7 +38,7 @@ export class BiService {
   ) {}
 
   async listDatasets(actor: ActorContext): Promise<BiDataset[]> {
-    await this.rbac.requirePermission(actor.userId, "reporting.bi.manage");
+    await this.rbac.requirePermission(actor, "reporting.bi.manage");
     await this.ensureDatasetsProvisioned(actor.tenantId);
 
     const activeModules = new Set(await this.repo.listActiveModuleCodes(actor.tenantId));
@@ -49,8 +49,8 @@ export class BiService {
       const registered = BI_DATASET_REGISTRY.find((candidate) => candidate.code === dataset.code);
       if (!registered || !activeModules.has(registered.moduleCode)) continue;
       try {
-        await this.rbac.requirePermissionsOnSameAssignment(
-          actor.userId,
+        await this.rbac.          requirePermissionsOnActiveAssignment(
+          actor,
           this.requiredPermissions(registered),
         );
         authorized.push(dataset);
@@ -167,7 +167,7 @@ export class BiService {
   }
 
   async listSavedReports(actor: ActorContext, datasetCode?: string): Promise<BiSavedReport[]> {
-    await this.rbac.requirePermission(actor.userId, "reporting.bi.manage");
+    await this.rbac.requirePermission(actor, "reporting.bi.manage");
 
     if (datasetCode) {
       const registered = getRegisteredDataset(datasetCode);
@@ -259,7 +259,7 @@ export class BiService {
     dataset: RegisteredDatasetDef,
     requiredPermissions = this.requiredPermissions(dataset),
   ): Promise<void> {
-    await this.rbac.requirePermissionsOnSameAssignment(actor.userId, requiredPermissions);
+    await this.rbac.requirePermissionsOnActiveAssignment(actor, requiredPermissions);
     const activeModules = await this.repo.listActiveModuleCodes(actor.tenantId);
     if (!activeModules.includes(dataset.moduleCode)) {
       throw new NotFoundError("BiDataset", dataset.code);

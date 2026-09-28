@@ -47,7 +47,7 @@ export class DocumentService {
   ): Promise<void> {
     const resolver = this.resolvers.get(entityType);
     if (!resolver) {
-      await this.rbac.requirePermission(actor.userId, legacyPermission);
+      await this.rbac.requirePermission(actor, legacyPermission);
       return;
     }
     const allowed = await resolver.canAccess(actor, entityId);

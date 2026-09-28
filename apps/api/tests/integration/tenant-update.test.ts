@@ -4,9 +4,15 @@ import { buildApp } from "../../src/app.js";
 import { ForbiddenError } from "../../src/domain/shared-kernel/errors.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgTenantRepository } from "../../src/infrastructure/persistence/repositories/tenant.repository.pg.js";
-import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, provisionFirstAdmin } from "./helpers.js";
+import {
+  activateAllModules,
+  authHeader,
+  bootstrapTenant,
+  createReadOnlyRole,
+  provisionFirstAdmin,
+  sessionTokenFor,
+} from "./helpers.js";
 
 /**
  * Tenant name update — `PATCH /tenants/me`.
@@ -63,7 +69,7 @@ async function createUserWithRole(
      VALUES ($1, $2, $3, $4)`,
     [userId, roleId, scope.type, scope.organizationUnitId ?? null],
   );
-  return { userId, token: signAccessToken({ sub: userId, tenantId }) };
+  return { userId, token: await sessionTokenFor({ userId, tenantId }) };
 }
 
 async function patch(
@@ -111,7 +117,9 @@ beforeAll(async () => {
     password: PASSWORD,
   });
   adminId = admin.userId;
-  adminToken = signAccessToken({ sub: adminId, tenantId });
+  // Epic 1 (§4.1 F): a bearer token must name a session — minted here the
+  // way the login endpoint does, since this suite never calls /auth/login.
+  adminToken = await sessionTokenFor({ userId: adminId, tenantId });
 });
 
 afterAll(async () => {
@@ -257,7 +265,7 @@ describe("PATCH /tenants/me", () => {
        VALUES ($1, $2, 'organization_unit', $3), ($1, $4, 'tenant', NULL)`,
       [userId, permissionRole, organizationUnitId, scopeRole],
     );
-    const token = signAccessToken({ sub: userId, tenantId });
+    const token = await sessionTokenFor({ userId, tenantId });
 
     const { statusCode } = await patch({ name: "Split Rename" }, { token });
 

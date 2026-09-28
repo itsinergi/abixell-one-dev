@@ -25,7 +25,7 @@ export class ContractService {
   ) {}
 
   async create(actor: ActorContext, input: CreateContractInput): Promise<Contract> {
-    await this.rbac.requirePermission(actor.userId, "contract.manage");
+    await this.rbac.requirePermission(actor, "contract.manage");
     await this.customers.getAuthorized(actor, input.customerId);
 
     const contract = await this.repo.create({ ...input, tenantId: actor.tenantId }, actor.userId);
@@ -43,7 +43,7 @@ export class ContractService {
   }
 
   async update(actor: ActorContext, id: string, input: UpdateContractInput): Promise<Contract> {
-    await this.rbac.requirePermission(actor.userId, "contract.manage");
+    await this.rbac.requirePermission(actor, "contract.manage");
     const current = await this.repo.findById(id);
     if (!current || current.tenantId !== actor.tenantId) {
       throw new NotFoundError("Contract", id);
@@ -66,7 +66,7 @@ export class ContractService {
   }
 
   async listByCustomer(actor: ActorContext, customerId: string): Promise<Contract[]> {
-    await this.rbac.requirePermission(actor.userId, "contract.read");
+    await this.rbac.requirePermission(actor, "contract.read");
     await this.customers.getAuthorized(actor, customerId);
     return this.repo.listByCustomer(customerId);
   }

@@ -125,7 +125,7 @@ export class SalesService {
   /** Gated on `sales.manage` (what a user needs to actually create), so a
    * salesperson can populate the form without broad `config.read`. */
   async getReferenceOptions(actor: ActorContext): Promise<SalesReferenceOptions> {
-    await this.rbac.requirePermission(actor.userId, "sales.manage");
+    await this.rbac.requirePermission(actor, "sales.manage");
     const [stages, sources, units] = await Promise.all([
       this.configuration.listReferenceDataItemsForTrustedCaller(
         actor.tenantId,
@@ -171,7 +171,7 @@ export class SalesService {
       effectiveTo?: string | null;
     },
   ): Promise<PriceBook> {
-    await this.rbac.requirePermission(actor.userId, "sales.configure");
+    await this.rbac.requirePermission(actor, "sales.configure");
     // A customer-specific book is still Customer data: the same Data Scope
     // gate applies before it can be authored.
     if (input.customerId) {
@@ -191,8 +191,8 @@ export class SalesService {
   }
 
   async listPriceBooks(actor: ActorContext): Promise<PriceBook[]> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
-    const tenantScoped = await this.rbac.hasTenantScope(actor.userId);
+    await this.rbac.requirePermission(actor, "sales.read");
+    const tenantScoped = await this.rbac.hasTenantScope(actor);
     const customerIds = tenantScoped ? null : await this.customers.listScopedCustomerIds(actor);
     return this.repo.listPriceBooks(actor.tenantId, customerIds);
   }
@@ -202,7 +202,7 @@ export class SalesService {
     priceBookId: string,
     input: { serviceId: string; unitCode: string; unitPrice: number; minQuantity?: number },
   ): Promise<PriceBookEntry> {
-    await this.rbac.requirePermission(actor.userId, "sales.configure");
+    await this.rbac.requirePermission(actor, "sales.configure");
     const book = await this.getAuthorizedPriceBook(actor, priceBookId);
 
     const service = await this.serviceRepo.findById(input.serviceId);
@@ -245,7 +245,7 @@ export class SalesService {
   }
 
   async listPriceBookEntries(actor: ActorContext, priceBookId: string): Promise<PriceBookEntry[]> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
+    await this.rbac.requirePermission(actor, "sales.read");
     const book = await this.getAuthorizedPriceBook(actor, priceBookId);
     return this.repo.listPriceBookEntries(actor.tenantId, book.id);
   }
@@ -265,7 +265,7 @@ export class SalesService {
     actor: ActorContext,
     input: CreateOpportunityRequest,
   ): Promise<Opportunity> {
-    await this.rbac.requirePermission(actor.userId, "sales.manage");
+    await this.rbac.requirePermission(actor, "sales.manage");
     const customer = await this.customers.getAuthorized(actor, input.customerId);
 
     await this.requireActiveReferenceCode(
@@ -337,7 +337,7 @@ export class SalesService {
     actor: ActorContext,
     filters: { outcome?: OpportunityOutcome; stageCode?: string; customerId?: string } = {},
   ): Promise<Opportunity[]> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
+    await this.rbac.requirePermission(actor, "sales.read");
     if (filters.customerId) {
       await this.customers.getAuthorized(actor, filters.customerId);
     }
@@ -349,7 +349,7 @@ export class SalesService {
     actor: ActorContext,
     id: string,
   ): Promise<{ opportunity: Opportunity; history: OpportunityStageHistoryEntry[]; quotations: Quotation[] }> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
+    await this.rbac.requirePermission(actor, "sales.read");
     const opportunity = await this.getAuthorizedOpportunity(actor, id);
     const [history, quotations] = await Promise.all([
       this.repo.listOpportunityStageHistory(actor.tenantId, opportunity.id),
@@ -363,7 +363,7 @@ export class SalesService {
     id: string,
     input: ChangeStageRequest,
   ): Promise<Opportunity> {
-    await this.rbac.requirePermission(actor.userId, "sales.manage");
+    await this.rbac.requirePermission(actor, "sales.manage");
     const current = await this.getAuthorizedOpportunity(actor, id);
 
     if (current.outcome !== "open") {
@@ -441,7 +441,7 @@ export class SalesService {
   }
 
   async getPipelineSummary(actor: ActorContext): Promise<OpportunityPipelineRow[]> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
+    await this.rbac.requirePermission(actor, "sales.read");
     const customerIds = await this.customers.listScopedCustomerIds(actor);
     return this.repo.summarisePipeline(actor.tenantId, customerIds);
   }
@@ -495,7 +495,7 @@ export class SalesService {
     actor: ActorContext,
     input: CreateQuotationRequest,
   ): Promise<QuotationDetail> {
-    await this.rbac.requirePermission(actor.userId, "sales.manage");
+    await this.rbac.requirePermission(actor, "sales.manage");
     const opportunity = await this.getAuthorizedOpportunity(actor, input.opportunityId);
     if (opportunity.outcome !== "open") {
       throw new ConflictError(
@@ -647,7 +647,7 @@ export class SalesService {
   }
 
   async getQuotation(actor: ActorContext, id: string): Promise<QuotationDetail> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
+    await this.rbac.requirePermission(actor, "sales.read");
     const quotation = await this.getAuthorizedQuotation(actor, id);
     const lines = await this.repo.listQuotationLines(actor.tenantId, quotation.id);
     if (!quotation.workflowInstanceId) {
@@ -666,7 +666,7 @@ export class SalesService {
   }
 
   async listQuotations(actor: ActorContext): Promise<Quotation[]> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
+    await this.rbac.requirePermission(actor, "sales.read");
     const customerIds = await this.customers.listScopedCustomerIds(actor);
     return this.repo.listQuotationsByCustomers(actor.tenantId, customerIds);
   }
@@ -677,7 +677,7 @@ export class SalesService {
    * denormalised mirror for listing, never a second state machine.
    */
   async submitQuotationForApproval(actor: ActorContext, id: string): Promise<Quotation> {
-    await this.rbac.requirePermission(actor.userId, "sales.manage");
+    await this.rbac.requirePermission(actor, "sales.manage");
     const quotation = await this.getAuthorizedQuotation(actor, id);
     if (quotation.status !== "draft") {
       throw new ConflictError(
@@ -735,7 +735,7 @@ export class SalesService {
     id: string,
     decision: "issued" | "withdrawn",
   ): Promise<Quotation> {
-    await this.rbac.requirePermission(actor.userId, "sales.approve");
+    await this.rbac.requirePermission(actor, "sales.approve");
     const quotation = await this.getAuthorizedQuotation(actor, id);
     if (quotation.status !== "in_approval") {
       throw new ConflictError(
@@ -786,7 +786,7 @@ export class SalesService {
     decision: "accepted" | "declined",
     note: string | null,
   ): Promise<Quotation> {
-    await this.rbac.requirePermission(actor.userId, "sales.read");
+    await this.rbac.requirePermission(actor, "sales.read");
     const quotation = await this.getAuthorizedQuotation(actor, id);
     if (quotation.status !== "issued") {
       throw new ConflictError(

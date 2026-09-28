@@ -7,9 +7,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
 import { PgRbacRepository } from "../../src/infrastructure/persistence/repositories/rbac.repository.pg.js";
-import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { activateAllModules, authHeader, bootstrapTenant, provisionFirstAdmin } from "./helpers.js";
+import {
+  activateAllModules,
+  authHeader,
+  bootstrapTenant,
+  provisionFirstAdmin,
+  sessionTokenFor,
+} from "./helpers.js";
 
 /**
  * Phase 11F — Governed Business Admin access management.
@@ -186,8 +191,10 @@ async function createCustomer(
   return result.rows[0].id as string;
 }
 
-function tokenFor(tenantId: string, user: UserFixture): string {
-  return signAccessToken({ sub: user.id, tenantId });
+function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
+  // Epic 1 (§4.1 F): a bearer token must name a session, so fixtures create
+  // one the way the login endpoint does instead of signing a bare payload.
+  return sessionTokenFor({ userId: user.id, tenantId });
 }
 
 async function get(
@@ -409,11 +416,11 @@ describe("Phase 11F — governed Admin access management", () => {
       },
     );
 
-    managerToken = tokenFor(tenantId, manager);
-    readOnlyToken = tokenFor(tenantId, readOnly);
-    bareConsoleToken = tokenFor(tenantId, bareConsole);
-    noConsoleToken = tokenFor(tenantId, noConsole);
-    aggregateToken = tokenFor(tenantId, aggregateActor);
+    managerToken = await tokenFor(tenantId, manager);
+    readOnlyToken = await tokenFor(tenantId, readOnly);
+    bareConsoleToken = await tokenFor(tenantId, bareConsole);
+    noConsoleToken = await tokenFor(tenantId, noConsole);
+    aggregateToken = await tokenFor(tenantId, aggregateActor);
 
     // Independent tenant used for ownership/404 and projection-isolation probes.
     otherTenantId = await createTenant(OTHER_TENANT, "Tenant Phase 11F Other");
@@ -447,7 +454,7 @@ describe("Phase 11F — governed Admin access management", () => {
       scopeType: "organization_unit",
       scopeOrganizationUnitId: otherOrganizationUnitId,
     });
-    otherManagerToken = tokenFor(otherTenantId, otherManager);
+    otherManagerToken = await tokenFor(otherTenantId, otherManager);
 
     // No bootstrap administrator exists in this tenant: the names and the
     // is_full_access marker are intentionally present without actual grants.
@@ -475,7 +482,7 @@ describe("Phase 11F — governed Admin access management", () => {
       nameOnlyActors.push({
         roleCode,
         user,
-        token: tokenFor(namesTenantId, user),
+        token: await tokenFor(namesTenantId, user),
       });
       expect(assignmentId).toMatch(/^[0-9a-f-]{36}$/);
     }
@@ -530,8 +537,8 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeType: "tenant",
       },
     );
-    guardAToken = tokenFor(guardTenantId, guardA);
-    guardBToken = tokenFor(guardTenantId, guardB);
+    guardAToken = await tokenFor(guardTenantId, guardA);
+    guardBToken = await tokenFor(guardTenantId, guardB);
   });
 
   afterAll(async () => {
@@ -1013,7 +1020,7 @@ describe("Phase 11F — governed Admin access management", () => {
       await createAssignment(ceilingAssigner.id, ceilingAssignerRole.id, {
         scopeType: "tenant",
       });
-      const ceilingToken = tokenFor(tenantId, ceilingAssigner);
+      const ceilingToken = await tokenFor(tenantId, ceilingAssigner);
 
       const ceilingTarget = await createUser(
         tenantId,

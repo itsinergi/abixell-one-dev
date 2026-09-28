@@ -92,9 +92,8 @@ export class ServiceQualityService {
   // --- Configuration -------------------------------------------------------
 
   async createCalendar(actor: ActorContext, input: CreateCalendarInput) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     assertValidTimeZone(input.timeZone);
@@ -126,7 +125,7 @@ export class ServiceQualityService {
   }
 
   async listCalendars(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const calendars = await this.repo.listCalendars(actor.tenantId);
     return Promise.all(
       calendars.map(async (calendar) => ({
@@ -142,9 +141,8 @@ export class ServiceQualityService {
     calendarId: string,
     input: { holidayDate: string; name: string },
   ) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     const calendar = await this.repo.findCalendarById(actor.tenantId, calendarId);
@@ -176,9 +174,8 @@ export class ServiceQualityService {
   }
 
   async createSlaPolicy(actor: ActorContext, input: CreatePolicyInput) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     const calendar = await this.repo.findCalendarById(actor.tenantId, input.calendarId);
@@ -205,9 +202,8 @@ export class ServiceQualityService {
   }
 
   async getConfigurationOptions(actor: ActorContext) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     const [severities, categories] = await Promise.all([
@@ -226,7 +222,7 @@ export class ServiceQualityService {
   }
 
   async listSlaPolicies(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const policies = await this.repo.listSlaPolicies(actor.tenantId);
     return Promise.all(
       policies.map(async (policy) => ({
@@ -238,9 +234,8 @@ export class ServiceQualityService {
   }
 
   async createSlaRule(actor: ActorContext, input: CreateRuleInput) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     const policy = await this.repo.findSlaPolicyById(actor.tenantId, input.policyId);
@@ -321,7 +316,7 @@ export class ServiceQualityService {
   // --- Frozen targets ------------------------------------------------------
 
   async getComplaintSla(actor: ActorContext, complaintId: string) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const complaint = await this.getComplaintForPermission(
       actor,
       complaintId,
@@ -335,7 +330,7 @@ export class ServiceQualityService {
   }
 
   async getSlaPerformance(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const customerIds = await this.customers.listScopedCustomerIdsForPermission(
       actor,
       SERVICE_QUALITY_READ_PERMISSION,
@@ -574,9 +569,8 @@ export class ServiceQualityService {
   // --- SQ-ADV-002: Structured RCA -----------------------------------------
 
   async createRootCauseCategory(actor: ActorContext, input: CreateCategoryInput) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     if (input.parentId) {
@@ -604,14 +598,13 @@ export class ServiceQualityService {
   }
 
   async listRootCauseCategories(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     return this.repo.listRootCauseCategories(actor.tenantId);
   }
 
   async recordRcaFinding(actor: ActorContext, input: CreateFindingInput) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_RCA_MANAGE_PERMISSION,
     );
     const complaint = await this.getComplaintForPermission(
@@ -654,7 +647,7 @@ export class ServiceQualityService {
   }
 
   async listRcaFindings(actor: ActorContext, complaintId: string) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const complaint = await this.getComplaintForPermission(
       actor,
       complaintId,
@@ -664,9 +657,8 @@ export class ServiceQualityService {
   }
 
   async clearPrimaryRcaFinding(actor: ActorContext, complaintId: string) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_RCA_MANAGE_PERMISSION,
     );
     const complaint = await this.getComplaintForPermission(
@@ -690,9 +682,8 @@ export class ServiceQualityService {
     actor: ActorContext,
     input: Omit<CreateCapaActionInput, "tenantId" | "actionNumber">,
   ) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CAPA_MANAGE_PERMISSION,
     );
     const complaint = await this.getComplaintForPermission(
@@ -756,7 +747,7 @@ export class ServiceQualityService {
   }
 
   async listCapaActionsForComplaint(actor: ActorContext, complaintId: string) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const complaint = await this.getComplaintForPermission(
       actor,
       complaintId,
@@ -766,7 +757,7 @@ export class ServiceQualityService {
   }
 
   async listCapaActions(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const customerIds = await this.customers.listScopedCustomerIdsForPermission(
       actor,
       SERVICE_QUALITY_READ_PERMISSION,
@@ -780,9 +771,8 @@ export class ServiceQualityService {
     status: CapaStatus,
     extra?: { completionNote?: string },
   ) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CAPA_MANAGE_PERMISSION,
     );
     const action = await this.repo.findCapaActionById(actor.tenantId, id);
@@ -821,9 +811,8 @@ export class ServiceQualityService {
     id: string,
     input: { verdict: CapaVerdict; note?: string | null },
   ) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CAPA_VERIFY_PERMISSION,
     );
     const action = await this.repo.findCapaActionById(actor.tenantId, id);
@@ -857,7 +846,7 @@ export class ServiceQualityService {
   }
 
   async getCapaEffectivenessSummary(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const customerIds = await this.customers.listScopedCustomerIdsForPermission(
       actor,
       SERVICE_QUALITY_READ_PERMISSION,
@@ -866,7 +855,7 @@ export class ServiceQualityService {
   }
 
   async canAccessCapaForDocument(
-    actor: { tenantId: string; userId: string },
+    actor: ActorContext,
     capaId: string,
   ): Promise<boolean> {
     const action = await this.repo.findCapaActionById(actor.tenantId, capaId);
@@ -879,9 +868,8 @@ export class ServiceQualityService {
   // --- SQ-ADV-003: Deterministic Recurrence Analytics -----------------------
 
   async createRecurrenceRule(actor: ActorContext, input: CreateRecurrenceInput) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     if (input.windowDays <= 0 || input.minimumOccurrences <= 1) {
@@ -936,7 +924,7 @@ export class ServiceQualityService {
   }
 
   async listRecurrenceRules(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     return this.repo.listRecurrenceRules(actor.tenantId);
   }
 
@@ -945,7 +933,7 @@ export class ServiceQualityService {
     ruleId: string,
     at = new Date(),
   ): Promise<RecurrenceDetection> {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_READ_PERMISSION);
     const rule = await this.repo.findRecurrenceRuleById(actor.tenantId, ruleId);
     if (!rule) throw new NotFoundError("RecurrenceRule", ruleId);
 
@@ -980,9 +968,8 @@ export class ServiceQualityService {
   // --- SQ-ADV-004: Feedback Automation Proposals ---------------------------
 
   async createAutomationRule(actor: ActorContext, input: CreateAutoRuleInput) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     try {
@@ -1009,14 +996,13 @@ export class ServiceQualityService {
   }
 
   async listAutomationRules(actor: ActorContext) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_AUTOMATION_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_AUTOMATION_READ_PERMISSION);
     return this.repo.listAutomationRules(actor.tenantId);
   }
 
   async setAutomationRuleActive(actor: ActorContext, id: string, isActive: boolean) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_CONFIGURE_PERMISSION,
     );
     const updated = await this.repo.setAutomationRuleActive(
@@ -1037,21 +1023,20 @@ export class ServiceQualityService {
   }
 
   async listProposals(actor: ActorContext, status?: ProposalStatus) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_AUTOMATION_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_AUTOMATION_READ_PERMISSION);
     return this.repo.listProposals(actor.tenantId, status);
   }
 
   async getProposal(actor: ActorContext, id: string) {
-    await this.rbac.requirePermission(actor.userId, SERVICE_QUALITY_AUTOMATION_READ_PERMISSION);
+    await this.rbac.requirePermission(actor, SERVICE_QUALITY_AUTOMATION_READ_PERMISSION);
     const proposal = await this.repo.findProposalById(actor.tenantId, id);
     if (!proposal) throw new NotFoundError("AutomationProposal", id);
     return proposal;
   }
 
   async approveProposal(actor: ActorContext, id: string, note?: string | null) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_AUTOMATION_APPROVE_PERMISSION,
     );
     const proposal = await this.repo.findProposalById(actor.tenantId, id);
@@ -1077,7 +1062,7 @@ export class ServiceQualityService {
     }
 
     try {
-      await this.executeProposalAction(applying, actor.userId);
+      await this.executeProposalAction(applying, actor.userId, actor);
       const applied = await this.repo.transitionProposal(
         actor.tenantId,
         id,
@@ -1116,9 +1101,8 @@ export class ServiceQualityService {
   }
 
   async rejectProposal(actor: ActorContext, id: string, note: string) {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       SERVICE_QUALITY_AUTOMATION_APPROVE_PERMISSION,
     );
     if (!note || note.trim().length === 0) {
@@ -1206,11 +1190,13 @@ export class ServiceQualityService {
   private async executeProposalAction(
     proposal: AutomationProposal,
     decidedBy: string,
+    approver: ActorContext,
   ): Promise<void> {
-    const actor: ActorContext = {
-      tenantId: proposal.tenantId,
-      userId: decidedBy,
-    };
+    // Epic 1 (§4.1 C) — the proposal executes AS the approver's session
+    // context, so its reach is the approver's ACTIVE Role. A synthetic
+    // userId-only actor would have consulted the union of every Role the
+    // approver holds.
+    const actor = approver;
 
     if (proposal.proposedAction === "reopen_complaint") {
       await this.complaints.reopen(

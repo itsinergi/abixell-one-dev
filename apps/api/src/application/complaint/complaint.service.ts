@@ -163,7 +163,7 @@ export class ComplaintService {
   ) {}
 
   async create(actor: ActorContext, input: CreateComplaintInput): Promise<Complaint> {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     // Customer/Data Scope Validation — the E2E target's second step.
     // Works identically whether `actor` is a Customer User (scope_type
     // 'customer', exact match, ADR-0011) or an internal user filing on a
@@ -225,7 +225,7 @@ export class ComplaintService {
     complaint: Complaint;
     status: { stepCode: string | null; instanceStatus: string } | null;
   }> {
-    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.rbac.requirePermission(actor, "complaint.read");
     const complaint = await this.getAuthorized(actor, id);
     if (!complaint.workflowInstanceId) {
       return { complaint, status: null };
@@ -238,7 +238,7 @@ export class ComplaintService {
   }
 
   async listByCustomer(actor: ActorContext, customerId: string): Promise<Complaint[]> {
-    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.rbac.requirePermission(actor, "complaint.read");
     await this.customers.getAuthorized(actor, customerId);
     return this.repo.listByCustomer(customerId);
   }
@@ -252,7 +252,7 @@ export class ComplaintService {
    * Only active items are returned.
    */
   async getCreateOptions(actor: ActorContext): Promise<ComplaintCreateOptions> {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     const [categories, severities, priorities] = await Promise.all([
       this.configuration.listReferenceDataItemsForTrustedCaller(actor.tenantId, COMPLAINT_CATEGORY_REF_TYPE),
       this.configuration.listReferenceDataItemsForTrustedCaller(actor.tenantId, COMPLAINT_SEVERITY_REF_TYPE),
@@ -274,7 +274,7 @@ export class ComplaintService {
    * status is composed per row via the trusted-caller Workflow projection.
    */
   async listByCustomerSummary(actor: ActorContext, customerId: string): Promise<ComplaintSummaryItem[]> {
-    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.rbac.requirePermission(actor, "complaint.read");
     await this.customers.getAuthorized(actor, customerId);
     const complaints = await this.repo.listByCustomer(customerId);
     const items: ComplaintSummaryItem[] = [];
@@ -306,7 +306,7 @@ export class ComplaintService {
    * lifecycle state to decide it.
    */
   async getDetail(actor: ActorContext, id: string): Promise<ComplaintDetailView> {
-    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.rbac.requirePermission(actor, "complaint.read");
     const complaint = await this.getAuthorized(actor, id);
     if (!complaint.workflowInstanceId) {
       return {
@@ -320,7 +320,7 @@ export class ComplaintService {
     }
 
     const view = await this.workflow.getEntityWorkflowView(actor, complaint.workflowInstanceId);
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     const canReopen = permissions.has("complaint.manage") && view.instanceStatus !== "in_progress";
 
     return {
@@ -374,7 +374,7 @@ export class ComplaintService {
     filters: OperationalQueueFilters,
     pagination: { limit?: number; offset?: number },
   ): Promise<OperationalQueueResult> {
-    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.rbac.requirePermission(actor, "complaint.read");
     await this.requireInternalActor(actor);
 
     const customers = await this.customers.listForTenant(actor);
@@ -441,7 +441,7 @@ export class ComplaintService {
    * workflow comments). Reuses the existing composite Workflow view.
    */
   async getOperationalDetail(actor: ActorContext, id: string): Promise<OperationalComplaintDetail> {
-    await this.rbac.requirePermission(actor.userId, "complaint.read");
+    await this.rbac.requirePermission(actor, "complaint.read");
     await this.requireInternalActor(actor);
     const complaint = await this.getAuthorized(actor, id);
 
@@ -470,7 +470,7 @@ export class ComplaintService {
 
     const view = await this.workflow.getEntityWorkflowView(actor, complaint.workflowInstanceId);
     const s = await this.workflow.getEntityStatus(actor, complaint.workflowInstanceId);
-    const permissions = await this.rbac.getEffectivePermissions(actor.userId);
+    const permissions = await this.rbac.getActivePermissions(actor);
     const canReopen = permissions.has("complaint.manage") && view.instanceStatus !== "in_progress";
 
     return {
@@ -515,7 +515,7 @@ export class ComplaintService {
    * meaning of "Workflow tidak boleh hardcoded di Complaint Service".
    */
   async act(actor: ActorContext, id: string, actionCode: string, comment: string | null) {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     const complaint = await this.getAuthorized(actor, id);
     if (!complaint.workflowInstanceId) {
       throw new ConflictError("This Complaint has no active Workflow Instance");
@@ -566,7 +566,7 @@ export class ComplaintService {
   }
 
   async updateInvestigation(actor: ActorContext, id: string, input: UpdateInvestigationInput) {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     await this.getAuthorized(actor, id);
     const updated = await this.repo.updateInvestigation(id, input, actor.userId);
 
@@ -583,7 +583,7 @@ export class ComplaintService {
   }
 
   async verify(actor: ActorContext, id: string, verificationNote: string | null) {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     await this.getAuthorized(actor, id);
     const updated = await this.repo.updateVerification(
       id,
@@ -602,7 +602,7 @@ export class ComplaintService {
   }
 
   async confirmByCustomer(actor: ActorContext, id: string, note: string | null) {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     await this.getAuthorized(actor, id);
     const updated = await this.repo.updateCustomerConfirmation(
       id,
@@ -629,7 +629,7 @@ export class ComplaintService {
    * `WorkflowService`'s, reused as-is.
    */
   async reopen(actor: ActorContext, id: string, toStepCode: string, comment: string | null) {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     const complaint = await this.getAuthorized(actor, id);
     if (!complaint.workflowInstanceId) {
       throw new ConflictError("This Complaint has no active Workflow Instance");
@@ -669,7 +669,7 @@ export class ComplaintService {
   }
 
   async updateSeverity(actor: ActorContext, id: string, severity: string, note?: string | null) {
-    await this.rbac.requirePermission(actor.userId, "complaint.manage");
+    await this.rbac.requirePermission(actor, "complaint.manage");
     await this.getAuthorized(actor, id);
     const severities = await this.configuration.listReferenceDataItemsForTrustedCaller(
       actor.tenantId,

@@ -5,12 +5,25 @@ import type {
 } from "../../domain/rbac/rbac.entity.js";
 import type { OrganizationUnitRepository } from "../../domain/organization-unit/organization-unit.entity.js";
 import { ForbiddenError } from "../../domain/shared-kernel/errors.js";
+import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 
 /**
  * Authorization = Role Permission (what) + Data Scope (which data),
  * per 02-Identity-Security-RBAC-Foundation.md. This service is the single
  * place both axes are evaluated — HTTP routes call it, they never
  * hand-roll their own permission checks.
+ *
+ * Epic 1 (§4.1 C) — separation of duties. Every method that answers "may the
+ * actor do this" now reads the SESSION'S ACTIVE ASSIGNMENT, not the union of
+ * everything the user holds. A user granted Creator and Approver must not be
+ * able to approve in the Creator context merely because another Role they
+ * hold would allow it.
+ *
+ * The methods that answer "what does this user hold" (getAssignments,
+ * getMyAssignmentsWithScopeNames, getAssignmentsWithPermission, and the
+ * repository's cross-user reads) deliberately keep the `userId` form: queue
+ * routing, notification fan-out and admin review ask about a user in the
+ * abstract, and pinning those to one session's choice would be wrong.
  */
 export class RbacService {
   constructor(
@@ -18,16 +31,42 @@ export class RbacService {
     private readonly orgUnits: OrganizationUnitRepository,
   ) {}
 
+  /** The union across every assignment the user holds. Informational only —
+   * `/me` reports it so a user can see their full capability set before
+   * switching context. Never an enforcement input. */
   async getEffectivePermissions(userId: string): Promise<Set<string>> {
     return this.repo.getEffectivePermissionCodes(userId);
   }
 
-  /** Throws ForbiddenError if the user does not hold `permissionCode`. */
-  async requirePermission(userId: string, permissionCode: string): Promise<void> {
-    const permissions = await this.repo.getEffectivePermissionCodes(userId);
+  /** The ACTIVE assignment's permission codes. This is the enforcement read:
+   * a session with no effective assignment yields the empty set. */
+  async getActivePermissions(actor: ActorContext): Promise<Set<string>> {
+    return this.repo.getEffectivePermissionCodesForAssignment(
+      actor.tenantId,
+      actor.assignmentId,
+    );
+  }
+
+  /**
+   * Throws ForbiddenError unless the actor's ACTIVE Role carries
+   * `permissionCode`.
+   *
+   * Three distinguishable failures collapse into one refusal, deliberately:
+   * the session holds no effective assignment, the active Role lacks the
+   * code, or the code belongs only to another Role the user holds. All three
+   * mean "not in this context", and telling them apart would leak role
+   * structure to a caller who is only entitled to a yes/no.
+   */
+  async requirePermission(actor: ActorContext, permissionCode: string): Promise<void> {
+    if (actor.assignmentId === null) {
+      throw new ForbiddenError(
+        `No active Role in this session; switch to a Role that grants permission '${permissionCode}'`,
+      );
+    }
+    const permissions = await this.getActivePermissions(actor);
     if (!permissions.has(permissionCode)) {
       throw new ForbiddenError(
-        `Missing permission '${permissionCode}'`,
+        `Missing permission '${permissionCode}' in the active Role`,
       );
     }
   }
@@ -45,6 +84,24 @@ export class RbacService {
     if (!allowed) {
       throw new ForbiddenError(
         `Missing same-assignment permissions '${permissionCodes.join("', '")}'`,
+      );
+    }
+  }
+
+  /** Epic 1 — same "all codes on one assignment" rule, pinned to the session's
+   * active assignment. */
+  async requirePermissionsOnActiveAssignment(
+    actor: ActorContext,
+    permissionCodes: readonly string[],
+  ): Promise<void> {
+    const allowed = await this.repo.hasPermissionSetForAssignment(
+      actor.tenantId,
+      actor.assignmentId,
+      permissionCodes,
+    );
+    if (!allowed) {
+      throw new ForbiddenError(
+        `Missing same-assignment permissions '${permissionCodes.join("', '")}' in the active Role`,
       );
     }
   }
@@ -68,6 +125,25 @@ export class RbacService {
     }
   }
 
+  /** Epic 1 — the enforcement form: the ACTIVE assignment must be tenant-scoped
+   * AND carry the permission. A tenant-scoped Role the user holds but has not
+   * switched into does not authorize the action. */
+  async requireTenantScopedPermissionForActor(
+    actor: ActorContext,
+    permissionCode: string,
+  ): Promise<void> {
+    const allowed = await this.repo.hasTenantScopedPermissionForAssignment(
+      actor.tenantId,
+      actor.assignmentId,
+      permissionCode,
+    );
+    if (!allowed) {
+      throw new ForbiddenError(
+        `Missing tenant-scoped permission '${permissionCode}' in the active Role`,
+      );
+    }
+  }
+
   /** Epic 4 step 11b — Window read-only state for one actor and one Window.
    * Passthrough so the enforcement plugin asks the same service every other
    * authorization question asks, and so the repository read has exactly one
@@ -81,56 +157,64 @@ export class RbacService {
     return this.repo.getWindowAccessState(tenantId, userId, windowCode);
   }
 
+  /** Epic 1 — the Window lock read against the ACTIVE Role only. Without this
+   * a read-only Assignment could write through because another Role the user
+   * holds happens to be writable. */
+  async getWindowAccessStateForActor(
+    actor: ActorContext,
+    windowCode: string,
+  ): Promise<{ configured: boolean; writable: boolean }> {
+    return this.repo.getWindowAccessStateForAssignment(
+      actor.tenantId,
+      actor.assignmentId,
+      windowCode,
+    );
+  }
+
   /**
-   * Throws ForbiddenError unless the user has an assignment whose Data
-   * Scope covers `targetOrganizationUnitId` — either a tenant-wide
-   * assignment, or an organization_unit assignment on
-   * `targetOrganizationUnitId` itself OR on any of its ANCESTORS
-   * (Checkpoint 0F / ADR-0009, Hierarchical Data Scope — supersedes
-   * ADR-0005's exact-match-only rule from 0B: a Data Scope assigned to a
-   * parent Organization Unit now also covers every descendant, e.g. a
-   * Regional Manager scoped to "Region" automatically covers every
-   * "Site" under it, without a separate assignment per Site).
+   * Epic 1 — the enforcement form: throws unless the actor's ACTIVE
+   * assignment's Data Scope covers `targetOrganizationUnitId` — a tenant-wide
+   * active assignment, or an active organization_unit assignment on the unit
+   * or one of its ANCESTORS. An ancestor assignment the user holds but has
+   * not switched into grants nothing here.
    */
-  async requireOrganizationUnitScope(
-    userId: string,
+  async requireOrganizationUnitScopeForActor(
+    actor: ActorContext,
     targetOrganizationUnitId: string,
   ): Promise<void> {
-    const covered = await this.isOrganizationUnitScopeCovered(userId, targetOrganizationUnitId);
+    const covered = await this.isActiveOrganizationUnitScopeCovered(
+      actor,
+      targetOrganizationUnitId,
+    );
     if (!covered) {
       throw new ForbiddenError(
-        "Your assigned Data Scope does not cover this Organization Unit",
+        "The active Role's Data Scope does not cover this Organization Unit",
       );
     }
   }
 
-  /** Public since Phase 3: a business module filtering a LIST by
-   * Organization Unit Data Scope (e.g. Workforce) must reuse this exact
-   * rule rather than re-deriving hierarchical scope for itself. Mirrors
-   * `isCustomerContextScopeCovered`, which is already public for the same
-   * reason. */
-  async isOrganizationUnitScopeCovered(
-    userId: string,
+  async isActiveOrganizationUnitScopeCovered(
+    actor: ActorContext,
     targetOrganizationUnitId: string,
   ): Promise<boolean> {
-    const [assignments, ancestorIds] = await Promise.all([
-      this.repo.getAssignments(userId),
-      this.orgUnits.listAncestorIds(targetOrganizationUnitId),
-    ]);
-    const ancestorSet = new Set(ancestorIds);
-    return assignments.some(
-      (a) =>
-        a.scopeType === "tenant" ||
-        (a.scopeType === "organization_unit" &&
-          a.scopeOrganizationUnitId !== null &&
-          ancestorSet.has(a.scopeOrganizationUnitId)),
-    );
+    if (actor.assignmentId === null) return false;
+    if (actor.scopeType === "tenant") return true;
+    if (
+      actor.scopeType !== "organization_unit" ||
+      actor.scopeOrganizationUnitId === null
+    ) {
+      return false;
+    }
+    const ancestorIds = await this.orgUnits.listAncestorIds(targetOrganizationUnitId);
+    return new Set(ancestorIds).has(actor.scopeOrganizationUnitId);
   }
 
-  /** True if the user holds at least one tenant-wide assignment. */
-  async hasTenantScope(userId: string): Promise<boolean> {
-    const assignments = await this.repo.getAssignments(userId);
-    return assignments.some((a) => a.scopeType === "tenant");
+  /** True if the user's ACTIVE assignment is tenant-wide. The userId form is
+   * gone: every caller asked "may the actor act tenant-wide", and answering
+   * from an inactive Role the user merely holds was the exact bug §4.1
+   * closes. */
+  async hasTenantScope(actor: ActorContext): Promise<boolean> {
+    return actor.assignmentId !== null && actor.scopeType === "tenant";
   }
 
   /**
@@ -140,43 +224,25 @@ export class RbacService {
    * concept — a task is routed to whoever holds a role in a scope, not to
    * one pre-picked user).
    *
-   * - `targetOrganizationUnitId = null` (a tenant-wide task): the actor
-   *   must hold `roleCode` with a tenant-wide assignment.
-   * - `targetOrganizationUnitId` set: the actor must hold `roleCode` with
-   *   either a tenant-wide assignment, or an organization_unit assignment
-   *   on the target unit itself OR on any of its ANCESTORS (Checkpoint
-   *   0F / ADR-0009 — a broader, tenant-wide role holder can still act on
-   *   a narrower-scoped task, and now so can a holder scoped to any
-   *   parent Organization Unit of the task's target).
+   * Epic 1 (§4.1 C): the question is now asked about the ACTIVE Role only.
+   * Holding Approver in another context must not let the actor decide a task
+   * routed to Approver while they are working as Creator — that is precisely
+   * the separation-of-duties hole this epic closes.
+   *
+   * - `targetOrganizationUnitId = null` (a tenant-wide task): the active
+   *   assignment must be tenant-wide and carry `roleCode`.
+   * - otherwise: the active assignment must be tenant-wide, or scoped to the
+   *   target unit itself or one of its ANCESTORS (Checkpoint 0F / ADR-0009).
    */
-  async hasRoleCoveringScope(
-    userId: string,
+  async hasActiveRoleCoveringScope(
+    actor: ActorContext,
     roleCode: string,
     targetOrganizationUnitId: string | null,
   ): Promise<boolean> {
-    const assignments = await this.repo.getAssignments(userId);
-    return this.doAssignmentsCoverRoleScope(assignments, roleCode, targetOrganizationUnitId);
-  }
-
-  async doAssignmentsCoverRoleScope(
-    assignments: UserRoleAssignment[],
-    roleCode: string,
-    targetOrganizationUnitId: string | null,
-  ): Promise<boolean> {
-    const roleAssignments = assignments.filter((a) => a.roleCode === roleCode);
-    if (roleAssignments.length === 0) return false;
-    if (targetOrganizationUnitId === null) {
-      return roleAssignments.some((a) => a.scopeType === "tenant");
-    }
-    const ancestorIds = await this.orgUnits.listAncestorIds(targetOrganizationUnitId);
-    const ancestorSet = new Set(ancestorIds);
-    return roleAssignments.some(
-      (a) =>
-        a.scopeType === "tenant" ||
-        (a.scopeType === "organization_unit" &&
-          a.scopeOrganizationUnitId !== null &&
-          ancestorSet.has(a.scopeOrganizationUnitId)),
-    );
+    if (actor.assignmentId === null || actor.roleCode !== roleCode) return false;
+    if (actor.scopeType === "tenant") return true;
+    if (targetOrganizationUnitId === null) return false;
+    return this.isActiveOrganizationUnitScopeCovered(actor, targetOrganizationUnitId);
   }
 
   /**
@@ -187,31 +253,46 @@ export class RbacService {
    * between call sites (the same design goal as ADR-0009's
    * `listAncestorIds`).
    *
-   * Covered if the actor holds ANY of:
-   * - a tenant-wide assignment (internal Administrator/broad role), OR
+   * Epic 1 (§4.1 C): the enforcement form reads the ACTIVE assignment.
+   * Covered if it is ANY of:
+   * - tenant-wide (internal Administrator/broad role), OR
    * - an organization_unit assignment covering `ownerOrganizationUnitId`
    *   (internal Supervisor/GM/Regional Manager — hierarchical, ADR-0009),
    *   when the target Customer has an owner Organization Unit, OR
-   * - a customer assignment whose `scopeCustomerId` matches `customerId`
-   *   exactly (a Customer User — no hierarchy, a Customer has no
-   *   descendants).
+   * - a customer assignment matching `customerId` exactly (a Customer User —
+   *   no hierarchy, a Customer has no descendants).
    */
-  async requireCustomerContextScope(
-    userId: string,
+  async requireCustomerContextScopeForActor(
+    actor: ActorContext,
     target: { customerId: string; ownerOrganizationUnitId: string | null },
   ): Promise<void> {
-    const covered = await this.isCustomerContextScopeCovered(userId, target);
+    const covered = await this.isActiveCustomerContextScopeCovered(actor, target);
     if (!covered) {
-      throw new ForbiddenError("Your assigned Data Scope does not cover this Customer");
+      throw new ForbiddenError("The active Role's Data Scope does not cover this Customer");
     }
   }
 
-  async isCustomerContextScopeCovered(
-    userId: string,
+  async isActiveCustomerContextScopeCovered(
+    actor: ActorContext,
     target: { customerId: string; ownerOrganizationUnitId: string | null },
   ): Promise<boolean> {
-    const assignments = await this.repo.getAssignments(userId);
-    return this.isCustomerContextScopeCoveredByAssignments(assignments, target);
+    if (actor.assignmentId === null) return false;
+    if (actor.scopeType === "tenant") return true;
+    if (
+      actor.scopeType === "customer" &&
+      actor.scopeCustomerId === target.customerId
+    ) {
+      return true;
+    }
+    if (
+      actor.scopeType === "organization_unit" &&
+      target.ownerOrganizationUnitId !== null &&
+      actor.scopeOrganizationUnitId !== null
+    ) {
+      const ancestorIds = await this.orgUnits.listAncestorIds(target.ownerOrganizationUnitId);
+      return new Set(ancestorIds).has(actor.scopeOrganizationUnitId);
+    }
+    return false;
   }
 
   /** Checkpoint 1B hardening — same rule as `isCustomerContextScopeCovered`,
@@ -242,10 +323,36 @@ export class RbacService {
     return false;
   }
 
-  /** Passthrough — see `RbacRepository.getAssignments`. Exposed so a
-   * caller can fetch once and reuse across several scope checks (e.g.
-   * `CustomerService.listForTenant`, `WorkflowService.isActorAssociatedWithInstance`
-   * callers) instead of re-querying per item. */
+  /** Epic 1 — the ACTIVE assignment as a zero-or-one element list, in the
+   * shape `isCustomerContextScopeCoveredByAssignments` and friends already
+   * accept. Callers that filter a whole LIST by Data Scope (a Customer list,
+   * a Project list) swap their source from `getAssignments(userId)` to this
+   * and inherit active-Role enforcement without changing their predicate. */
+  getActiveAssignment(actor: ActorContext): UserRoleAssignment[] {
+    if (
+      actor.assignmentId === null ||
+      actor.roleId === null ||
+      actor.roleCode === null ||
+      actor.scopeType === null
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: actor.assignmentId,
+        userId: actor.userId,
+        roleId: actor.roleId,
+        roleCode: actor.roleCode,
+        scopeType: actor.scopeType,
+        scopeOrganizationUnitId: actor.scopeOrganizationUnitId,
+        scopeCustomerId: actor.scopeCustomerId,
+      },
+    ];
+  }
+
+  /** Passthrough — see `RbacRepository.getAssignments`. Kept for callers
+   * asking what a user holds in the abstract; enforcement callers use
+   * `getActiveAssignment`. */
   async getAssignments(userId: string): Promise<UserRoleAssignment[]> {
     return this.repo.getAssignments(userId);
   }

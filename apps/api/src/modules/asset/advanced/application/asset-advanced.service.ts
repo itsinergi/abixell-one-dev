@@ -95,7 +95,7 @@ export class AssetAdvancedService {
       nextDueMeter?: number | null;
     },
   ): Promise<AssetMaintenanceSchedule> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.manage");
+    await this.rbac.requirePermission(actor, "asset.maintenance.manage");
     await this.assertAssetExists(actor.tenantId, input.assetId);
 
     if (input.frequencyType === "calendar" && (!input.intervalDays || input.intervalDays <= 0)) {
@@ -133,20 +133,20 @@ export class AssetAdvancedService {
   }
 
   async listMaintenanceSchedules(actor: ActorContext, assetId?: string): Promise<AssetMaintenanceSchedule[]> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     if (assetId) await this.assertAssetExists(actor.tenantId, assetId);
     return this.repo.listMaintenanceSchedules(actor.tenantId, assetId);
   }
 
   async getMaintenanceSchedule(actor: ActorContext, id: string): Promise<AssetMaintenanceSchedule> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     const schedule = await this.repo.findMaintenanceScheduleById(actor.tenantId, id);
     if (!schedule) throw new NotFoundError("AssetMaintenanceSchedule", id);
     return schedule;
   }
 
   async listDueSchedules(actor: ActorContext, asOfDate?: string): Promise<AssetMaintenanceSchedule[]> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     const targetDate = asOfDate ? this.validateDateOnly(asOfDate, "asOfDate") : this.todayDateString();
     return this.repo.listDueMaintenanceSchedules(actor.tenantId, targetDate);
   }
@@ -167,7 +167,7 @@ export class AssetAdvancedService {
       costEstimate?: number | null;
     },
   ): Promise<AssetMaintenanceWorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.manage");
+    await this.rbac.requirePermission(actor, "asset.maintenance.manage");
     await this.assertAssetExists(actor.tenantId, input.assetId);
 
     if (input.scheduleId) {
@@ -242,13 +242,13 @@ export class AssetAdvancedService {
     actor: ActorContext,
     filter: MaintenanceWorkOrderListFilter = {},
   ): Promise<{ workOrder: AssetMaintenanceWorkOrder; status: EntityWorkflowStatus | null }[]> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     const orders = await this.repo.listMaintenanceWorkOrders(actor.tenantId, filter);
     return this.withWorkflowStatus(actor, orders);
   }
 
   async getMaintenanceWorkOrderDetail(actor: ActorContext, id: string): Promise<MaintenanceWorkOrderDetailView> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     const workOrder = await this.repo.findMaintenanceWorkOrderById(actor.tenantId, id);
     if (!workOrder) throw new NotFoundError("AssetMaintenanceWorkOrder", id);
 
@@ -278,7 +278,7 @@ export class AssetAdvancedService {
     id: string,
     assigneeUserId: string,
   ): Promise<AssetMaintenanceWorkOrder> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.manage");
+    await this.rbac.requirePermission(actor, "asset.maintenance.manage");
     const workOrder = await this.repo.findMaintenanceWorkOrderById(actor.tenantId, id);
     if (!workOrder) throw new NotFoundError("AssetMaintenanceWorkOrder", id);
     if (!workOrder.workflowInstanceId) {
@@ -359,7 +359,7 @@ export class AssetAdvancedService {
       currentMeterReading?: number | null;
     },
   ) {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.manage");
+    await this.rbac.requirePermission(actor, "asset.maintenance.manage");
     const workOrder = await this.repo.findMaintenanceWorkOrderById(actor.tenantId, id);
     if (!workOrder) throw new NotFoundError("AssetMaintenanceWorkOrder", id);
     if (!workOrder.workflowInstanceId) {
@@ -452,7 +452,7 @@ export class AssetAdvancedService {
     workOrderId: string,
     input: { itemId: string; quantity: number; unitCost?: number | null; notes?: string | null },
   ): Promise<AssetMaintenancePart> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.manage");
+    await this.rbac.requirePermission(actor, "asset.maintenance.manage");
     const workOrder = await this.repo.findMaintenanceWorkOrderById(actor.tenantId, workOrderId);
     if (!workOrder) throw new NotFoundError("AssetMaintenanceWorkOrder", workOrderId);
     if (workOrder.completedAt) throw new ConflictError("Cannot record parts on completed maintenance work order");
@@ -485,7 +485,7 @@ export class AssetAdvancedService {
   }
 
   async listSpareParts(actor: ActorContext, workOrderId: string): Promise<AssetMaintenancePart[]> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     const workOrder = await this.repo.findMaintenanceWorkOrderById(actor.tenantId, workOrderId);
     if (!workOrder) throw new NotFoundError("AssetMaintenanceWorkOrder", workOrderId);
     return this.repo.listMaintenanceParts(actor.tenantId, workOrderId);
@@ -500,7 +500,7 @@ export class AssetAdvancedService {
     assetId: string,
     input: { readingType: MeterReadingType; readingValue: number; readingDate?: string | null; notes?: string | null },
   ): Promise<AssetMeterReading> {
-    await this.rbac.requirePermission(actor.userId, "asset.meter.manage");
+    await this.rbac.requirePermission(actor, "asset.meter.manage");
     await this.assertAssetExists(actor.tenantId, assetId);
 
     if (input.readingValue < 0) throw new ValidationError("Meter reading value cannot be negative");
@@ -549,7 +549,7 @@ export class AssetAdvancedService {
     assetId: string,
     readingType?: MeterReadingType,
   ): Promise<AssetMeterReading[]> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     await this.assertAssetExists(actor.tenantId, assetId);
     return this.repo.listMeterReadings(actor.tenantId, assetId, readingType);
   }
@@ -569,7 +569,7 @@ export class AssetAdvancedService {
       notes?: string | null;
     },
   ): Promise<AssetDowntimeRecord> {
-    await this.rbac.requirePermission(actor.userId, "asset.downtime.manage");
+    await this.rbac.requirePermission(actor, "asset.downtime.manage");
     await this.assertAssetExists(actor.tenantId, assetId);
 
     const startTime = this.validateIsoDateTime(input.startTime, "startTime");
@@ -613,7 +613,7 @@ export class AssetAdvancedService {
   }
 
   async closeDowntime(actor: ActorContext, id: string, endTime?: string | null): Promise<AssetDowntimeRecord> {
-    await this.rbac.requirePermission(actor.userId, "asset.downtime.manage");
+    await this.rbac.requirePermission(actor, "asset.downtime.manage");
     const end = endTime ? new Date(this.validateIsoDateTime(endTime, "endTime")) : new Date();
     const updated = await this.repo.closeDowntime(actor.tenantId, id, end);
     if (!updated) throw new ConflictError("Downtime record not found or already closed");
@@ -631,7 +631,7 @@ export class AssetAdvancedService {
   }
 
   async listDowntimeRecords(actor: ActorContext, assetId: string): Promise<AssetDowntimeRecord[]> {
-    await this.rbac.requirePermission(actor.userId, "asset.maintenance.read");
+    await this.rbac.requirePermission(actor, "asset.maintenance.read");
     await this.assertAssetExists(actor.tenantId, assetId);
     return this.repo.listDowntimeRecords(actor.tenantId, assetId);
   }
@@ -646,7 +646,7 @@ export class AssetAdvancedService {
     periodStartStr: string,
     periodEndStr: string,
   ): Promise<ReliabilityMetrics> {
-    await this.rbac.requirePermission(actor.userId, "asset.analytics.read");
+    await this.rbac.requirePermission(actor, "asset.analytics.read");
     await this.assertAssetExists(actor.tenantId, assetId);
 
     const periodStart = new Date(`${this.validateDateOnly(periodStartStr, "periodStart")}T00:00:00.000Z`);
@@ -692,7 +692,7 @@ export class AssetAdvancedService {
     actor: ActorContext,
     assetId: string,
   ): Promise<AssetPredictiveSnapshot> {
-    await this.rbac.requirePermission(actor.userId, "asset.analytics.read");
+    await this.rbac.requirePermission(actor, "asset.analytics.read");
     await this.assertAssetExists(actor.tenantId, assetId);
 
     const analysisDate = this.todayDateString();
@@ -752,13 +752,13 @@ export class AssetAdvancedService {
   }
 
   async listPredictiveSnapshots(actor: ActorContext, assetId: string, limit?: number): Promise<AssetPredictiveSnapshot[]> {
-    await this.rbac.requirePermission(actor.userId, "asset.analytics.read");
+    await this.rbac.requirePermission(actor, "asset.analytics.read");
     await this.assertAssetExists(actor.tenantId, assetId);
     return this.repo.listPredictiveSnapshots(actor.tenantId, assetId, limit);
   }
 
   async getLatestPredictiveSnapshot(actor: ActorContext, assetId: string): Promise<AssetPredictiveSnapshot | null> {
-    await this.rbac.requirePermission(actor.userId, "asset.analytics.read");
+    await this.rbac.requirePermission(actor, "asset.analytics.read");
     await this.assertAssetExists(actor.tenantId, assetId);
     return this.repo.findLatestPredictiveSnapshot(actor.tenantId, assetId);
   }

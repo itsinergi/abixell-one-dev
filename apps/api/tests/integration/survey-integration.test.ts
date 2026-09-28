@@ -33,6 +33,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
   let tenantAId: string;
   let tenantBId: string;
   let adminAActor: ActorContext;
+  let adminBId: string;
   let customerId: string;
   let customer2Id: string;
   let customerUserId: string; // customer-scoped over customerId (valid respondent)
@@ -45,6 +46,53 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
   let ratingQuestionId: string;
   let choiceQuestionId: string;
   let longTextQuestionId: string;
+
+  const actorCache = new Map<string, ActorContext>();
+
+  /**
+   * Build an ActorContext the way the auth plugin resolves one — from the
+   * user's effective assignment (Epic 1 §4.1 B). These tests drive the
+   * application services directly rather than over HTTP, so they never hold
+   * a token; before Epic 1 they could name just `userId` + `tenantId` and
+   * RBAC read permissions by user. Now the active Role is the assignment, so
+   * the fixture resolves it the same way a session would.
+   */
+  const actorOf = async (
+    userId: string,
+    tenantId: string,
+    scope?: "tenant" | "customer",
+  ): Promise<ActorContext> => {
+    const key = `${userId}:${scope ?? ""}`;
+    const cached = actorCache.get(key);
+    if (cached) return cached;
+    const row = (
+      await pool.query(
+        `SELECT aura.id, aura.role_id, r.code AS role_code, aura.scope_type,
+                aura.scope_organization_unit_id, aura.scope_customer_id
+           FROM authorization_effective_user_role_assignments aura
+           JOIN roles r ON r.id = aura.role_id
+          WHERE aura.user_id = $1
+            AND aura.tenant_id = $2
+            AND ($3::text IS NULL OR aura.scope_type = $3)
+          ORDER BY aura.id
+          LIMIT 1`,
+        [userId, tenantId, scope ?? null],
+      )
+    ).rows[0];
+    const actor: ActorContext = {
+      userId,
+      tenantId,
+      sessionId: `test-session-${userId}`,
+      assignmentId: (row?.id as string) ?? null,
+      roleId: (row?.role_id as string) ?? null,
+      roleCode: (row?.role_code as string) ?? null,
+      scopeType: (row?.scope_type as ActorContext["scopeType"]) ?? null,
+      scopeOrganizationUnitId: (row?.scope_organization_unit_id as string) ?? null,
+      scopeCustomerId: (row?.scope_customer_id as string) ?? null,
+    };
+    actorCache.set(key, actor);
+    return actor;
+  };
 
   const insertTenant = async (code: string, name: string) =>
     (await pool.query(`INSERT INTO tenants (code, name) VALUES ($1, $2) RETURNING id`, [code, name])).rows[0].id as string;
@@ -111,8 +159,9 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     tenantBId = await insertTenant(B, "Tenant 1E1 B");
 
     const admin = await provisionFirstAdmin({ tenantId: tenantAId, email: "admin@t1e1a.local", password: "Admin12345!" });
-    adminAActor = { userId: admin.userId, tenantId: tenantAId };
-    await provisionFirstAdmin({ tenantId: tenantBId, email: "admin@t1e1b.local", password: "Admin12345!" });
+    adminAActor = await actorOf(admin.userId, tenantAId);
+    const adminB = await provisionFirstAdmin({ tenantId: tenantBId, email: "admin@t1e1b.local", password: "Admin12345!" });
+    adminBId = adminB.userId;
 
     customerId = await insertCustomer(tenantAId, "CUST-1E1-1");
     customer2Id = await insertCustomer(tenantAId, "CUST-1E1-2");
@@ -197,7 +246,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, complaintNumber);
     await confirm(complaintId, customerUserId, tenantAId);
     const assignmentId = (await assignmentsForComplaint(complaintId))[0].id as string;
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     await container.surveyResponse.saveAnswers(respondent, assignmentId, answers);
     await container.surveyResponse.submit(respondent, assignmentId);
     return { complaintId, assignmentId };
@@ -326,10 +375,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
   });
 
   it("Tenant isolation — a confirmation in tenant B with only a DISABLED policy creates nothing (tenant-scoped policy lookup)", async () => {
-    const adminB: ActorContext = {
-      userId: (await pool.query(`SELECT id FROM users WHERE email = 'admin@t1e1b.local'`)).rows[0].id,
-      tenantId: tenantBId,
-    };
+    const adminB = await actorOf(adminBId, tenantBId);
     await container.survey.createDefinition(adminB, { code: SURVEY_CODE, name: "CSAT B" });
     const vB = (await pool.query(`SELECT sv.id FROM survey_versions sv JOIN survey_definitions sd ON sd.id = sv.survey_definition_id WHERE sd.tenant_id = $1`, [tenantBId])).rows[0].id;
     await container.survey.addQuestion(adminB, vB, { code: "overall", text: "Overall", questionType: "rating", isRequired: true, config: { min: 1, max: 5 } });
@@ -474,7 +520,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     // Two policies both assigned (independent lineage, FD-1E §27).
     const scoreExecBefore = (await executions(scorePolicy.id, complaintId))[0];
     const assignmentId = scoreExecBefore.survey_assignment_id as string;
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     // "no" carries score 1 but is the FIRST option — order must not be used.
     const optionNoId = (
       await pool.query(`SELECT id FROM survey_question_options WHERE survey_question_id = $1 AND code = 'no'`, [choiceQuestionId])
@@ -512,7 +558,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-5");
     await confirm(complaintId, customerUserId, tenantAId);
     const assignmentId = (await executions(textPolicy.id, complaintId))[0].survey_assignment_id as string;
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     await container.surveyResponse.saveAnswers(respondent, assignmentId, [
       { questionId: ratingQuestionId, valueNumeric: 1 },
       { questionId: longTextQuestionId, valueText: "terrible" },
@@ -547,7 +593,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-6");
     await confirm(complaintId, customerUserId, tenantAId);
     const assignmentId = (await executions(missingPolicy.id, complaintId))[0].survey_assignment_id as string;
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     await container.surveyResponse.saveAnswers(respondent, assignmentId, [
       { questionId: ratingQuestionId, valueNumeric: 1 },
     ]);
@@ -584,7 +630,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     // Admin widens the threshold to 4 while the respondent is still answering.
     await pool.query(`UPDATE survey_integration_policies SET outcome_numeric_value = 4 WHERE id = $1`, [driftPolicy.id]);
 
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     await container.surveyResponse.saveAnswers(respondent, assignmentId, [
       { questionId: ratingQuestionId, valueNumeric: 3 },
     ]);
@@ -620,7 +666,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     const assignmentId = (await executions(offPolicy.id, complaintId))[0].survey_assignment_id as string;
     await pool.query(`UPDATE survey_integration_policies SET enabled = false WHERE id = $1`, [offPolicy.id]);
 
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     await container.surveyResponse.saveAnswers(respondent, assignmentId, [
       { questionId: ratingQuestionId, valueNumeric: 1 },
     ]);
@@ -637,7 +683,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
       surveyDefinitionCode: SURVEY_CODE,
       respondentUserId: customerUserId,
     });
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     await container.surveyResponse.saveAnswers(respondent, assignment.id, [
       { questionId: ratingQuestionId, valueNumeric: 1 },
     ]);
@@ -673,7 +719,7 @@ describe("Checkpoint 1E.1 — Survey Integration (Complaint → Assignment)", ()
     const complaintId = await insertComplaint(tenantAId, customerId, customerUserId, "C-1E2-9");
     await confirm(complaintId, customerUserId, tenantAId);
     const assignmentId = (await executions(orphanPolicy.id, complaintId))[0].survey_assignment_id as string;
-    const respondent: ActorContext = { userId: customerUserId, tenantId: tenantAId };
+    const respondent = await actorOf(customerUserId, tenantAId);
     await container.surveyResponse.saveAnswers(respondent, assignmentId, [
       { questionId: ratingQuestionId, valueNumeric: 1 },
     ]);

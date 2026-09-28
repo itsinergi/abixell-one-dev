@@ -44,9 +44,8 @@ export class PredictiveService {
     actor: ActorContext,
     input: GenerateForecastInput,
   ): Promise<GenerateForecastResponse> {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       "reporting.predictive.read",
     );
 
@@ -104,9 +103,8 @@ export class PredictiveService {
     actor: ActorContext,
     modelCode?: ForecastModelCode,
   ): Promise<PredictiveForecastSnapshot[]> {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       "reporting.predictive.read",
     );
     return this.repo.listForecastSnapshots(actor.tenantId, modelCode);
@@ -116,9 +114,8 @@ export class PredictiveService {
     actor: ActorContext,
     modelCode: ForecastModelCode,
   ): Promise<PredictiveForecastSnapshot | null> {
-    await this.rbac.requireTenantScopedPermission(
-      actor.tenantId,
-      actor.userId,
+    await this.rbac.requireTenantScopedPermissionForActor(
+      actor,
       "reporting.predictive.read",
     );
     return this.repo.findLatestSnapshot(actor.tenantId, modelCode);

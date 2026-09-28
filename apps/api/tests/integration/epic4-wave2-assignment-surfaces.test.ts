@@ -6,9 +6,8 @@ import type {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { signAccessToken } from "../../src/infrastructure/security/jwt.js";
 import { hashPassword } from "../../src/infrastructure/security/password.js";
-import { activateAllModules, authHeader, bootstrapTenant } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, sessionTokenFor } from "./helpers.js";
 
 /**
  * Epic 4 Wave 2 §4.4 — the User-centric and assignment-centric surfaces.
@@ -166,8 +165,10 @@ async function createCustomer(tenantId: string, name: string): Promise<string> {
   return result.rows[0].id as string;
 }
 
-function tokenFor(tenantId: string, user: UserFixture): string {
-  return signAccessToken({ sub: user.id, tenantId });
+function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
+  // Epic 1 (�4.1 F): a bearer token must name a session, so fixtures create
+  // one the way the login endpoint does instead of signing a bare payload.
+  return sessionTokenFor({ userId: user.id, tenantId });
 }
 
 function get(url: string, token: string): Promise<LightMyRequestResponse> {
@@ -250,26 +251,26 @@ describe("Epic 4 Wave 2 — User and assignment surfaces", () => {
 
     tenantAdmin = await createUser(tenantId, "tenant-admin", passwordHash);
     await createAssignment(tenantAdmin.id, managerRole.id, { scopeType: "tenant" });
-    tenantAdminToken = tokenFor(tenantId, tenantAdmin);
+    tenantAdminToken = await tokenFor(tenantId, tenantAdmin);
 
     regionAdmin = await createUser(tenantId, "region-admin", passwordHash);
     await createAssignment(regionAdmin.id, managerRole.id, {
       scopeType: "organization_unit",
       organizationUnitId: siteAId,
     });
-    regionAdminToken = tokenFor(tenantId, regionAdmin);
+    regionAdminToken = await tokenFor(tenantId, regionAdmin);
 
     moduleAdmin = await createUser(tenantId, "module-admin", passwordHash);
     await createAssignment(moduleAdmin.id, moduleRole.id, { scopeType: "tenant" });
-    moduleAdminToken = tokenFor(tenantId, moduleAdmin);
+    moduleAdminToken = await tokenFor(tenantId, moduleAdmin);
 
     consoleReader = await createUser(tenantId, "console-reader", passwordHash);
     await createAssignment(consoleReader.id, readerRole.id, { scopeType: "tenant" });
-    consoleReaderToken = tokenFor(tenantId, consoleReader);
+    consoleReaderToken = await tokenFor(tenantId, consoleReader);
 
     // Admin Console entry, but no administration authority of any kind.
     bareUser = await createUser(tenantId, "bare-user", passwordHash);
-    bareUserToken = tokenFor(tenantId, bareUser);
+    bareUserToken = await tokenFor(tenantId, bareUser);
 
     targetInTeamX = await createUser(tenantId, "target-teamx", passwordHash);
     await createAssignment(targetInTeamX.id, assignableRole.id, {
