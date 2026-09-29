@@ -449,6 +449,22 @@ export class SupplyChainAdvancedService {
   // 2. Batches & Serials (SCM-ADV-002, SCM-ADV-003)
   // =========================================================================
 
+  /**
+   * Data Scope exception, stated rather than implied (Epic 5 G3 enforcement
+   * batch): `scm_item_batches` carries `item_id` and nothing else — no
+   * Organization Unit, no warehouse, no Legal Entity — so a batch master has no
+   * placement to narrow by and no parent record to resolve. These three
+   * operations are therefore permission-gated only, with the batch's own
+   * capability (`supply_chain.inventory.manage` / `.read`). SERIALS, which DO
+   * carry `warehouse_id`, are scope-asserted on every operation
+   * (`assertWarehouseInScope` in create/update/get and `resolveScopedWarehouseIds`
+   * in the list), so a serial recorded in another warehouse is still invisible.
+   *
+   * Consequence, so the next wave can weigh it: a unit-scoped clerk holding
+   * `supply_chain.inventory.read` can read the Tenant's batch master list. The
+   * list is item reference data, not stock or value; the stock itself is
+   * warehoused and therefore scoped.
+   */
   async createBatch(
     actor: ActorContext,
     input: Omit<CreateScmItemBatchInput, "createdBy" | "batchNumber"> & { batchNumber?: string },
@@ -1126,6 +1142,7 @@ export class SupplyChainAdvancedService {
     input: RecordScmStockOpnameCountInput,
   ): Promise<ScmStockOpnameLine> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
+    await this.assertInventoryLineInScope(actor, { opnameLineId: input.lineId });
     const line = await this.repo.recordStockOpnameCount(actor.tenantId, input);
     if (!line) {
       throw new NotFoundError("ScmStockOpnameLine", input.lineId);
@@ -1336,6 +1353,7 @@ export class SupplyChainAdvancedService {
     },
   ): Promise<LandedCostDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.valuation.manage");
+    await this.assertTenantLevelScope(actor, "Landed cost documents");
 
     const voucherNumber =
       (input.voucherNumber ?? (await this.configuration.generateNumberForTenant(
@@ -1384,6 +1402,7 @@ export class SupplyChainAdvancedService {
     landedCostId: string,
   ): Promise<LandedCostDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.valuation.manage");
+    await this.assertTenantLevelScope(actor, "Landed cost documents");
     const existing = await this.repo.findLandedCostById(actor.tenantId, landedCostId);
     if (!existing) {
       throw new NotFoundError("ScmLandedCost", landedCostId);
@@ -1409,6 +1428,7 @@ export class SupplyChainAdvancedService {
 
   async getLandedCost(actor: ActorContext, landedCostId: string): Promise<LandedCostDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.valuation.read");
+    await this.assertTenantLevelScope(actor, "Landed cost documents");
     const result = await this.repo.findLandedCostById(actor.tenantId, landedCostId);
     if (!result) {
       throw new NotFoundError("ScmLandedCost", landedCostId);
@@ -1421,6 +1441,7 @@ export class SupplyChainAdvancedService {
     filter: ScmLandedCostFilter = {},
   ): Promise<ScmLandedCost[]> {
     await this.rbac.requirePermission(actor, "supply_chain.valuation.read");
+    await this.assertTenantLevelScope(actor, "Landed cost documents");
     return this.repo.listLandedCosts(actor.tenantId, filter);
   }
 
@@ -1776,6 +1797,7 @@ export class SupplyChainAdvancedService {
     },
   ): Promise<SupplierEvaluationDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
+    await this.assertTenantLevelScope(actor, "Supplier evaluations");
 
     const evaluationNumber =
       (input.evaluationNumber ?? (await this.configuration.generateNumberForTenant(
@@ -1857,6 +1879,7 @@ export class SupplyChainAdvancedService {
     evaluationId: string,
   ): Promise<SupplierEvaluationDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.read");
+    await this.assertTenantLevelScope(actor, "Supplier evaluations");
     const evaluation = await this.repo.findSupplierEvaluationById(actor.tenantId, evaluationId);
     if (!evaluation) {
       throw new NotFoundError("ScmSupplierEvaluation", evaluationId);
@@ -1883,6 +1906,7 @@ export class SupplyChainAdvancedService {
     filter: ScmSupplierEvaluationFilter = {},
   ): Promise<Array<{ evaluation: ScmSupplierEvaluation; status: EntityWorkflowStatus | null }>> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.read");
+    await this.assertTenantLevelScope(actor, "Supplier evaluations");
     const evaluations = await this.repo.listSupplierEvaluations(actor.tenantId, filter);
 
     return this.withWorkflowStatus(
@@ -1900,6 +1924,7 @@ export class SupplyChainAdvancedService {
     comment?: string,
   ): Promise<SupplierEvaluationDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
+    await this.assertTenantLevelScope(actor, "Supplier evaluations");
     const evaluation = await this.repo.findSupplierEvaluationById(actor.tenantId, evaluationId);
     if (!evaluation) {
       throw new NotFoundError("ScmSupplierEvaluation", evaluationId);
@@ -1944,6 +1969,7 @@ export class SupplyChainAdvancedService {
     },
   ): Promise<SupplierContractDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
+    await this.assertTenantLevelScope(actor, "Supplier contracts");
 
     const contractNumber =
       (input.contractNumber ?? (await this.configuration.generateNumberForTenant(
@@ -2007,6 +2033,7 @@ export class SupplyChainAdvancedService {
     additionalSpentAmount: number,
   ): Promise<SupplierContractDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
+    await this.assertTenantLevelScope(actor, "Supplier contracts");
     const existing = await this.repo.findSupplierContractById(actor.tenantId, contractId);
     if (!existing) {
       throw new NotFoundError("ScmSupplierContract", contractId);
@@ -2034,6 +2061,7 @@ export class SupplyChainAdvancedService {
     contractId: string,
   ): Promise<SupplierContractDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.read");
+    await this.assertTenantLevelScope(actor, "Supplier contracts");
     const result = await this.repo.findSupplierContractById(actor.tenantId, contractId);
     if (!result) {
       throw new NotFoundError("ScmSupplierContract", contractId);
@@ -2065,6 +2093,7 @@ export class SupplyChainAdvancedService {
     filter: ScmSupplierContractFilter = {},
   ): Promise<Array<{ contract: ScmSupplierContract; status: EntityWorkflowStatus | null }>> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.read");
+    await this.assertTenantLevelScope(actor, "Supplier contracts");
     const contracts = await this.repo.listSupplierContracts(actor.tenantId, filter);
 
     return this.withWorkflowStatus(
@@ -2082,6 +2111,7 @@ export class SupplyChainAdvancedService {
     comment?: string,
   ): Promise<SupplierContractDetailView> {
     await this.rbac.requirePermission(actor, "supply_chain.contract.manage");
+    await this.assertTenantLevelScope(actor, "Supplier contracts");
     const result = await this.repo.findSupplierContractById(actor.tenantId, contractId);
     if (!result) {
       throw new NotFoundError("ScmSupplierContract", contractId);
@@ -2206,6 +2236,7 @@ export class SupplyChainAdvancedService {
 
   async listAccountAssignmentConfigs(actor: ActorContext): Promise<ScmAccountAssignmentConfig[]> {
     await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
+    await this.assertTenantLevelScope(actor, "Account assignment configuration");
     return this.repo.listAccountAssignmentConfigs(actor.tenantId);
   }
 
@@ -2214,6 +2245,7 @@ export class SupplyChainAdvancedService {
     assignmentType: ScmAccountAssignmentType,
   ): Promise<ScmAccountAssignmentConfig> {
     await this.rbac.requirePermission(actor, "supply_chain.procurement.read");
+    await this.assertTenantLevelScope(actor, "Account assignment configuration");
     const cfg = await this.repo.findAccountAssignmentConfig(actor.tenantId, assignmentType);
     if (!cfg) {
       throw new NotFoundError("ScmAccountAssignmentConfig", assignmentType);
@@ -2339,6 +2371,7 @@ export class SupplyChainAdvancedService {
     input: Omit<CreateScmInspectionInput, "inspectionNumber" | "createdBy"> & { inspectionNumber?: string },
   ): Promise<ScmInspection> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
+    await this.assertInventoryLineInScope(actor, { receivingLineId: input.receivingLineId });
 
     // Idempotent replay (ADR-0023).
     const replayed = await this.repo.findInspectionByIdempotencyKey(
@@ -2391,6 +2424,7 @@ export class SupplyChainAdvancedService {
     receivingLineId: string,
   ): Promise<ScmInspection | null> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
+    await this.assertInventoryLineInScope(actor, { receivingLineId });
     return this.repo.findInspectionByReceivingLineId(actor.tenantId, receivingLineId);
   }
 
@@ -2401,6 +2435,7 @@ export class SupplyChainAdvancedService {
     input: Omit<CreateScmDiscrepancyRecordInput, "createdBy">,
   ): Promise<ScmDiscrepancyRecord> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
+    await this.assertInventoryLineInScope(actor, { receivingLineId: input.receivingLineId });
 
     const discrepancy = await this.repo.createDiscrepancyRecord(actor.tenantId, {
       ...input,
@@ -2428,6 +2463,7 @@ export class SupplyChainAdvancedService {
     input: Omit<ResolveScmDiscrepancyRecordInput, "resolvedBy"> & { resolvedBy?: string | null },
   ): Promise<ScmDiscrepancyRecord> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
+    await this.assertInventoryLineInScope(actor, { discrepancyId: input.discrepancyId });
 
     const resolved = await this.repo.resolveDiscrepancyRecord(actor.tenantId, {
       ...input,
@@ -2454,7 +2490,20 @@ export class SupplyChainAdvancedService {
     filter: ScmDiscrepancyRecordFilter = {},
   ): Promise<ScmDiscrepancyRecord[]> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
-    return this.repo.listDiscrepancyRecords(actor.tenantId, filter);
+    // Epic 5 G3 enforcement batch — a discrepancy record is anchored to a
+    // receiving line, and therefore to that line's warehouse. The requested
+    // receiving line is asserted directly; a free list is narrowed to the
+    // warehouses the ACTIVE assignment's Data Scope covers (the warehouse-tier
+    // rule `listReceivingRecords` and friends already apply).
+    if (filter.receivingLineId) {
+      await this.assertInventoryLineInScope(actor, { receivingLineId: filter.receivingLineId });
+      return this.repo.listDiscrepancyRecords(actor.tenantId, filter);
+    }
+    const scopedWarehouseIds = await this.resolveScopedWarehouseIds(actor, null);
+    return this.repo.listDiscrepancyRecords(actor.tenantId, {
+      ...filter,
+      warehouseIds: scopedWarehouseIds ?? undefined,
+    });
   }
 
   // --- Return To Vendor ---
@@ -2632,6 +2681,7 @@ export class SupplyChainAdvancedService {
     input: Omit<CreateScmAccountingReadyEventInput, "createdBy">,
   ): Promise<ScmAccountingReadyEvent> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
+    await this.assertTenantLevelScope(actor, "Accounting-ready events");
 
     // Idempotent replay (ADR-0023): "re-delivering an event must not create a
     // second accounting effect downstream".
@@ -2674,6 +2724,7 @@ export class SupplyChainAdvancedService {
     eventId: string,
   ): Promise<ScmAccountingReadyEvent> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
+    await this.assertTenantLevelScope(actor, "Accounting-ready events");
     const event = await this.repo.findAccountingReadyEventById(actor.tenantId, eventId);
     if (!event) {
       throw new NotFoundError("ScmAccountingReadyEvent", eventId);
@@ -2686,6 +2737,7 @@ export class SupplyChainAdvancedService {
     filter: ScmAccountingReadyEventFilter = {},
   ): Promise<ScmAccountingReadyEvent[]> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.read");
+    await this.assertTenantLevelScope(actor, "Accounting-ready events");
     return this.repo.listAccountingReadyEvents(actor.tenantId, filter);
   }
 
@@ -2694,6 +2746,7 @@ export class SupplyChainAdvancedService {
     input: Omit<UpdateScmAccountingReadyEventStateInput, "occurredBy">,
   ): Promise<{ event: ScmAccountingReadyEvent; transition: ScmAccountingReadyEventStateTransition }> {
     await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
+    await this.assertTenantLevelScope(actor, "Accounting-ready events");
 
     const result = await this.repo.updateAccountingReadyEventState(actor.tenantId, {
       ...input,
@@ -3665,6 +3718,54 @@ export class SupplyChainAdvancedService {
   // Data Scope & Hierarchy Authorization Helpers
   // =========================================================================
 
+  /**
+   * Epic 5 G3 enforcement batch — the Data Scope rule for a line-level
+   * inventory record. Inspections, discrepancy records and stock-opname counts
+   * are keyed by a LINE id, and no line is readable by id in this repository,
+   * so the warehouse the line belongs to is resolved through its parent record
+   * and asserted. An unresolvable ref is a `NotFoundError`, never a silent
+   * pass: fail closed.
+   */
+  private async assertInventoryLineInScope(
+    actor: ActorContext,
+    ref: {
+      receivingLineId?: string | null;
+      discrepancyId?: string | null;
+      opnameLineId?: string | null;
+    },
+  ): Promise<void> {
+    const warehouseId = await this.repo.findInventoryLinePlacementWarehouseId(
+      actor.tenantId,
+      ref,
+    );
+    if (!warehouseId) {
+      throw new NotFoundError(
+        "InventoryLine",
+        ref.receivingLineId ?? ref.discrepancyId ?? ref.opnameLineId ?? "unknown",
+      );
+    }
+    await this.assertWarehouseInScope(actor, warehouseId);
+  }
+
+  /**
+   * Epic 5 G3 enforcement batch — the Data Scope rule for a TENANT-LEVEL
+   * family: landed-cost documents, supplier evaluations and contracts, contract
+   * spend, account-assignment configuration and accounting-ready events carry
+   * no Organization Unit and no Legal Entity column, so there is no placement to
+   * narrow by. Their authority is therefore the tenant-wide scope, which is the
+   * same rule the module already applies to their documents
+   * (`canAccessLandedCostForDocument`, `canAccessSupplierContractForDocument`).
+   * Before this, any internal caller holding the family's capability could read
+   * and change it at ANY scope, because only the permission was checked.
+   */
+  private async assertTenantLevelScope(actor: ActorContext, entity: string): Promise<void> {
+    if (!(await this.rbac.hasTenantScope(actor))) {
+      throw new ForbiddenError(
+        `${entity} are tenant-level: the active Role's Data Scope must be tenant-wide`,
+      );
+    }
+  }
+
   private async assertWarehouseInScope(
     actor: ActorContext,
     warehouseId: string,
@@ -3695,24 +3796,30 @@ export class SupplyChainAdvancedService {
     actor: ActorContext,
     requestedOrgUnitId?: string | null,
   ): Promise<string[] | null> {
-    const hasTenant = await this.rbac.hasTenantScope(actor);
     if (requestedOrgUnitId) {
       await this.rbac.requireOrganizationUnitScopeForActor(actor, requestedOrgUnitId);
       const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, [requestedOrgUnitId]);
       return descendantIds.length > 0 ? descendantIds : [requestedOrgUnitId];
     }
-    if (hasTenant) {
-      return null;
-    }
-    const assignments = await this.rbac.getAssignments(actor.userId);
-    const rootOrgUnitIds = assignments
-      .filter((a) => a.scopeType === "organization_unit" && a.scopeOrganizationUnitId)
-      .map((a) => a.scopeOrganizationUnitId as string);
-    if (rootOrgUnitIds.length === 0) {
-      return [];
-    }
-    const descendantIds = await this.repo.listOrganizationUnitDescendantIds(actor.tenantId, rootOrgUnitIds);
-    return descendantIds.length > 0 ? descendantIds : rootOrgUnitIds;
+    // Epic 5 G3 enforcement batch — the narrowing comes from the ACTIVE
+    // assignment's Data Scope, computed in one place (`RbacService`), so the
+    // warehouse/procurement tiers inherit the tenant → Legal Entity →
+    // Organization Unit chain instead of hand-rolling an Organization-Unit-only
+    // walk:
+    // - tenant-wide       → `null` (no narrowing),
+    // - legal_entity      → every active unit inside that Legal Entity (§4.5
+    //                       Putaran 4). The previous walk read
+    //                       `getAssignments(actor.userId)` and filtered
+    //                       `scopeType === 'organization_unit'`, so an
+    //                       Legal-Entity-scoped supervisor matched NOTHING and
+    //                       every warehouse list answered empty,
+    // - organization_unit → the scope unit and its active descendants,
+    // - anything else     → `[]` (fail closed).
+    //
+    // Using `getAssignments(userId)` — the UNION of every Role the user holds —
+    // was also an Epic 1 §4.1 C violation: a user holding a wide Role they had
+    // not switched into still widened the list they saw.
+    return this.rbac.listScopedOrganizationUnitIds(actor);
   }
 
   private async resolveScopedWarehouseIds(

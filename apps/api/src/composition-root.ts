@@ -169,7 +169,7 @@ export function buildContainer() {
   const complaintRepo = new PgComplaintRepository(pool);
 
   const audit = new AuditService(auditRepo);
-  const rbac = new RbacService(rbacRepo, organizationUnitRepo);
+  const rbac = new RbacService(rbacRepo, organizationUnitRepo, legalEntityRepo);
   // Epic 1 (§4.1 D) — approval authority & separation of duties. Reads role
   // limits, the supervisor chain, org-unit supervisor, the currency table and
   // the accumulated-approval window; wired here so the document workflows of

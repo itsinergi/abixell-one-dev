@@ -2841,6 +2841,55 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     return r.rows[0] ? toDiscrepancyRecord(r.rows[0]) : null;
   }
 
+  /**
+   * Epic 5 G3 enforcement batch — resolves the warehouse anchor of a
+   * line-level inventory record for the Data Scope check. See the interface
+   * comment for the fail-closed contract.
+   */
+  async findInventoryLinePlacementWarehouseId(
+    tenantId: string,
+    ref: {
+      receivingLineId?: string | null;
+      discrepancyId?: string | null;
+      opnameLineId?: string | null;
+    },
+  ): Promise<string | null> {
+    if (ref.receivingLineId) {
+      const r = await this.pool.query(
+        `SELECT warehouse_id
+           FROM scm_receiving_lines
+          WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, ref.receivingLineId],
+      );
+      return (r.rows[0]?.warehouse_id as string | undefined) ?? null;
+    }
+    if (ref.discrepancyId) {
+      const r = await this.pool.query(
+        `SELECT rl.warehouse_id
+           FROM scm_discrepancy_records d
+           JOIN scm_receiving_lines rl
+             ON rl.id = d.receiving_line_id
+            AND rl.tenant_id = d.tenant_id
+          WHERE d.tenant_id = $1 AND d.id = $2`,
+        [tenantId, ref.discrepancyId],
+      );
+      return (r.rows[0]?.warehouse_id as string | undefined) ?? null;
+    }
+    if (ref.opnameLineId) {
+      const r = await this.pool.query(
+        `SELECT o.warehouse_id
+           FROM scm_stock_opname_lines l
+           JOIN scm_stock_opnames o
+             ON o.id = l.opname_id
+            AND o.tenant_id = l.tenant_id
+          WHERE l.tenant_id = $1 AND l.id = $2`,
+        [tenantId, ref.opnameLineId],
+      );
+      return (r.rows[0]?.warehouse_id as string | undefined) ?? null;
+    }
+    return null;
+  }
+
   async listDiscrepancyRecords(
     tenantId: string,
     filter: ScmDiscrepancyRecordFilter = {},
@@ -2859,6 +2908,18 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     if (filter.discrepancyType) {
       params.push(filter.discrepancyType);
       conditions.push(`discrepancy_type = $${params.length}`);
+    }
+    if (filter.warehouseIds && filter.warehouseIds.length > 0) {
+      params.push(filter.warehouseIds);
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+             FROM scm_receiving_lines rl
+            WHERE rl.id = scm_discrepancy_records.receiving_line_id
+              AND rl.tenant_id = scm_discrepancy_records.tenant_id
+              AND rl.warehouse_id = ANY($${params.length})
+         )`,
+      );
     }
 
     const r = await this.pool.query(

@@ -28,6 +28,7 @@ import { createSession, resolveActor, switchSessionRole } from "../../src/applic
 import { RbacService } from "../../src/application/rbac/rbac.service.js";
 import { PgRbacRepository } from "../../src/infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { PgOrganizationUnitRepository } from "../../src/infrastructure/persistence/repositories/organization-unit.repository.pg.js";
+import { PgLegalEntityRepository } from "../../src/infrastructure/persistence/repositories/legal-entity.repository.pg.js";
 import { requireTransactionActorPermission } from "../../src/infrastructure/persistence/repositories/governed-transaction.js";
 import {
   activateAllModules,
@@ -61,7 +62,7 @@ async function assertNonProductionDatabase(): Promise<string> {
 describe("Epic 5 G3 — legal_entity scope core (§4.5 steps 14–15)", () => {
   const app = buildApp();
   const rbacRepo = new PgRbacRepository(pool);
-  const rbac = new RbacService(rbacRepo, new PgOrganizationUnitRepository(pool));
+  const rbac = new RbacService(rbacRepo, new PgOrganizationUnitRepository(pool), new PgLegalEntityRepository(pool));
 
   let tenantId: string;
   let otherTenantId: string;
@@ -289,6 +290,10 @@ describe("Epic 5 G3 — legal_entity scope core (§4.5 steps 14–15)", () => {
         "1789400000000_epic-5-g3-legal-entity-scope",
         "1789410000000_epic-5-g3-session-legal-entity-scope",
         "1789420000000_epic-5-g3-authorization-effective-view",
+        // Enforcement batch (t_e1a1984c): the Organization Unit branch of the
+        // projection now requires an ACTIVE scope unit, closing the asymmetry
+        // M12 deliberately left open for the Legal Entity family.
+        "1789430000000_epic-5-g3-organization-unit-scope-active",
       ]);
     });
 

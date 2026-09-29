@@ -4,8 +4,58 @@ import type {
   UserRoleAssignment,
 } from "../../domain/rbac/rbac.entity.js";
 import type { OrganizationUnitRepository } from "../../domain/organization-unit/organization-unit.entity.js";
+import type {
+  LegalEntityRepository,
+  LifecycleStatus,
+} from "../../domain/legal-entity/legal-entity.entity.js";
 import { ForbiddenError } from "../../domain/shared-kernel/errors.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
+
+/**
+ * Epic 5 §4.5 Putaran 6 — "an inactive entity may not be used for new work".
+ * Applied to authorization: an entity that is not `status = 'active'`
+ * (`inactive`, `tombstone`, `deleted`, or `draft`) confers no Data Scope and is
+ * not a usable target. `status` is the authoritative lifecycle column — G1 pins
+ * `is_active = (status = 'active')` with a CHECK and a sync trigger, and a
+ * legacy row that still reads `is_active = true` while its status says
+ * `deleted` is caught here and only here.
+ */
+function isUsableLifecycleEntity(status: LifecycleStatus | null | undefined): boolean {
+  return status === "active";
+}
+
+/**
+ * A RETIRED entity (tombstoned or deleted) is terminal: nothing is authorized
+ * to reach into it, in either direction.
+ *
+ * `inactive` and `draft` deliberately stay coverable. The Organization Unit's
+ * own lifecycle transitions (`inactive → active`, `inactive → tombstone`) run
+ * their scope check against the very unit they are about to move, so refusing
+ * an inactive TARGET here would make those transitions unsatisfiable — the same
+ * trap G1 documented for the Legal Entity deactivation guard. Closing an
+ * inactive entity to new work is that entity's own guard, plus the rule that a
+ * SCOPE rooted in a non-active entity confers nothing (see
+ * `isUsableLifecycleEntity` and the authorization-effective projection).
+ */
+function isRetiredLifecycleEntity(status: LifecycleStatus | null | undefined): boolean {
+  return status === "deleted" || status === "tombstone";
+}
+
+/**
+ * The lifecycle states a Legal Entity may be USED in for new work.
+ *
+ * `inactive`, `tombstone` and `deleted` are refused — §4.5 Putaran 6, and the
+ * whole point of the enforcement batch. `draft` is allowed on purpose: a Legal
+ * Entity is created as `draft` (`LegalEntityRepository.create` defaults it that
+ * way) and its chart of accounts, employees and addresses are configured BEFORE
+ * the entity goes live, so refusing a draft target would break setup rather
+ * than protect anything. A `legal_entity`-scoped ASSIGNMENT on a draft Legal
+ * Entity still confers nothing: the authorization-effective projection requires
+ * `le.is_active`, which a draft row does not have.
+ */
+function isOpenForNewWork(status: LifecycleStatus | null | undefined): boolean {
+  return status === "active" || status === "draft";
+}
 
 /**
  * Authorization = Role Permission (what) + Data Scope (which data),
@@ -29,6 +79,15 @@ export class RbacService {
   constructor(
     private readonly repo: RbacRepository,
     private readonly orgUnits: OrganizationUnitRepository,
+    /**
+     * Epic 5 G3 enforcement batch — the Legal Entity lifecycle read. The Data
+     * Scope chain is tenant → Legal Entity → Organization Unit, so a coverage
+     * answer that names a Legal Entity has to be able to say whether that Legal
+     * Entity is still usable. Kept as a repository dependency (not a raw
+     * `Pool`) for the same reason `orgUnits` is: the scope checks read the same
+     * aggregate the rest of the platform writes.
+     */
+    private readonly legalEntities: LegalEntityRepository,
   ) {}
 
   /** The union across every assignment the user holds. Informational only —
@@ -200,23 +259,50 @@ export class RbacService {
   ): Promise<boolean> {
     if (actor.assignmentId === null) return false;
     if (actor.scopeType === "tenant") return true;
-    // Epic 5 G3 — the coverage chain tenant → Legal Entity → Organization
-    // Unit. A Legal Entity-scoped assignment covers EVERY unit inside that
-    // Legal Entity, which is not the same set as the ancestor walk: a unit in
-    // the Legal Entity is covered even when no assignment names one of its
-    // ancestors. §4.5 Putaran 4: the scope "mencakup semua Organization Unit di
-    // Legal Entity tersebut, tetapi tidak mencakup Legal Entity lain".
-    if (actor.scopeType === "legal_entity" && actor.scopeLegalEntityId !== null) {
-      const unit = await this.orgUnits.findById(targetOrganizationUnitId);
+    // Epic 5 G3 enforcement batch — the coverage chain tenant → Legal Entity →
+    // Organization Unit. A Legal Entity-scoped assignment covers EVERY unit
+    // inside that Legal Entity, which is not the same set as the ancestor walk:
+    // a unit in the Legal Entity is covered even when no assignment names one
+    // of its ancestors. §4.5 Putaran 4: the scope "mencakup semua Organization
+    // Unit di Legal Entity tersebut, tetapi tidak mencakup Legal Entity lain".
+    //
+    // Fail-closed guards, in the order they are cheapest to reason about:
+    // 1. the TARGET unit must exist in the actor's Tenant and must not be
+    //    RETIRED (tombstoned or deleted) — a terminal unit is closed to
+    //    everything, while `inactive` stays coverable so the unit's own
+    //    lifecycle transitions remain reachable (see
+    //    `isRetiredLifecycleEntity`);
+    // 2. the SCOPE entity (the Legal Entity or the Organization Unit the active
+    //    assignment names) must itself be usable — an authority rooted in a
+    //    closed entity is void even if a stale ActorContext still carries it;
+    // 3. the actor's Organization Unit scope must actually cover the target by
+    //    the ancestor walk (ADR-0009).
+    const unit = await this.orgUnits.findById(targetOrganizationUnitId);
+    if (unit === null || unit.tenantId !== actor.tenantId) return false;
+    if (isRetiredLifecycleEntity(unit.status)) return false;
+
+    if (actor.scopeType === "legal_entity") {
+      if (actor.scopeLegalEntityId === null) return false;
+      if (unit.legalEntityId !== actor.scopeLegalEntityId) return false;
+      const legalEntity = await this.legalEntities.findById(actor.scopeLegalEntityId);
       return (
-        unit !== null &&
-        unit.tenantId === actor.tenantId &&
-        unit.legalEntityId === actor.scopeLegalEntityId
+        legalEntity !== null &&
+        legalEntity.tenantId === actor.tenantId &&
+        isUsableLifecycleEntity(legalEntity.status)
       );
     }
     if (
       actor.scopeType !== "organization_unit" ||
       actor.scopeOrganizationUnitId === null
+    ) {
+      // A customer-scoped assignment never reaches into the internal structure.
+      return false;
+    }
+    const scopeUnit = await this.orgUnits.findById(actor.scopeOrganizationUnitId);
+    if (
+      scopeUnit === null ||
+      scopeUnit.tenantId !== actor.tenantId ||
+      !isUsableLifecycleEntity(scopeUnit.status)
     ) {
       return false;
     }
@@ -225,23 +311,189 @@ export class RbacService {
   }
 
   /**
-   * Epic 5 G3 (§4.5 step 15) — is `targetLegalEntityId` covered by the actor's
-   * ACTIVE Data Scope? Covered exactly by a tenant-wide assignment or by a
-   * `legal_entity` assignment naming that Legal Entity. A sibling Legal Entity
-   * of the same Tenant is never covered, and an Organization Unit assignment
-   * never widens to the whole Legal Entity that contains it.
+   * The lifecycle-safe coverage question: does the ACTIVE assignment's Data
+   * Scope cover `targetLegalEntityId`, regardless of the target's lifecycle
+   * state? Covered exactly by a tenant-wide assignment or by a `legal_entity`
+   * assignment naming that Legal Entity. A sibling Legal Entity of the same
+   * Tenant is never covered, and an Organization Unit assignment never widens
+   * to the whole Legal Entity that contains it (§4.5 principle 9).
+   *
+   * This is the form the Legal Entity's OWN aggregate uses (profile, addresses,
+   * lifecycle): an inactive Legal Entity must stay readable and reactivatable,
+   * so the target's lifecycle state deliberately does not enter here. A
+   * resource that ASSIGNS a Legal Entity to something new uses
+   * `isActiveLegalEntityScopeCovered` instead.
    */
-  async isActiveLegalEntityScopeCovered(
+  async isLegalEntityScopeCovered(
     actor: ActorContext,
     targetLegalEntityId: string,
   ): Promise<boolean> {
     if (actor.assignmentId === null) return false;
+    const target = await this.legalEntities.findById(targetLegalEntityId);
+    if (target === null || target.tenantId !== actor.tenantId) return false;
     if (actor.scopeType === "tenant") return true;
     return (
       actor.scopeType === "legal_entity" &&
       actor.scopeLegalEntityId !== null &&
       actor.scopeLegalEntityId === targetLegalEntityId
     );
+  }
+
+  /**
+   * Epic 5 G3 (§4.5 step 15) — is `targetLegalEntityId` covered by the actor's
+   * ACTIVE Data Scope AND open for new work? Same rules as
+   * `isLegalEntityScopeCovered`, plus the target Legal Entity must not be
+   * `inactive`, `tombstone` or `deleted`.
+   *
+   * This is the form every resource uses when it WRITES a Legal Entity id onto
+   * something: §4.5 Putaran 6 — an inactive or deleted Legal Entity may not be
+   * used for new work. The Legal Entity's own lifecycle transitions do not pass
+   * through here (see `isLegalEntityScopeCovered`), so reactivating an inactive
+   * Legal Entity stays possible.
+   */
+  async isActiveLegalEntityScopeCovered(
+    actor: ActorContext,
+    targetLegalEntityId: string,
+  ): Promise<boolean> {
+    if (actor.assignmentId === null) return false;
+    const target = await this.legalEntities.findById(targetLegalEntityId);
+    if (target === null || target.tenantId !== actor.tenantId) return false;
+    if (!isOpenForNewWork(target.status)) return false;
+    if (actor.scopeType === "tenant") return true;
+    return (
+      actor.scopeType === "legal_entity" &&
+      actor.scopeLegalEntityId !== null &&
+      actor.scopeLegalEntityId === targetLegalEntityId
+    );
+  }
+
+  /** Epic 5 G3 enforcement batch — the enforcement form of the pure scope
+   * question (lifecycle-safe; see `isLegalEntityScopeCovered`). The permission
+   * is the caller's to state, because the same scope question is asked by reads
+   * and writes that carry different capability codes. */
+  async requireLegalEntityScopeForActor(
+    actor: ActorContext,
+    targetLegalEntityId: string,
+  ): Promise<void> {
+    if (!(await this.isLegalEntityScopeCovered(actor, targetLegalEntityId))) {
+      throw new ForbiddenError(
+        "The active Role's Data Scope does not cover this Legal Entity",
+      );
+    }
+  }
+
+  /** Epic 5 G3 enforcement batch — the enforcement form used whenever a Legal
+   * Entity is ASSIGNED to new work: coverage plus "the target is active". */
+  async requireActiveLegalEntityScopeForActor(
+    actor: ActorContext,
+    targetLegalEntityId: string,
+  ): Promise<void> {
+    if (!(await this.isActiveLegalEntityScopeCovered(actor, targetLegalEntityId))) {
+      throw new ForbiddenError(
+        "The active Role's Data Scope does not cover this Legal Entity, or the Legal Entity is not active",
+      );
+    }
+  }
+
+  /**
+   * The Organization Unit ids the ACTIVE assignment's Data Scope covers, for a
+   * caller narrowing a LIST read — the Legal Entity-aware successor of the
+   * ad-hoc `getAssignments(userId)` walks some modules used to do.
+   *
+   * - `null` means "every unit in the Tenant" (a tenant-wide active
+   *   assignment): a caller passes it straight through as "no narrowing".
+   * - an empty array means "no unit at all" — the fail-closed answer for a
+   *   customer-scoped, scope-less or unusable-scope session.
+   * - a `legal_entity` scope yields every ACTIVE unit inside that Legal Entity
+   *   (§4.5 Putaran 4), which is the whole point of the branch: before this,
+   *   an Organization-Unit-only walk answered empty for a Legal Entity-scoped
+   *   supervisor and silently showed them nothing.
+   * - an `organization_unit` scope yields that unit and its ACTIVE descendants
+   *   (ADR-0009). Units that are inactive, tombstoned or deleted are excluded:
+   *   they authorize nothing, so no list should widen back onto them.
+   */
+  async listScopedOrganizationUnitIds(actor: ActorContext): Promise<string[] | null> {
+    if (actor.assignmentId === null) return [];
+    if (actor.scopeType === "tenant") return null;
+
+    const units = (await this.orgUnits.listByTenant(actor.tenantId)).filter((u) =>
+      isUsableLifecycleEntity(u.status),
+    );
+
+    if (actor.scopeType === "legal_entity") {
+      if (actor.scopeLegalEntityId === null) return [];
+      const legalEntity = await this.legalEntities.findById(actor.scopeLegalEntityId);
+      if (
+        legalEntity === null ||
+        legalEntity.tenantId !== actor.tenantId ||
+        !isUsableLifecycleEntity(legalEntity.status)
+      ) {
+        return [];
+      }
+      return units
+        .filter((u) => u.legalEntityId === actor.scopeLegalEntityId)
+        .map((u) => u.id);
+    }
+
+    if (actor.scopeType === "organization_unit") {
+      if (actor.scopeOrganizationUnitId === null) return [];
+      const root = units.find((u) => u.id === actor.scopeOrganizationUnitId);
+      if (!root) return [];
+      const childrenByParent = new Map<string, string[]>();
+      for (const unit of units) {
+        if (unit.parentId === null) continue;
+        const siblings = childrenByParent.get(unit.parentId) ?? [];
+        siblings.push(unit.id);
+        childrenByParent.set(unit.parentId, siblings);
+      }
+      const covered: string[] = [];
+      const queue = [root.id];
+      while (queue.length > 0) {
+        const current = queue.shift() as string;
+        covered.push(current);
+        queue.push(...(childrenByParent.get(current) ?? []));
+      }
+      return covered;
+    }
+
+    return [];
+  }
+
+  /**
+   * The Legal Entity ids the ACTIVE assignment's Data Scope lets the actor SEE,
+   * for narrowing a Legal Entity list read — `null` for "every Legal Entity in
+   * the Tenant".
+   *
+   * An Organization Unit scope yields the Legal Entity its covered units belong
+   * to: the unit sits INSIDE that Legal Entity, so the structure the user is
+   * scoped to cannot be rendered without naming it. That is a read of the
+   * parent, not authority over the whole Legal Entity — mutations still go
+   * through `isActiveLegalEntityScopeCovered`, which refuses an Organization
+   * Unit scope (§4.5 principle 9: a unit authority never widens upward).
+   */
+  async listScopedLegalEntityIds(actor: ActorContext): Promise<string[] | null> {
+    if (actor.assignmentId === null) return [];
+    if (actor.scopeType === "tenant") return null;
+    if (actor.scopeType === "legal_entity") {
+      if (actor.scopeLegalEntityId === null) return [];
+      const covered = await this.isActiveLegalEntityScopeCovered(
+        actor,
+        actor.scopeLegalEntityId,
+      );
+      return covered ? [actor.scopeLegalEntityId] : [];
+    }
+    if (actor.scopeType === "organization_unit") {
+      const unitIds = await this.listScopedOrganizationUnitIds(actor);
+      if (unitIds === null || unitIds.length === 0) return unitIds === null ? null : [];
+      const wanted = new Set(unitIds);
+      const units = await this.orgUnits.listByTenant(actor.tenantId);
+      return [
+        ...new Set(
+          units.filter((u) => wanted.has(u.id)).map((u) => u.legalEntityId),
+        ),
+      ];
+    }
+    return [];
   }
 
   /** Epic 5 G3 — the enforcement form, and the single entry point a Legal
