@@ -28,7 +28,8 @@ import type { MenuNode } from "./app-metadata.entity.js";
 export interface MenuFilterInput {
   /** Effective permission codes held by the caller ("any of" per menu). */
   permissions: readonly string[];
-  /** Data-Scope types the caller holds (customer / organization_unit / tenant). */
+  /** Data-Scope types the caller holds (customer / legal_entity /
+   * organization_unit / tenant). */
   scopeTypes: readonly string[];
   /** Module codes active for the caller's tenant. */
   activeModuleCodes: readonly string[];
@@ -37,12 +38,24 @@ export interface MenuFilterInput {
 /**
  * External = holds NO internal Data Scope. Mirrors the browser's
  * `isInternalScope` (capabilities.ts): internal means an explicit
- * `tenant` or `organization_unit` scope. A caller with only a customer
- * scope is external even if some permission was granted alongside it —
+ * `tenant`, `legal_entity` or `organization_unit` scope. A caller with only a
+ * customer scope is external even if some permission was granted alongside it —
  * the whitelist decides reach, not permissions.
+ *
+ * Epic 5 G3 (§4.5 step 14): `legal_entity` was missing from the internal set,
+ * which would have made every Legal Entity-scoped internal user read as an
+ * external caller and stripped their internal menu down to the customer
+ * whitelist. A Legal Entity is internal structure — the middle of the chain
+ * tenant → Legal Entity → Organization Unit — so it belongs in the same list
+ * as the other two.
  */
 export function isExternalCaller(scopeTypes: readonly string[]): boolean {
-  return !scopeTypes.some((scope) => scope === "tenant" || scope === "organization_unit");
+  return !scopeTypes.some(
+    (scope) =>
+      scope === "tenant" ||
+      scope === "legal_entity" ||
+      scope === "organization_unit",
+  );
 }
 
 function filterNode(node: MenuNode, input: MenuFilterInput, external: boolean): MenuNode | null {

@@ -15,6 +15,13 @@ const assignRoleSchema = z.discriminatedUnion("scopeType", [
   z
     .object({
       roleCode: z.string().min(1),
+      scopeType: z.literal("legal_entity"),
+      scopeLegalEntityId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      roleCode: z.string().min(1),
       scopeType: z.literal("organization_unit"),
       scopeOrganizationUnitId: z.string().uuid(),
     })
@@ -30,11 +37,12 @@ const assignRoleSchema = z.discriminatedUnion("scopeType", [
 
 // --- Epic 4 Wave 2: User and assignment bodies ----------------------------
 // The pair vocabulary is the SAME one the Phase 11F single-assignment route
-// uses, so an operator sees one shape on both surfaces. Customer scope stays
-// in the vocabulary because the repository is the authority on which scopes a
-// governed batch may reach (§4.4 E) and refuses it by name; narrowing here
-// instead would move that refusal into a schema error and make the boundary
-// depend on which route was called.
+// uses, so an operator sees one shape on both surfaces. The vocabulary carries
+// every scope family the repository understands — including customer scope,
+// which the governed batch refuses (§4.4 E) because the repository is the
+// authority on which scopes a batch may reach; narrowing here instead would
+// move that refusal into a schema error and make the boundary depend on which
+// route was called. `legal_entity` joined the vocabulary in Epic 5 G3.
 
 const MAX_ASSIGNMENT_PAIRS = 50;
 const MAX_FULL_NAME_LENGTH = 200;
@@ -51,9 +59,11 @@ const assignmentPairsSchema = z
         `${pair.roleCode}|${pair.scopeType}|${
           pair.scopeType === "tenant"
             ? ""
-            : pair.scopeType === "organization_unit"
-              ? pair.scopeOrganizationUnitId
-              : pair.scopeCustomerId
+            : pair.scopeType === "legal_entity"
+              ? pair.scopeLegalEntityId
+              : pair.scopeType === "organization_unit"
+                ? pair.scopeOrganizationUnitId
+                : pair.scopeCustomerId
         }`,
     );
     if (new Set(keys).size !== keys.length) {

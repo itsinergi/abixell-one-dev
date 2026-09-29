@@ -2038,6 +2038,7 @@ export type AdminOverview = {
 
 export type AdminRoleAssignmentScopeType =
   | "tenant"
+  | "legal_entity"
   | "organization_unit"
   | "customer";
 
@@ -2048,6 +2049,10 @@ export type AdminRoleAssignmentSummary = {
   roleName: string | null;
   scopeType: AdminRoleAssignmentScopeType;
   scopeState: "available" | "unavailable";
+  /** Epic 5 G3 — the Legal Entity scope target, named only when it resolves in
+   * the assigned User's tenant. */
+  scopeLegalEntityId?: string | null;
+  scopeLegalEntityName?: string | null;
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;
@@ -2072,6 +2077,11 @@ export type AdminUserAccessSummary = {
 
 export type AdminRoleAssignmentInput =
   | { roleCode: string; scopeType: "tenant" }
+  | {
+      roleCode: string;
+      scopeType: "legal_entity";
+      scopeLegalEntityId: string;
+    }
   | {
       roleCode: string;
       scopeType: "organization_unit";

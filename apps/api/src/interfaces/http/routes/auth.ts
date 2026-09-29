@@ -94,6 +94,7 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
         roleId: next.roleId,
         roleCode: next.roleCode,
         scopeType: next.scopeType,
+        scopeLegalEntityId: next.scopeLegalEntityId,
         scopeOrganizationUnitId: next.scopeOrganizationUnitId,
         scopeCustomerId: next.scopeCustomerId,
       });
@@ -146,7 +147,10 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
     const activeScopeName =
       picked?.scopeType === "tenant"
         ? picked.scopeType
-        : picked?.scopeOrganizationUnitName ?? picked?.scopeCustomerName ?? null;
+        : picked?.scopeLegalEntityName ??
+          picked?.scopeOrganizationUnitName ??
+          picked?.scopeCustomerName ??
+          null;
 
     // Checkpoint 1C.3 — the distinct Data-Scope types of the ACTIVE
     // assignment only. The pre-Epic-1 union form would have told a Customer

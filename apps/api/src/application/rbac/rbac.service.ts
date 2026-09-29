@@ -174,9 +174,10 @@ export class RbacService {
   /**
    * Epic 1 — the enforcement form: throws unless the actor's ACTIVE
    * assignment's Data Scope covers `targetOrganizationUnitId` — a tenant-wide
-   * active assignment, or an active organization_unit assignment on the unit
-   * or one of its ANCESTORS. An ancestor assignment the user holds but has
-   * not switched into grants nothing here.
+   * active assignment, a legal_entity active assignment naming the Legal
+   * Entity the unit belongs to (Epic 5 G3), or an active organization_unit
+   * assignment on the unit or one of its ANCESTORS. An ancestor assignment the
+   * user holds but has not switched into grants nothing here.
    */
   async requireOrganizationUnitScopeForActor(
     actor: ActorContext,
@@ -199,6 +200,20 @@ export class RbacService {
   ): Promise<boolean> {
     if (actor.assignmentId === null) return false;
     if (actor.scopeType === "tenant") return true;
+    // Epic 5 G3 — the coverage chain tenant → Legal Entity → Organization
+    // Unit. A Legal Entity-scoped assignment covers EVERY unit inside that
+    // Legal Entity, which is not the same set as the ancestor walk: a unit in
+    // the Legal Entity is covered even when no assignment names one of its
+    // ancestors. §4.5 Putaran 4: the scope "mencakup semua Organization Unit di
+    // Legal Entity tersebut, tetapi tidak mencakup Legal Entity lain".
+    if (actor.scopeType === "legal_entity" && actor.scopeLegalEntityId !== null) {
+      const unit = await this.orgUnits.findById(targetOrganizationUnitId);
+      return (
+        unit !== null &&
+        unit.tenantId === actor.tenantId &&
+        unit.legalEntityId === actor.scopeLegalEntityId
+      );
+    }
     if (
       actor.scopeType !== "organization_unit" ||
       actor.scopeOrganizationUnitId === null
@@ -207,6 +222,56 @@ export class RbacService {
     }
     const ancestorIds = await this.orgUnits.listAncestorIds(targetOrganizationUnitId);
     return new Set(ancestorIds).has(actor.scopeOrganizationUnitId);
+  }
+
+  /**
+   * Epic 5 G3 (§4.5 step 15) — is `targetLegalEntityId` covered by the actor's
+   * ACTIVE Data Scope? Covered exactly by a tenant-wide assignment or by a
+   * `legal_entity` assignment naming that Legal Entity. A sibling Legal Entity
+   * of the same Tenant is never covered, and an Organization Unit assignment
+   * never widens to the whole Legal Entity that contains it.
+   */
+  async isActiveLegalEntityScopeCovered(
+    actor: ActorContext,
+    targetLegalEntityId: string,
+  ): Promise<boolean> {
+    if (actor.assignmentId === null) return false;
+    if (actor.scopeType === "tenant") return true;
+    return (
+      actor.scopeType === "legal_entity" &&
+      actor.scopeLegalEntityId !== null &&
+      actor.scopeLegalEntityId === targetLegalEntityId
+    );
+  }
+
+  /** Epic 5 G3 — the enforcement form, and the single entry point a Legal
+   * Entity-scoped resource should call. Same-assignment rule: the permission
+   * comes from the ACTIVE assignment (requirePermission) and the scope comes
+   * from that same context, so a permission held at one scope can never be
+   * combined with the scope of another. */
+  async requireLegalEntityScopedPermissionForActor(
+    actor: ActorContext,
+    permissionCode: string,
+    targetLegalEntityId: string,
+  ): Promise<void> {
+    await this.requirePermission(actor, permissionCode);
+    if (!(await this.isActiveLegalEntityScopeCovered(actor, targetLegalEntityId))) {
+      throw new ForbiddenError(
+        "The active Role's Data Scope does not cover this Legal Entity",
+      );
+    }
+  }
+
+  /** Epic 5 G3 — the same combined form for an Organization Unit target: the
+   * ACTIVE assignment must carry the permission AND cover the unit, through
+   * the tenant → Legal Entity → Organization Unit chain. */
+  async requireOrganizationUnitScopedPermissionForActor(
+    actor: ActorContext,
+    permissionCode: string,
+    targetOrganizationUnitId: string,
+  ): Promise<void> {
+    await this.requirePermission(actor, permissionCode);
+    await this.requireOrganizationUnitScopeForActor(actor, targetOrganizationUnitId);
   }
 
   /** True if the user's ACTIVE assignment is tenant-wide. The userId form is
@@ -243,6 +308,31 @@ export class RbacService {
     if (actor.scopeType === "tenant") return true;
     if (targetOrganizationUnitId === null) return false;
     return this.isActiveOrganizationUnitScopeCovered(actor, targetOrganizationUnitId);
+  }
+
+  /**
+   * Epic 5 G3 — the same coverage question asked about a SET of assignment
+   * rows a caller already holds, so a list read does not need one query per
+   * row (the shape `isCustomerContextScopeCoveredByAssignments` established).
+   *
+   * - a tenant-wide assignment covers every Legal Entity;
+   * - a `legal_entity` assignment covers exactly its own Legal Entity and
+   *   never a sibling of the same Tenant;
+   * - an `organization_unit` assignment covers nothing at this level: a unit
+   *   is narrower than the Legal Entity that contains it (§4.5 principle 9),
+   *   and widening it here would let a unit authority govern the whole Legal
+   *   Entity.
+   */
+  isLegalEntityCoveredByAssignments(
+    assignments: readonly UserRoleAssignment[],
+    targetLegalEntityId: string,
+  ): boolean {
+    if (assignments.some((a) => a.scopeType === "tenant")) return true;
+    return assignments.some(
+      (a) =>
+        a.scopeType === "legal_entity" &&
+        (a.scopeLegalEntityId ?? null) === targetLegalEntityId,
+    );
   }
 
   /**
@@ -284,6 +374,22 @@ export class RbacService {
     ) {
       return true;
     }
+    // Epic 5 G3 — a Customer owned by an Organization Unit inside the actor's
+    // Legal Entity is covered by the Legal Entity scope, exactly the way the
+    // unit-scope branch below covers it: the ownership unit is the join
+    // between the Customer axis and the internal structure.
+    if (
+      actor.scopeType === "legal_entity" &&
+      actor.scopeLegalEntityId !== null &&
+      target.ownerOrganizationUnitId !== null
+    ) {
+      const ownerUnit = await this.orgUnits.findById(target.ownerOrganizationUnitId);
+      return (
+        ownerUnit !== null &&
+        ownerUnit.tenantId === actor.tenantId &&
+        ownerUnit.legalEntityId === actor.scopeLegalEntityId
+      );
+    }
     if (
       actor.scopeType === "organization_unit" &&
       target.ownerOrganizationUnitId !== null &&
@@ -312,7 +418,25 @@ export class RbacService {
       return true;
     }
     if (target.ownerOrganizationUnitId) {
+      // Epic 5 G3 — one lookup for the ownership unit answers both internal
+      // branches: the unit gives the actor's Legal Entity (legal_entity scope)
+      // and the ancestors the unit-scope branch walks.
+      const legalEntityAssignments = assignments.filter(
+        (a) => a.scopeType === "legal_entity",
+      );
       const orgUnitAssignments = assignments.filter((a) => a.scopeType === "organization_unit");
+      if (legalEntityAssignments.length === 0 && orgUnitAssignments.length === 0) {
+        return false;
+      }
+      const ownerUnit = await this.orgUnits.findById(target.ownerOrganizationUnitId);
+      if (!ownerUnit) return false;
+      if (
+        legalEntityAssignments.some(
+          (a) => (a.scopeLegalEntityId ?? null) === ownerUnit.legalEntityId,
+        )
+      ) {
+        return true;
+      }
       if (orgUnitAssignments.length === 0) return false;
       const ancestorIds = await this.orgUnits.listAncestorIds(target.ownerOrganizationUnitId);
       const ancestorSet = new Set(ancestorIds);
@@ -344,6 +468,7 @@ export class RbacService {
         roleId: actor.roleId,
         roleCode: actor.roleCode,
         scopeType: actor.scopeType,
+        scopeLegalEntityId: actor.scopeLegalEntityId,
         scopeOrganizationUnitId: actor.scopeOrganizationUnitId,
         scopeCustomerId: actor.scopeCustomerId,
       },

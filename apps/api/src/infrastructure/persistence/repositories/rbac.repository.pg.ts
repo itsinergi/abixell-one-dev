@@ -6,6 +6,7 @@ import type {
   AdminAssignmentRow,
   AssignmentOptions,
   AssignmentRoleOption,
+  AssignmentScopeLegalEntityOption,
   AssignmentScopeUnitOption,
   AssignmentBatchResult,
   CreateGovernedUserInput,
@@ -26,6 +27,7 @@ import type {
   RoleDefinitionPreviewInput,
   RolePermissionDetail,
   RoleSummary,
+  ScopeType,
   UpdateRoleAssignmentsInput,
   UpdateRoleDefinitionInput,
   UserRoleAssignment,
@@ -91,7 +93,7 @@ const SCOPE_EXCLUSIVITY_MESSAGE =
 async function assertNoScopeExclusivityConflict(
   client: { query: PoolClient["query"] },
   targetUserId: string,
-  scopeType: "tenant" | "organization_unit" | "customer",
+  scopeType: ScopeType,
 ): Promise<void> {
   const conflicting = await client.query<{ exists: boolean }>(
     `SELECT EXISTS(
@@ -228,6 +230,8 @@ function mapAdminAssignment(
     roleName: (row.role_name as string | null) ?? null,
     scopeType: row.scope_type as AdminRoleAssignmentSummary["scopeType"],
     scopeState: row.scope_state as AdminRoleAssignmentSummary["scopeState"],
+    scopeLegalEntityId: (row.scope_legal_entity_id as string | null) ?? null,
+    scopeLegalEntityName: (row.scope_legal_entity_name as string | null) ?? null,
     scopeOrganizationUnitId:
       (row.scope_organization_unit_id as string | null) ?? null,
     scopeOrganizationUnitName:
@@ -266,7 +270,14 @@ function assignmentLifecycleState(
  *
  * Epic 1 (§4.1 C): pinned to the SESSION'S ACTIVE assignment. An admin who
  * switched into a Customer-context Role must not keep region-admin visibility
- * through an Organization-Unit Role they are no longer working as. */
+ * through an Organization-Unit Role they are no longer working as.
+ *
+ * Epic 5 G3: a `legal_entity` assignment's anchors are EVERY Organization
+ * Unit of that Legal Entity — the anchors exist to be expanded downward, and
+ * "everything in this Legal Entity" is exactly that set. The caller expands
+ * them once more with `listOrganizationUnitSubtreeIdsIn` (a no-op for units
+ * that are already leaves), so both scope families flow through the one
+ * expansion ADR-0009 established. */
 async function listActorOrganizationUnitAnchorsIn(
   client: Pool | PoolClient,
   tenantId: string,
@@ -275,16 +286,33 @@ async function listActorOrganizationUnitAnchorsIn(
 ): Promise<string[]> {
   if (assignmentId === null) return [];
   const result = await client.query<{ id: string }>(
-    `SELECT DISTINCT aura.scope_organization_unit_id AS id
-       FROM authorization_effective_user_role_assignments aura
-       JOIN role_permissions rp ON rp.role_id = aura.role_id
-       JOIN permissions p ON p.id = rp.permission_id
-      WHERE aura.tenant_id = $1
-        AND aura.id = $2
-        AND aura.scope_type = 'organization_unit'
-        AND aura.scope_organization_unit_id IS NOT NULL
-        AND p.code = $3
-      ORDER BY aura.scope_organization_unit_id`,
+    `SELECT DISTINCT anchor_id AS id
+       FROM (
+         SELECT aura.scope_organization_unit_id AS anchor_id
+           FROM authorization_effective_user_role_assignments aura
+           JOIN role_permissions rp ON rp.role_id = aura.role_id
+           JOIN permissions p ON p.id = rp.permission_id
+          WHERE aura.tenant_id = $1
+            AND aura.id = $2
+            AND aura.scope_type = 'organization_unit'
+            AND aura.scope_organization_unit_id IS NOT NULL
+            AND p.code = $3
+         UNION
+         SELECT ou.id AS anchor_id
+           FROM authorization_effective_user_role_assignments aura
+           JOIN role_permissions rp ON rp.role_id = aura.role_id
+           JOIN permissions p ON p.id = rp.permission_id
+           JOIN organization_units ou
+             ON ou.legal_entity_id = aura.scope_legal_entity_id
+            AND ou.tenant_id = aura.tenant_id
+            AND ou.deleted_at IS NULL
+          WHERE aura.tenant_id = $1
+            AND aura.id = $2
+            AND aura.scope_type = 'legal_entity'
+            AND aura.scope_legal_entity_id IS NOT NULL
+            AND p.code = $3
+       ) anchors
+      ORDER BY id`,
     [tenantId, assignmentId, permissionCode],
   );
   return result.rows.map((row) => row.id);
@@ -316,6 +344,31 @@ async function listOrganizationUnitSubtreeIdsIn(
      )
      SELECT id FROM subtree ORDER BY id`,
     [tenantId, roots],
+  );
+  return result.rows.map((row) => row.id);
+}
+
+/** Epic 5 G3 — every live Organization Unit inside one Legal Entity. The
+ * downward half of the coverage chain tenant → Legal Entity → Organization
+ * Unit (§4.5 principle 9): a `legal_entity` assignment covers all of these,
+ * which is why the administrative visibility, the assignment picker and the
+ * delegation check all read this one query instead of restating the rule.
+ * `deleted_at IS NULL` is the same availability filter the subtree walk and
+ * the product's other scope queries use; lifecycle state is decided by the
+ * authorization projection, not here. */
+async function listOrganizationUnitIdsForLegalEntityIn(
+  client: Pool | PoolClient,
+  tenantId: string,
+  legalEntityId: string,
+): Promise<string[]> {
+  const result = await client.query<{ id: string }>(
+    `SELECT id
+       FROM organization_units
+      WHERE tenant_id = $1
+        AND legal_entity_id = $2
+        AND deleted_at IS NULL
+      ORDER BY id`,
+    [tenantId, legalEntityId],
   );
   return result.rows.map((row) => row.id);
 }
@@ -413,6 +466,38 @@ function assignmentKey(
   return `${roleId}|${scopeType}|${scopeId ?? ""}`;
 }
 
+/** The scope target of one PROPOSED pair, whichever family it belongs to. Each
+ * family stores its target in its own column, so "the target of this pair"
+ * has to be asked once, in one place: the batch writer keys its pairs and its
+ * `RETURNING` rows by the same triple, and a family that fell through to the
+ * wrong column would silently pair two grants with the wrong summaries. */
+function pairScopeId(pair: GovernedRoleAssignmentInput): string | null {
+  switch (pair.scopeType) {
+    case "tenant":
+      return null;
+    case "legal_entity":
+      return pair.scopeLegalEntityId;
+    case "organization_unit":
+      return pair.scopeOrganizationUnitId;
+    case "customer":
+      return pair.scopeCustomerId;
+  }
+}
+
+/** The same question asked of an inserted/reloaded row. */
+function rowScopeId(row: Record<string, unknown>): string | null {
+  switch (row.scope_type as string) {
+    case "legal_entity":
+      return (row.scope_legal_entity_id as string | null) ?? null;
+    case "organization_unit":
+      return (row.scope_organization_unit_id as string | null) ?? null;
+    case "customer":
+      return (row.scope_customer_id as string | null) ?? null;
+    default:
+      return null;
+  }
+}
+
 /**
  * §4.4 C: one batch is one transaction and one confirmation, so a pair repeated
  * inside the request is a malformed request — not a pair to be silently
@@ -424,12 +509,7 @@ function normalizeAssignmentPairs(
 ): GovernedRoleAssignmentInput[] {
   const seen = new Set<string>();
   for (const pair of pairs) {
-    const key =
-      pair.scopeType === "tenant"
-        ? `${pair.roleCode}|tenant|`
-        : pair.scopeType === "organization_unit"
-          ? `${pair.roleCode}|organization_unit|${pair.scopeOrganizationUnitId}`
-          : `${pair.roleCode}|customer|${pair.scopeCustomerId}`;
+    const key = assignmentKey(pair.roleCode, pair.scopeType, pairScopeId(pair));
     if (seen.has(key)) {
       throw new ValidationError(
         `Duplicate assignment pair for Role '${pair.roleCode}' and the same scope`,
@@ -453,6 +533,8 @@ function projectAdminAssignment(
     role_name: row.role_name,
     scope_type: row.scope_type,
     scope_state: row.scope_state,
+    scope_legal_entity_id: row.scope_legal_entity_id,
+    scope_legal_entity_name: row.scope_legal_entity_name,
     scope_organization_unit_id: row.scope_organization_unit_id,
     scope_organization_unit_name: row.scope_organization_unit_name,
     scope_customer_id: row.scope_customer_id,
@@ -733,7 +815,8 @@ export class PgRbacRepository implements RbacRepository {
   ): Promise<UserRoleAssignment[]> {
     const result = await this.pool.query(
       `SELECT DISTINCT aura.id, aura.user_id, aura.role_id, r.code AS role_code,
-              aura.scope_type, aura.scope_organization_unit_id, aura.scope_customer_id
+              aura.scope_type, aura.scope_legal_entity_id,
+              aura.scope_organization_unit_id, aura.scope_customer_id
          FROM authorization_effective_user_role_assignments aura
          JOIN roles r ON r.id = aura.role_id
          JOIN role_permissions rp ON rp.role_id = aura.role_id
@@ -747,6 +830,7 @@ export class PgRbacRepository implements RbacRepository {
       roleId: row.role_id,
       roleCode: row.role_code,
       scopeType: row.scope_type,
+      scopeLegalEntityId: row.scope_legal_entity_id,
       scopeOrganizationUnitId: row.scope_organization_unit_id,
       scopeCustomerId: row.scope_customer_id,
     }));
@@ -774,6 +858,13 @@ export class PgRbacRepository implements RbacRepository {
     rootOrganizationUnitIds: readonly string[],
   ): Promise<string[]> {
     return listOrganizationUnitSubtreeIdsIn(this.pool, tenantId, rootOrganizationUnitIds);
+  }
+
+  async listOrganizationUnitIdsForLegalEntity(
+    tenantId: string,
+    legalEntityId: string,
+  ): Promise<string[]> {
+    return listOrganizationUnitIdsForLegalEntityIn(this.pool, tenantId, legalEntityId);
   }
 
   async listActorOrganizationUnitAnchors(
@@ -836,6 +927,8 @@ export class PgRbacRepository implements RbacRepository {
               access.role_name,
               access.scope_type,
               access.scope_state,
+              access.scope_legal_entity_id,
+              access.scope_legal_entity_name,
               access.scope_organization_unit_id,
               access.scope_organization_unit_name,
               access.scope_customer_id,
@@ -876,12 +969,22 @@ export class PgRbacRepository implements RbacRepository {
                          AND ura.scope_organization_unit_id IS NULL
                          AND ura.scope_customer_id IS NULL
                        )
+                       OR (ura.scope_type = 'legal_entity' AND le.id IS NOT NULL)
                        OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
                        OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
                      )
                     THEN 'available'
                     ELSE 'unavailable'
                   END AS scope_state,
+                  ura.scope_legal_entity_id,
+                  CASE
+                    WHEN ura.scope_invalidated_at IS NULL
+                      AND ura.revoked_at IS NULL
+                      AND r.id IS NOT NULL
+                      AND r.is_active
+                      THEN le.name
+                    ELSE NULL
+                  END AS scope_legal_entity_name,
                   ura.scope_organization_unit_id,
                   CASE
                     WHEN ura.scope_invalidated_at IS NULL
@@ -904,6 +1007,10 @@ export class PgRbacRepository implements RbacRepository {
              LEFT JOIN roles r
                ON r.id = ura.role_id
               AND r.tenant_id = u.tenant_id
+             LEFT JOIN legal_entities le
+               ON le.id = ura.scope_legal_entity_id
+              AND le.tenant_id = u.tenant_id
+              AND le.deleted_at IS NULL
              LEFT JOIN organization_units ou
                ON ou.id = ura.scope_organization_unit_id
               AND ou.tenant_id = u.tenant_id
@@ -929,6 +1036,25 @@ export class PgRbacRepository implements RbacRepository {
                  AND target_assignment.scope_invalidated_at IS NULL
                  AND target_assignment.revoked_at IS NULL
                  AND target_assignment.scope_organization_unit_id = ANY($4::uuid[])
+            )
+            -- Epic 5 G3 — a target whose only live assignment is Legal Entity
+            -- scoped is visible to the administrator whose covered units
+            -- include a unit of that Legal Entity. Without this branch the
+            -- write path and the list would disagree about which Users exist:
+            -- the write's anchor check counts the Legal Entity family, so the
+            -- read must too.
+            OR EXISTS (
+              SELECT 1
+                FROM user_role_assignments target_assignment
+                JOIN organization_units target_unit
+                  ON target_unit.legal_entity_id = target_assignment.scope_legal_entity_id
+                 AND target_unit.tenant_id = u.tenant_id
+                 AND target_unit.deleted_at IS NULL
+               WHERE target_assignment.user_id = u.id
+                 AND target_assignment.scope_type = 'legal_entity'
+                 AND target_assignment.scope_invalidated_at IS NULL
+                 AND target_assignment.revoked_at IS NULL
+                 AND target_unit.id = ANY($4::uuid[])
             )
           )
         ORDER BY u.full_name,
@@ -1020,19 +1146,39 @@ export class PgRbacRepository implements RbacRepository {
       );
 
       const target = await client.query<{ organization_unit_ids: string[] }>(
+        // Epic 5 G3 — the target's ANCHOR units, which is what the visibility
+        // intersection is asked about: an Organization Unit assignment anchors
+        // its unit, and a Legal Entity assignment anchors every unit inside
+        // that Legal Entity (§4.5 principle 9). Without the second family a
+        // User whose only assignment is Legal Entity-scoped would be invisible
+        // to the very administrator whose Data Scope covers them.
         `SELECT ARRAY(
-                    SELECT ura.scope_organization_unit_id
-                      FROM user_role_assignments ura
-                     WHERE ura.user_id = users.id
-                       AND ura.scope_type = 'organization_unit'
-                       AND ura.scope_invalidated_at IS NULL
-                       AND ura.revoked_at IS NULL
-                  ) AS organization_unit_ids
-             FROM users
-            WHERE id = $1
-              AND tenant_id = $2
-              AND deleted_at IS NULL
-              AND status = 'active'`,
+                  SELECT anchor_id
+                    FROM (
+                      SELECT ura.scope_organization_unit_id AS anchor_id
+                        FROM user_role_assignments ura
+                       WHERE ura.user_id = users.id
+                         AND ura.scope_type = 'organization_unit'
+                         AND ura.scope_invalidated_at IS NULL
+                         AND ura.revoked_at IS NULL
+                      UNION
+                      SELECT ou.id AS anchor_id
+                        FROM user_role_assignments ura
+                        JOIN organization_units ou
+                          ON ou.legal_entity_id = ura.scope_legal_entity_id
+                         AND ou.tenant_id = users.tenant_id
+                         AND ou.deleted_at IS NULL
+                       WHERE ura.user_id = users.id
+                         AND ura.scope_type = 'legal_entity'
+                         AND ura.scope_invalidated_at IS NULL
+                         AND ura.revoked_at IS NULL
+                    ) anchors
+                ) AS organization_unit_ids
+           FROM users
+          WHERE id = $1
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+            AND status = 'active'`,
         [targetUserId, actor.tenantId],
       );
       if (
@@ -1046,6 +1192,9 @@ export class PgRbacRepository implements RbacRepository {
           "Tenant-wide assignment requires tenant-wide authority",
         );
       }
+      // Epic 5 G3 — one level below tenant: a `legal_entity` grant is only
+      // delegable to an actor whose own Data Scope already reaches the whole
+      // Legal Entity (see `resolveLegalEntityScopeTarget`).
 
       const roleResult = await client.query(
         `SELECT id, code, name, is_active
@@ -1145,6 +1294,18 @@ export class PgRbacRepository implements RbacRepository {
           : null;
       const customerId =
         input.scopeType === "customer" ? input.scopeCustomerId : null;
+      const legalEntityId =
+        input.scopeType === "legal_entity" ? input.scopeLegalEntityId : null;
+      let legalEntityName: string | null = null;
+
+      if (legalEntityId) {
+        legalEntityName = await this.resolveLegalEntityScopeTarget(
+          client,
+          actor,
+          visibility,
+          legalEntityId,
+        );
+      }
 
       if (organizationUnitId) {
         const organizationUnit = await client.query(
@@ -1187,15 +1348,17 @@ export class PgRbacRepository implements RbacRepository {
       try {
         inserted = await client.query(
           `INSERT INTO user_role_assignments
-             (user_id, role_id, scope_type, scope_organization_unit_id,
-              scope_customer_id, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING id, scope_type, scope_organization_unit_id,
-                     scope_customer_id, created_at, created_by`,
+             (user_id, role_id, scope_type, scope_legal_entity_id,
+              scope_organization_unit_id, scope_customer_id, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, scope_type, scope_legal_entity_id,
+                     scope_organization_unit_id, scope_customer_id,
+                     created_at, created_by`,
           [
             targetUserId,
             role.id,
             input.scopeType,
+            legalEntityId,
             organizationUnitId,
             customerId,
             actor.userId,
@@ -1226,6 +1389,8 @@ export class PgRbacRepository implements RbacRepository {
         role_name: role.name,
         scope_type: row.scope_type,
         scope_state: "available",
+        scope_legal_entity_id: row.scope_legal_entity_id,
+        scope_legal_entity_name: legalEntityName,
         scope_organization_unit_id: row.scope_organization_unit_id,
         scope_organization_unit_name: organizationUnitName,
         scope_customer_id: row.scope_customer_id,
@@ -1263,19 +1428,39 @@ export class PgRbacRepository implements RbacRepository {
       );
 
       const target = await client.query<{ organization_unit_ids: string[] }>(
+        // Epic 5 G3 — the target's ANCHOR units, which is what the visibility
+        // intersection is asked about: an Organization Unit assignment anchors
+        // its unit, and a Legal Entity assignment anchors every unit inside
+        // that Legal Entity (§4.5 principle 9). Without the second family a
+        // User whose only assignment is Legal Entity-scoped would be invisible
+        // to the very administrator whose Data Scope covers them.
         `SELECT ARRAY(
-                    SELECT ura.scope_organization_unit_id
-                      FROM user_role_assignments ura
-                     WHERE ura.user_id = users.id
-                       AND ura.scope_type = 'organization_unit'
-                       AND ura.scope_invalidated_at IS NULL
-                       AND ura.revoked_at IS NULL
-                  ) AS organization_unit_ids
-             FROM users
-            WHERE id = $1
-              AND tenant_id = $2
-              AND deleted_at IS NULL
-              AND status = 'active'`,
+                  SELECT anchor_id
+                    FROM (
+                      SELECT ura.scope_organization_unit_id AS anchor_id
+                        FROM user_role_assignments ura
+                       WHERE ura.user_id = users.id
+                         AND ura.scope_type = 'organization_unit'
+                         AND ura.scope_invalidated_at IS NULL
+                         AND ura.revoked_at IS NULL
+                      UNION
+                      SELECT ou.id AS anchor_id
+                        FROM user_role_assignments ura
+                        JOIN organization_units ou
+                          ON ou.legal_entity_id = ura.scope_legal_entity_id
+                         AND ou.tenant_id = users.tenant_id
+                         AND ou.deleted_at IS NULL
+                       WHERE ura.user_id = users.id
+                         AND ura.scope_type = 'legal_entity'
+                         AND ura.scope_invalidated_at IS NULL
+                         AND ura.revoked_at IS NULL
+                    ) anchors
+                ) AS organization_unit_ids
+           FROM users
+          WHERE id = $1
+            AND tenant_id = $2
+            AND deleted_at IS NULL
+            AND status = 'active'`,
         [targetUserId, actor.tenantId],
       );
       if (
@@ -1300,12 +1485,21 @@ export class PgRbacRepository implements RbacRepository {
                        AND ura.scope_organization_unit_id IS NULL
                        AND ura.scope_customer_id IS NULL
                      )
+                     OR (ura.scope_type = 'legal_entity' AND le.id IS NOT NULL)
                      OR (ura.scope_type = 'organization_unit' AND ou.id IS NOT NULL)
                      OR (ura.scope_type = 'customer' AND c.id IS NOT NULL)
                    )
                   THEN 'available'
                   ELSE 'unavailable'
                 END AS scope_state,
+                ura.scope_legal_entity_id,
+                CASE
+                  WHEN ura.scope_invalidated_at IS NULL
+                    AND ura.revoked_at IS NULL
+                    AND r.id IS NOT NULL
+                    THEN le.name
+                  ELSE NULL
+                END AS scope_legal_entity_name,
                 ura.scope_organization_unit_id,
                 CASE
                   WHEN ura.scope_invalidated_at IS NULL
@@ -1346,6 +1540,10 @@ export class PgRbacRepository implements RbacRepository {
            LEFT JOIN roles r
              ON r.id = ura.role_id
             AND r.tenant_id = u.tenant_id
+           LEFT JOIN legal_entities le
+             ON le.id = ura.scope_legal_entity_id
+            AND le.tenant_id = u.tenant_id
+            AND le.deleted_at IS NULL
            LEFT JOIN organization_units ou
              ON ou.id = ura.scope_organization_unit_id
             AND ou.tenant_id = u.tenant_id
@@ -1563,7 +1761,49 @@ export class PgRbacRepository implements RbacRepository {
         }),
       );
 
-      return { canAssignTenantScope, organizationUnits, roles };
+      // Epic 5 G3 — the same universe one level up. Every Legal Entity of the
+      // Tenant is listed (the scope picker shows the structure it is choosing
+      // within), but only ones the actor may really scope to are selectable:
+      // an ACTIVE Legal Entity whose whole Organization Unit set already sits
+      // inside the actor's own covered units when the actor is not tenant-wide.
+      // A deactivated Legal Entity is never offered — the write path refuses it
+      // by name, so the picker must not pretend otherwise.
+      const legalEntityRows = await client.query<{
+        id: string;
+        name: string;
+        status: string;
+      }>(
+        `SELECT id, name, status
+           FROM legal_entities
+          WHERE tenant_id = $1
+            AND deleted_at IS NULL
+          ORDER BY name, id`,
+        [actor.tenantId],
+      );
+      const assignableLegalEntityIds = new Set<string>();
+      if (!canAssignTenantScope) {
+        for (const row of legalEntityRows.rows) {
+          if (row.status !== "active") continue;
+          const unitIds = await listOrganizationUnitIdsForLegalEntityIn(
+            client,
+            actor.tenantId,
+            row.id,
+          );
+          if (unitIds.every((id) => assignableUnits?.has(id) ?? false)) {
+            assignableLegalEntityIds.add(row.id);
+          }
+        }
+      }
+      const legalEntities: AssignmentScopeLegalEntityOption[] =
+        legalEntityRows.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          selectable:
+            row.status === "active" &&
+            (canAssignTenantScope || assignableLegalEntityIds.has(row.id)),
+        }));
+
+      return { canAssignTenantScope, organizationUnits, legalEntities, roles };
     } finally {
       client.release();
     }
@@ -1593,7 +1833,8 @@ export class PgRbacRepository implements RbacRepository {
     summaries: AssignmentPairSummary[];
     writePairs: {
       roleId: string;
-      scopeType: "tenant" | "organization_unit";
+      scopeType: ScopeType;
+      scopeLegalEntityId: string | null;
       scopeOrganizationUnitId: string | null;
     }[];
   }> {
@@ -1610,13 +1851,33 @@ export class PgRbacRepository implements RbacRepository {
 
     if (targetUserId !== null) {
       const target = await client.query<{ organization_unit_ids: string[] }>(
+        // Epic 5 G3 — the target's ANCHOR units, which is what the visibility
+        // intersection is asked about: an Organization Unit assignment anchors
+        // its unit, and a Legal Entity assignment anchors every unit inside
+        // that Legal Entity (§4.5 principle 9). Without the second family a
+        // User whose only assignment is Legal Entity-scoped would be invisible
+        // to the very administrator whose Data Scope covers them.
         `SELECT ARRAY(
-                  SELECT ura.scope_organization_unit_id
-                    FROM user_role_assignments ura
-                   WHERE ura.user_id = users.id
-                     AND ura.scope_type = 'organization_unit'
-                     AND ura.scope_invalidated_at IS NULL
-                     AND ura.revoked_at IS NULL
+                  SELECT anchor_id
+                    FROM (
+                      SELECT ura.scope_organization_unit_id AS anchor_id
+                        FROM user_role_assignments ura
+                       WHERE ura.user_id = users.id
+                         AND ura.scope_type = 'organization_unit'
+                         AND ura.scope_invalidated_at IS NULL
+                         AND ura.revoked_at IS NULL
+                      UNION
+                      SELECT ou.id AS anchor_id
+                        FROM user_role_assignments ura
+                        JOIN organization_units ou
+                          ON ou.legal_entity_id = ura.scope_legal_entity_id
+                         AND ou.tenant_id = users.tenant_id
+                         AND ou.deleted_at IS NULL
+                       WHERE ura.user_id = users.id
+                         AND ura.scope_type = 'legal_entity'
+                         AND ura.scope_invalidated_at IS NULL
+                         AND ura.revoked_at IS NULL
+                    ) anchors
                 ) AS organization_unit_ids
            FROM users
           WHERE id = $1
@@ -1676,7 +1937,8 @@ export class PgRbacRepository implements RbacRepository {
     const summaries: AssignmentPairSummary[] = [];
     const writePairs: {
       roleId: string;
-      scopeType: "tenant" | "organization_unit";
+      scopeType: ScopeType;
+      scopeLegalEntityId: string | null;
       scopeOrganizationUnitId: string | null;
     }[] = [];
 
@@ -1700,12 +1962,49 @@ export class PgRbacRepository implements RbacRepository {
           roleCode: role.code,
           roleName: role.name,
           scopeType: "tenant",
+          scopeLegalEntityId: null,
+          scopeLegalEntityName: null,
           scopeOrganizationUnitId: null,
           scopeOrganizationUnitName: null,
           scopeCustomerId: null,
           scopeCustomerName: null,
         });
-        writePairs.push({ roleId: role.id, scopeType: "tenant", scopeOrganizationUnitId: null });
+        writePairs.push({
+          roleId: role.id,
+          scopeType: "tenant",
+          scopeLegalEntityId: null,
+          scopeOrganizationUnitId: null,
+        });
+        continue;
+      }
+
+      // Epic 5 G3 — the Legal Entity family. Delegation and target resolution
+      // are the same question the single-grant path asks, so it asks it with
+      // the same method: only the summary and the pair it writes are new.
+      if (pair.scopeType === "legal_entity") {
+        const name = await this.resolveLegalEntityScopeTarget(
+          client,
+          actor,
+          visibility,
+          pair.scopeLegalEntityId,
+        );
+        summaries.push({
+          roleCode: role.code,
+          roleName: role.name,
+          scopeType: "legal_entity",
+          scopeLegalEntityId: pair.scopeLegalEntityId,
+          scopeLegalEntityName: name,
+          scopeOrganizationUnitId: null,
+          scopeOrganizationUnitName: null,
+          scopeCustomerId: null,
+          scopeCustomerName: null,
+        });
+        writePairs.push({
+          roleId: role.id,
+          scopeType: "legal_entity",
+          scopeLegalEntityId: pair.scopeLegalEntityId,
+          scopeOrganizationUnitId: null,
+        });
         continue;
       }
 
@@ -1730,6 +2029,8 @@ export class PgRbacRepository implements RbacRepository {
           roleCode: role.code,
           roleName: role.name,
           scopeType: "organization_unit",
+          scopeLegalEntityId: null,
+          scopeLegalEntityName: null,
           scopeOrganizationUnitId: pair.scopeOrganizationUnitId,
           scopeOrganizationUnitName: name,
           scopeCustomerId: null,
@@ -1738,6 +2039,7 @@ export class PgRbacRepository implements RbacRepository {
         writePairs.push({
           roleId: role.id,
           scopeType: "organization_unit",
+          scopeLegalEntityId: null,
           scopeOrganizationUnitId: pair.scopeOrganizationUnitId,
         });
         continue;
@@ -1866,25 +2168,29 @@ export class PgRbacRepository implements RbacRepository {
         inserted = await client.query<{
           id: string;
           role_id: string;
-          scope_type: "tenant" | "organization_unit";
+          scope_type: ScopeType;
+          scope_legal_entity_id: string | null;
           scope_organization_unit_id: string | null;
           created_at: Date;
           created_by: string;
         }>(
           `INSERT INTO user_role_assignments
-             (user_id, role_id, scope_type, scope_organization_unit_id,
-              scope_customer_id, created_by)
-           SELECT $1, r.id, p.scope_type, p.scope_organization_unit_id, NULL, $2
-             FROM unnest($3::uuid[], $4::text[], $5::uuid[])
-               AS p(role_id, scope_type, scope_organization_unit_id)
+             (user_id, role_id, scope_type, scope_legal_entity_id,
+              scope_organization_unit_id, scope_customer_id, created_by)
+           SELECT $1, r.id, p.scope_type, p.scope_legal_entity_id,
+                  p.scope_organization_unit_id, NULL, $2
+             FROM unnest($3::uuid[], $4::text[], $5::uuid[], $6::uuid[])
+               AS p(role_id, scope_type, scope_legal_entity_id,
+                    scope_organization_unit_id)
              JOIN roles r ON r.id = p.role_id
-           RETURNING id, role_id, scope_type, scope_organization_unit_id,
-                     created_at, created_by`,
+           RETURNING id, role_id, scope_type, scope_legal_entity_id,
+                     scope_organization_unit_id, created_at, created_by`,
           [
             targetUserId,
             actor.userId,
             writePairs.map((p) => p.roleId),
             writePairs.map((p) => p.scopeType),
+            writePairs.map((p) => p.scopeLegalEntityId),
             writePairs.map((p) => p.scopeOrganizationUnitId),
           ],
         );
@@ -1915,7 +2221,11 @@ export class PgRbacRepository implements RbacRepository {
 
       const indexByKey = new Map(
         writePairs.map((pair, index) => [
-          assignmentKey(pair.roleId, pair.scopeType, pair.scopeOrganizationUnitId),
+          assignmentKey(
+            pair.roleId,
+            pair.scopeType,
+            pair.scopeLegalEntityId ?? pair.scopeOrganizationUnitId,
+          ),
           index,
         ]),
       );
@@ -1923,7 +2233,7 @@ export class PgRbacRepository implements RbacRepository {
         const summary =
           summaries[
             indexByKey.get(
-              assignmentKey(row.role_id, row.scope_type, row.scope_organization_unit_id),
+              assignmentKey(row.role_id, row.scope_type, rowScopeId(row)),
             )!
           ];
         return mapAdminAssignment({
@@ -1933,6 +2243,8 @@ export class PgRbacRepository implements RbacRepository {
           role_name: summary.roleName,
           scope_type: row.scope_type,
           scope_state: "available",
+          scope_legal_entity_id: row.scope_legal_entity_id,
+          scope_legal_entity_name: summary.scopeLegalEntityName,
           scope_organization_unit_id: row.scope_organization_unit_id,
           scope_organization_unit_name: summary.scopeOrganizationUnitName,
           scope_customer_id: null,
@@ -2041,25 +2353,29 @@ export class PgRbacRepository implements RbacRepository {
         const inserted = await client.query<{
           id: string;
           role_id: string;
-          scope_type: "tenant" | "organization_unit";
+          scope_type: ScopeType;
+          scope_legal_entity_id: string | null;
           scope_organization_unit_id: string | null;
           created_at: Date;
           created_by: string;
         }>(
           `INSERT INTO user_role_assignments
-             (user_id, role_id, scope_type, scope_organization_unit_id,
-              scope_customer_id, created_by)
-           SELECT $1, r.id, p.scope_type, p.scope_organization_unit_id, NULL, $2
-             FROM unnest($3::uuid[], $4::text[], $5::uuid[])
-               AS p(role_id, scope_type, scope_organization_unit_id)
+             (user_id, role_id, scope_type, scope_legal_entity_id,
+              scope_organization_unit_id, scope_customer_id, created_by)
+           SELECT $1, r.id, p.scope_type, p.scope_legal_entity_id,
+                  p.scope_organization_unit_id, NULL, $2
+             FROM unnest($3::uuid[], $4::text[], $5::uuid[], $6::uuid[])
+               AS p(role_id, scope_type, scope_legal_entity_id,
+                    scope_organization_unit_id)
              JOIN roles r ON r.id = p.role_id
-           RETURNING id, role_id, scope_type, scope_organization_unit_id,
-                     created_at, created_by`,
+           RETURNING id, role_id, scope_type, scope_legal_entity_id,
+                     scope_organization_unit_id, created_at, created_by`,
           [
             created.id,
             actor.userId,
             writePairs.map((p) => p.roleId),
             writePairs.map((p) => p.scopeType),
+            writePairs.map((p) => p.scopeLegalEntityId),
             writePairs.map((p) => p.scopeOrganizationUnitId),
           ],
         );
@@ -2073,7 +2389,11 @@ export class PgRbacRepository implements RbacRepository {
 
         const indexByKey = new Map(
           writePairs.map((pair, index) => [
-            assignmentKey(pair.roleId, pair.scopeType, pair.scopeOrganizationUnitId),
+            assignmentKey(
+              pair.roleId,
+              pair.scopeType,
+              pair.scopeLegalEntityId ?? pair.scopeOrganizationUnitId,
+            ),
             index,
           ]),
         );
@@ -2081,7 +2401,7 @@ export class PgRbacRepository implements RbacRepository {
           const summary =
             summaries[
               indexByKey.get(
-                assignmentKey(row.role_id, row.scope_type, row.scope_organization_unit_id),
+                assignmentKey(row.role_id, row.scope_type, rowScopeId(row)),
               )!
             ];
           return mapAdminAssignment({
@@ -2091,6 +2411,8 @@ export class PgRbacRepository implements RbacRepository {
             role_name: summary.roleName,
             scope_type: row.scope_type,
             scope_state: "available",
+            scope_legal_entity_id: row.scope_legal_entity_id,
+            scope_legal_entity_name: summary.scopeLegalEntityName,
             scope_organization_unit_id: row.scope_organization_unit_id,
             scope_organization_unit_name: summary.scopeOrganizationUnitName,
             scope_customer_id: null,
@@ -3436,6 +3758,60 @@ export class PgRbacRepository implements RbacRepository {
   }
 
   /**
+   * Epic 5 G3 — resolve one Legal Entity scope target for a governed write.
+   *
+   * Three questions, in the order the other scope families ask them:
+   *
+   * 1. does the Legal Entity exist in the actor's Tenant and is it not
+   *    deleted? (a foreign or missing target must be indistinguishable — the
+   *    same 404 the Organization Unit branch raises);
+   * 2. is it ACTIVE? §4.5 Putaran 6: an inactive Legal Entity "tidak boleh
+   *    dipakai transaksi baru", and a grant is the creation of new authority.
+   *    The refusal names the lifecycle, not a mystery 422;
+   * 3. is it inside the actor's own administrative visibility? A units actor
+   *    may scope to a Legal Entity only when every Organization Unit of that
+   *    Legal Entity is already inside the units they cover — the Legal Entity
+   *    scope resolves to exactly those units, so anything less would let them
+   *    grant authority over units they cannot see.
+   *
+   * Returns the display name so the caller's projection names the target
+   * without a second query.
+   */
+  private async resolveLegalEntityScopeTarget(
+    client: PoolClient,
+    actor: GovernedActor,
+    visibility: AdministrativeVisibility,
+    legalEntityId: string,
+  ): Promise<string> {
+    const target = await client.query<{ name: string; status: string }>(
+      `SELECT name, status
+         FROM legal_entities
+        WHERE id = $1
+          AND tenant_id = $2
+          AND deleted_at IS NULL`,
+      [legalEntityId, actor.tenantId],
+    );
+    const legalEntity = target.rows[0];
+    if (!legalEntity) throw new NotFoundError("Legal Entity", legalEntityId);
+    if (legalEntity.status !== "active") {
+      throw new ValidationError(
+        "A Legal Entity must be active before Role assignments can be scoped to it",
+      );
+    }
+    if (visibility.kind === "units") {
+      const unitIds = await listOrganizationUnitIdsForLegalEntityIn(
+        client,
+        actor.tenantId,
+        legalEntityId,
+      );
+      if (!unitIds.every((id) => visibility.organizationUnitIds.includes(id))) {
+        throw new ForbiddenError("Assignment target is outside your Data Scope");
+      }
+    }
+    return legalEntity.name;
+  }
+
+  /**
    * Epic 4 Wave 2 rewire of the Phase 11F write gates (§4.4 D): the console
    * entry ticket alone, at ANY Data Scope. The tenant-scoped
    * `user.role.manage` requirement it used to bundle moved to
@@ -3526,7 +3902,9 @@ export class PgRbacRepository implements RbacRepository {
   ): Promise<string[]> {
     // Capability-based recipient resolution (Checkpoint 1E.2). Internal
     // scopes only — `customer`-scoped assignments are deliberately excluded
-    // so a Customer User can never be an internal management recipient.
+    // so a Customer User can never be an internal management recipient. The
+    // three internal families are tenant, legal_entity (Epic 5 G3) and
+    // organization_unit.
     const result = await this.pool.query(
       `SELECT DISTINCT aura.user_id
          FROM authorization_effective_user_role_assignments aura
@@ -3534,7 +3912,7 @@ export class PgRbacRepository implements RbacRepository {
          JOIN permissions p ON p.id = rp.permission_id
         WHERE aura.tenant_id = $1
           AND p.code = $2
-          AND aura.scope_type IN ('tenant', 'organization_unit')`,
+          AND aura.scope_type IN ('tenant', 'legal_entity', 'organization_unit')`,
       [tenantId, permissionCode],
     );
     return result.rows.map((r) => r.user_id);
@@ -3574,7 +3952,8 @@ export class PgRbacRepository implements RbacRepository {
   async getAssignments(userId: string): Promise<UserRoleAssignment[]> {
     const result = await this.pool.query(
       `SELECT aura.id, aura.user_id, aura.role_id, r.code AS role_code,
-              aura.scope_type, aura.scope_organization_unit_id, aura.scope_customer_id
+              aura.scope_type, aura.scope_legal_entity_id,
+              aura.scope_organization_unit_id, aura.scope_customer_id
          FROM authorization_effective_user_role_assignments aura
          JOIN roles r ON r.id = aura.role_id
         WHERE aura.user_id = $1`,
@@ -3586,6 +3965,7 @@ export class PgRbacRepository implements RbacRepository {
       roleId: row.role_id,
       roleCode: row.role_code,
       scopeType: row.scope_type,
+      scopeLegalEntityId: row.scope_legal_entity_id,
       scopeOrganizationUnitId: row.scope_organization_unit_id,
       scopeCustomerId: row.scope_customer_id,
     }));
@@ -3606,12 +3986,17 @@ export class PgRbacRepository implements RbacRepository {
               r.code AS role_code,
               r.name AS role_name,
               aura.scope_type,
+              aura.scope_legal_entity_id,
+              le.name AS scope_legal_entity_name,
               aura.scope_organization_unit_id,
               ou.name AS scope_organization_unit_name,
               aura.scope_customer_id,
               c.name AS scope_customer_name
          FROM authorization_effective_user_role_assignments aura
          JOIN roles r ON r.id = aura.role_id
+         LEFT JOIN legal_entities le
+           ON le.id = aura.scope_legal_entity_id
+          AND le.deleted_at IS NULL
          LEFT JOIN organization_units ou
            ON ou.id = aura.scope_organization_unit_id
           AND ou.deleted_at IS NULL
@@ -3628,6 +4013,8 @@ export class PgRbacRepository implements RbacRepository {
       roleCode: row.role_code,
       roleName: row.role_name,
       scopeType: row.scope_type,
+      scopeLegalEntityId: row.scope_legal_entity_id,
+      scopeLegalEntityName: row.scope_legal_entity_name,
       scopeOrganizationUnitId: row.scope_organization_unit_id,
       scopeOrganizationUnitName: row.scope_organization_unit_name,
       scopeCustomerId: row.scope_customer_id,
@@ -3675,13 +4062,15 @@ export class PgRbacRepository implements RbacRepository {
 
       const result = await client.query(
         `INSERT INTO user_role_assignments
-           (user_id, role_id, scope_type, scope_organization_unit_id, scope_customer_id, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
+           (user_id, role_id, scope_type, scope_legal_entity_id,
+            scope_organization_unit_id, scope_customer_id, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
         [
           input.userId,
           input.roleId,
           input.scopeType,
+          input.scopeLegalEntityId ?? null,
           input.scopeOrganizationUnitId ?? null,
           input.scopeCustomerId ?? null,
           createdBy,
@@ -3694,6 +4083,7 @@ export class PgRbacRepository implements RbacRepository {
         roleId: row.role_id,
         roleCode: roleResult.rows[0].code as string,
         scopeType: row.scope_type,
+        scopeLegalEntityId: row.scope_legal_entity_id,
         scopeOrganizationUnitId: row.scope_organization_unit_id,
         scopeCustomerId: row.scope_customer_id,
       };
@@ -3712,15 +4102,20 @@ export class PgRbacRepository implements RbacRepository {
     // uses, kept self-contained in this query (a single JOIN) rather than
     // a second round-trip, since this method is already tenant/role
     // scoped SQL.
+    //
+    // Epic 5 G3: a `legal_entity` holder of the role is eligible for a target
+    // unit inside that Legal Entity — the coverage chain tenant → Legal Entity
+    // → Organization Unit, resolved from the target unit's own row so this
+    // query keeps the same shape (one statement, no extra round trip).
     const result = await this.pool.query(
       `WITH RECURSIVE ancestors AS (
-         SELECT id, parent_id
+         SELECT id, parent_id, legal_entity_id
            FROM organization_units
           WHERE id = $3
             AND tenant_id = $1
             AND deleted_at IS NULL
          UNION ALL
-         SELECT ou.id, ou.parent_id
+         SELECT ou.id, ou.parent_id, ou.legal_entity_id
            FROM organization_units ou
            JOIN ancestors a ON ou.id = a.parent_id
           WHERE ou.tenant_id = $1
@@ -3737,6 +4132,13 @@ export class PgRbacRepository implements RbacRepository {
               $3::uuid IS NOT NULL
               AND aura.scope_type = 'organization_unit'
               AND aura.scope_organization_unit_id IN (SELECT id FROM ancestors)
+            )
+            OR (
+              $3::uuid IS NOT NULL
+              AND aura.scope_type = 'legal_entity'
+              AND aura.scope_legal_entity_id = (
+                SELECT legal_entity_id FROM ancestors WHERE id = $3::uuid
+              )
             )
           )`,
       [tenantId, roleCode, organizationUnitId],

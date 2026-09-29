@@ -91,6 +91,7 @@ export function useAssignmentOptions(enabled: boolean): AssignmentOptionsState {
 export interface AssignmentPairIdentity {
   roleCode: string;
   scopeType: string;
+  scopeLegalEntityId?: string | null;
   scopeOrganizationUnitId?: string | null;
   scopeCustomerId?: string | null;
 }
@@ -98,6 +99,9 @@ export interface AssignmentPairIdentity {
 /** Stable identity of a pair, mirroring the server's duplicate rejection. */
 export function assignmentPairKey(pair: AssignmentPairIdentity): string {
   if (pair.scopeType === "tenant") return `${pair.roleCode}::tenant`;
+  if (pair.scopeType === "legal_entity") {
+    return `${pair.roleCode}::le:${pair.scopeLegalEntityId ?? ""}`;
+  }
   if (pair.scopeType === "organization_unit") {
     return `${pair.roleCode}::ou:${pair.scopeOrganizationUnitId ?? ""}`;
   }
@@ -118,6 +122,9 @@ export function assignmentPairsHaveDuplicate(
 
 function scopeKeyOf(pair: AdminRoleAssignmentInput): string {
   if (pair.scopeType === "tenant") return "tenant";
+  if (pair.scopeType === "legal_entity") {
+    return `le:${pair.scopeLegalEntityId}`;
+  }
   if (pair.scopeType === "organization_unit") {
     return `ou:${pair.scopeOrganizationUnitId}`;
   }
@@ -145,7 +152,13 @@ function pairFromSelection(
       scopeOrganizationUnitId: unit.id,
     };
   }
-  // Customer scope is never offered by this picker; nothing can select it.
+  // Neither Customer scope nor Legal Entity scope is offered by this picker
+  // yet. Customer scope waits for the Service Operation session (Epic 5 G3
+  // keeps it out); the Legal Entity option list is served by the API
+  // (`AssignmentOptions.legalEntities`) and gets its control in the Epic 5 G3
+  // UI card. Until that control exists, nothing can select either key, so the
+  // editor offers none of them rather than inventing a choice the API would
+  // have to second-guess.
   return null;
 }
 
