@@ -128,7 +128,8 @@ Notes, stated rather than smoothed over:
 
 Two probe scripts (`probe-g2-guards.sql`, `probe-g2-shipped.sql`), each
 experiment in its own `BEGIN … ROLLBACK` with results carried out by
-`RAISE NOTICE`:
+`RAISE NOTICE`. The shipped-schema script was re-measured after round 2's review
+(`probe-g2-shipped-v2.sql`, §11.1) — the row below that changed is marked.
 
 | Probe | Ship state | Result |
 |---|---|---|
@@ -145,8 +146,20 @@ experiment in its own `BEGIN … ROLLBACK` with results carried out by
 | S3 direct root-Central DELETE, owner present | **shipped** | **refused** |
 | S4 direct DELETE of a non-root unit | **shipped** | allowed, unchanged |
 | S5a overlapping effective range | **shipped** | **refused** (`organization_unit_hierarchy_no_overlap`) |
-| S5b back-to-back ranges | **shipped** | allowed |
+| S5b back-to-back ranges (**corrected, §11.1**) | **shipped** | allowed **only with the creation trigger neutralised**: on the schema as shipped the unit already owns an open range from its creation, so a hand-written second range is a real overlap → **refused** `23P01` |
 | S6a/S6b/S6c registry census | **shipped** | child → `parent_id` hit; leaf → `[]`; LE → `organization_units.legal_entity_id` |
+
+**What §6 covers, per migration** (the rev-1 table did not say this, and rev-1's
+`S5b` row was measured before `1789399500000` landed):
+
+- S1–S4 — `1789398000000`'s two carry-forward guards, on top of the G1 definitions;
+- S5a–S5c — `1789396000000`'s `organization_unit_hierarchy_no_overlap` constraint
+  and `organization_unit_parent_at()`;
+- S6a–S6c and S7 — `1789397000000`'s `entity_reference_registry` and
+  `entity_reference_census()`;
+- **not covered here**: `1789399500000` (projection sync) and `1789399600000`
+  (root-Central backfill). Those two are measured in §1 (fresh migration from
+  zero) and §5 (the legacy clone).
 
 ## 7. Carry-forward resolution
 
@@ -244,12 +257,24 @@ it). Probe C below is the round-1 repro: now 409, parent unchanged, **no open
 range** on the tombstoned unit.
 
 Same class, found while fixing it and closed here: a **tombstone dated before the
-version in force** (a business date earlier than the start of the range in force —
-the shape a legacy-shaped unit or a future-dated publish produces) used to close
-nothing, leaving a tombstoned unit "in force" for every reader. It is now refused
-by name: the unit cannot leave the structure before the version that put it there,
-and no range can express it. Probe E below: refused, the version in force still
-open and the unit still `inactive`; the ordinary delete then records and closes it.
+version in force** (a business date earlier than the start of the range in force)
+used to close nothing, leaving a tombstoned unit "in force" for every reader. It
+is now refused by name: the unit cannot leave the structure before the version
+that put it there, and no range can express it. Probe E below: refused, the
+version in force still open and the unit still `inactive`; the ordinary delete
+then records and closes it.
+
+**Reachability, corrected in round 3 (§11.2).** The shape that reaches this rule
+is the **legacy** one — a unit whose recorded history starts long after its
+`created_at`, which is every unit the parity snapshot predates (§5), and the
+fixture the acceptance test builds
+(`epic-5-g2-hierarchy-history.test.ts`, "refuses a tombstone dated before the
+version in force"). A **future-dated publish does not reach it**: after one, the
+current instant sits inside the *sealed* `[creation, +10h)` range, so the coverage
+check refuses first with its own message ("A range … is already in force at …; it
+overlaps this change"). Round 2 measured exactly that (P5a), and the round-1
+handoff's sentence claiming the future-dated shape was enough to reach the rule
+was wrong. Both refusals are named 409s; only the rule that fires differs.
 
 ### 10.3 Observation — publishing a `draft`
 
@@ -297,7 +322,7 @@ Round-1 probes re-run on the reworked tree
 | B — second backdate on one unit | **500**, `23P01` | **409** named (same reason), one open range, nothing written |
 | C — publish a pending request after the unit's tombstone | **200**, unit re-parented + new open range | **409** named ("structure changes are no longer accepted"), parent unchanged, no open range |
 | D — publish a `draft` | 200, silently | 200, `fromStatus: "draft"` on the publish audit |
-| E — tombstone dated before the version in force | not covered | **409** named; the ordinary tombstone then closes the range (no open range) |
+| E — tombstone dated before the version in force (legacy shape, §11.2) | not covered | **409** named; the ordinary tombstone then closes the range (no open range) |
 | F — two backdates with a forward publish between them | **500** | **200 / 200**, partition gapless: `[-85d,-60d) [-60d,-30d) [-30d,+10h) [+10h,∞)` |
 
 A correction dated **before the range in force but after the unit was created** —
@@ -348,3 +373,106 @@ The migration hash is unchanged from round 1 (the reviewer's `92a3854…`), so n
 applied migration was touched by this rework. The other three are the reworked
 artifacts; re-check them before reviewing, and again before round 2's
 reproduction.
+
+## 11. Round-3 rework (round-2 review `changes_requested`, comment #31)
+
+Round 2 verified the implementation and asked for two **evidence-artifact**
+corrections, explicitly without touching behaviour. That is all this round did:
+**no implementation file, migration or test changed** — the three artifact hashes
+below are byte-identical to the revision round 2 reviewed, so the behaviour it
+verified is the behaviour shipped.
+
+### 11.1 §6 re-measured — the `S5b` row
+
+Round 2's finding was right and is now fixed in §6. Rev 1's experiment inserted a
+second range `[2026-06-01, ∞)` for a unit the probe had just created **through the
+application schema**, so `1789399500000`'s
+`trg_organization_units_sync_hierarchy_history` had already opened a range for
+that unit at creation (`[creation, ∞)`). The insert therefore genuinely overlapped
+it — a real overlap, not an adjacency test — and the rev-1 header names only
+`1789396000000`, `1789397000000` and `1789398000000` as the definitions it
+covers, i.e. the row was measured before the projection trigger landed and never
+re-run. §6 now states which migration each probe group covers.
+
+Re-measured with the experiment actually asking the adjacency question
+(`probe-g2-shipped-v2.sql`, same `BEGIN … ROLLBACK` discipline, on
+`abixell_one_epic5g2rw3`):
+
+| Probe | Result on the shipped schema |
+|---|---|
+| S5a overlapping range | **refused** `23P01` (`organization_unit_hierarchy_no_overlap`) |
+| S5b-shipped, as rev 1 wrote it (trigger active) | **refused** `23P01` — the unit already owns 1 open range from its creation, so this is an overlap, not adjacency |
+| S5b-isolated (creation trigger disabled for the rolled-back transaction) | history rows opened at creation = **0**; back-to-back range **allowed** |
+| S5b-isolated control (a real overlap, same transaction, same schema) | **refused** `23P01` — so "allowed" above is adjacency, not a disabled constraint |
+| S5c `organization_unit_parent_at()` mid-range | returns the parent that holds that range |
+| S1 / S2a / S2b / S3 / S4 | unchanged: teardown OK / **refused** / teardown OK / **refused** (Root Central) / non-root delete allowed |
+| S6a/S6b/S6c, S7 | unchanged: `parent_id: 1` / `[]` / `legal_entity_id: 2`; registry = 2 entity types, `organization_unit` 28 columns + `legal_entity` 5 |
+
+Adjacency on the **app path** is the other half of the same claim and it is
+gapless: §10.4 probe F's partition `[-85d,-60d) [-60d,-30d) [-30d,+10h) [+10h,∞)`
+shares every boundary with exactly one range open.
+
+### 11.2 §10 corrected — which rule refuses a tombstone dated before the version in force
+
+§10.2 no longer says the rule is reachable "the shape a legacy-shaped unit or a
+future-dated publish produces", and the round-1 handoff's sentence that it is
+"reachable without a legacy fixture: publish a future-dated move, then tombstone
+the unit now" is corrected in place and on the card. Measured, both shapes, this
+run's own database (probe file `zz-round3-probes.test.ts`, two tests, both pass):
+
+| Probe | Shape | Result |
+|---|---|---|
+| P5a | fresh unit, forward-dated publish (+10h) → ranges `[creation,+10h)` sealed + `[+10h,∞)` open; deactivate; tombstone dated **now** | **409** — **the coverage check**, not the branch: `A range (…) is already in force at …; it overlaps this change`, one open range, unchanged |
+| P5b | legacy shape (unit created 365 days ago, recorded history opens 10 days ago); deactivate; tombstone dated **60 days ago** | **409** — the branch: `The range in force began at …, later than the effective date …; an Organization Unit cannot leave the structure before the version that put it there`; the ordinary tombstone then **200** and **no range in force** |
+
+So: the rule is reachable, and P5b (the shape the suite's own fixture builds) is
+what reaches it; after a future-dated publish the current instant sits inside the
+*sealed* range and the coverage refusal wins first. Both are named 409s — nothing
+about the behaviour changed, only the sentence about which rule fires and when.
+
+### 11.3 Verification (this run's own isolated database)
+
+```
+$ docker exec abixell-dev psql -U abixell -d abixell_one_epic5g2rw3 -tc "SELECT current_database();"
+ abixell_one_epic5g2rw3            (created empty, migrated from zero:
+                                    pgmigrations 75 rows, 6 of them G2,
+                                    highest stamp 1789399600000,
+                                    "Migrations complete!")
+
+$ npx vitest run tests/integration/epic-5-g2-hierarchy-history.test.ts
+ Test Files  1 passed (1)      Tests  18 passed (18)
+
+$ npm run test -w apps/api      (full suite, same database)
+ Test Files  2 failed | 64 passed (66)   ← role-definition + window-enforcement,
+      Tests  902 passed | 27 skipped (929)  the documented by-design pair (they
+                                            require DB abixell_one_epic3_wave4)
+
+$ npm run typecheck -w apps/api → exit 0
+$ npm run lint -w apps/api      → 56 problems (7 errors, 49 warnings) = baseline;
+                                  no file this wave touched is named
+```
+
+Migrations: `git diff --name-status f30ce1c HEAD -- apps/api/migrations` = six
+**A** lines; `git diff --name-status eaeab0f HEAD -- apps/api/migrations` empty.
+
+Hygiene: `git status --porcelain` = this document only; `--ignored` adds
+`node_modules/` and `apps/api/storage/`; no `*.log`, `*.sql`, `*.dump`, `*.bak`
+or `test-*`/`validation-*` file anywhere in the worktree (the probe scripts and
+their logs live outside the repo, below).
+
+Artifact hashes at this verification (§10.6 values, re-checked unchanged):
+
+```
+92a385491ba9ab068f31f0c61a18abb29df2748b3f2e108ed126a716b46c9259  apps/api/migrations/1789396000000_epic-5-g2-hierarchy-history.cjs
+34e09e44fae550e78f3623850a1ff10fba9f7da38ac352716049c27e9d229016  apps/api/src/infrastructure/persistence/repositories/organization-unit-hierarchy.repository.pg.ts
+f33766b8d4436e4233b928297d15cbd12eb68f8a44238581715f59ebd8e3320c  apps/api/tests/integration/epic-5-g2-hierarchy-history.test.ts
+664635dfa9e43fda0167a7511835976c7d594d54c02bc03febfbb245dc4de182  apps/api/src/domain/organization-unit/organization-unit-hierarchy.entity.ts
+```
+
+### 11.4 Evidence kept outside the repo
+
+`%LOCALAPPDATA%\Temp\epic5g2rw3\`: `probe-g2-shipped-v2.sql` (+
+`probe-shipped-v2.log`), `zz-round3-probes.test.ts` (copied in to run, deleted —
+`git status` clean of it), `probes.log`, `acceptance.log`, `fullsuite.log`,
+`typecheck.log`, `lint.log`, `migrate.log`, `wave.env`.
+
