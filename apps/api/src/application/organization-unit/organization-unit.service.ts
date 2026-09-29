@@ -3,16 +3,26 @@ import type {
   OrganizationUnitRepository,
   UpdateOrganizationUnitInput,
 } from "../../domain/organization-unit/organization-unit.entity.js";
-import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 import type { RbacRepository } from "../../domain/rbac/rbac.entity.js";
+import type { LifecycleStatus } from "../../domain/legal-entity/legal-entity.entity.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
-import { ForbiddenError, NotFoundError } from "../../domain/shared-kernel/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../domain/shared-kernel/errors.js";
 
+/**
+ * Organization Unit application service.
+ *
+ * No `AuditService` dependency: every write is governed and the transaction in
+ * `PgOrganizationUnitRepository` records its own audit row, so the trail can
+ * never outlive a rolled-back change.
+ *
+ * The service layer additionally protects the root Central (§4.5 Putaran 4)
+ * *before* the repository is reached, so the caller gets a named refusal rather
+ * than a constraint error.
+ */
 export class OrganizationUnitService {
   constructor(
     private readonly repo: OrganizationUnitRepository,
-    private readonly audit: AuditService,
     private readonly rbac: RbacService,
     private readonly rbacRepo: RbacRepository,
   ) {}
@@ -39,18 +49,7 @@ export class OrganizationUnitService {
       }
     }
 
-    const unit = await this.repo.create({ ...input, tenantId: actor.tenantId }, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      actorUserId: actor.userId,
-      action: "organization_unit.created",
-      entityType: "organization_unit",
-      entityId: unit.id,
-      metadata: { name: unit.name, parentId: unit.parentId },
-    });
-
-    return unit;
+    return this.repo.create({ ...input, tenantId: actor.tenantId }, actor);
   }
 
   async update(
@@ -72,8 +71,43 @@ export class OrganizationUnitService {
     );
     const unit = await this.repo.findById(id);
     if (!unit || unit.tenantId !== actor.tenantId) throw new NotFoundError("OrganizationUnit", id);
+    this.assertRootCentralSurvives(unit.unitType, unit.parentId, isActive);
     await this.rbac.requireOrganizationUnitScopeForActor(actor, id);
     return this.repo.setActive(id, isActive, actor);
+  }
+
+  /**
+   * Explicit lifecycle transition (`POST /organization-units/:id/status`).
+   * G0 §5 keeps the same policy as the Legal Entity: `draft → active`,
+   * `active → inactive`, `inactive → active`, `inactive → tombstone`.
+   */
+  async updateStatus(actor: ActorContext, id: string, status: LifecycleStatus) {
+    await this.rbac.requirePermission(
+      actor,
+      status === "active" ? "organization_unit.activate" : "organization_unit.deactivate",
+    );
+    const unit = await this.repo.findById(id);
+    if (!unit || unit.tenantId !== actor.tenantId) throw new NotFoundError("OrganizationUnit", id);
+    this.assertRootCentralSurvives(unit.unitType, unit.parentId, status === "active");
+    await this.rbac.requireOrganizationUnitScopeForActor(actor, id);
+    return this.repo.updateStatus(id, status, actor);
+  }
+
+  /**
+   * §4.5 Putaran 4: "Setiap Legal Entity wajib memiliki tepat satu root
+   * Organization Unit bernama Central. Dibuat otomatis saat Legal Entity dibuat
+   * dan tidak boleh dihapus." The database trigger refuses the write; this
+   * states the rule where the caller can read it, and audits nothing because
+   * nothing is written.
+   */
+  private assertRootCentralSurvives(
+    unitType: string,
+    parentId: string | null,
+    isActive: boolean,
+  ): void {
+    if (unitType === "Central" && parentId === null && !isActive) {
+      throw new ConflictError("Root Central Organization Unit cannot be deactivated");
+    }
   }
 
   async listForTenant(actor: ActorContext) {

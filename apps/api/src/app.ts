@@ -15,6 +15,7 @@ import { registerAuthRoutes } from "./interfaces/http/routes/auth.js";
 import { registerTenantRoutes } from "./interfaces/http/routes/tenants.js";
 import { registerLegalEntityRoutes } from "./interfaces/http/routes/legal-entities.js";
 import { registerOrganizationUnitRoutes } from "./interfaces/http/routes/organization-units.js";
+import { registerDepartmentRoutes } from "./interfaces/http/routes/departments.js";
 import { registerUserRoutes } from "./interfaces/http/routes/users.js";
 import { registerAuditRoutes } from "./interfaces/http/routes/audit.js";
 import { registerConfigurationRoutes } from "./interfaces/http/routes/config.js";
@@ -157,6 +158,9 @@ export function buildApp(): FastifyInstance {
     registerTenantRoutes(scoped, container);
     registerLegalEntityRoutes(scoped, container);
     registerOrganizationUnitRoutes(scoped, container);
+    // Epic 5 Gelombang 1 — Department master (hierarchy + lifecycle). A master
+    // surface, never an authorization scope.
+    registerDepartmentRoutes(scoped, container);
     registerUserRoutes(scoped, container);
     registerAuditRoutes(scoped, container);
     registerConfigurationRoutes(scoped, container);

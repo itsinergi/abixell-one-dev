@@ -2,6 +2,7 @@ import { pool } from "./infrastructure/persistence/db.js";
 import { PgTenantRepository } from "./infrastructure/persistence/repositories/tenant.repository.pg.js";
 import { PgLegalEntityRepository } from "./infrastructure/persistence/repositories/legal-entity.repository.pg.js";
 import { PgOrganizationUnitRepository } from "./infrastructure/persistence/repositories/organization-unit.repository.pg.js";
+import { PgDepartmentRepository } from "./infrastructure/persistence/repositories/department.repository.pg.js";
 import { PgUserRepository } from "./infrastructure/persistence/repositories/user.repository.pg.js";
 import { PgRbacRepository } from "./infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { PgAuditLogRepository } from "./infrastructure/persistence/repositories/audit-log.repository.pg.js";
@@ -36,6 +37,7 @@ import { ApprovalAuthorityService } from "./domain/rbac/approval-authority.servi
 import { TenantService } from "./application/tenant/tenant.service.js";
 import { LegalEntityService } from "./application/legal-entity/legal-entity.service.js";
 import { OrganizationUnitService } from "./application/organization-unit/organization-unit.service.js";
+import { DepartmentService } from "./application/department/department.service.js";
 import { UserService } from "./application/identity/user.service.js";
 import { AuthService } from "./application/identity/auth.service.js";
 import { ConfigurationService } from "./application/configuration/configuration.service.js";
@@ -134,6 +136,11 @@ export function buildContainer() {
   const tenantRepo = new PgTenantRepository(pool);
   const legalEntityRepo = new PgLegalEntityRepository(pool);
   const organizationUnitRepo = new PgOrganizationUnitRepository(pool);
+  // Epic 5 Gelombang 1 — Department master. Deliberately NOT a scope source:
+  // the repository is only ever reached with the actor's tenant id, and no
+  // scope column or RbacService scope method is involved (see the module
+  // comment on domain/department/department.entity.ts).
+  const departmentRepo = new PgDepartmentRepository(pool);
   const userRepo = new PgUserRepository(pool);
   const rbacRepo = new PgRbacRepository(pool);
   const auditRepo = new PgAuditLogRepository(pool);
@@ -692,8 +699,9 @@ export function buildContainer() {
     eventBus,
     scheduler,
     tenant: new TenantService(tenantRepo, audit, rbac),
-    legalEntity: new LegalEntityService(legalEntityRepo, audit, rbac),
-    organizationUnit: new OrganizationUnitService(organizationUnitRepo, audit, rbac, rbacRepo),
+    legalEntity: new LegalEntityService(legalEntityRepo, rbac),
+    organizationUnit: new OrganizationUnitService(organizationUnitRepo, rbac, rbacRepo),
+    departments: new DepartmentService(departmentRepo, rbac),
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
     configuration,

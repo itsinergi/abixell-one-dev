@@ -67,7 +67,7 @@ describe("Login workspace selection", () => {
     );
     const ouResult = await pool.query(
       `INSERT INTO organization_units (tenant_id, legal_entity_id, name, unit_type)
-       VALUES ($1, $2, 'Site LWS', 'Site') RETURNING id`,
+       VALUES ($1, $2, 'Site LWS', 'Internal Site') RETURNING id`,
       [tenantAId, leResult.rows[0].id],
     );
     const orgUnitId = ouResult.rows[0].id as string;

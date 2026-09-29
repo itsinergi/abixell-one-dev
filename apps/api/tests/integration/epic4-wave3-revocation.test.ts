@@ -101,7 +101,7 @@ async function createOrganizationUnit(
   );
   const organizationUnit = await pool.query(
     `INSERT INTO organization_units (tenant_id, legal_entity_id, name, unit_type)
-     VALUES ($1, $2, $3, 'Branch')
+     VALUES ($1, $2, $3, 'Internal Site')
      RETURNING id`,
     [tenantId, legalEntity.rows[0].id, `E4W3 Organization Unit ${suffix}`],
   );

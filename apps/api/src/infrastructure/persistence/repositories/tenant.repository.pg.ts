@@ -3,6 +3,7 @@ import type {
   CreateTenantInput,
   Tenant,
   TenantRepository,
+  UpdatedTenantProfile,
   UpdateTenantInput,
 } from "../../../domain/tenant/tenant.entity.js";
 import type { ActorContext } from "../../../domain/shared-kernel/audit-context.js";
@@ -13,6 +14,17 @@ import {
   requireTransactionActorPermission,
 } from "./governed-transaction.js";
 
+/** `UpdateTenantInput` field → column. Fixed, so the dynamic SET below can
+ * never interpolate a caller-supplied identifier. */
+const PROFILE_COLUMNS: ReadonlyArray<readonly [keyof UpdateTenantInput & string, string]> = [
+  ["defaultTimezone", "default_timezone"],
+  ["defaultLocale", "default_locale"],
+  ["defaultCurrency", "default_currency"],
+  ["contactAdminName", "contact_admin_name"],
+  ["contactAdminEmail", "contact_admin_email"],
+  ["contactAdminPhone", "contact_admin_phone"],
+];
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRow(row: any): Tenant {
   return {
@@ -20,6 +32,12 @@ function mapRow(row: any): Tenant {
     code: row.code,
     name: row.name,
     status: row.status,
+    defaultTimezone: row.default_timezone ?? null,
+    defaultLocale: row.default_locale ?? null,
+    defaultCurrency: row.default_currency ?? null,
+    contactAdminName: row.contact_admin_name ?? null,
+    contactAdminEmail: row.contact_admin_email ?? null,
+    contactAdminPhone: row.contact_admin_phone ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -54,29 +72,54 @@ export class PgTenantRepository implements TenantRepository {
     return result.rows[0] ? mapRow(result.rows[0]) : null;
   }
 
-  async updateName(input: UpdateTenantInput, actor: ActorContext): Promise<{ name: string }> {
+  /**
+   * Profile update — the existing governed path, widened.
+   *
+   * The name-only behaviour is preserved exactly: only the columns whose keys
+   * are present in `input` are written, so omitting a profile field leaves the
+   * stored value alone and sending `null` clears it. The audit event still
+   * carries `{ previousName, name }` for a name-only request, with the supplied
+   * profile fields added beside them, and the response echoes exactly the
+   * fields that were written.
+   */
+  async updateName(
+    input: UpdateTenantInput,
+    actor: ActorContext,
+  ): Promise<UpdatedTenantProfile> {
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
-      await requireTransactionActorPermission(
-        client,
-        actor,
-        "tenant.update",
-      );
+      await requireTransactionActorPermission(client, actor, "tenant.update");
 
-      const current = await client.query<{ name: string }>(
-        `SELECT name FROM tenants WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+      const current = await client.query(
+        `SELECT * FROM tenants WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
         [actor.tenantId],
       );
       if (!current.rows[0]) throw new NotFoundError("Tenant", actor.tenantId);
 
-      const updated = await client.query<{ name: string }>(
+      const assignments: string[] = ["name = $1", "updated_by = $2", "updated_at = now()"];
+      const values: unknown[] = [input.name, actor.userId];
+      const written: UpdatedTenantProfile = { name: input.name };
+      const auditMetadata: Record<string, unknown> = {
+        previousName: current.rows[0].name,
+        name: input.name,
+      };
+
+      for (const [field, column] of PROFILE_COLUMNS) {
+        const value = input[field];
+        if (value === undefined) continue;
+        values.push(value);
+        assignments.push(`${column} = $${values.length}`);
+        written[field] = value as string;
+        auditMetadata[field] = value;
+      }
+
+      values.push(actor.tenantId);
+      const updated = await client.query(
         `UPDATE tenants
-            SET name = $1,
-                updated_by = $2,
-                updated_at = now()
-          WHERE id = $3
+            SET ${assignments.join(", ")}
+          WHERE id = $${values.length}
             AND deleted_at IS NULL
-        RETURNING name`,
-        [input.name, actor.userId, actor.tenantId],
+        RETURNING *`,
+        values,
       );
       if (!updated.rows[0]) throw new NotFoundError("Tenant", actor.tenantId);
 
@@ -86,13 +129,14 @@ export class PgTenantRepository implements TenantRepository {
         action: "tenant.updated",
         entityType: "tenant",
         entityId: actor.tenantId,
-        metadata: {
-          previousName: current.rows[0].name,
-          name: updated.rows[0].name,
-        },
+        metadata: auditMetadata,
       });
 
-      return { name: updated.rows[0].name };
+      const row = mapRow(updated.rows[0]);
+      // Echo what was written, not the whole row: a caller that sent only a
+      // name still gets `{ name }` back.
+      written.name = row.name;
+      return written;
     });
   }
 

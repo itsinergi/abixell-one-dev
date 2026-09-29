@@ -179,6 +179,9 @@ export const PERMISSION_MODULE_PREFIXES: ReadonlyArray<readonly [string, ModuleC
   ["role.", "platform"],
   ["audit_log.", "platform"],
   ["config.", "platform"],
+  // Epic 5 Gelombang 1 — the Department master is tenant-owned platform data
+  // (organisation structure), never a module of its own.
+  ["department.", "platform"],
   ["integration.", "platform"],
   ["legal_entity.", "platform"],
   ["notification.", "platform"],
@@ -228,6 +231,7 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
   "audit-log": "platform",
   auth: "platform",
   config: "platform",
+  departments: "platform",
   documents: "platform",
   health: "platform",
   integration: "platform",

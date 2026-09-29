@@ -137,22 +137,40 @@ async function createAssignment(
 }
 
 /** Organization Units come as a tree: the §4.4 E descendant rule needs a real
- * `parent_id` chain, so the flat Phase 11F helper is not enough here. */
+ * `parent_id` chain, so the flat Phase 11F helper is not enough here.
+ *
+ * Epic 5 Gelombang 1 makes the parent link a same-Legal-Entity link
+ * (`organization_units_enforce_structure`, migration 1789385000000 — §4.5:
+ * "Anak dan parent harus berada pada Tenant dan Legal Entity yang sama"), so
+ * the whole tree hangs off ONE Legal Entity per Tenant rather than minting a
+ * fresh one per unit, which is what this helper used to do. Nothing in §4.4
+ * asserted Legal Entity identity; the tree only ever needed a parent chain. */
+const legalEntityByTenant = new Map<string, string>();
+
+async function tenantLegalEntityId(tenantId: string): Promise<string> {
+  const cached = legalEntityByTenant.get(tenantId);
+  if (cached !== undefined) return cached;
+  const legalEntity = await pool.query(
+    `INSERT INTO legal_entities (tenant_id, name) VALUES ($1, $2) RETURNING id`,
+    [tenantId, `E4W2 Legal Entity ${codeStamp}`],
+  );
+  const id = legalEntity.rows[0].id as string;
+  legalEntityByTenant.set(tenantId, id);
+  return id;
+}
+
 async function createOrganizationUnit(
   tenantId: string,
   name: string,
   parentId: string | null,
 ): Promise<string> {
-  const legalEntity = await pool.query(
-    `INSERT INTO legal_entities (tenant_id, name) VALUES ($1, $2) RETURNING id`,
-    [tenantId, `${name} Legal Entity`],
-  );
+  const legalEntityId = await tenantLegalEntityId(tenantId);
   const unit = await pool.query(
     `INSERT INTO organization_units
        (tenant_id, legal_entity_id, parent_id, name, unit_type)
-     VALUES ($1, $2, $3, $4, 'Branch')
+     VALUES ($1, $2, $3, $4, 'Internal Site')
      RETURNING id`,
-    [tenantId, legalEntity.rows[0].id, parentId, name],
+    [tenantId, legalEntityId, parentId, name],
   );
   return unit.rows[0].id as string;
 }
@@ -166,7 +184,7 @@ async function createCustomer(tenantId: string, name: string): Promise<string> {
 }
 
 function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
-  // Epic 1 (�4.1 F): a bearer token must name a session, so fixtures create
+  // Epic 1 (�4.1 F): a bearer token must name a session, so fixtures create
   // one the way the login endpoint does instead of signing a bare payload.
   return sessionTokenFor({ userId: user.id, tenantId });
 }

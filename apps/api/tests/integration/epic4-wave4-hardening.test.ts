@@ -106,7 +106,7 @@ async function createOrganizationUnit(
   );
   const organizationUnit = await pool.query(
     `INSERT INTO organization_units (tenant_id, legal_entity_id, name, unit_type)
-     VALUES ($1, $2, $3, 'Branch')
+     VALUES ($1, $2, $3, 'Internal Site')
      RETURNING id`,
     [tenantId, legalEntity.rows[0].id, `E4W4 Organization Unit ${suffix}`],
   );
@@ -140,7 +140,7 @@ async function createAssignment(
 }
 
 function tokenFor(tenantId: string, user: UserFixture): Promise<string> {
-  // Epic 1 (§4.1 F): a bearer token must name a session, so fixtures create
+  // Epic 1 (ï¿½4.1 F): a bearer token must name a session, so fixtures create
   // one the way the login endpoint does instead of signing a bare payload.
   return sessionTokenFor({ userId: user.id, tenantId });
 }
