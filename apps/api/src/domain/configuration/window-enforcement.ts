@@ -259,6 +259,11 @@ export const WINDOW_RULES: WindowRule[] = [
   // (DashboardPage) and read from `/admin`; `/administration` owns them.
   { method: "*", apiPath: "/legal-entities", windowCode: "route:/administration" },
   { method: "*", apiPath: "/organization-units", windowCode: "route:/administration" },
+  // Epic 5 Gelombang 2 — proposing a structure change, reading its
+  // effective-dated history and tombstoning a unit are all raised from the same
+  // `/administration` organisation surface as the unit list itself. The review
+  // queue lives on its own first segment, so it needs its own rule.
+  { method: "*", apiPath: "/organization-unit-change-requests", windowCode: "route:/administration" },
   // Epic 5 Gelombang 1 — the Department master is edited from the same
   // `/administration` surface as the rest of the organisation structure.
   { method: "*", apiPath: "/departments", windowCode: "route:/administration" },
