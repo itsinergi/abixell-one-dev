@@ -240,6 +240,7 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
   notifications: "platform",
   observability: "platform",
   "organization-units": "platform",
+  "organization-unit-change-requests": "platform",
   scheduler: "platform",
   tenants: "platform",
   users: "platform",

@@ -15,6 +15,7 @@ import { registerAuthRoutes } from "./interfaces/http/routes/auth.js";
 import { registerTenantRoutes } from "./interfaces/http/routes/tenants.js";
 import { registerLegalEntityRoutes } from "./interfaces/http/routes/legal-entities.js";
 import { registerOrganizationUnitRoutes } from "./interfaces/http/routes/organization-units.js";
+import { registerOrganizationUnitHierarchyRoutes } from "./interfaces/http/routes/organization-unit-hierarchy.js";
 import { registerDepartmentRoutes } from "./interfaces/http/routes/departments.js";
 import { registerUserRoutes } from "./interfaces/http/routes/users.js";
 import { registerAuditRoutes } from "./interfaces/http/routes/audit.js";
@@ -158,6 +159,11 @@ export function buildApp(): FastifyInstance {
     registerTenantRoutes(scoped, container);
     registerLegalEntityRoutes(scoped, container);
     registerOrganizationUnitRoutes(scoped, container);
+    // Epic 5 Gelombang 2 — effective-dated hierarchy history, change requests and
+    // the tombstone/reference-check flow. Registered beside the unit surface it
+    // changes; the permission, not the route, is what separates proposer from
+    // publisher (§4.5 principle 12).
+    registerOrganizationUnitHierarchyRoutes(scoped, container);
     // Epic 5 Gelombang 1 — Department master (hierarchy + lifecycle). A master
     // surface, never an authorization scope.
     registerDepartmentRoutes(scoped, container);
