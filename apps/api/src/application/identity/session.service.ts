@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
+import type { ScopeType } from "../../domain/rbac/rbac.entity.js";
 import { ForbiddenError } from "../../domain/shared-kernel/errors.js";
 import {
   inGovernedTransaction,
@@ -26,6 +27,7 @@ const ASSIGNMENT_COLUMNS = `
   aura.role_id,
   r.code AS role_code,
   aura.scope_type,
+  aura.scope_legal_entity_id,
   aura.scope_organization_unit_id,
   aura.scope_customer_id
 `;
@@ -62,7 +64,8 @@ export async function createSession(
 ): Promise<string> {
   const result = await pool.query<{ id: string }>(
     `WITH default_assignment AS (
-       SELECT aura.id, aura.role_id, aura.scope_organization_unit_id
+       SELECT aura.id, aura.role_id, aura.scope_legal_entity_id,
+              aura.scope_organization_unit_id
          FROM authorization_effective_user_role_assignments aura
          JOIN roles r ON r.id = aura.role_id
         WHERE aura.user_id = $1
@@ -71,8 +74,10 @@ export async function createSession(
         LIMIT 1
      )
      INSERT INTO sessions (user_id, tenant_id, remote_addr, web_session,
-                           active_assignment_id, active_role_id, organization_unit_id)
-     SELECT $1, $2, $3, $4, d.id, d.role_id, d.scope_organization_unit_id
+                           active_assignment_id, active_role_id,
+                           scope_legal_entity_id, organization_unit_id)
+     SELECT $1, $2, $3, $4, d.id, d.role_id,
+            d.scope_legal_entity_id, d.scope_organization_unit_id
        FROM (SELECT 1) AS one
        LEFT JOIN default_assignment d ON true
      RETURNING id`,
@@ -104,7 +109,8 @@ export async function resolveActor(
     assignment_id: string | null;
     role_id: string | null;
     role_code: string | null;
-    scope_type: "tenant" | "organization_unit" | "customer" | null;
+    scope_type: ScopeType | null;
+    scope_legal_entity_id: string | null;
     scope_organization_unit_id: string | null;
     scope_customer_id: string | null;
   }>(
@@ -139,6 +145,7 @@ export async function resolveActor(
     roleId: row.role_id,
     roleCode: row.role_code,
     scopeType: row.scope_type,
+    scopeLegalEntityId: row.scope_legal_entity_id,
     scopeOrganizationUnitId: row.scope_organization_unit_id,
     scopeCustomerId: row.scope_customer_id,
   };
@@ -205,7 +212,8 @@ export async function switchSessionRole(
       assignment_id: string;
       role_id: string;
       role_code: string;
-      scope_type: "tenant" | "organization_unit" | "customer";
+      scope_type: ScopeType;
+      scope_legal_entity_id: string | null;
       scope_organization_unit_id: string | null;
       scope_customer_id: string | null;
     }>(
@@ -244,13 +252,15 @@ export async function switchSessionRole(
       `UPDATE sessions
           SET active_assignment_id = $2,
               active_role_id = $3,
-              organization_unit_id = $4,
+              scope_legal_entity_id = $4,
+              organization_unit_id = $5,
               last_seen_at = now()
         WHERE id = $1`,
       [
         input.sessionId,
         assignment.assignment_id,
         assignment.role_id,
+        assignment.scope_legal_entity_id,
         assignment.scope_organization_unit_id,
       ],
     );
@@ -277,6 +287,7 @@ export async function switchSessionRole(
       roleId: assignment.role_id,
       roleCode: assignment.role_code,
       scopeType: assignment.scope_type,
+      scopeLegalEntityId: assignment.scope_legal_entity_id,
       scopeOrganizationUnitId: assignment.scope_organization_unit_id,
       scopeCustomerId: assignment.scope_customer_id,
     };

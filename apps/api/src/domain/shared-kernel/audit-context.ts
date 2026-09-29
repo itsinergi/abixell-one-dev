@@ -24,7 +24,11 @@ export interface ActorContext {
    * role-match checks (workflow eligibility, menu filtering) never need a
    * second query for what authentication already resolved. */
   roleCode: string | null;
-  scopeType: "tenant" | "organization_unit" | "customer" | null;
+  scopeType: "tenant" | "legal_entity" | "organization_unit" | "customer" | null;
+  /** Epic 5 G3 — set when the active assignment's scope is `legal_entity`.
+   * Carried for the same reason the other two target ids are: the coverage
+   * checks must never re-query what authentication already resolved. */
+  scopeLegalEntityId: string | null;
   scopeOrganizationUnitId: string | null;
   scopeCustomerId: string | null;
 }
@@ -35,6 +39,12 @@ export interface ActorContext {
  * they are allowed to perform.
  *
  * - 'tenant'            -> the whole Tenant
+ * - 'legal_entity'      -> one Legal Entity AND every Organization Unit in it
+ *                          (Epic 5 §4.5 Putaran 4). A Legal Entity is the
+ *                          middle of the three levels: wider than an
+ *                          Organization Unit, narrower than the Tenant, and it
+ *                          never reaches a SIBLING Legal Entity of the same
+ *                          Tenant.
  * - 'organization_unit' -> one Organization Unit AND every descendant of
  *                          it (Checkpoint 0F / ADR-0009, hierarchical)
  * - 'customer'          -> exactly one Customer (Checkpoint 1A /
@@ -46,5 +56,6 @@ export interface ActorContext {
  */
 export type DataScope =
   | { type: "tenant" }
+  | { type: "legal_entity"; legalEntityId: string }
   | { type: "organization_unit"; organizationUnitId: string }
   | { type: "customer"; customerId: string };

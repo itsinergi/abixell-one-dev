@@ -26,13 +26,20 @@ export interface Permission {
   description: string;
 }
 
+/** The four Data Scope families an assignment may carry (Epic 5 §4.5
+ * Putaran 4 adds `legal_entity`). Named once so every projection, input and
+ * hash in this module states the same set. */
+export type ScopeType = "tenant" | "legal_entity" | "organization_unit" | "customer";
+
 /** One row of a user's effective assignment: a Role plus the Data Scope it grants. */
 export interface UserRoleAssignment {
   id: string;
   userId: string;
   roleId: string;
   roleCode: string;
-  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeType: ScopeType;
+  /** Epic 5 G3 — set when scopeType === "legal_entity". */
+  scopeLegalEntityId?: string | null;
   scopeOrganizationUnitId: string | null;
   /** Checkpoint 1A / ADR-0011 — set when scopeType === "customer". */
   scopeCustomerId: string | null;
@@ -47,7 +54,9 @@ export interface MyRoleAssignment {
   roleId: string;
   roleCode: string;
   roleName: string;
-  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeType: ScopeType;
+  scopeLegalEntityId?: string | null;
+  scopeLegalEntityName?: string | null;
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;
@@ -57,7 +66,8 @@ export interface MyRoleAssignment {
 export interface AssignRoleInput {
   userId: string;
   roleId: string;
-  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeType: ScopeType;
+  scopeLegalEntityId?: string | null;
   scopeOrganizationUnitId?: string | null;
   scopeCustomerId?: string | null;
 }
@@ -65,6 +75,11 @@ export interface AssignRoleInput {
 /** Strict application input for the governed Admin assignment surface. */
 export type GovernedRoleAssignmentInput =
   | { roleCode: string; scopeType: "tenant" }
+  | {
+      roleCode: string;
+      scopeType: "legal_entity";
+      scopeLegalEntityId: string;
+    }
   | {
       roleCode: string;
       scopeType: "organization_unit";
@@ -126,12 +141,24 @@ export interface AdminAssignmentRow extends AdminRoleAssignmentSummary {
 }
 
 /** Step 15 — the picker universe. `organizationUnits` carries the actor's
- * assignable units with their tenant-wide tree context; `roles` carries only
+ * assignable units with their tenant-wide tree context; `legalEntities`
+ * carries the same answer one level up (Epic 5 G3); `roles` carries only
  * Roles the actor may delegate. */
 export interface AssignmentOptions {
   canAssignTenantScope: boolean;
   organizationUnits: AssignmentScopeUnitOption[];
+  legalEntities: AssignmentScopeLegalEntityOption[];
   roles: AssignmentRoleOption[];
+}
+
+/** Epic 5 G3 — one Legal Entity the actor may scope an assignment to. */
+export interface AssignmentScopeLegalEntityOption {
+  id: string;
+  name: string;
+  /** False for a Legal Entity that exists as context but is outside the
+   * actor's own Data Scope, or is not active: the picker never offers a grant
+   * the API would refuse. */
+  selectable: boolean;
 }
 
 export interface AssignmentScopeUnitOption {
@@ -172,10 +199,15 @@ export interface AdminRoleAssignmentSummary {
   roleState: "available" | "unavailable";
   roleCode: string | null;
   roleName: string | null;
-  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeType: ScopeType;
   /** Availability is intentionally generic: deleted, missing, foreign, and
    * permanently invalidated scopes are indistinguishable to callers. */
   scopeState: "available" | "unavailable";
+  /** Epic 5 G3 — the Legal Entity scope target and its display name, projected
+   * under the same redaction rule as the other two scope families: a target
+   * that does not resolve in the assigned User's tenant is named nowhere. */
+  scopeLegalEntityId?: string | null;
+  scopeLegalEntityName?: string | null;
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;
@@ -513,6 +545,16 @@ export interface RbacRepository extends RoleDefinitionRepository {
   listOrganizationUnitSubtreeIds(
     tenantId: string,
     rootOrganizationUnitIds: readonly string[],
+  ): Promise<string[]>;
+  /** Epic 5 G3 — every Organization Unit inside one Legal Entity. This is the
+   * downward half of the coverage chain tenant → Legal Entity → Organization
+   * Unit (§4.5 principle 9): an assignment scoped to a Legal Entity covers
+   * every unit in it, and this is the one place that set is computed, so the
+   * administrative visibility, the assignment picker and the delegation check
+   * cannot drift from the coverage predicate. */
+  listOrganizationUnitIdsForLegalEntity(
+    tenantId: string,
+    legalEntityId: string,
   ): Promise<string[]>;
   /** The actor's own Organization Unit anchors, unexpanded — the assignable
    * universe for the scope picker (ancestors are context, not choices).

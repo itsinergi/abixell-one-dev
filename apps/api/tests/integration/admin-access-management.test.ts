@@ -805,6 +805,8 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: customerId,
         scopeCustomerName: "P11F Customer PRIMARY",
+        scopeLegalEntityId: null,
+        scopeLegalEntityName: null,
         ...lifecycleFields("active", null),
       });
 
@@ -859,6 +861,8 @@ describe("Phase 11F — governed Admin access management", () => {
           scopeOrganizationUnitName: null,
           scopeCustomerId: null,
           scopeCustomerName: null,
+          scopeLegalEntityId: null,
+          scopeLegalEntityName: null,
           ...lifecycleFields("active", manager.id),
         },
         {
@@ -872,6 +876,8 @@ describe("Phase 11F — governed Admin access management", () => {
           scopeOrganizationUnitName: "P11F Organization Unit Primary",
           scopeCustomerId: null,
           scopeCustomerName: null,
+          scopeLegalEntityId: null,
+          scopeLegalEntityName: null,
           ...lifecycleFields("active", manager.id),
         },
       ]);
@@ -1211,6 +1217,8 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        scopeLegalEntityId: null,
+        scopeLegalEntityName: null,
         ...lifecycleFields("invalidated", manager.id),
       });
       expect(deletedProjectionResponse.body).not.toContain(
@@ -1369,6 +1377,8 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: lifecycleCustomerId,
         scopeCustomerName: null,
+        scopeLegalEntityId: null,
+        scopeLegalEntityName: null,
         ...lifecycleFields("invalidated", manager.id),
       });
       expect(projectionResponse.body).not.toContain(
@@ -1663,6 +1673,8 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        scopeLegalEntityId: null,
+        scopeLegalEntityName: null,
         ...lifecycleFields("invalidated", null),
       });
       expect(movedAwayProjection.body).not.toContain(assignableRole.code);
@@ -1805,6 +1817,8 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        scopeLegalEntityId: null,
+        scopeLegalEntityName: null,
         ...lifecycleFields("invalidated", null),
       });
       expect(movedAwayProjection.body).not.toContain(movedRole.code);
@@ -1973,6 +1987,8 @@ describe("Phase 11F — governed Admin access management", () => {
         scopeOrganizationUnitName: null,
         scopeCustomerId: null,
         scopeCustomerName: null,
+        scopeLegalEntityId: null,
+        scopeLegalEntityName: null,
         ...lifecycleFields("invalidated", null),
       });
       expect(localProjection.body).not.toContain(foreignRole.code);

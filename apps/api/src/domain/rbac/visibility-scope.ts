@@ -40,7 +40,9 @@ export type AdministrativeVisibility =
 export interface AssignmentPairSummary {
   roleCode: string;
   roleName: string;
-  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeType: "tenant" | "legal_entity" | "organization_unit" | "customer";
+  scopeLegalEntityId: string | null;
+  scopeLegalEntityName: string | null;
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;
@@ -81,17 +83,23 @@ export function computeAssignmentBatchHash(
       .map((pair) =>
         pair.scopeType === "tenant"
           ? { roleCode: pair.roleCode, scopeType: "tenant" as const }
-          : pair.scopeType === "organization_unit"
+          : pair.scopeType === "legal_entity"
             ? {
                 roleCode: pair.roleCode,
-                scopeType: "organization_unit" as const,
-                scopeOrganizationUnitId: pair.scopeOrganizationUnitId,
+                scopeType: "legal_entity" as const,
+                scopeLegalEntityId: pair.scopeLegalEntityId,
               }
-            : {
-                roleCode: pair.roleCode,
-                scopeType: "customer" as const,
-                scopeCustomerId: pair.scopeCustomerId,
-              },
+            : pair.scopeType === "organization_unit"
+              ? {
+                  roleCode: pair.roleCode,
+                  scopeType: "organization_unit" as const,
+                  scopeOrganizationUnitId: pair.scopeOrganizationUnitId,
+                }
+              : {
+                  roleCode: pair.roleCode,
+                  scopeType: "customer" as const,
+                  scopeCustomerId: pair.scopeCustomerId,
+                },
       )
       .sort((a, b) => {
         const left = `${a.scopeType}:${a.roleCode}:${JSON.stringify(a)}`;

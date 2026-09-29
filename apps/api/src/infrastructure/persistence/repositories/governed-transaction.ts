@@ -47,18 +47,29 @@ export async function listOrganizationUnitAncestorIds(
 }
 
 // Permission and scope must belong to the same effective assignment.
-// Without an OU target, mutations govern tenant-wide resources (users/LEs).
+// Without a scope target, mutations govern tenant-wide resources (users/LEs).
 //
 // Epic 1 (§4.1 C): the assignment is named explicitly (`$5`) rather than
 // being re-derived from the user, so this write gate consults the SESSION'S
 // ACTIVE Role. Without the pin, a user who holds a permission through any
 // switched-away Role would satisfy this check inside a transaction whose
 // other reads were already scoped to the active Role.
+//
+// Epic 5 G3 (§4.5 step 15): the target may be an Organization Unit OR a Legal
+// Entity, and the coverage chain is tenant → Legal Entity → Organization Unit.
+// `legalEntityId` is the explicit form; when only an Organization Unit is
+// named, its Legal Entity is resolved from the unit row inside this same
+// query, so a Legal Entity-scoped assignment covers every unit of that Legal
+// Entity — including units it would not reach through the ancestor walk — and
+// never a unit of a sibling Legal Entity. A caller that names no target at all
+// still requires a tenant-wide active assignment: the Legal Entity branch
+// compares against NULL and matches nothing.
 export async function requireTransactionActorPermission(
   client: PoolClient,
   actor: GovernedActor,
   permissionCode: string,
   organizationUnitId?: string,
+  legalEntityId?: string,
 ): Promise<void> {
   if (actor.assignmentId === null) {
     throw new ForbiddenError(
@@ -87,9 +98,28 @@ export async function requireTransactionActorPermission(
             aura.scope_type = 'tenant'
             OR (aura.scope_type = 'organization_unit'
                 AND aura.scope_organization_unit_id = ANY($4::uuid[]))
+            OR (aura.scope_type = 'legal_entity'
+                AND aura.scope_legal_entity_id = COALESCE(
+                  $6::uuid,
+                  (
+                    SELECT ou.legal_entity_id
+                      FROM organization_units ou
+                     WHERE ou.id = $7::uuid
+                       AND ou.tenant_id = $1
+                       AND ou.deleted_at IS NULL
+                  )
+                ))
           )
      ) AS allowed`,
-    [actor.tenantId, actor.userId, permissionCode, ancestors, actor.assignmentId],
+    [
+      actor.tenantId,
+      actor.userId,
+      permissionCode,
+      ancestors,
+      actor.assignmentId,
+      legalEntityId ?? null,
+      organizationUnitId ?? null,
+    ],
   );
   if (result.rows[0]?.allowed !== true) {
     throw new ForbiddenError(`Missing permission or Data Scope for '${permissionCode}'`);

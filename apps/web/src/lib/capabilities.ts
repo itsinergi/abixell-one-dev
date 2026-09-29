@@ -194,18 +194,27 @@ export interface NavSection {
   /** Visible if the user holds AT LEAST ONE of these permissions.
    * `undefined` means "visible to any authenticated user". */
   requiresAnyOf?: string[];
-  /** Visible only to INTERNAL users — those with an organization_unit or
-   * tenant Data Scope (Checkpoint 1C.3). Keeps operational areas away from
-   * external Customer Users. UX only; the backend still enforces access. */
+  /** Visible only to INTERNAL users — those with a tenant, legal_entity or
+   * organization_unit Data Scope (Checkpoint 1C.3). Keeps operational areas
+   * away from external Customer Users. UX only; the backend still enforces
+   * access. */
   requiresInternal?: boolean;
   /** Visible only to users who hold a customer Data Scope (external Customer
    * Users) — the customer-facing complaint experience. */
   requiresCustomerScope?: boolean;
 }
 
-/** Internal = explicitly holds an organization_unit or tenant Data Scope. */
+/** Internal = explicitly holds a tenant, legal_entity or organization_unit
+ * Data Scope. Mirrors the API's `isExternalCaller` (menu-filter.ts): Epic 5 G3
+ * added `legal_entity`, and the two lists must agree or an internal user is
+ * shown the external shell. */
 export function isInternalScope(scopeTypes: string[]): boolean {
-  return scopeTypes.some((scope) => scope === "tenant" || scope === "organization_unit");
+  return scopeTypes.some(
+    (scope) =>
+      scope === "tenant" ||
+      scope === "legal_entity" ||
+      scope === "organization_unit",
+  );
 }
 
 export function hasCustomerScope(scopeTypes: string[]): boolean {
