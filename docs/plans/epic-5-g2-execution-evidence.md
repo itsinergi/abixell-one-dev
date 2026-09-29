@@ -200,3 +200,151 @@ New: 6 migrations, `src/domain/organization-unit/organization-unit-hierarchy.ent
 Modified: `src/app.ts`, `src/composition-root.ts`,
 `src/domain/configuration/window-enforcement.ts`,
 `src/domain/configuration/module-attribution.ts`.
+
+## 10. Round-1 rework (review `changes_requested`, comment #23)
+
+Sections 1–9 above are the round-0 record and are left as written. This section is
+the rework: what the review's two blocking findings and one observation changed,
+and what was re-measured afterwards.
+
+### 10.1 Finding 1 — the backdated range's upper bound
+
+`sealRangeAndOpen()` bounded a backdated range with the **open** range's start.
+That is the next boundary only when the open range happens to follow the
+effective date: as soon as a sealed range starts after it (any unit that has had a
+forward publish, or a second backdate), the insert overlapped that sealed range and
+`organization_unit_hierarchy_no_overlap` refused it as a raw `23P01` → **HTTP 500**.
+
+The bound is now the **next range boundary after the effective date**
+(`min(effective_from)` over the unit's ranges that start later), whichever range
+that is. With it, corrections are recorded as a gapless partition — probe F below:
+four ranges, every boundary shared, exactly one open.
+
+The branch's other half — *"a date preceding where the unit's history begins should
+be a named `ConflictError`, not a raw `23P01`"* — is now explicit in two places:
+
+- **before the unit existed**: `effectiveFrom < organization_units.created_at` is
+  refused by name (the structure was not in force before there was a unit to hold
+  it — the invariant the projection-sync header states for the first range). That
+  is the date the round-1 note describes as "the only shape that works"; it is now
+  the shape that is refused.
+- **any residual exclusion violation** (a race between two publishes): translated
+  into the same named `ConflictError` instead of escaping as `23P01`. The
+  constraint stays the last line of defence, and it no longer surfaces as a 500.
+
+### 10.2 Finding 2 — a request outliving its unit's tombstone
+
+`publishChangeRequest` now calls `assertMutableUnit(unit)` against the row it has
+just locked, inside the transaction, before any history is written — the same
+refusal `createChangeRequest` applies at proposal time, at the only moment it
+cannot be bypassed. The `inactive` precondition for a tombstone was moved from the
+direct endpoint into `applyTombstone`, so the published-request path is held to it
+too (a unit that went back to `active` while the request waited is not deleted by
+it). Probe C below is the round-1 repro: now 409, parent unchanged, **no open
+range** on the tombstoned unit.
+
+Same class, found while fixing it and closed here: a **tombstone dated before the
+version in force** (a business date earlier than the start of the range in force —
+the shape a legacy-shaped unit or a future-dated publish produces) used to close
+nothing, leaving a tombstoned unit "in force" for every reader. It is now refused
+by name: the unit cannot leave the structure before the version that put it there,
+and no range can express it. Probe E below: refused, the version in force still
+open and the unit still `inactive`; the ordinary delete then records and closes it.
+
+### 10.3 Observation — publishing a `draft`
+
+Chosen and now stated once, in the domain:
+`PUBLISHABLE_CHANGE_REQUEST_STATUSES = ["draft", "pending_review"]`, imported by
+the repository guard and asserted by the suite. §4.5 principle 12 fixes *who*
+publishes, not *which states* are publishable; this wave ships no separate submit
+route, so the create-time `submitForReview` flag **is** the submit step and
+restricting publish to `pending_review` would leave `draft` a state that can only
+be cancelled. The publish audit now records `fromStatus`, so a publish that skipped
+the proposer's signal is visible on the record instead of inferable from a queue.
+`CreateChangeRequestInput.submitForReview` and the guard comment were rewritten to
+say the same thing; the 1789397000000 header is an applied migration and is left
+untouched.
+
+### 10.4 Re-measured evidence
+
+```
+$ docker exec abixell-dev psql -U abixell -d abixell_one_epic5g2rw -tc "SELECT current_database();"
+ abixell_one_epic5g2rw
+$ ... -tc "SELECT count(*) FROM pgmigrations;"
+ 75                     (created empty, migrated from zero, "Migrations complete!")
+
+$ npx vitest run tests/integration/epic-5-g2-hierarchy-history.test.ts
+ Test Files  1 passed (1)
+      Tests  18 passed (18)          (was 12; +6 for the corrections above)
+
+$ npm run test -w apps/api        (full suite, same database)
+ Test Files  2 failed | 64 passed (66)     ← the documented by-design pair
+      Tests  902 passed | 27 skipped (929) (was 896/27/923: delta = +6)
+
+$ npm run typecheck -w apps/api   → exit 0
+$ npm run lint -w apps/api        → 56 problems (7 errors, 49 warnings) = baseline
+                                    exact; no finding names a file this wave touched
+```
+
+Round-1 probes re-run on the reworked tree
+(`zz-round1-probes.test.ts`, kept outside the repo in
+`%LOCALAPPDATA%\Temp\epic5g2rw\`, copied in for the run and deleted after —
+`git status` clean of it; log `probes.log`):
+
+| Probe | Round 1 | Reworked tree |
+|---|---|---|
+| A — 5-day backdate after a forward publish | **500**, `23P01` | **409** named ("precedes the Organization Unit's own creation"), ranges untouched |
+| B — second backdate on one unit | **500**, `23P01` | **409** named (same reason), one open range, nothing written |
+| C — publish a pending request after the unit's tombstone | **200**, unit re-parented + new open range | **409** named ("structure changes are no longer accepted"), parent unchanged, no open range |
+| D — publish a `draft` | 200, silently | 200, `fromStatus: "draft"` on the publish audit |
+| E — tombstone dated before the version in force | not covered | **409** named; the ordinary tombstone then closes the range (no open range) |
+| F — two backdates with a forward publish between them | **500** | **200 / 200**, partition gapless: `[-85d,-60d) [-60d,-30d) [-30d,+10h) [+10h,∞)` |
+
+A correction dated **before the range in force but after the unit was created** —
+the honest shape, which only a unit whose recorded history starts later than the
+unit itself can have (every unit that predates the parity snapshot, per §5) — is
+recorded: closed range ending where the recorded history begins, projection NOT
+rewritten, `appliedToCurrentProjection: false`, both dates on the audit. Probes A
+and B use freshly created units, so their dates fall before the unit existed and
+are refused by name; the recordable versions of both shapes are covered by
+`makeHistoryStartAfterCreation` in the suite and by probe F.
+
+Two honest limits, stated rather than smoothed over:
+
+- A backdate that lands **inside** a version already in force stays refused (named,
+  "overlaps this change"). This model records closed periods; it never rewrites
+  one, which is what §4.5's "laporan periode yang sudah ditutup tidak boleh berubah
+  diam-diam" asks for.
+- A **tombstone dated before the version in force** is refused rather than
+  recorded (§10.2). Recording it would require rewriting the version that the date
+  precedes, and recording nothing would leave the unit in force. If the Founder
+  wants such a closure recorded, it needs a rule for the version it invalidates —
+  the same effective-date-aware work Wave 3 owns for scope walks.
+
+### 10.5 Authorship and concurrency (disclosed)
+
+The rework landed in this worktree while **another session of the same profile was
+writing to the same three files** (session `20260929_102947_ae9e66`, pid 4356,
+which had run the round-1 review; this run is session `20260929_103650_aa441d`,
+run 20. Both are listed in `active_sessions.json`; the file mtimes moved between
+15-second polls while this run was reading). This run's contribution on top of the
+tree it found: the named `PUBLISHABLE_CHANGE_REQUEST_STATUSES` rule + the audit's
+`fromStatus`, the `23P01` translation, the tombstone invariant fix (§10.2, probe
+E), the acceptance assertions for all three, this section, and the verification
+above. Flagged on the card as a hotspot
+(`organization-unit-hierarchy.repository.pg.ts`). If the other session produces a
+further revision, the hashes below are what was verified here.
+
+### 10.6 Artifact hashes at verification time
+
+```
+92a385491ba9ab068f31f0c61a18abb29df2748b3f2e108ed126a716b46c9259  migrations/1789396000000_epic-5-g2-hierarchy-history.cjs
+34e09e44fae550e78f3623850a1ff10fba9f7da38ac352716049c27e9d229016  src/infrastructure/persistence/repositories/organization-unit-hierarchy.repository.pg.ts
+f33766b8d4436e4233b928297d15cbd12eb68f8a44238581715f59ebd8e3320c  tests/integration/epic-5-g2-hierarchy-history.test.ts
+664635dfa9e43fda0167a7511835976c7d594d54c02bc03febfbb245dc4de182  src/domain/organization-unit/organization-unit-hierarchy.entity.ts
+```
+
+The migration hash is unchanged from round 1 (the reviewer's `92a3854…`), so no
+applied migration was touched by this rework. The other three are the reworked
+artifacts; re-check them before reviewing, and again before round 2's
+reproduction.

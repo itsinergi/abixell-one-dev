@@ -38,6 +38,23 @@ export const CHANGE_REQUEST_STATUSES = [
 
 export type ChangeRequestStatus = (typeof CHANGE_REQUEST_STATUSES)[number];
 
+/** The states a change request may still be published FROM — the terminal set
+ * (`published`, `rejected`, `cancelled`) is everything else.
+ *
+ * §4.5 principle 12 settles WHO publishes ("Proposal bukan publish. ... hanya
+ * Super Admin dapat menerbitkan perubahan struktur.") and nowhere makes the
+ * proposer's own `submitForReview` signal an authorisation gate. So a `draft` —
+ * the proposer's working copy, which the queue's `status` filter keeps out of
+ * the "ready to review" list — is still publishable by the reviewer: the review
+ * queue lists it (`GET /organization-unit-change-requests?status=draft`), and
+ * Wave 2 ships no separate submit transition, so refusing it here would leave
+ * `draft` a state that can only be cancelled. What publishing a draft is NOT is
+ * silent: the publish audit records `fromStatus`, so the record says the
+ * proposer never claimed the proposal was ready. Named once, here, so the guard
+ * in the repository and the acceptance suite state the same rule as this
+ * paragraph instead of the two disagreeing. */
+export const PUBLISHABLE_CHANGE_REQUEST_STATUSES = ["draft", "pending_review"] as const;
+
 /** §4.5 Putaran 6: what an Admin Tenant may propose is "hierarchy Organization
  * Unit, inactive/delete request, code change request, dan profil Legal Entity
  * penting". Gelombang 2 owns the first two; the code-change and Legal Entity
@@ -94,8 +111,11 @@ export interface CreateChangeRequestInput {
   requestedEffectiveFrom: Date;
   reason: string;
   /** `true` moves the new request straight to `pending_review`: the proposer
-   * states it is ready for the Super Admin. A draft is the proposer's own
-   * scratch space and never reaches a reviewer. */
+   * states it is ready for the Super Admin. `false` leaves it a `draft` — the
+   * proposer's own working copy, which the review queue's `status` filter keeps
+   * out of the "ready to review" list. It is not a lock on the reviewer: see
+   * PUBLISHABLE_CHANGE_REQUEST_STATUSES, which states which states a publish may
+   * act on and what the audit records about it. */
   submitForReview?: boolean;
 }
 

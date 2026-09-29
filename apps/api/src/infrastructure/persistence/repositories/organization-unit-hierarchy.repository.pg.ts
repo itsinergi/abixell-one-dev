@@ -16,6 +16,7 @@ import {
   CHANGE_REQUEST_ACTIONS,
   CHANGE_REQUEST_STATUSES,
   ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS,
+  PUBLISHABLE_CHANGE_REQUEST_STATUSES,
 } from "../../../domain/organization-unit/organization-unit-hierarchy.entity.js";
 import type { LifecycleStatus } from "../../../domain/legal-entity/legal-entity.entity.js";
 import {
@@ -53,6 +54,16 @@ import {
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** PostgreSQL `exclusion_violation`. The EXCLUDE constraint is the last line of
+ * defence behind the checks in `sealRangeAndOpen`; if it ever fires it is a
+ * refusal, not a server fault, and it must reach the caller under the same name
+ * the checks use rather than as an unhandled `23P01` → HTTP 500. */
+const PG_EXCLUSION_VIOLATION = "23P01";
+
+function isExclusionViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === PG_EXCLUSION_VIOLATION;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapHistoryRow(row: any): HierarchyHistoryEntry {
@@ -104,6 +115,9 @@ interface UnitRow {
   status: LifecycleStatus;
   is_active: boolean;
   replacement_organization_unit_id: string | null;
+  /** The instant the unit itself came into being. A hierarchy version cannot
+   * precede it: there was no unit for the structure to describe. */
+  created_at: Date;
 }
 
 export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHierarchyRepository {
@@ -267,13 +281,29 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
         request.organizationUnitId,
       );
 
-      if (request.status !== "draft" && request.status !== "pending_review") {
+      // Which states a publish may act on is stated once, in the domain:
+      // `PUBLISHABLE_CHANGE_REQUEST_STATUSES`. `draft` is publishable too, and
+      // that is deliberate rather than an oversight: this wave ships no separate
+      // "submit" route, so `submitForReview` at creation time is the submit step
+      // and a reviewer may also publish a proposal the proposer left in draft.
+      // The Q7 status split (1789397000000) still holds where it matters — a draft
+      // stays editable and cancellable by its proposer, and only
+      // `published`/`rejected` are terminal review outcomes. `fromStatus` on the
+      // audit row below is what keeps a publish that skipped the proposer's signal
+      // visible instead of silent.
+      if (!(PUBLISHABLE_CHANGE_REQUEST_STATUSES as readonly string[]).includes(request.status)) {
         throw new ConflictError(
           `Change request is '${request.status}' and can no longer be published`,
         );
       }
 
       const unit = await this.lockUnit(client, request.organizationUnitId, actor.tenantId);
+      // The unit may have moved on while the request waited: a proposal created
+      // while it was live can outlive its tombstone. Publishing therefore
+      // re-evaluates mutability against the LOCKED row — the check
+      // `createChangeRequest` performs is a proposal-time courtesy, not the
+      // guarantee (see `assertMutableUnit`).
+      this.assertMutableUnit(unit);
       const effectiveFrom = request.requestedEffectiveFrom;
       const publishedAt = new Date();
       const backdated = effectiveFrom.getTime() < publishedAt.getTime();
@@ -342,6 +372,11 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
         metadata: {
           organizationUnitId: unit.id,
           requestedAction: request.requestedAction,
+          // The state the proposal was in when the reviewer acted on it. A
+          // `draft` published here is a publish the proposer never claimed was
+          // ready (see PUBLISHABLE_CHANGE_REQUEST_STATUSES); the record says so
+          // rather than leaving it to be inferred from the queue.
+          fromStatus: request.status,
           before: request.beforeState,
           after: request.afterState,
           // The pair §4.5 principle 8 requires: the business date the change
@@ -472,12 +507,8 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
       );
       const unit = await this.lockUnit(client, organizationUnitId, actor.tenantId);
       const effectiveFrom = input.effectiveFrom ?? new Date();
-
-      if (unit.status !== "inactive") {
-        throw new ConflictError(
-          `An Organization Unit is tombstoned from 'inactive'; this one is '${unit.status}'`,
-        );
-      }
+      // The "inactive first" rule is enforced in `applyTombstone`, which the
+      // published-request path goes through as well — one rule, one place.
 
       const applied = await this.applyTombstone(client, actor, unit, {
         replacementOrganizationUnitId: input.replacementOrganizationUnitId ?? null,
@@ -648,6 +679,16 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
         "Root Central Organization Unit cannot be deleted; it lives as long as its Legal Entity",
       );
     }
+    // Putaran 4 fixes the order: "Setelah inactive, Delete oleh Super Admin
+    // mengubah Organization Unit menjadi tombstone." Re-checked here, inside the
+    // transaction, because a published request may be older than the state it
+    // assumed: a unit that went back to `active` after the request was raised
+    // must not be tombstoned by it.
+    if (unit.status !== "inactive") {
+      throw new ConflictError(
+        `An Organization Unit is tombstoned from 'inactive'; this one is '${unit.status}'`,
+      );
+    }
     if (!input.reason || input.reason.trim().length === 0) {
       throw new ConflictError("Deleting an Organization Unit needs a reason");
     }
@@ -748,6 +789,23 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
     request: OrganizationUnitChangeRequest | null,
     openNew = true,
   ): Promise<{ historyId: string | null; appliesToCurrentProjection: boolean }> {
+    const unitCreatedAt = new Date(unit.created_at);
+
+    // A hierarchy version cannot describe a period before the unit existed: the
+    // range would claim a structure was in force while there was nothing for it
+    // to hold. §4.5 G bounds a backdate in days; the entity's own lifetime is
+    // the other end of the same rule, and it is refused BY NAME rather than left
+    // to the EXCLUDE constraint. Legacy units are unaffected: the parity
+    // snapshot starts their history long after their `created_at`, so the whole
+    // window between the two stays recordable.
+    if (effectiveFrom.getTime() < unitCreatedAt.getTime()) {
+      throw new ConflictError(
+        `The effective date ${effectiveFrom.toISOString()} precedes the Organization Unit's own ` +
+          `creation (${unitCreatedAt.toISOString()}); no structure can be recorded for a period ` +
+          `before the unit existed`,
+      );
+    }
+
     // A SEALED range that already contains this instant is a real overlap: two
     // versions would be in force for the same date. The OPEN range is different —
     // it has no upper bound yet, so a later date simply becomes its end.
@@ -787,6 +845,22 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
 
     const backdated = currentFrom !== null && effectiveFrom.getTime() < currentFrom.getTime();
 
+    if (openNew === false && current && backdated) {
+      // Tombstone with a business date that precedes the version in force. The
+      // unit is leaving the structure, so that version has to END at the
+      // effective date — but it did not start yet, and no range may end before it
+      // begins. The alternative (closing nothing) would leave a tombstoned unit
+      // "in force" for every reader of `organization_unit_parent_at` and of the
+      // current projection view, which is the opposite of what Putaran 4 records.
+      // Refused BY NAME, like the pre-creation date above, instead of recording
+      // half of the operation.
+      throw new ConflictError(
+        `The range in force began at ${currentFrom.toISOString()}, later than the effective date ` +
+          `${effectiveFrom.toISOString()}; an Organization Unit cannot leave the structure before ` +
+          `the version that put it there`,
+      );
+    }
+
     if (current && !backdated) {
       // Forward: the range in force ends where the new version begins.
       await client.query(
@@ -801,33 +875,75 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
 
     // A backdated correction is a closed range: it ends where the version that
     // is still in force begins, so nothing about the present is rewritten.
-    const effectiveTo = backdated ? currentFrom : null;
+    //
+    // The bound is the start of the NEXT range after `effectiveFrom` — whichever
+    // range that is, sealed or open. Bounding it by the OPEN range's start
+    // instead is only the same value when the open range happens to be the next
+    // one: as soon as a sealed range starts after `effectiveFrom` (any unit that
+    // has had a forward publish), such a range would overlap it and the
+    // `organization_unit_hierarchy_no_overlap` EXCLUDE constraint would refuse a
+    // legitimate correction with a raw 23P01 — a 500, not a named refusal.
+    let effectiveTo: Date | null = null;
+    if (backdated) {
+      const next = await client.query(
+        `SELECT min(effective_from) AS next_from
+           FROM organization_unit_hierarchy_history
+          WHERE organization_unit_id = $1
+            AND effective_from > $2`,
+        [unit.id, effectiveFrom],
+      );
+      const nextFrom = next.rows[0]?.next_from as Date | null | undefined;
+      effectiveTo = nextFrom ? new Date(nextFrom) : null;
+      if (!effectiveTo) {
+        // Unreachable: `backdated` means a range starts after `effectiveFrom`.
+        throw new ConflictError(
+          `No version follows ${effectiveFrom.toISOString()} on this Organization Unit; ` +
+            `the correction cannot be bounded`,
+        );
+      }
+    }
 
-    const opened = await client.query(
-      `INSERT INTO organization_unit_hierarchy_history
-         (tenant_id, organization_unit_id, parent_organization_unit_id,
-          effective_from, effective_to, published_at, published_by, recorded_at,
-          reason, change_request_id, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,now(),$6,now(),$7,$8,$6,$6)
-       RETURNING id`,
-      [
-        actor.tenantId,
-        unit.id,
-        newParentId,
-        effectiveFrom,
-        effectiveTo,
-        actor.userId,
-        request?.reason ?? "Organization Unit structure changed",
-        request?.id ?? null,
-      ],
-    );
+    let opened;
+    try {
+      opened = await client.query(
+        `INSERT INTO organization_unit_hierarchy_history
+           (tenant_id, organization_unit_id, parent_organization_unit_id,
+            effective_from, effective_to, published_at, published_by, recorded_at,
+            reason, change_request_id, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,now(),$6,now(),$7,$8,$6,$6)
+         RETURNING id`,
+        [
+          actor.tenantId,
+          unit.id,
+          newParentId,
+          effectiveFrom,
+          effectiveTo,
+          actor.userId,
+          request?.reason ?? "Organization Unit structure changed",
+          request?.id ?? null,
+        ],
+      );
+    } catch (error) {
+      // `organization_unit_hierarchy_no_overlap` is the database's own copy of
+      // the coverage rule above, and it is the last line of defence rather than
+      // the first. A race between two publishes for the same unit can still reach
+      // it, and a race is a refusal like any other: it is translated into the same
+      // named conflict instead of escaping as a raw 23P01 → HTTP 500.
+      if (isExclusionViolation(error)) {
+        throw new ConflictError(
+          `Another version of this Organization Unit's structure came into force at ` +
+            `${effectiveFrom.toISOString()} while this change was being recorded; it overlaps this change`,
+        );
+      }
+      throw error;
+    }
     return { historyId: opened.rows[0].id as string, appliesToCurrentProjection: !backdated };
   }
 
   private async lockUnit(client: PoolClient, id: string, tenantId: string): Promise<UnitRow> {
     const result = await client.query(
       `SELECT id, tenant_id, legal_entity_id, parent_id, name, unit_type, status, is_active,
-              replacement_organization_unit_id
+              replacement_organization_unit_id, created_at
          FROM organization_units
         WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
         FOR UPDATE`,

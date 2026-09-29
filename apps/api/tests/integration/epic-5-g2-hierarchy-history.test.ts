@@ -127,6 +127,45 @@ async function auditRows(entityId: string, action: string) {
   return result.rows as { actor_user_id: string; metadata: Record<string, unknown> }[];
 }
 
+/**
+ * Give a unit the shape EVERY unit that predates this wave has: its recorded
+ * history begins later than the unit itself. The parity snapshot in
+ * 1789396000000 opened each existing unit's first range at the migration
+ * instant, which is long after the unit's own `created_at`, and the window
+ * between the two is exactly the period a backdated correction can name.
+ * (A unit created AFTER the snapshot has both values at its creation instant, so
+ * no such window exists for it — which is why the pre-creation date is a named
+ * refusal rather than a range.)
+ */
+async function makeHistoryStartAfterCreation(
+  unitId: string,
+  options: { createdDaysAgo: number; rangeStartDaysAgo: number },
+) {
+  await pool.query(
+    `UPDATE organization_units SET created_at = now() - ($2 || ' days')::interval WHERE id = $1`,
+    [unitId, String(options.createdDaysAgo)],
+  );
+  await pool.query(
+    `UPDATE organization_unit_hierarchy_history
+        SET effective_from = now() - ($2 || ' days')::interval
+      WHERE organization_unit_id = $1 AND effective_to IS NULL`,
+    [unitId, String(options.rangeStartDaysAgo)],
+  );
+}
+
+/** The unit's history as `[from, to]` ISO pairs, oldest first. */
+async function historyRanges(unitId: string): Promise<{ from: string; to: string | null }[]> {
+  const result = await pool.query(
+    `SELECT effective_from, effective_to FROM organization_unit_hierarchy_history
+      WHERE organization_unit_id = $1 ORDER BY effective_from`,
+    [unitId],
+  );
+  return result.rows.map((row) => ({
+    from: new Date(row.effective_from).toISOString(),
+    to: row.effective_to === null ? null : new Date(row.effective_to).toISOString(),
+  }));
+}
+
 beforeAll(async () => {
   const tenant = await bootstrapTenant(app, TENANT, "Epic 5 G2 Hierarchy History");
   tenantId = tenant.id;
@@ -279,6 +318,8 @@ describe("Epic 5 G2 — effective-dated hierarchy history", () => {
     expect(forwardMeta.publishedAt).toBeDefined();
     expect(forwardMeta.backdated).toBe(false);
     expect(forwardMeta.reason).toBe("Forward-dated reorganisation");
+    // The state the proposal was in when the reviewer published it.
+    expect(forwardMeta.fromStatus).toBe("pending_review");
     expect(forwardMeta.before).toMatchObject({ parentId: central });
     expect(forwardMeta.after).toMatchObject({ parentId: regionB.id });
     // §4.5 principle 8: the business date is NOT the recording date.
@@ -292,7 +333,11 @@ describe("Epic 5 G2 — effective-dated hierarchy history", () => {
     // version, so moving it back would be a cycle.
     const regionC = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
     const regionD = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
-    const backdatedAt = daysFromNow(-5);
+    // The correction names a period BEFORE the version in force, which is the
+    // shape a legacy unit has (see `makeHistoryStartAfterCreation`): the unit has
+    // existed for a year and its recorded history begins ten days ago.
+    await makeHistoryStartAfterCreation(regionC.id, { createdDaysAgo: 365, rangeStartDaysAgo: 10 });
+    const backdatedAt = daysFromNow(-20);
     const backdated = await propose(regionC.id, {
       requestedAction: "move",
       proposedParentOrganizationUnitId: regionD.id,
@@ -600,5 +645,293 @@ describe("Epic 5 G2 — tombstone, replacement and the reference check", () => {
     });
     expect(refused.status, JSON.stringify(refused.body)).toBe(409);
     expect(String(refused.body.error)).toContain("inactive");
+  });
+});
+
+/**
+ * The corrections the wave's first round got wrong, each one a property rather
+ * than a shape:
+ *
+ *   - a backdated version is bounded by the NEXT range after its effective date,
+ *     so correcting a past period stays possible once the history has moved on;
+ *   - a date before the unit existed is refused BY NAME, never by the EXCLUDE
+ *     constraint surfacing as a 500;
+ *   - a published request re-checks the unit it targets, so a proposal cannot
+ *     outlive its unit's tombstone.
+ */
+describe("Epic 5 G2 — backdated corrections and the state a request was raised against", () => {
+  it("records a backdated correction after the history has moved on, and a second one before it", async () => {
+    const legalEntity = await createLegalEntity();
+    const central = await rootCentralOf(legalEntity.id);
+    const unit = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+    const other = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+
+    // Legacy shape: the unit is a year old, its recorded history begins 30 days ago.
+    await makeHistoryStartAfterCreation(unit.id, { createdDaysAgo: 365, rangeStartDaysAgo: 30 });
+    const rangeStart = (await historyRanges(unit.id))[0].from;
+
+    // 1. A correction dated 60 days back: before the version in force, inside the
+    //    90-day window, and after the unit was created. It is recorded as a
+    //    CLOSED range ending where the version in force begins, and the current
+    //    projection is NOT rewritten.
+    const firstAt = daysFromNow(-60);
+    const first = await propose(unit.id, {
+      requestedAction: "move",
+      proposedParentOrganizationUnitId: other.id,
+      requestedEffectiveFrom: ISO(firstAt),
+      reason: "Late correction of the structure before the recorded history",
+      submitForReview: true,
+    });
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    const firstPublished = await publish(first.body.id as string);
+    expect(firstPublished.status, JSON.stringify(firstPublished.body)).toBe(200);
+    expect(firstPublished.body.backdated).toBe(true);
+    expect(firstPublished.body.organizationUnit.parentId).toBe(central);
+
+    let ranges = await historyRanges(unit.id);
+    expect(ranges).toHaveLength(2);
+    expect(ranges[0]).toEqual({ from: ISO(firstAt), to: rangeStart });
+    expect(ranges[1]).toEqual({ from: rangeStart, to: null });
+    const stillParented = await pool.query(`SELECT parent_id FROM organization_units WHERE id = $1`, [unit.id]);
+    expect(stillParented.rows[0].parent_id).toBe(central);
+
+    // 2. A forward-dated publish 10 hours ahead: the version in force is sealed
+    //    at its effective date and the projection follows this time.
+    const futureAt = hoursFromNow(10);
+    const second = await propose(unit.id, {
+      requestedAction: "move",
+      proposedParentOrganizationUnitId: other.id,
+      requestedEffectiveFrom: ISO(futureAt),
+      reason: "Reorganisation from the effective date",
+      submitForReview: true,
+    });
+    const secondPublished = await publish(second.body.id as string);
+    expect(secondPublished.status, JSON.stringify(secondPublished.body)).toBe(200);
+    expect(secondPublished.body.backdated).toBe(false);
+
+    // 3. A SECOND correction, earlier than the first. Bounding a backdated range
+    //    by the open range's start (the first round's bug) made this overlap the
+    //    sealed [-60d, -30d) range: the exclusion constraint raised 23P01 and the
+    //    caller saw 500. The bound is the NEXT range, so the correction is
+    //    recorded and the partition stays gapless. 85 days back: inside the
+    //    90-day policy window, and still before the version in force.
+    const thirdAt = daysFromNow(-85);
+    const third = await propose(unit.id, {
+      requestedAction: "move",
+      proposedParentOrganizationUnitId: other.id,
+      requestedEffectiveFrom: ISO(thirdAt),
+      reason: "Earlier correction of the same period",
+      submitForReview: true,
+    });
+    expect(third.status, JSON.stringify(third.body)).toBe(201);
+    const thirdPublished = await publish(third.body.id as string);
+    expect(thirdPublished.status, JSON.stringify(thirdPublished.body)).toBe(200);
+    expect(thirdPublished.body.backdated).toBe(true);
+
+    ranges = await historyRanges(unit.id);
+    expect(ranges).toHaveLength(4);
+    expect(ranges[0]).toEqual({ from: ISO(thirdAt), to: ISO(firstAt) });
+    expect(ranges[1]).toEqual({ from: ISO(firstAt), to: rangeStart });
+    expect(ranges.filter((row) => row.to === null)).toHaveLength(1);
+    // Every range boundary is shared, not doubled: the partition has no gap and
+    // no overlap (which the EXCLUDE constraint would have refused anyway).
+    for (let i = 1; i < ranges.length; i += 1) {
+      expect(ranges[i].from).toBe(ranges[i - 1].to);
+    }
+  });
+
+  it("refuses a change dated before the Organization Unit existed, by name", async () => {
+    const legalEntity = await createLegalEntity();
+    const central = await rootCentralOf(legalEntity.id);
+    const unit = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+    const other = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+
+    // Inside the policy window (90 days) but before the unit was created: there
+    // is no structure to record for a period with no unit. A named refusal — the
+    // first round let this reach the exclusion constraint and answer 500.
+    const proposed = await propose(unit.id, {
+      requestedAction: "move",
+      proposedParentOrganizationUnitId: other.id,
+      requestedEffectiveFrom: ISO(daysFromNow(-20)),
+      reason: "Correction dated before the unit existed",
+      submitForReview: true,
+    });
+    expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
+
+    const published = await publish(proposed.body.id as string);
+    expect(published.status, JSON.stringify(published.body)).toBe(409);
+    expect(String(published.body.error)).toContain("precedes the Organization Unit's own creation");
+
+    // Nothing was written, and the request did not become terminal: refusing is
+    // not publishing.
+    expect(await historyRanges(unit.id)).toHaveLength(1);
+    const request = await pool.query(`SELECT status FROM organization_unit_change_requests WHERE id = $1`, [
+      proposed.body.id,
+    ]);
+    expect(request.rows[0].status).toBe("pending_review");
+  });
+
+  it("refuses publishing a request whose unit was tombstoned while it waited", async () => {
+    const legalEntity = await createLegalEntity();
+    const central = await rootCentralOf(legalEntity.id);
+    const region = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+    const site = await createUnit(legalEntity.id, { parentId: region.id, unitType: "Internal Site" });
+    const replacement = await createUnit(legalEntity.id, { parentId: region.id, unitType: "Internal Site" });
+
+    const pending = await propose(site.id, {
+      requestedAction: "move",
+      proposedParentOrganizationUnitId: replacement.id,
+      requestedEffectiveFrom: ISO(hoursFromNow(2)),
+      reason: "Reorganisation proposed while the site was live",
+      submitForReview: true,
+    });
+    expect(pending.status, JSON.stringify(pending.body)).toBe(201);
+    expect(pending.body.status).toBe("pending_review");
+
+    const deactivated = await call("POST", `/organization-units/${site.id}/status`, {
+      payload: { status: "inactive" },
+    });
+    expect(deactivated.status, JSON.stringify(deactivated.body)).toBe(200);
+    const tombstoned = await call("POST", `/organization-units/${site.id}/tombstone`, {
+      payload: { reason: "Site closed while a change request was open" },
+    });
+    expect(tombstoned.status, JSON.stringify(tombstoned.body)).toBe(200);
+
+    const published = await publish(pending.body.id as string);
+    expect(published.status, JSON.stringify(published.body)).toBe(409);
+    expect(String(published.body.error)).toContain("structure changes are no longer accepted");
+
+    // The tombstone survives untouched: the unit has no version in force, and its
+    // parent was not moved by a request it outlived.
+    const ranges = await historyRanges(site.id);
+    expect(ranges.length).toBeGreaterThanOrEqual(1);
+    expect(ranges.filter((row) => row.to === null)).toHaveLength(0);
+    const unitRow = await pool.query(`SELECT status, parent_id FROM organization_units WHERE id = $1`, [site.id]);
+    expect(unitRow.rows[0].status).toBe("tombstone");
+    expect(unitRow.rows[0].parent_id).toBe(region.id);
+  });
+
+  it("refuses publishing a tombstone request for a unit that is active again", async () => {
+    const legalEntity = await createLegalEntity();
+    const central = await rootCentralOf(legalEntity.id);
+    const region = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+    const site = await createUnit(legalEntity.id, { parentId: region.id, unitType: "Internal Site" });
+
+    const deactivated = await call("POST", `/organization-units/${site.id}/status`, {
+      payload: { status: "inactive" },
+    });
+    expect(deactivated.status, JSON.stringify(deactivated.body)).toBe(200);
+    const proposed = await propose(site.id, {
+      requestedAction: "tombstone",
+      requestedEffectiveFrom: ISO(hoursFromNow(1)),
+      reason: "Delete requested while inactive",
+      submitForReview: true,
+    });
+    expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
+
+    // Putaran 4's order is "inactive first, then delete": the unit is active
+    // again when the review happens, so the request may not delete it. (Activating
+    // a unit needs its owning Legal Entity active — a Gelombang 1 rule, unrelated
+    // to this wave.)
+    const leActivated = await call("POST", `/legal-entities/${legalEntity.id}/activate`);
+    expect(leActivated.status, JSON.stringify(leActivated.body)).toBe(200);
+    const reactivated = await call("POST", `/organization-units/${site.id}/status`, {
+      payload: { status: "active" },
+    });
+    expect(reactivated.status, JSON.stringify(reactivated.body)).toBe(200);
+
+    const published = await publish(proposed.body.id as string);
+    expect(published.status, JSON.stringify(published.body)).toBe(409);
+    expect(String(published.body.error)).toContain("tombstoned from 'inactive'");
+    const unitRow = await pool.query(`SELECT status FROM organization_units WHERE id = $1`, [site.id]);
+    expect(unitRow.rows[0].status).toBe("active");
+  });
+
+  it("publishes a draft, and refuses to publish an already published request", async () => {
+    const legalEntity = await createLegalEntity();
+    const central = await rootCentralOf(legalEntity.id);
+    const regionA = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+    const regionB = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+
+    // This wave ships no separate submit route, so the create-time flag IS the
+    // submit step and a reviewer may publish a draft directly. What the status
+    // set still separates is what can be edited/cancelled (draft,
+    // pending_review) from what is terminal (published, rejected).
+    const draft = await propose(regionA.id, {
+      requestedAction: "move",
+      proposedParentOrganizationUnitId: regionB.id,
+      requestedEffectiveFrom: ISO(hoursFromNow(4)),
+      reason: "Left in draft, published by the reviewer",
+    });
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+    expect(draft.body.status).toBe("draft");
+
+    const published = await publish(draft.body.id as string);
+    expect(published.status, JSON.stringify(published.body)).toBe(200);
+    expect(published.body.request).toMatchObject({ status: "published" });
+
+    // The rule is stated once, in the domain (PUBLISHABLE_CHANGE_REQUEST_STATUSES);
+    // the audit is what keeps a publish that skipped the proposer's signal from
+    // being indistinguishable from one that waited for it.
+    const draftAudit = await auditRows(
+      draft.body.id as string,
+      "organization_unit.change_request.published",
+    );
+    expect(draftAudit).toHaveLength(1);
+    expect((draftAudit[0].metadata as Record<string, unknown>).fromStatus).toBe("draft");
+
+    const again = await publish(draft.body.id as string);
+    expect(again.status, JSON.stringify(again.body)).toBe(409);
+    expect(String(again.body.error)).toContain("can no longer be published");
+
+    const cancelled = await call(
+      "POST",
+      `/organization-unit-change-requests/${draft.body.id as string}/cancel`,
+    );
+    expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(409);
+  });
+
+  it("refuses a tombstone dated before the version in force, so a tombstone never leaves a range in force", async () => {
+    const legalEntity = await createLegalEntity();
+    const central = await rootCentralOf(legalEntity.id);
+    const unit = await createUnit(legalEntity.id, { parentId: central, unitType: "Region" });
+
+    // The legacy shape again: a year-old unit whose recorded history begins ten
+    // days ago, so a business date 60 days back precedes the version in force
+    // without being covered by any range (it is inside the 90-day window).
+    await makeHistoryStartAfterCreation(unit.id, { createdDaysAgo: 365, rangeStartDaysAgo: 10 });
+    const deactivated = await call("POST", `/organization-units/${unit.id}/status`, {
+      payload: { status: "inactive" },
+    });
+    expect(deactivated.status, JSON.stringify(deactivated.body)).toBe(200);
+
+    // Putaran 4's delete has to END the version in force — that is what makes a
+    // tombstone different from a deactivation. A business date before that version
+    // would say the unit left the structure before it was put there, which no
+    // range can express, and closing nothing would leave a tombstoned unit "in
+    // force" for every reader. Refused by name; nothing is written.
+    const refused = await call("POST", `/organization-units/${unit.id}/tombstone`, {
+      payload: {
+        reason: "Closed as of a date before the recorded history",
+        effectiveFrom: ISO(daysFromNow(-60)),
+      },
+    });
+    expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+    expect(String(refused.body.error)).toContain(
+      "cannot leave the structure before the version that put it there",
+    );
+
+    const untouched = await pool.query(`SELECT status FROM organization_units WHERE id = $1`, [unit.id]);
+    expect(untouched.rows[0].status).toBe("inactive");
+    expect((await historyRanges(unit.id)).filter((row) => row.to === null)).toHaveLength(1);
+
+    // The ordinary delete still works on the same unit, and it is the version in
+    // force that ends: the invariant the suite asserts elsewhere holds here too.
+    const tombstoned = await call("POST", `/organization-units/${unit.id}/tombstone`, {
+      payload: { reason: "Closed from the recorded history on" },
+    });
+    expect(tombstoned.status, JSON.stringify(tombstoned.body)).toBe(200);
+    expect(tombstoned.body.status).toBe("tombstone");
+    expect((await historyRanges(unit.id)).filter((row) => row.to === null)).toHaveLength(0);
   });
 });
