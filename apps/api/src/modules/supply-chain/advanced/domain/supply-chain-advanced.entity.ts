@@ -1461,6 +1461,12 @@ export interface ScmDiscrepancyRecordFilter {
   receivingLineId?: string;
   status?: ScmDiscrepancyStatus;
   discrepancyType?: ScmDiscrepancyType;
+  /** Epic 5 G3 enforcement batch — the warehouses a discrepancy record may be
+   * reported from, resolved through its receiving line. A list read passes the
+   * ACTIVE assignment's scoped warehouse ids here instead of filtering in
+   * memory, so a unit-scoped reader cannot see another warehouse's
+   * discrepancies. `null`/absent means "no narrowing". */
+  warehouseIds?: string[] | null;
 }
 
 export interface ScmAccountingReadyEventFilter {
@@ -2082,6 +2088,22 @@ export interface SupplyChainAdvancedRepository {
     input: ResolveScmDiscrepancyRecordInput,
   ): Promise<ScmDiscrepancyRecord | null>;
   listDiscrepancyRecords(tenantId: string, filter?: ScmDiscrepancyRecordFilter): Promise<ScmDiscrepancyRecord[]>;
+  /**
+   * Epic 5 G3 enforcement batch — the WAREHOUSE a line-level inventory record
+   * belongs to, so the tier's line-keyed operations run the same Data Scope
+   * check their parent record runs. Exactly one ref is honoured, in this order:
+   * a receiving line directly; a discrepancy record through its receiving line;
+   * a stock-opname line through its opname. Returns `null` when the ref is not
+   * in the Tenant — which the caller treats as fail-closed, not as "no anchor".
+   */
+  findInventoryLinePlacementWarehouseId(
+    tenantId: string,
+    ref: {
+      receivingLineId?: string | null;
+      discrepancyId?: string | null;
+      opnameLineId?: string | null;
+    },
+  ): Promise<string | null>;
 
   // Accounting-ready events (SCM facts only; no Finance posting)
   createAccountingReadyEvent(tenantId: string, input: CreateScmAccountingReadyEventInput): Promise<ScmAccountingReadyEvent>;

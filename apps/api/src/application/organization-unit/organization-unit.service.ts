@@ -114,30 +114,35 @@ export class OrganizationUnitService {
     await this.rbac.requirePermission(actor, "organization_unit.read");
 
     const all = await this.repo.listByTenant(actor.tenantId);
-    const hasTenantScope = await this.rbac.hasTenantScope(actor);
-    if (hasTenantScope) return all;
+    // Epic 5 G3 enforcement batch — the ACTIVE assignment's Data Scope decides
+    // what is visible:
+    // - tenant-wide            → the whole structure;
+    // - legal_entity           → every unit inside that Legal Entity (§4.5
+    //                            Putaran 4), which the earlier
+    //                            Organization-Unit-only walk answered as an
+    //                            EMPTY list for;
+    // - organization_unit      → the scope unit, its descendants AND every
+    //                            ancestor up to the Legal Entity's root, so the
+    //                            branch the user hangs from can be rendered.
+    //
+    // `getAssignments(actor.userId)` — the union of every Role the user holds —
+    // is deliberately NOT read here any more: Epic 1 §4.1 C made the active
+    // Role the enforcement input, and a list read is an enforcement read. A list
+    // built from the union shows a user units their current context does not
+    // cover.
+    const scope = await this.rbac.listScopedOrganizationUnitIds(actor);
+    if (scope === null) return all;
 
-    // Hierarchical scope filter (Checkpoint 0F / ADR-0009, supersedes the
-    // 0B exact-match-only rule): a unit is visible if the actor's Data
-    // Scope covers the unit itself OR any of its ANCESTORS — e.g. an
-    // assignment on "Region" now also surfaces every "Site" under it.
-    // Walked in-memory against the tenant's full unit list (already
-    // fetched above) rather than one SQL round-trip per unit.
-    const assignments = await this.rbacRepo.getAssignments(actor.userId);
-    const scopeIds = new Set(
-      assignments
-        .filter((a) => a.scopeType === "organization_unit" && a.scopeOrganizationUnitId)
-        .map((a) => a.scopeOrganizationUnitId as string),
-    );
+    const coveredIds = new Set(scope);
     const byId = new Map(all.map((u) => [u.id, u]));
-    const isCovered = (unitId: string): boolean => {
+    const isVisible = (unitId: string): boolean => {
       let current = byId.get(unitId);
       while (current) {
-        if (scopeIds.has(current.id)) return true;
+        if (coveredIds.has(current.id)) return true;
         current = current.parentId ? byId.get(current.parentId) : undefined;
       }
       return false;
     };
-    return all.filter((u) => isCovered(u.id));
+    return all.filter((u) => isVisible(u.id));
   }
 }

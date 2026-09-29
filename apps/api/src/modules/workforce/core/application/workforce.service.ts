@@ -415,11 +415,23 @@ export class WorkforceService {
     return `${year}-${month}-${day}`;
   }
 
+  /**
+   * Workforce-anchored Legal Entity placement.
+   *
+   * Existence is not authority. Epic 5 G3 (enforcement batch) adds the Data
+   * Scope check on the ACTIVE assignment plus the fail-closed lifecycle rule of
+   * §4.5 Putaran 6: an inactive or deleted Legal Entity may not be used for new
+   * work — an employee can only be placed into the Legal Entity the active Role
+   * covers, and never into a closed one. Before this, ANY internal caller holding
+   * `workforce.manage` could place an employee into a sibling Legal Entity of
+   * the same Tenant.
+   */
   private async resolveLegalEntity(actor: ActorContext, legalEntityId: string | null): Promise<string | null> {
     if (!legalEntityId) return null;
     if (!(await this.repo.legalEntityExists(actor.tenantId, legalEntityId))) {
       throw new NotFoundError("LegalEntity", legalEntityId);
     }
+    await this.rbac.requireActiveLegalEntityScopeForActor(actor, legalEntityId);
     return legalEntityId;
   }
 
