@@ -322,31 +322,25 @@ describe("Epic 5 G1 — typed addresses with same-tenant ownership", () => {
 });
 
 describe("Epic 5 G1 — Organization Unit and Legal Entity lifecycle", () => {
-  it("blocks deactivating a Legal Entity that still owns an active Organization Unit", async () => {
+  it("allows deactivating a Legal Entity when its only active unit is the root Central", async () => {
     const legalEntity = await createLegalEntity();
     const activated = await call("POST", `/legal-entities/${legalEntity.id}/status`, {
       payload: { status: "active" },
     });
     expect(activated.status).toBe(200);
 
-    // `createLegalEntity` already produced the root Central, so the active
-    // Organization Unit this guard refuses over is present without extra work.
-    //
-    // This is also the Founder-deferred half of Gelombang 1 (decision
-    // 2026-09-29, item [3A]): because the root Central is always active and can
-    // never be deactivated (§4.5 Putaran 4), the guard has no API path that
-    // clears it yet, so `active → inactive` on a Legal Entity is currently
-    // reachable only by a direct write. Resolving that — deactivate the root
-    // with its Legal Entity, or exempt the root from this guard — is Gelombang
-    // 2 work and is NOT implemented here on purpose.
+    // `createLegalEntity` already produced the root Central. Phase 3 (line 377)
+    // excludes the root Central from the active-units guard, so a Legal Entity
+    // whose only live unit is that Central may now be deactivated through the
+    // API.
     const roots = await rootUnitsOf(legalEntity.id);
     expect(roots).toHaveLength(1);
 
-    const blocked = await call("POST", `/legal-entities/${legalEntity.id}/status`, {
+    const deactivated = await call("POST", `/legal-entities/${legalEntity.id}/status`, {
       payload: { status: "inactive" },
     });
-    expect(blocked.status).toBe(409);
-    expect(String(blocked.body.error ?? blocked.body.message)).toMatch(/Organization Unit/i);
+    expect(deactivated.status).toBe(200);
+    expect(deactivated.body.status).toBe("inactive");
   });
 
   it("blocks deactivating an Organization Unit that still has active children", async () => {
