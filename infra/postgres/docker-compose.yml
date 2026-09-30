@@ -1,24 +1,23 @@
-name: abixell-one
-
+name: abixell-dev
 services:
-  postgres:
+  abixell-dev:
     image: postgres:16-alpine
+    container_name: abixell-dev
     restart: unless-stopped
     environment:
       POSTGRES_USER: abixell
       POSTGRES_PASSWORD: abixell_dev_password
-      POSTGRES_DB: abixell_one
-    # Local development only. Production uses infra/deployment/compose.yml
-    # and never publishes PostgreSQL outside its internal network.
+      POSTGRES_DB: abixell_one_dev
+    # Local Windows environment only.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5442:5432"
     volumes:
-      - abixell_postgres_data:/var/lib/postgresql/data
+      - abixell_dev_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U abixell -d abixell_one"]
+      test: ["CMD-SHELL", "pg_isready -U abixell -d abixell_one_dev"]
       interval: 5s
       timeout: 5s
       retries: 10
-
 volumes:
-  abixell_postgres_data:
+  abixell_dev_pgdata:
+    name: abixell_dev_pgdata

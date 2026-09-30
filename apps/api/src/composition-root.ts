@@ -37,6 +37,8 @@ import { RbacService } from "./application/rbac/rbac.service.js";
 import { ApprovalAuthorityService } from "./domain/rbac/approval-authority.service.js";
 import { TenantService } from "./application/tenant/tenant.service.js";
 import { LegalEntityService } from "./application/legal-entity/legal-entity.service.js";
+import { PgLegalEntityAttachmentReferenceRepository } from "./infrastructure/persistence/repositories/legal-entity-attachment-reference.repository.pg.js";
+import { LegalEntityAttachmentReferenceService } from "./application/legal-entity-attachment-reference/legal-entity-attachment-reference.service.js";
 import { OrganizationUnitService } from "./application/organization-unit/organization-unit.service.js";
 import { OrganizationUnitHierarchyService } from "./application/organization-unit/organization-unit-hierarchy.service.js";
 import { DepartmentService } from "./application/department/department.service.js";
@@ -707,6 +709,11 @@ export function buildContainer() {
     scheduler,
     tenant: new TenantService(tenantRepo, audit, rbac),
     legalEntity: new LegalEntityService(legalEntityRepo, rbac),
+    legalEntityAttachmentReference: new LegalEntityAttachmentReferenceService(
+      new PgLegalEntityAttachmentReferenceRepository(pool),
+      legalEntityRepo,
+      rbac,
+    ),
     organizationUnit: new OrganizationUnitService(organizationUnitRepo, rbac, rbacRepo),
     organizationUnitHierarchy: new OrganizationUnitHierarchyService(
       organizationUnitHierarchyRepo,

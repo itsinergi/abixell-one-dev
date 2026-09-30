@@ -2107,8 +2107,15 @@ export type AdminAssignmentRow = AdminRoleAssignmentSummary & {
  * context (an ancestor above the actor's own subtree), not choices. */
 export type AdminAssignmentOptions = {
   canAssignTenantScope: boolean;
+  legalEntities: AdminAssignmentLegalEntityOption[];
   organizationUnits: AdminAssignmentUnitOption[];
   roles: AdminAssignmentRoleOption[];
+};
+
+export type AdminAssignmentLegalEntityOption = {
+  id: string;
+  name: string;
+  selectable: boolean;
 };
 
 export type AdminAssignmentUnitOption = {
@@ -2136,6 +2143,8 @@ export type AdminAssignmentPairSummary = {
   roleCode: string;
   roleName: string;
   scopeType: AdminRoleAssignmentScopeType;
+  scopeLegalEntityId: string | null;
+  scopeLegalEntityName: string | null;
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;

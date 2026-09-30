@@ -141,6 +141,17 @@ function pairFromSelection(
       ? { roleCode, scopeType: "tenant" }
       : null;
   }
+  if (scopeKey.startsWith("le:")) {
+    const legalEntity = options.legalEntities.find(
+      (candidate) => `le:${candidate.id}` === scopeKey,
+    );
+    if (!legalEntity || !legalEntity.selectable) return null;
+    return {
+      roleCode,
+      scopeType: "legal_entity",
+      scopeLegalEntityId: legalEntity.id,
+    };
+  }
   if (scopeKey.startsWith("ou:")) {
     const unit = options.organizationUnits.find(
       (candidate) => `ou:${candidate.id}` === scopeKey,
@@ -152,13 +163,8 @@ function pairFromSelection(
       scopeOrganizationUnitId: unit.id,
     };
   }
-  // Neither Customer scope nor Legal Entity scope is offered by this picker
-  // yet. Customer scope waits for the Service Operation session (Epic 5 G3
-  // keeps it out); the Legal Entity option list is served by the API
-  // (`AssignmentOptions.legalEntities`) and gets its control in the Epic 5 G3
-  // UI card. Until that control exists, nothing can select either key, so the
-  // editor offers none of them rather than inventing a choice the API would
-  // have to second-guess.
+  // Customer scope waits for the Service Operation session (Epic 5 G3 keeps it
+  // out), so the editor offers no customer key for the API to second-guess.
   return null;
 }
 
@@ -184,6 +190,7 @@ export function AssignmentPairEditor({
   const selectableRoles = options.roles.filter((role) => role.selectable);
   const hasSelectableScope =
     options.canAssignTenantScope ||
+    options.legalEntities.some((le) => le.selectable) ||
     options.organizationUnits.some((unit) => unit.selectable);
   // Stable per-row identity: a pair's content can repeat transiently while the
   // operator edits, and index keys would rebind focus and open select state to
@@ -216,9 +223,13 @@ export function AssignmentPairEditor({
   function addPair() {
     const role = selectableRoles[0];
     if (!role) return;
+    const firstSelectableUnit = options.organizationUnits.find((unit) => unit.selectable);
+    const firstSelectableLe = options.legalEntities.find((le) => le.selectable);
     const scopeKey = options.canAssignTenantScope
       ? "tenant"
-      : `ou:${options.organizationUnits.find((unit) => unit.selectable)?.id ?? ""}`;
+      : firstSelectableLe
+        ? `le:${firstSelectableLe.id}`
+        : `ou:${firstSelectableUnit?.id ?? ""}`;
     const pair = pairFromSelection(role.code, scopeKey, options);
     if (!pair) return;
     setRowIds([...rowIds, ++rowIdCounter.current]);
@@ -277,6 +288,15 @@ export function AssignmentPairEditor({
                     <option value="tenant" disabled={!options.canAssignTenantScope}>
                       Tenant-wide{!options.canAssignTenantScope ? " — not permitted for your access" : ""}
                     </option>
+                    {options.legalEntities.map((legalEntity) => (
+                      <option
+                        key={legalEntity.id}
+                        value={`le:${legalEntity.id}`}
+                        disabled={!legalEntity.selectable}
+                      >
+                        {`${legalEntity.name}${legalEntity.selectable ? "" : " — context"}`}
+                      </option>
+                    ))}
                     {options.organizationUnits.map((unit) => (
                       <option
                         key={unit.id}

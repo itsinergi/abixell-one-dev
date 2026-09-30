@@ -357,6 +357,15 @@ export class PgLegalEntityRepository implements LegalEntityRepository {
       // on Organization Units, and on Legal Entities only through a direct
       // write, until that wave lands.
       if (status === "inactive" || status === "tombstone") {
+        // The root Central is excluded from this check: it is created active
+        // and the Organization Unit repository refuses to ever deactivate it
+        // directly (`Root Central Organization Unit cannot be deactivated`),
+        // so requiring it inactive here would make every Legal Entity
+        // permanently un-deactivatable — the unsatisfiable-guard trap this
+        // file's module comment warns about. Deactivating the Legal Entity
+        // takes its structure out of active use without mutating the root
+        // Central's own row; reactivating restores both to the same state
+        // they were in before (§4.5 decision 2026-09-29, item [3A]).
         const activeUnits = await client.query(
           `SELECT 1
              FROM organization_units
@@ -364,6 +373,7 @@ export class PgLegalEntityRepository implements LegalEntityRepository {
               AND tenant_id = $2
               AND is_active = true
               AND deleted_at IS NULL
+              AND NOT (unit_type = 'Central' AND parent_id IS NULL)
             FOR UPDATE`,
           [id, actor.tenantId],
         );

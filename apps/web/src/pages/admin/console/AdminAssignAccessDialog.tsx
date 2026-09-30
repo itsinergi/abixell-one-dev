@@ -403,9 +403,11 @@ function PreviewSummary({
               {" · "}
               {pair.scopeType === "tenant"
                 ? "Tenant-wide"
-                : pair.scopeType === "organization_unit"
-                  ? pair.scopeOrganizationUnitName ?? "Unknown organization unit"
-                  : pair.scopeCustomerName ?? "Unknown customer"}
+                : pair.scopeType === "legal_entity"
+                  ? pair.scopeLegalEntityName ?? "Unknown Legal Entity"
+                  : pair.scopeType === "organization_unit"
+                    ? pair.scopeOrganizationUnitName ?? "Unknown organization unit"
+                    : pair.scopeCustomerName ?? "Unknown customer"}
             </div>
           </li>
         ))}
