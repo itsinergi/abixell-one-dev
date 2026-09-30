@@ -175,7 +175,7 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 | 2 | Application Dictionary & Metadata Engine | Epic 1 | **Digali 2026-09-23 — detail di §4.2, siap eksekusi setelah Epic 1** |
 | 3 | Module & Menu Tree Configuration | Epic 2 | **Digali 2026-09-23 — detail di §4.3, siap eksekusi setelah Epic 2** |
 | 4 | User, Role & Permission Configuration UI | Epic 1, 2, 3 | **Digali 2026-09-24 — detail di §4.4, siap desain setelah Epic 1–3** |
-| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Eksekusi 2026-09-28–2026-09-30 — G0-G4 COMPLETE; Phase 1-3 regression lulus (43 test); Phase 4 menunggu DB admin; detail di §4.5** |
+| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Eksekusi 2026-09-28–2026-09-30 — G0-G4 COMPLETE; Phase 1-5 selesai (43 test regression + Phase 4 live DB re-parent); detail di §4.5** |
 | 6 | User Identity, Employee, Business Partner & Assignment | Epic 1, 4, 5 | **Digali 2026-09-24 — detail di §4.6, siap desain setelah Epic 1, 4, dan 5** |
 | 7 | Document Engine & Transaction Lifecycle | Epic 1, 2, 5, 6 | **Digali 2026-09-24 — detail di §4.7, siap desain setelah Epic 1, 2, 5, 6** |
 | 8 | Document Type, Numbering & Parameter Setup | Epic 7 | **Digali 2026-09-25 — detail di §4.8, siap desain setelah Epic 7** |
@@ -1853,8 +1853,8 @@ Epic 5 menyiapkan metadata/reference untuk dokumen legal Legal Entity, misalnya 
 - **Phase 1 — G3 UI Picker**: COMPLETE — LE picker + selectable detection + default selection (AdminAssignmentControls, AdminAssignAccessDialog)
 - **Phase 2 — G4 Attachment Metadata**: COMPLETE — migration, domain entity, repository (governed tx), service (RBAC), routes, DI wiring, G4 contract doc
 - **Phase 3 — G1 Lifecycle Fix**: COMPLETE — legal-entity.repository.pg.ts line 377 excludes root Central from active-units guard; LE deactivation now safe
-- **Phase 4 — Legacy Re-parent**: NOT STARTED (DB admin task — backfill Central roots, re-parent 45 orphans, preserve grandfathered unit_type; operator spec: `docs/plans/epic-5-phase-4-legacy-reparent-spec.md`)
-- **Phase 5 — Documentation & QA**: PARTIAL (G4 contract written, progress doc updated; Phase 4 operator spec written; 43 integration tests lulus di isolated test DB — G1 lifecycle 17, G3 authorization 13, G3 legal entity scope 13; Epic 5 §4.5 roadmap items #4, #7 deferred to future interviews; typecheck clean API+Web)
+- **Phase 4 — Legacy Re-parent**: COMPLETE (DB admin executed 2026-09-30; 37 orphan OUs re-parented, 21 LEs consolidated to single Central root, 0 remaining orphans in real data, 21 audit entries)
+- **Phase 5 — Documentation & QA**: COMPLETE (G4 contract written, Phase 4 operator spec written & executed, 43 integration tests lulus di isolated test DB — G1 lifecycle 17, G3 authorization 13, G3 legal entity scope 13; Phase 4 live DB re-parent done; Epic 5 §4.5 roadmap items #4, #7 deferred to future interviews; typecheck clean API+Web)
 
 **Gelombang 0 — Kontrak dan migrasi aman**
 
