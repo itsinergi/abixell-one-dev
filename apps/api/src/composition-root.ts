@@ -4,6 +4,7 @@ import { PgLegalEntityRepository } from "./infrastructure/persistence/repositori
 import { PgOrganizationUnitRepository } from "./infrastructure/persistence/repositories/organization-unit.repository.pg.js";
 import { PgOrganizationUnitHierarchyRepository } from "./infrastructure/persistence/repositories/organization-unit-hierarchy.repository.pg.js";
 import { PgDepartmentRepository } from "./infrastructure/persistence/repositories/department.repository.pg.js";
+import { PgBusinessPartnerRepository } from "./infrastructure/persistence/repositories/business-partner.repository.pg.js";
 import { PgUserRepository } from "./infrastructure/persistence/repositories/user.repository.pg.js";
 import { PgRbacRepository } from "./infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { PgAuditLogRepository } from "./infrastructure/persistence/repositories/audit-log.repository.pg.js";
@@ -42,6 +43,7 @@ import { LegalEntityAttachmentReferenceService } from "./application/legal-entit
 import { OrganizationUnitService } from "./application/organization-unit/organization-unit.service.js";
 import { OrganizationUnitHierarchyService } from "./application/organization-unit/organization-unit-hierarchy.service.js";
 import { DepartmentService } from "./application/department/department.service.js";
+import { BusinessPartnerService } from "./application/business-partner/business-partner.service.js";
 import { UserService } from "./application/identity/user.service.js";
 import { AuthService } from "./application/identity/auth.service.js";
 import { ConfigurationService } from "./application/configuration/configuration.service.js";
@@ -150,6 +152,11 @@ export function buildContainer() {
   // scope column or RbacService scope method is involved (see the module
   // comment on domain/department/department.entity.ts).
   const departmentRepo = new PgDepartmentRepository(pool);
+  // Epic 6 Gelombang 1 — Business Partner canonical party model. Not an
+  // authorization scope (see the module comment on
+  // domain/business-partner/business-partner.entity.ts), same posture as
+  // `departmentRepo` above.
+  const businessPartnerRepo = new PgBusinessPartnerRepository(pool);
   const userRepo = new PgUserRepository(pool);
   const rbacRepo = new PgRbacRepository(pool);
   const auditRepo = new PgAuditLogRepository(pool);
@@ -721,6 +728,7 @@ export function buildContainer() {
       rbac,
     ),
     departments: new DepartmentService(departmentRepo, rbac),
+    businessPartner: new BusinessPartnerService(businessPartnerRepo, rbac),
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
     configuration,
