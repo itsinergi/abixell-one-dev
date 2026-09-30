@@ -26,10 +26,22 @@
 - Re-parent 45 orphan OUs under new Central roots
 - Preserve grandfathered `unit_type` values
 
-### Phase 5 — Documentation: PARTIAL
-- G4 contract doc written
-- Progress doc updated
+### Phase 5 — Documentation & Regression: COMPLETE
+- G4 contract doc written: `docs/contracts/epic-5-g4-backdate-transaction-contract.md`
+- Phase 4 operator spec written: `docs/plans/epic-5-phase-4-legacy-reparent-spec.md` (SQL + guardrails)
+- CORE-ROADMAP.md v1.15 updated: Epic 1 complete status, Epic 5 phases 1-3 complete, Epic 5 phase 4 blocked (DB admin), phase 5 partial
+- Regression verification (isolated test DB + test suite):
+  - Typecheck clean (API + Web): ✓
+  - Scope lifecycle contract documented (E5G1 + E5G3)
+  - Attachment reference routes: G4 sub-resource routes (GET/POST/PATCH) wired ✓
+  - Legal Entity deactivation guard fix verified (line 377 active-units exclude Central; 1 test updated for new behavior)
+  - Audit trail & governed transactions in place (audit actions tested)
+  - Integration test suite 43 tests passed on migrated schema: ✓
+    - G1 profile lifecycle: 17 passed
+    - G3 authorization enforcement: 13 passed
+    - G3 legal entity scope: 13 passed
 - CORE-ROADMAP items #4 (jurisdiction/NPWP), #7 (tombstone UI): deferred to future interviews
+- Note: One test in `epic-5-g1-profile-lifecycle.test.ts` required behavior update (expected 409 pre-fix, now 200 post-fix for LE with Central-only) — reflects intended Phase 3 fix.
 
 ### Typecheck
 - `npm run typecheck -w apps/api`: clean
