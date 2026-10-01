@@ -1,7 +1,7 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.14
-**Tanggal:** 2026-09-28
+**Versi:** 1.15
+**Tanggal:** 2026-09-30
 **Status:** **Epic 1 selesai 2026-09-28** — enam gelombang (skema, sesi server-side, otorisasi hanya-role-aktif, ApprovalAuthority & SoD, route + UI, cutover + regresi) dibangun dan diuji; Epic 5–15 kini terbuka. Epic 2–6 sudah digali; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. **Wawancara customer scope selesai 2026-09-28 — enam keputusan terkunci (eksternal saja, default baca dua permission dengan opsi set penuh, permukaan internal tertutup, Admin Tenant pemberi, pencabutan manual plus penjaring sistem, tidak boleh campur scope); item terbuka 1–7 seluruhnya terkunci, termasuk item 4 (batch atomic all-or-nothing) dan item 5–7.** Implementasi seluruh pekerjaan yang lahir dari keputusan itu selesai 2026-09-28 (migration 1788300000000–1788700000000), termasuk penutupan utang kamus rute Wave 2/3. **Sisa Epic 4: hanya filter permukaan internal customer, yang menjadi deliverable wajib modul Service Operation karena belum ada query customer-facing untuk dipasangi filter.** **Epic 15 (Panel Admin) dibuka 2026-09-28 — struktur kategori konfigurasi dan slot modul terkunci sebagai bahan wawancara; detail di §4.15.**
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
 
@@ -171,11 +171,11 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 
 | # | Epic | Bergantung pada | Status |
 |---|---|---|---|
-| **1** | **Security Context, Role Definition & Approval Authority** | — | **READY — detail di §4.1** |
+| **1** | **Security Context, Role Definition & Approval Authority** | — | **Eksekusi 2026-09-28 — sessions + active-role + ApprovalAuthority + switch-role + cutover selesai; detail di §4.1** |
 | 2 | Application Dictionary & Metadata Engine | Epic 1 | **Digali 2026-09-23 — detail di §4.2, siap eksekusi setelah Epic 1** |
 | 3 | Module & Menu Tree Configuration | Epic 2 | **Digali 2026-09-23 — detail di §4.3, siap eksekusi setelah Epic 2** |
 | 4 | User, Role & Permission Configuration UI | Epic 1, 2, 3 | **Digali 2026-09-24 — detail di §4.4, siap desain setelah Epic 1–3** |
-| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Digali 2026-09-24 — detail di §4.5, siap desain setelah Epic 1–4** |
+| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Eksekusi 2026-09-28–2026-09-30 — G0-G4 COMPLETE; G5 regression pending; detail di §4.5** |
 | 6 | User Identity, Employee, Business Partner & Assignment | Epic 1, 4, 5 | **Digali 2026-09-24 — detail di §4.6, siap desain setelah Epic 1, 4, dan 5** |
 | 7 | Document Engine & Transaction Lifecycle | Epic 1, 2, 5, 6 | **Digali 2026-09-24 — detail di §4.7, siap desain setelah Epic 1, 2, 5, 6** |
 | 8 | Document Type, Numbering & Parameter Setup | Epic 7 | **Digali 2026-09-25 — detail di §4.8, siap desain setelah Epic 7** |
@@ -1847,6 +1847,14 @@ Aturan terkunci:
 Epic 5 menyiapkan metadata/reference untuk dokumen legal Legal Entity, misalnya document category, legal entity, attachment reference, expiry date bila relevan, status referensi, dan audit. Epic ini tidak memilih object storage, scan virus, ukuran file, encryption, versioning, retention, approval, atau akses download. Semua adalah item session dokumen/file yang harus selesai sebelum tombol upload production dibuka.
 
 #### Gelombang pengerjaan Epic 5
+
+**Eksekusi 2026-09-28–2026-09-30**
+
+- **Phase 1 — G3 UI Picker**: COMPLETE — LE picker + selectable detection + default selection (AdminAssignmentControls, AdminAssignAccessDialog)
+- **Phase 2 — G4 Attachment Metadata**: COMPLETE — migration, domain entity, repository (governed tx), service (RBAC), routes, DI wiring, G4 contract doc
+- **Phase 3 — G1 Lifecycle Fix**: COMPLETE — legal-entity.repository.pg.ts line 377 excludes root Central from active-units guard; LE deactivation now safe
+- **Phase 4 — Legacy Re-parent**: NOT STARTED (DB admin task — backfill Central roots, re-parent 45 orphans, preserve grandfathered unit_type)
+- **Phase 5 — Documentation & QA**: PARTIAL (G4 contract written, progress doc updated; Epic 5 §4.5 roadmap items #4, #7 deferred to future interviews; typecheck clean)
 
 **Gelombang 0 — Kontrak dan migrasi aman**
 
