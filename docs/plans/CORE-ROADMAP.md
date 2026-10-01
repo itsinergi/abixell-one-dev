@@ -171,12 +171,12 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 
 | # | Epic | Bergantung pada | Status |
 |---|---|---|---|
-| **1** | **Security Context, Role Definition & Approval Authority** | — | **Eksekusi 2026-09-28 — sessions + active-role + ApprovalAuthority + switch-role + cutover selesai; detail di §4.1** |
-| 2 | Application Dictionary & Metadata Engine | Epic 1 | **Eksekusi 2026-10-01 — Wave 2 (Reference Data Metadata) dan Wave 3 (Parameter Bridge) selesai; 14/14 focused tests, 30/30 parity tests, 958/958 API regression, typecheck 0 errors, bootstrap key timing attack fixed; detail di §4.2** |
-| 3 | Module & Menu Tree Configuration | Epic 2 | **Digali 2026-09-23 — detail di §4.3, siap eksekusi setelah Epic 2** |
-| 4 | User, Role & Permission Configuration UI | Epic 1, 2, 3 | **Digali 2026-09-24 — detail di §4.4, siap desain setelah Epic 1–3** |
-| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Eksekusi 2026-09-28–2026-09-30 — G0-G4 COMPLETE; Phase 1-5 selesai (43 test regression + Phase 4 live DB re-parent); detail di §4.5** |
-| 6 | User Identity, Employee, Business Partner & Assignment | Epic 1, 4, 5 | **Digali 2026-09-24 — detail di §4.6, siap desain setelah Epic 1, 4, dan 5** |
+| **1** | **Security Context, Role Definition & Approval Authority** | — | **DONE 2026-09-28 — sessions + active-role + ApprovalAuthority + switch-role + cutover selesai; detail di §4.1** |
+| 2 | Application Dictionary & Metadata Engine | Epic 1 | **DONE 2026-10-01 — Wave 2 (Reference Data Metadata) dan Wave 3 (Parameter Bridge) selesai; 14/14 focused tests, 30/30 parity tests, 958/958 API regression, typecheck 0 errors, bootstrap key timing attack fixed; detail di §4.2** |
+| 3 | Module & Menu Tree Configuration | Epic 2 | **DONE 2026-09-27 — Wave 1-3 selesai; 38 tests lulus (menu-filter, served-nav, parity); detail di §4.3, progress di `epic-3-progress.md`** |
+| 4 | User, Role & Permission Configuration UI | Epic 1, 2, 3 | **DONE 2026-09-28 — Gelombang 1-4 selesai sampai UI/UX; 124 tests lulus; window enforcement 334/340 route terkunci; detail di §4.4, progress di `epic-4-progress.md`** |
+| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **DONE 2026-09-30 — G0-G4/Phase 1-5 selesai; tidak ada Phase 6 di kontrak §4.5; OU re-parent selesai di Phase 4; detail di §4.5** |
+| 6 | User Identity, Employee, Business Partner & Assignment | Epic 1, 4, 5 | **NEXT / IN PROGRESS 2026-10-01 — Gelombang 0-1 selesai (Business Partner foundation), 435 tests lulus; siap lanjut Gelombang 2-4 (placement, User/Role Assignment, Tax Registration, merge/split); detail di §4.6, progress di `epic-6-progress.md`** |
 | 7 | Document Engine & Transaction Lifecycle | Epic 1, 2, 5, 6 | **Digali 2026-09-24 — detail di §4.7, siap desain setelah Epic 1, 2, 5, 6** |
 | 8 | Document Type, Numbering & Parameter Setup | Epic 7 | **Digali 2026-09-25 — detail di §4.8, siap desain setelah Epic 7** |
 | 9 | Workflow Engine, Approval Matrix & Escalation | Epic 1, 7 | **Digali 2026-09-25 — detail di §4.9, siap desain setelah Epic 1 dan 7** |
@@ -1872,6 +1872,8 @@ Epic 5 menyiapkan metadata/reference untuk dokumen legal Legal Entity, misalnya 
 #### Gelombang pengerjaan Epic 5
 
 **Eksekusi 2026-09-28–2026-09-30**
+
+> **Status Epic 5: DONE 2026-09-30.** Kelima fase di bawah selesai. Tidak ada "Phase 6" dalam kontrak §4.5 — permintaan "Epic 5 Phase 6 (OU re-parent + backlog HSE)" ditutup 2026-10-01: OU re-parent sudah dikerjakan di Phase 4, dan HSE adalah modul terpisah, bukan fase Epic 5.
 
 - **Phase 1 — G3 UI Picker**: COMPLETE — LE picker + selectable detection + default selection (AdminAssignmentControls, AdminAssignAccessDialog)
 - **Phase 2 — G4 Attachment Metadata**: COMPLETE — migration, domain entity, repository (governed tx), service (RBAC), routes, DI wiring, G4 contract doc
