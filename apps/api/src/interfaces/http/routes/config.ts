@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Container } from "../../../composition-root.js";
+import { bootstrapKeyMatches } from "../plugins/bootstrap-auth-plugin.js";
 
 const setModuleActivationSchema = z.object({ isActive: z.boolean() });
 
@@ -25,6 +26,12 @@ const referenceDataItemParamsSchema = z.object({
 });
 
 const createNumberingSequenceSchema = z.object({ pattern: z.string().min(1) });
+
+const setParameterValueSchema = z.object({
+  level: z.enum(["S", "C", "O"]),
+  value: z.unknown(),
+  organizationUnitId: z.string().uuid().optional(),
+});
 
 export function registerConfigurationRoutes(app: FastifyInstance, container: Container) {
   // --- Module Activation ---------------------------------------------------
@@ -204,6 +211,60 @@ export function registerConfigurationRoutes(app: FastifyInstance, container: Con
     async (request, reply) => {
       const { code } = request.params as { code: string };
       const result = await container.configuration.generateNumber(request.actor!, code);
+      return reply.send(result);
+    },
+  );
+
+  // --- Parameters (Epic 2 Wave 3 bridge) ---------------------------------------
+  app.get("/config/parameters", { preHandler: app.authenticate }, async (request, reply) => {
+    const list = await container.configuration.listAppParameters(request.actor!);
+    return reply.send(list);
+  });
+
+  app.get(
+    "/config/parameters/:code/effective",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      const { organizationUnitId } = request.query as { organizationUnitId?: string };
+      const result = await container.configuration.resolveEffectiveParameter(
+        request.actor!,
+        code,
+        organizationUnitId,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // System-level writes need platform authority (same posture as
+  // PUT /config/modules/:code), but Client/Organization writes are ordinary
+  // authenticated config.manage calls — so the bootstrap-key check is applied
+  // here conditionally, only after the body's requested level is known,
+  // instead of as a blanket preHandler.
+  app.put(
+    "/config/parameters/:code/values",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { code } = request.params as { code: string };
+      const body = setParameterValueSchema.parse(request.body);
+      if (body.value === undefined) {
+        return reply.status(400).send({ error: "value is required" });
+      }
+
+      let hasPlatformAuthority = false;
+      if (body.level === "S") {
+        if (!bootstrapKeyMatches(request.headers["x-bootstrap-key"], process.env.PLATFORM_BOOTSTRAP_KEY)) {
+          return reply.status(401).send({ error: "Invalid or missing bootstrap key" });
+        }
+        hasPlatformAuthority = true;
+      }
+
+      const result = await container.configuration.setParameterValue(
+        request.actor!,
+        code,
+        { level: body.level, value: body.value, organizationUnitId: body.organizationUnitId },
+        hasPlatformAuthority,
+      );
       return reply.send(result);
     },
   );

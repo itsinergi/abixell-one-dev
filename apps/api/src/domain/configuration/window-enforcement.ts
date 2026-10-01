@@ -254,6 +254,9 @@ export const WINDOW_RULES: WindowRule[] = [
   // recorded — see the header.
   { method: "*", apiPath: "/admin", windowCode: "route:/admin" },
   { method: "*", apiPath: "/app-metadata", windowCode: "route:/administration" },
+  // Epic 6 Gelombang 1 — Business Partner canonical party model. Edited from
+  // the same `/administration` surface as identity and org structure.
+  { method: "*", apiPath: "/business-partners", windowCode: "route:/administration" },
   { method: "*", apiPath: "/config", windowCode: "route:/administration" },
   // Identity, org structure and tenancy are all edited from `/administration`
   // (DashboardPage) and read from `/admin`; `/administration` owns them.

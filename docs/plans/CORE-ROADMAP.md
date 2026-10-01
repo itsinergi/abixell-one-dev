@@ -1,6 +1,6 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.15
+**Versi:** 1.16
 **Tanggal:** 2026-09-30
 **Status:** **Epic 1 selesai 2026-09-28** — enam gelombang (skema, sesi server-side, otorisasi hanya-role-aktif, ApprovalAuthority & SoD, route + UI, cutover + regresi) dibangun dan diuji; Epic 5–15 kini terbuka. Epic 2–6 sudah digali; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. **Wawancara customer scope selesai 2026-09-28 — enam keputusan terkunci (eksternal saja, default baca dua permission dengan opsi set penuh, permukaan internal tertutup, Admin Tenant pemberi, pencabutan manual plus penjaring sistem, tidak boleh campur scope); item terbuka 1–7 seluruhnya terkunci, termasuk item 4 (batch atomic all-or-nothing) dan item 5–7.** Implementasi seluruh pekerjaan yang lahir dari keputusan itu selesai 2026-09-28 (migration 1788300000000–1788700000000), termasuk penutupan utang kamus rute Wave 2/3. **Sisa Epic 4: hanya filter permukaan internal customer, yang menjadi deliverable wajib modul Service Operation karena belum ada query customer-facing untuk dipasangi filter.** **Epic 15 (Panel Admin) dibuka 2026-09-28 — struktur kategori konfigurasi dan slot modul terkunci sebagai bahan wawancara; detail di §4.15.**
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
@@ -172,10 +172,10 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 | # | Epic | Bergantung pada | Status |
 |---|---|---|---|
 | **1** | **Security Context, Role Definition & Approval Authority** | — | **Eksekusi 2026-09-28 — sessions + active-role + ApprovalAuthority + switch-role + cutover selesai; detail di §4.1** |
-| 2 | Application Dictionary & Metadata Engine | Epic 1 | **Digali 2026-09-23 — detail di §4.2, siap eksekusi setelah Epic 1** |
+| 2 | Application Dictionary & Metadata Engine | Epic 1 | **Eksekusi 2026-10-01 — Wave 2 (Reference Data Metadata) dan Wave 3 (Parameter Bridge) selesai; 14/14 focused tests, 30/30 parity tests, 958/958 API regression, typecheck 0 errors, bootstrap key timing attack fixed; detail di §4.2** |
 | 3 | Module & Menu Tree Configuration | Epic 2 | **Digali 2026-09-23 — detail di §4.3, siap eksekusi setelah Epic 2** |
 | 4 | User, Role & Permission Configuration UI | Epic 1, 2, 3 | **Digali 2026-09-24 — detail di §4.4, siap desain setelah Epic 1–3** |
-| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Eksekusi 2026-09-28–2026-09-30 — G0-G4 COMPLETE; G5 regression pending; detail di §4.5** |
+| 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Eksekusi 2026-09-28–2026-09-30 — G0-G4 COMPLETE; Phase 1-5 selesai (43 test regression + Phase 4 live DB re-parent); detail di §4.5** |
 | 6 | User Identity, Employee, Business Partner & Assignment | Epic 1, 4, 5 | **Digali 2026-09-24 — detail di §4.6, siap desain setelah Epic 1, 4, dan 5** |
 | 7 | Document Engine & Transaction Lifecycle | Epic 1, 2, 5, 6 | **Digali 2026-09-24 — detail di §4.7, siap desain setelah Epic 1, 2, 5, 6** |
 | 8 | Document Type, Numbering & Parameter Setup | Epic 7 | **Digali 2026-09-25 — detail di §4.8, siap desain setelah Epic 7** |
@@ -593,6 +593,29 @@ Tidak ada penimpa yang diam-diam tertimpa. Tidak ada definisi lama yang diam-dia
 | 2 | Apakah wizard perlu objek kamus sendiri, atau cukup ditandai pada Tab? | **Ditutup 2026-09-26 — cukup penanda pada Tab** (`app_tabs.tab_type = 'wizard'`; tidak ada objek `app_wizards`; lihat tabel keputusan). |
 | 3 | Halaman admin/konfigurasi mana yang pertama memakai generator terbatas? | **Diteruskan Epic 13 (§4.13 open item #5):** dijawab saat Wave 13.5 — bukan di Epic 4. Urutan generator dikunci §4.13 keputusan #12: layar baca-saja dulu (Wave 13.4), form admin menyusul (Wave 13.5). |
 | 4 | Apakah penimpa tenant ikut masuk versioning, atau cukup audit? | **Ditutup 2026-09-26 — tidak, cukup audit.** Yang masuk versioning adalah **penimpa terbitkan** (super admin lewat UI; §4.2 baris "Rollback": "setiap perubahan tersimpan sebagai versi"; guardrail #4 "Setiap aktifkan membentuk versi"). Cakupan tenant tidak pernah masuk jalur itu: baris "Cakupan tenant" membatasi tenant pada kolom aman (label, terminologi, urutan field, field disembunyikan), dan guardrail #1 "Batas wewenang" melarang UI menyentuh definisi akses dalam keadaan apa pun — jadi tidak ada kolom akses yang bisa diaktifkan/dibatalkan oleh penimpa tenant. Baris 516 sudah menyatakan penimpa tenant kalah dari penimpa terbitkan (urutan: inti > penimpa terbitkan > penimpa tenant), sehingga rollback penimpa terbitkan tidak boleh dan tidak perlu menyentuh baris tenant. Konsekuensi yang mengikat implementasi: penimpa tenant memerlukan **audit** (siapa, kapan, sebelum/sesudah — sudah tersedia lewat `audit_log` + `recordGovernedAudit`), dan **tidak** memerlukan rantai versi/snapshot yang dapat dipulihkan. Taksonomi lengkap (yang ber-versi vs yang ber-audit saja) ditulis saat Gelombang 2; keputusannya sendiri sudah final sekarang. |
+
+#### Gate sebelum Epic 2 dinyatakan selesai
+
+**Status: Epic 2 DONE — 2026-10-01.** Gelombang 1 selesai lebih dahulu; Gelombang 2 (konfigurasi bisnis) dan Gelombang 3 (jembatan parameter) selesai pada 2026-10-01.
+
+| # | Pemeriksaan | Hasil |
+|---|---|---|
+| 1 | Skema: level-konsistensi parameter, guardrail tidak dapat diwakili sebagai ter-override, isolasi tenant lewat FK komposit | Lulus — `app_parameters` / `app_parameter_values`; CHECK `NOT is_guardrail OR NOT org_override_allowed`; FK komposit `(tenant_id, organization_scope_id)` |
+| 2 | Urutan keputusan nilai efektif: Organization > Client > System > bawaan produk; bacaan efektif mengembalikan nilai dan level sumber | Lulus — `GET /config/parameters/:code/effective` mengembalikan `sourceLevel` (`O`/`C`/`S`/`product_default`) |
+| 3 | Otorisasi: tulis System butuh bootstrap key; tulis Client/Organization butuh `config.manage` + scope tenant | Lulus — gerbang bootstrap di route; RBAC scope OU diverifikasi reviewer |
+| 4 | Audit: setiap perubahan parameter tercatat (siapa, kapan) | Lulus — `updated_by` / `updated_at` |
+| 5 | Tidak ada teks dijalankan: aturan dan nilai disimpan sebagai data terstruktur | Lulus — nilai lewat `jsonb`, divalidasi Schema Registry; tidak ada skrip |
+| 6 | Validasi sebelum simpan: nilai parameter divalidasi terhadap `metadata_registry` | Lulus — `SchemaRegistryValidator` menolak nilai tidak sesuai skema |
+| 7 | Sembilan operator aturan tetap terkunci (tidak dilebarkan tanpa sengaja) | Lulus — regresi sembilan operator di suite Epic 2 |
+| 8 | Paritas: kamus (dictionary/route/menu) dan seed referensi data | Lulus — 30/30 tes paritas |
+| 9 | Migrasi: `1790900000000` dan `1791000000000` lolos platform-boundary-validator | Lulus — tidak ada temuan baru Wave 2–3; 11 isu lama Epic 5/6 di luar cakupan |
+| 10 | Typecheck API | Lulus — 0 error (`tsc --noEmit`) |
+| 11 | Regresi fokus Epic 2 | Lulus — 14/14 (`tests/integration/epic-2-wave-2-3-configuration.test.ts`) |
+| 12 | Regresi API penuh | Lulus — 958/958 tes jalan; 2 suite gagal saat pengumpulan karena penjaga DB terisolasi Epic 3/4 (`abixell_one_epic3_wave4`), bukan regresi Epic 2 |
+| 13 | Peninjau: database-reviewer (4 temuan) dan typescript-reviewer (1 CRITICAL) | Selesai — semua diperbaiki: sintaks FK, indeks komposit, `down()` terminology yang terlalu luas, CHECK guardrail, dan perbandingan bootstrap key constant-time |
+| 14 | Tanpa pekerjaan frontend/UI; tanpa langkah Epic 5/6 | Lulus |
+
+Bukti rinci: `docs/plans/epic-2-progress.md`.
 
 ---
 
@@ -1853,8 +1876,8 @@ Epic 5 menyiapkan metadata/reference untuk dokumen legal Legal Entity, misalnya 
 - **Phase 1 — G3 UI Picker**: COMPLETE — LE picker + selectable detection + default selection (AdminAssignmentControls, AdminAssignAccessDialog)
 - **Phase 2 — G4 Attachment Metadata**: COMPLETE — migration, domain entity, repository (governed tx), service (RBAC), routes, DI wiring, G4 contract doc
 - **Phase 3 — G1 Lifecycle Fix**: COMPLETE — legal-entity.repository.pg.ts line 377 excludes root Central from active-units guard; LE deactivation now safe
-- **Phase 4 — Legacy Re-parent**: NOT STARTED (DB admin task — backfill Central roots, re-parent 45 orphans, preserve grandfathered unit_type)
-- **Phase 5 — Documentation & QA**: PARTIAL (G4 contract written, progress doc updated; Epic 5 §4.5 roadmap items #4, #7 deferred to future interviews; typecheck clean)
+- **Phase 4 — Legacy Re-parent**: COMPLETE (DB admin executed 2026-09-30; 37 orphan OUs re-parented, 21 LEs consolidated to single Central root, 0 remaining orphans in real data, 21 audit entries)
+- **Phase 5 — Documentation & QA**: COMPLETE (G4 contract written, Phase 4 operator spec written & executed, 43 integration tests lulus di isolated test DB — G1 lifecycle 17, G3 authorization 13, G3 legal entity scope 13; Phase 4 live DB re-parent done; Epic 5 §4.5 roadmap items #4, #7 deferred to future interviews; typecheck clean API+Web)
 
 **Gelombang 0 — Kontrak dan migrasi aman**
 

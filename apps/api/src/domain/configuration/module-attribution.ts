@@ -133,6 +133,15 @@ export const PERMISSION_MODULE_EXCEPTIONS: Readonly<Record<string, ModuleCode>> 
  * and spend analytics is `procurement_management`.
  */
 export const PERMISSION_MODULE_PREFIXES: ReadonlyArray<readonly [string, ModuleCode]> = [
+  // Platform — identity, tenancy, configuration and cross-module plumbing.
+  // Epic 6 Gelombang 1 — Business Partner canonical party model (platform-level infrastructure).
+  ["business_partner.", "platform"],
+  ["bp_role.", "platform"],
+  ["bp_contact.", "platform"],
+  ["bp_address.", "platform"],
+  ["tax_registration.", "platform"],
+  ["employee_profile.", "platform"],
+
   // Supply Chain — warehouse custody and valuation.
   ["supply_chain.warehouse_task.", "warehouse_management"],
   ["supply_chain.warehouse.", "warehouse_management"],
@@ -230,6 +239,7 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
   "app-metadata": "platform",
   "audit-log": "platform",
   auth: "platform",
+  "business-partners": "platform",
   config: "platform",
   departments: "platform",
   documents: "platform",
