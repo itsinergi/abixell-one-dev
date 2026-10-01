@@ -172,7 +172,7 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 | # | Epic | Bergantung pada | Status |
 |---|---|---|---|
 | **1** | **Security Context, Role Definition & Approval Authority** | — | **Eksekusi 2026-09-28 — sessions + active-role + ApprovalAuthority + switch-role + cutover selesai; detail di §4.1** |
-| 2 | Application Dictionary & Metadata Engine | Epic 1 | **Digali 2026-09-23 — detail di §4.2, siap eksekusi setelah Epic 1** |
+| 2 | Application Dictionary & Metadata Engine | Epic 1 | **Eksekusi 2026-10-01 — Wave 2 (Reference Data Metadata) dan Wave 3 (Parameter Bridge) selesai; 14/14 focused tests, 30/30 parity tests, 958/958 API regression, typecheck 0 errors, bootstrap key timing attack fixed; detail di §4.2** |
 | 3 | Module & Menu Tree Configuration | Epic 2 | **Digali 2026-09-23 — detail di §4.3, siap eksekusi setelah Epic 2** |
 | 4 | User, Role & Permission Configuration UI | Epic 1, 2, 3 | **Digali 2026-09-24 — detail di §4.4, siap desain setelah Epic 1–3** |
 | 5 | Company, Tenant & Organization Profile | Epic 1, 2, 4 | **Eksekusi 2026-09-28–2026-09-30 — G0-G4 COMPLETE; Phase 1-5 selesai (43 test regression + Phase 4 live DB re-parent); detail di §4.5** |
@@ -593,6 +593,29 @@ Tidak ada penimpa yang diam-diam tertimpa. Tidak ada definisi lama yang diam-dia
 | 2 | Apakah wizard perlu objek kamus sendiri, atau cukup ditandai pada Tab? | **Ditutup 2026-09-26 — cukup penanda pada Tab** (`app_tabs.tab_type = 'wizard'`; tidak ada objek `app_wizards`; lihat tabel keputusan). |
 | 3 | Halaman admin/konfigurasi mana yang pertama memakai generator terbatas? | **Diteruskan Epic 13 (§4.13 open item #5):** dijawab saat Wave 13.5 — bukan di Epic 4. Urutan generator dikunci §4.13 keputusan #12: layar baca-saja dulu (Wave 13.4), form admin menyusul (Wave 13.5). |
 | 4 | Apakah penimpa tenant ikut masuk versioning, atau cukup audit? | **Ditutup 2026-09-26 — tidak, cukup audit.** Yang masuk versioning adalah **penimpa terbitkan** (super admin lewat UI; §4.2 baris "Rollback": "setiap perubahan tersimpan sebagai versi"; guardrail #4 "Setiap aktifkan membentuk versi"). Cakupan tenant tidak pernah masuk jalur itu: baris "Cakupan tenant" membatasi tenant pada kolom aman (label, terminologi, urutan field, field disembunyikan), dan guardrail #1 "Batas wewenang" melarang UI menyentuh definisi akses dalam keadaan apa pun — jadi tidak ada kolom akses yang bisa diaktifkan/dibatalkan oleh penimpa tenant. Baris 516 sudah menyatakan penimpa tenant kalah dari penimpa terbitkan (urutan: inti > penimpa terbitkan > penimpa tenant), sehingga rollback penimpa terbitkan tidak boleh dan tidak perlu menyentuh baris tenant. Konsekuensi yang mengikat implementasi: penimpa tenant memerlukan **audit** (siapa, kapan, sebelum/sesudah — sudah tersedia lewat `audit_log` + `recordGovernedAudit`), dan **tidak** memerlukan rantai versi/snapshot yang dapat dipulihkan. Taksonomi lengkap (yang ber-versi vs yang ber-audit saja) ditulis saat Gelombang 2; keputusannya sendiri sudah final sekarang. |
+
+#### Gate sebelum Epic 2 dinyatakan selesai
+
+**Status: Epic 2 DONE — 2026-10-01.** Gelombang 1 selesai lebih dahulu; Gelombang 2 (konfigurasi bisnis) dan Gelombang 3 (jembatan parameter) selesai pada 2026-10-01.
+
+| # | Pemeriksaan | Hasil |
+|---|---|---|
+| 1 | Skema: level-konsistensi parameter, guardrail tidak dapat diwakili sebagai ter-override, isolasi tenant lewat FK komposit | Lulus — `app_parameters` / `app_parameter_values`; CHECK `NOT is_guardrail OR NOT org_override_allowed`; FK komposit `(tenant_id, organization_scope_id)` |
+| 2 | Urutan keputusan nilai efektif: Organization > Client > System > bawaan produk; bacaan efektif mengembalikan nilai dan level sumber | Lulus — `GET /config/parameters/:code/effective` mengembalikan `sourceLevel` (`O`/`C`/`S`/`product_default`) |
+| 3 | Otorisasi: tulis System butuh bootstrap key; tulis Client/Organization butuh `config.manage` + scope tenant | Lulus — gerbang bootstrap di route; RBAC scope OU diverifikasi reviewer |
+| 4 | Audit: setiap perubahan parameter tercatat (siapa, kapan) | Lulus — `updated_by` / `updated_at` |
+| 5 | Tidak ada teks dijalankan: aturan dan nilai disimpan sebagai data terstruktur | Lulus — nilai lewat `jsonb`, divalidasi Schema Registry; tidak ada skrip |
+| 6 | Validasi sebelum simpan: nilai parameter divalidasi terhadap `metadata_registry` | Lulus — `SchemaRegistryValidator` menolak nilai tidak sesuai skema |
+| 7 | Sembilan operator aturan tetap terkunci (tidak dilebarkan tanpa sengaja) | Lulus — regresi sembilan operator di suite Epic 2 |
+| 8 | Paritas: kamus (dictionary/route/menu) dan seed referensi data | Lulus — 30/30 tes paritas |
+| 9 | Migrasi: `1790900000000` dan `1791000000000` lolos platform-boundary-validator | Lulus — tidak ada temuan baru Wave 2–3; 11 isu lama Epic 5/6 di luar cakupan |
+| 10 | Typecheck API | Lulus — 0 error (`tsc --noEmit`) |
+| 11 | Regresi fokus Epic 2 | Lulus — 14/14 (`tests/integration/epic-2-wave-2-3-configuration.test.ts`) |
+| 12 | Regresi API penuh | Lulus — 958/958 tes jalan; 2 suite gagal saat pengumpulan karena penjaga DB terisolasi Epic 3/4 (`abixell_one_epic3_wave4`), bukan regresi Epic 2 |
+| 13 | Peninjau: database-reviewer (4 temuan) dan typescript-reviewer (1 CRITICAL) | Selesai — semua diperbaiki: sintaks FK, indeks komposit, `down()` terminology yang terlalu luas, CHECK guardrail, dan perbandingan bootstrap key constant-time |
+| 14 | Tanpa pekerjaan frontend/UI; tanpa langkah Epic 5/6 | Lulus |
+
+Bukti rinci: `docs/plans/epic-2-progress.md`.
 
 ---
 

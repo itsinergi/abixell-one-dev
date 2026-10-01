@@ -29,6 +29,87 @@ interface AppWindowRow {
   updated_at: Date;
 }
 
+/**
+ * Allowlist-aware SELECT base for each dictionary object type (Epic 2
+ * Gelombang 2, §4.2 dictionary terminology allowlist). Same precedence as
+ * `MENU_TREE_QUERY`: a tenant override wins when the allowlist names the
+ * (object, field) pair and the tenant has set one; the object's own core
+ * value otherwise. Access-definition columns (module, registration, required
+ * permissions, active flags, physical names) are selected verbatim — only
+ * `name`/`description` ever resolve through the allowlist.
+ *
+ * `object_key` matches the convention documented in
+ * 1790900000000_epic-2-wave-2-business-config-completion.cjs: a window's own
+ * code; `<window code>.<tab code>` for a tab (a tab code repeats across
+ * windows); a table's own code; `<table code>.<field code>` for a field (a
+ * field code repeats across tables). Only `app_window` rows are seeded today
+ * — the other three LEFT JOINs simply find nothing and fall back to the core
+ * value, so seeding them later needs no query change.
+ */
+const WINDOW_QUERY_BASE = `
+  SELECT w.id, w.tenant_id, w.code,
+         COALESCE(nto.value, w.name) AS name,
+         COALESCE(dto.value, w.description) AS description,
+         w.module_code, w.registration_status, w.required_permissions, w.parent_path,
+         w.is_external_allowed, w.is_active, w.created_at, w.updated_at
+    FROM app_windows w
+    LEFT JOIN app_dictionary_terminology_allowlist na
+           ON na.object_type = 'app_window' AND na.object_key = w.code AND na.field = 'name'
+    LEFT JOIN tenant_terminology_overrides nto
+           ON nto.terminology_key_id = na.terminology_key_id AND nto.tenant_id = w.tenant_id
+    LEFT JOIN app_dictionary_terminology_allowlist da
+           ON da.object_type = 'app_window' AND da.object_key = w.code AND da.field = 'description'
+    LEFT JOIN tenant_terminology_overrides dto
+           ON dto.terminology_key_id = da.terminology_key_id AND dto.tenant_id = w.tenant_id`;
+
+const TAB_QUERY_BASE = `
+  SELECT t.id, t.tenant_id, t.window_id, t.code,
+         COALESCE(nto.value, t.name) AS name,
+         COALESCE(dto.value, t.description) AS description,
+         t.sequence_no, t.tab_type, t.is_active, t.created_at, t.updated_at
+    FROM app_tabs t
+    JOIN app_windows w ON w.id = t.window_id
+    LEFT JOIN app_dictionary_terminology_allowlist na
+           ON na.object_type = 'app_tab' AND na.object_key = w.code || '.' || t.code AND na.field = 'name'
+    LEFT JOIN tenant_terminology_overrides nto
+           ON nto.terminology_key_id = na.terminology_key_id AND nto.tenant_id = t.tenant_id
+    LEFT JOIN app_dictionary_terminology_allowlist da
+           ON da.object_type = 'app_tab' AND da.object_key = w.code || '.' || t.code AND da.field = 'description'
+    LEFT JOIN tenant_terminology_overrides dto
+           ON dto.terminology_key_id = da.terminology_key_id AND dto.tenant_id = t.tenant_id`;
+
+const TABLE_QUERY_BASE = `
+  SELECT tb.id, tb.tenant_id, tb.code,
+         COALESCE(nto.value, tb.name) AS name,
+         COALESCE(dto.value, tb.description) AS description,
+         tb.module_code, tb.physical_table_name, tb.is_active, tb.created_at, tb.updated_at
+    FROM app_tables tb
+    LEFT JOIN app_dictionary_terminology_allowlist na
+           ON na.object_type = 'app_table' AND na.object_key = tb.code AND na.field = 'name'
+    LEFT JOIN tenant_terminology_overrides nto
+           ON nto.terminology_key_id = na.terminology_key_id AND nto.tenant_id = tb.tenant_id
+    LEFT JOIN app_dictionary_terminology_allowlist da
+           ON da.object_type = 'app_table' AND da.object_key = tb.code AND da.field = 'description'
+    LEFT JOIN tenant_terminology_overrides dto
+           ON dto.terminology_key_id = da.terminology_key_id AND dto.tenant_id = tb.tenant_id`;
+
+const FIELD_QUERY_BASE = `
+  SELECT f.id, f.tenant_id, f.table_id, f.code,
+         COALESCE(nto.value, f.name) AS name,
+         COALESCE(dto.value, f.description) AS description,
+         f.sequence_no, f.field_type, f.is_mandatory, f.is_readonly, f.is_visible, f.is_active,
+         f.created_at, f.updated_at
+    FROM app_fields f
+    JOIN app_tables tb ON tb.id = f.table_id
+    LEFT JOIN app_dictionary_terminology_allowlist na
+           ON na.object_type = 'app_field' AND na.object_key = tb.code || '.' || f.code AND na.field = 'name'
+    LEFT JOIN tenant_terminology_overrides nto
+           ON nto.terminology_key_id = na.terminology_key_id AND nto.tenant_id = f.tenant_id
+    LEFT JOIN app_dictionary_terminology_allowlist da
+           ON da.object_type = 'app_field' AND da.object_key = tb.code || '.' || f.code AND da.field = 'description'
+    LEFT JOIN tenant_terminology_overrides dto
+           ON dto.terminology_key_id = da.terminology_key_id AND dto.tenant_id = f.tenant_id`;
+
 function mapWindow(r: AppWindowRow): AppWindow {
   // registration_status and required_permissions are NOT NULL with defaults, so
   // they need no fallback; parent_path is the only nullable one. A fallback on
@@ -284,7 +365,9 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async listWindowsByTenant(tenantId: string): Promise<AppWindow[]> {
     const result = await this.pool.query(
-      `SELECT * FROM app_windows WHERE tenant_id = $1 ORDER BY module_code, code`,
+      `${WINDOW_QUERY_BASE}
+       WHERE w.tenant_id = $1
+       ORDER BY w.module_code, w.code`,
       [tenantId],
     );
     return result.rows.map(mapWindow);
@@ -292,7 +375,8 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async getWindow(tenantId: string, windowId: string): Promise<AppWindow | null> {
     const result = await this.pool.query(
-      `SELECT * FROM app_windows WHERE tenant_id = $1 AND id = $2`,
+      `${WINDOW_QUERY_BASE}
+       WHERE w.tenant_id = $1 AND w.id = $2`,
       [tenantId, windowId],
     );
     return result.rows[0] ? mapWindow(result.rows[0]) : null;
@@ -300,7 +384,8 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async getWindowByCode(tenantId: string, code: string): Promise<AppWindow | null> {
     const result = await this.pool.query(
-      `SELECT * FROM app_windows WHERE tenant_id = $1 AND code = $2`,
+      `${WINDOW_QUERY_BASE}
+       WHERE w.tenant_id = $1 AND w.code = $2`,
       [tenantId, code],
     );
     return result.rows[0] ? mapWindow(result.rows[0]) : null;
@@ -387,7 +472,9 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async listTabsByWindow(tenantId: string, windowId: string): Promise<AppTab[]> {
     const result = await this.pool.query(
-      `SELECT * FROM app_tabs WHERE tenant_id = $1 AND window_id = $2 ORDER BY sequence_no, code`,
+      `${TAB_QUERY_BASE}
+       WHERE t.tenant_id = $1 AND t.window_id = $2
+       ORDER BY t.sequence_no, t.code`,
       [tenantId, windowId],
     );
     return result.rows.map(mapTab);
@@ -395,7 +482,8 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async getTab(tenantId: string, tabId: string): Promise<AppTab | null> {
     const result = await this.pool.query(
-      `SELECT * FROM app_tabs WHERE tenant_id = $1 AND id = $2`,
+      `${TAB_QUERY_BASE}
+       WHERE t.tenant_id = $1 AND t.id = $2`,
       [tenantId, tabId],
     );
     return result.rows[0] ? mapTab(result.rows[0]) : null;
@@ -504,7 +592,9 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async listTablesByTenant(tenantId: string): Promise<AppTable[]> {
     const result = await this.pool.query(
-      `SELECT * FROM app_tables WHERE tenant_id = $1 ORDER BY module_code, code`,
+      `${TABLE_QUERY_BASE}
+       WHERE tb.tenant_id = $1
+       ORDER BY tb.module_code, tb.code`,
       [tenantId],
     );
     return result.rows.map(mapTable);
@@ -512,7 +602,8 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async getTable(tenantId: string, tableId: string): Promise<AppTable | null> {
     const result = await this.pool.query(
-      `SELECT * FROM app_tables WHERE tenant_id = $1 AND id = $2`,
+      `${TABLE_QUERY_BASE}
+       WHERE tb.tenant_id = $1 AND tb.id = $2`,
       [tenantId, tableId],
     );
     return result.rows[0] ? mapTable(result.rows[0]) : null;
@@ -520,7 +611,8 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async getTableByCode(tenantId: string, code: string): Promise<AppTable | null> {
     const result = await this.pool.query(
-      `SELECT * FROM app_tables WHERE tenant_id = $1 AND code = $2`,
+      `${TABLE_QUERY_BASE}
+       WHERE tb.tenant_id = $1 AND tb.code = $2`,
       [tenantId, code],
     );
     return result.rows[0] ? mapTable(result.rows[0]) : null;
@@ -578,7 +670,9 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async listFieldsByTable(tenantId: string, tableId: string): Promise<AppField[]> {
     const result = await this.pool.query(
-      `SELECT * FROM app_fields WHERE tenant_id = $1 AND table_id = $2 ORDER BY sequence_no, code`,
+      `${FIELD_QUERY_BASE}
+       WHERE f.tenant_id = $1 AND f.table_id = $2
+       ORDER BY f.sequence_no, f.code`,
       [tenantId, tableId],
     );
     return result.rows.map(mapField);
@@ -586,7 +680,8 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async getField(tenantId: string, fieldId: string): Promise<AppField | null> {
     const result = await this.pool.query(
-      `SELECT * FROM app_fields WHERE tenant_id = $1 AND id = $2`,
+      `${FIELD_QUERY_BASE}
+       WHERE f.tenant_id = $1 AND f.id = $2`,
       [tenantId, fieldId],
     );
     return result.rows[0] ? mapField(result.rows[0]) : null;
@@ -594,7 +689,8 @@ export class PgAppMetadataRepository implements AppMetadataRepository {
 
   async getFieldByCode(tenantId: string, tableId: string, code: string): Promise<AppField | null> {
     const result = await this.pool.query(
-      `SELECT * FROM app_fields WHERE tenant_id = $1 AND table_id = $2 AND code = $3`,
+      `${FIELD_QUERY_BASE}
+       WHERE f.tenant_id = $1 AND f.table_id = $2 AND f.code = $3`,
       [tenantId, tableId, code],
     );
     return result.rows[0] ? mapField(result.rows[0]) : null;

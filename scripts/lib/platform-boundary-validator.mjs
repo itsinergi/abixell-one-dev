@@ -94,6 +94,14 @@ const REVIEWED_NEW_GLOBAL_TABLES = new Map([
     "menu_terminology_allowlist",
     "Product Core allowlist shared by all tenants; tenant values stay in tenant_terminology_overrides.",
   ],
+  [
+    "app_dictionary_terminology_allowlist",
+    "Product Core allowlist for Window/Tab/Table/Field labels; tenant values stay in tenant_terminology_overrides.",
+  ],
+  [
+    "app_parameters",
+    "Product Core parameter catalogue shared by all tenants; tenant overrides stay in app_parameter_values.",
+  ],
 ]);
 
 const ROUTE_CONTAINER_EXCEPTIONS = [

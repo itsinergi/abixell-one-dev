@@ -72,6 +72,9 @@ export interface ReferenceDataTypeCatalogItem {
   code: string;
   name: string;
   description: string;
+  allowTenantAdd: boolean;
+  isCore: boolean;
+  classification: "category" | "type" | "status" | "unit" | "other";
 }
 
 export interface ReferenceDataItem {
@@ -80,6 +83,7 @@ export interface ReferenceDataItem {
   label: string;
   sortOrder: number;
   isActive: boolean;
+  isCore: boolean;
 }
 
 export interface NumberingSequence {
@@ -87,6 +91,42 @@ export interface NumberingSequence {
   code: string;
   pattern: string;
   currentSequence: number;
+}
+
+export interface AppParameter {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  moduleCode: string;
+  parameterType: "boolean" | "integer" | "decimal" | "string" | "json";
+  schemaArea: string;
+  schemaKey: string;
+  defaultValue: unknown;
+  allowedLevels: ParameterLevel[];
+  orgOverrideAllowed: boolean;
+  isGuardrail: boolean;
+  isActive: boolean;
+}
+
+export type ParameterLevel = "S" | "C" | "O";
+
+export interface AppParameterValue {
+  id: string;
+  tenantId: string;
+  parameterId: string;
+  level: ParameterLevel;
+  clientScopeId: string | null;
+  organizationScopeId: string | null;
+  value: unknown;
+  updatedBy: string | null;
+  updatedAt: Date;
+}
+
+export interface EffectiveParameterValue {
+  code: string;
+  value: unknown;
+  sourceLevel: ParameterLevel | "product_default";
 }
 
 export interface MetadataRegistryEntry {
@@ -135,6 +175,7 @@ export interface ConfigurationRepository {
 
   // Reference Data
   listReferenceDataTypeCatalog(): Promise<ReferenceDataTypeCatalogItem[]>;
+  getReferenceDataTypeByCode(code: string): Promise<ReferenceDataTypeCatalogItem | null>;
   listReferenceDataItems(tenantId: string, typeCode: string): Promise<ReferenceDataItem[]>;
   createReferenceDataItem(
     tenantId: string,
@@ -149,6 +190,20 @@ export interface ConfigurationRepository {
     isActive: boolean,
     updatedBy: string,
   ): Promise<ReferenceDataItem | null>;
+
+  // Parameters
+  listAppParameters(): Promise<AppParameter[]>;
+  getAppParameterByCode(code: string): Promise<AppParameter | null>;
+  listParameterValues(tenantId: string, parameterId: string): Promise<AppParameterValue[]>;
+  upsertParameterValue(input: {
+    tenantId: string;
+    parameterId: string;
+    level: ParameterLevel;
+    clientScopeId: string | null;
+    organizationScopeId: string | null;
+    value: unknown;
+    updatedBy: string;
+  }): Promise<AppParameterValue>;
 
   // Numbering
   getNumberingSequence(tenantId: string, code: string): Promise<NumberingSequence | null>;

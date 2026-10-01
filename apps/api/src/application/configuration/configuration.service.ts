@@ -1,11 +1,14 @@
 import type {
+  AppParameter,
   ConfigScope,
   ConfigurationRepository,
   EffectiveFeatureFlag,
+  EffectiveParameterValue,
   EffectiveTerminology,
+  ParameterLevel,
 } from "../../domain/configuration/configuration.entity.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
-import { ConflictError, NotFoundError } from "../../domain/shared-kernel/errors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 import { SchemaRegistryValidator } from "./schema-registry-validator.js";
@@ -14,7 +17,7 @@ import { formatNumber } from "./numbering-formatter.js";
 /** Wave 3 step 11 keys read `menu.<menu code>.description` (seeded by
  * 1787500000000_epic-3-menu-terminology.cjs); everything else is a short
  * label. This picks the bounded schema, it does not authorize the write. */
-const MENU_DESCRIPTION_KEY = /^menu\..+\.description$/;
+const DESCRIPTION_TERMINOLOGY_KEY = /^(menu|window|tab|table|field)\..+\.description$/;
 
 export class ConfigurationService {
   private readonly validator: SchemaRegistryValidator;
@@ -187,10 +190,10 @@ export class ConfigurationService {
     await this.rbac.requirePermission(actor, "config.manage");
     // Two bounded shapes, chosen by which field the key feeds: a short label
     // (60, `terminology.value`) or a longer description (240,
-    // `terminology.description_value`, added for menu descriptions in
-    // Wave 3 step 11). Which key exists is core data — the Schema Registry
-    // refuses the write if this migration was never applied.
-    const schemaKey = MENU_DESCRIPTION_KEY.test(code) ? "description_value" : "value";
+    // `terminology.description_value`, for description fields on menus,
+    // windows, tabs, tables, fields). Which key exists is core data — the
+    // Schema Registry refuses the write if this migration was never applied.
+    const schemaKey = DESCRIPTION_TERMINOLOGY_KEY.test(code) ? "description_value" : "value";
     await this.validator.validate("terminology", schemaKey, value);
     // §4.2 open item #4: a tenant override needs audit, not a version chain.
     // "sebelum/sesudah" is only real if the previous value is captured here —
@@ -242,6 +245,15 @@ export class ConfigurationService {
     await this.rbac.requirePermission(actor, "config.manage");
     await this.validator.validate("reference_data", "item", item);
 
+    // Check tenant-add permission at the service layer before repository write
+    const refType = await this.repo.getReferenceDataTypeByCode(typeCode);
+    if (!refType) throw new NotFoundError("ReferenceDataType", typeCode);
+    if (!refType.allowTenantAdd) {
+      throw new ValidationError(
+        `Reference Data type '${typeCode}' does not allow tenant-added items`,
+      );
+    }
+
     try {
       const created = await this.repo.createReferenceDataItem(
         actor.tenantId,
@@ -283,6 +295,15 @@ export class ConfigurationService {
     item: { code: string; label: string; sortOrder?: number },
   ) {
     await this.validator.validate("reference_data", "item", item);
+
+    const refType = await this.repo.getReferenceDataTypeByCode(typeCode);
+    if (!refType) throw new NotFoundError("ReferenceDataType", typeCode);
+    if (!refType.allowTenantAdd) {
+      throw new ValidationError(
+        `Reference Data type '${typeCode}' does not allow tenant-added items`,
+      );
+    }
+
     try {
       const created = await this.repo.createReferenceDataItem(tenantId, typeCode, item, actorUserId);
       await this.audit.record({
@@ -349,6 +370,99 @@ export class ConfigurationService {
   /** Checkpoint 1C.6 — trusted-caller numbering read (no `config.read`). */
   async getNumberingSequenceForTrustedCaller(tenantId: string, code: string) {
     return this.repo.getNumberingSequence(tenantId, code);
+  }
+
+  // --- Parameters ------------------------------------------------------------
+
+  async listAppParameters(actor: ActorContext): Promise<AppParameter[]> {
+    await this.rbac.requirePermission(actor, "config.read");
+    return this.repo.listAppParameters();
+  }
+
+  async resolveEffectiveParameter(
+    actor: ActorContext,
+    code: string,
+    organizationUnitId?: string,
+  ): Promise<EffectiveParameterValue> {
+    await this.rbac.requirePermission(actor, "config.read");
+    const parameter = await this.repo.getAppParameterByCode(code);
+    if (!parameter) throw new NotFoundError("AppParameter", code);
+
+    if (organizationUnitId) {
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, organizationUnitId);
+    }
+
+    const values = await this.repo.listParameterValues(actor.tenantId, parameter.id);
+    const organizationValue = organizationUnitId
+      ? values.find(
+          (value) =>
+            value.level === "O" && value.organizationScopeId === organizationUnitId,
+        )
+      : undefined;
+    const clientValue = values.find(
+      (value) => value.level === "C" && value.clientScopeId === actor.tenantId,
+    );
+    const systemValue = values.find((value) => value.level === "S");
+
+    if (organizationValue) {
+      return { code, value: organizationValue.value, sourceLevel: "O" };
+    }
+    if (clientValue) return { code, value: clientValue.value, sourceLevel: "C" };
+    if (systemValue) return { code, value: systemValue.value, sourceLevel: "S" };
+    return { code, value: parameter.defaultValue, sourceLevel: "product_default" };
+  }
+
+  async setParameterValue(
+    actor: ActorContext,
+    code: string,
+    input: { level: ParameterLevel; value: unknown; organizationUnitId?: string },
+    hasPlatformAuthority: boolean,
+  ) {
+    await this.rbac.requirePermission(actor, "config.manage");
+    const parameter = await this.repo.getAppParameterByCode(code);
+    if (!parameter) throw new NotFoundError("AppParameter", code);
+
+    if (!parameter.allowedLevels.includes(input.level)) {
+      throw new ValidationError(`Parameter '${code}' does not allow level '${input.level}'`);
+    }
+    if (input.level === "S" && !hasPlatformAuthority) {
+      throw new ValidationError("System parameter writes require platform authority");
+    }
+    if (input.level === "O") {
+      if (!parameter.orgOverrideAllowed || parameter.isGuardrail) {
+        throw new ValidationError(`Parameter '${code}' does not allow Organization overrides`);
+      }
+      if (!input.organizationUnitId) {
+        throw new ValidationError("organizationUnitId is required for Organization level");
+      }
+      await this.rbac.requireOrganizationUnitScopeForActor(actor, input.organizationUnitId);
+    }
+
+    await this.validator.validate(parameter.schemaArea, parameter.schemaKey, input.value);
+    const previous = (await this.repo.listParameterValues(actor.tenantId, parameter.id)).find(
+      (value) =>
+        value.level === input.level &&
+        value.clientScopeId === (input.level === "S" ? null : actor.tenantId) &&
+        value.organizationScopeId === (input.level === "O" ? input.organizationUnitId : null),
+    );
+    const saved = await this.repo.upsertParameterValue({
+      tenantId: actor.tenantId,
+      parameterId: parameter.id,
+      level: input.level,
+      clientScopeId: input.level === "S" ? null : actor.tenantId,
+      organizationScopeId: input.level === "O" ? input.organizationUnitId! : null,
+      value: input.value,
+      updatedBy: actor.userId,
+    });
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "config.parameter.changed",
+      entityType: "app_parameter",
+      entityId: saved.id,
+      metadata: { code, level: input.level, previousValue: previous?.value ?? null, value: input.value },
+    });
+    return saved;
   }
 
   // --- Numbering -------------------------------------------------------------
