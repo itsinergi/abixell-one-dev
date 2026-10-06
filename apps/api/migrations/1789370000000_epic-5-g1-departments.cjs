@@ -57,7 +57,9 @@ exports.shorthands = undefined;
 exports.up = (pgm) => {
   pgm.createTable("departments", {
     id: { type: "uuid", primaryKey: true, default: pgm.func("gen_random_uuid()") },
-    tenant_id: { type: "uuid", notNull: true },
+    // Direct tenant ownership made statically provable: the Phase 11A baseline
+    // validator requires this constraint inline so it can parse the column definition.
+    tenant_id: { type: "uuid", notNull: true, references: "tenants", onDelete: "CASCADE" },
     parent_department_id: { type: "uuid" },
     name: { type: "text", notNull: true },
     code: { type: "text" },
@@ -66,14 +68,6 @@ exports.up = (pgm) => {
     created_at: { type: "timestamptz", notNull: true, default: pgm.func("now()") },
     updated_by: { type: "uuid" },
     updated_at: { type: "timestamptz", notNull: true, default: pgm.func("now()") },
-  });
-
-  pgm.addConstraint("departments", "departments_tenant_fkey", {
-    foreignKeys: {
-      columns: ["tenant_id"],
-      references: "tenants(id)",
-      onDelete: "CASCADE",
-    },
   });
 
   pgm.addConstraint("departments", "departments_tenant_id_id_unique", {

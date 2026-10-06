@@ -62,7 +62,10 @@ exports.shorthands = undefined;
 exports.up = (pgm) => {
   pgm.createTable("legal_entity_addresses", {
     id: { type: "uuid", primaryKey: true, default: pgm.func("gen_random_uuid()") },
-    tenant_id: { type: "uuid", notNull: true },
+    // Direct tenant ownership made statically provable: the Phase 11A baseline
+    // validator (scripts/lib/platform-boundary-validator.mjs) requires a
+    // non-null uuid FK with ON DELETE CASCADE on the column itself.
+    tenant_id: { type: "uuid", notNull: true, references: "tenants", onDelete: "CASCADE" },
     legal_entity_id: { type: "uuid", notNull: true },
     address_type: { type: "text", notNull: true },
     line1: { type: "text", notNull: true },

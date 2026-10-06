@@ -4,8 +4,8 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Governance Version** | v1.1 |
-| **Last Updated** | 2026-08-23 |
+| **Governance Version** | v1.2 |
+| **Last Updated** | 2026-10-06 |
 
 This document removes all ambiguity about which document is authoritative.
 
@@ -73,9 +73,9 @@ The 2026-08-20 restructure moved only what was safe. `docs/decision-log.md` (10 
 | Product Blueprint | v1.2 |
 | PRD | v1.0 |
 | Architecture Foundation | Phase 11A (2026-08-23) |
-| Roadmap Baseline | v1.13 |
+| Roadmap Baseline | v1.27 |
 | Progress Model | v1.0 |
-| Documentation Governance | v1.1 |
+| Documentation Governance | v1.2 |
 
 ## Change control
 

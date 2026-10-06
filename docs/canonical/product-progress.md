@@ -4,10 +4,10 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.26 |
+| **Roadmap Baseline** | v1.27 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-09-15 |
-| **Measured at** | `master @ 7b66c65` — Wave A5.1 completed and merged; handoff-reported 586/586 API tests across 39 files and 149 migration-owned permissions |
+| **Last Updated** | 2026-10-06 |
+| **Measured at** | Committed baseline `c3fe17e` (Epic 2 Wave 2-3 merged; 91 repository migrations); Track A worktree validated 2026-10-06 at `197` migration-owned permissions with `0` blocking boundary findings. Handoff-reported `586/586` API tests across 39 files and `149` permissions belong to the historical `7b66c65` baseline, not to this one. |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
@@ -26,11 +26,13 @@ Two metrics are reported deliberately. A single number would misrepresent the pr
 - **Client Extensions are excluded from both** — custom client work must never shrink product completion.
 - **Unweighted architecture/governance phases earn no points.** Phases 11A, 11B, 11C, 11D, 11E, and 11F are recorded for governance traceability without moving either metric.
 
-The current implementation baseline is `master @ 7b66c65`, following Wave A5.1 SCM decomposition. The latest development handoff reports 586/586 API tests across 39 files, 149 migration-owned permissions, 0 blocking boundary findings and 1 expected Manifest advisory; typecheck, production build, PWA validation, all 10 E2E smoke journeys and browser console checks passed; lint reported 0 errors and 45 warnings. These are recorded delivery results from [the latest handoff](../handoff.md#3-verification-results), not tests rerun during this documentation reconciliation.
+The canonical implementation baseline is the committed tip `c3fe17e` (Epic 2 Wave 2-3 merged), which follows Wave A5.1 SCM decomposition at `7b66c65`. The latest development handoff reports 586/586 API tests across 39 files, 149 migration-owned permissions, 0 blocking boundary findings and 1 expected Manifest advisory; typecheck, production build, PWA validation, all 10 E2E smoke journeys and browser console checks passed; lint reported 0 errors and 45 warnings. These are recorded delivery results from [the latest handoff](../handoff.md#3-verification-results) measured at `7b66c65`, not tests rerun during this documentation reconciliation.
+
+Phase 0 Track A hardening (unweighted) ran on 2026-10-06 against the committed baseline and is recorded in [TRACK_A_EXECUTION_LOG.md](../../abixell-one-e2e-plan/14_execution_plan/TRACK_A_EXECUTION_LOG.md). It fixed all 11 discovered platform-boundary violations, seeded `packages/contracts`, and reconciled these canonical documents. Fresh Track A evidence: platform-boundary validation `0` blocking / `1` expected advisory / `197` migration-owned permissions; `apps/api` and `apps/web` typecheck and lint both `0` errors. Track A did **not** rerun the API unit suite (sandbox timeout — an evidence gap, not a failure), the production build, PWA validation, `npm audit`, the browser smoke suite, or the launcher `db:up`. Track A adds no roadmap weight: it is stabilization of already-counted capability.
 
 Wave A5.1 separates Warehouse Management (36 tables, 12 domain services, `/wms/*`) and Procurement Management (12 tables, 5 domain services, `/procurement/*`), with shared master-data ports, accounting-event ports, legacy route compatibility and frontend response normalization. These domain ownership counts are not a fresh count of the complete live database. The previous 165-table measurement belongs to Wave A5, not this baseline. Repository migration inventory is recorded in the roadmap; applied database state was not remeasured.
 
-**Reconciliation rule:** the handoff is the latest development record, but its v1.19 / 51.0% headline is stale relative to completed Waves A1–A5 in canonical v1.25. This update advances documentation to v1.26 without rolling back earned progress: Core remains 174/174 (100.0%), Advanced 113/179 (63.1%), and Full 287/353 (81.3%). A5.1 earns no additional roadmap weight. Its delivery evidence does not authorize Wave A6 or other pending work.
+**Reconciliation rule:** the handoff is the latest historical development record for full delivery validation, but its v1.19 / 51.0% headline is stale relative to completed Waves A1–A5 in canonical v1.25. This update advances documentation to v1.27 without rolling back earned progress: Core remains 174/174 (100.0%), Advanced 113/179 (63.1%), and Full 287/353 (81.3%). A5.1, Epic 2 Wave 2-3 foundation, and Phase 0 Track A hardening earn no additional roadmap weight. Their evidence does not authorize Wave A6, Track B, release, or other pending work.
 
 Wave A5 delivers 22 weighted Advanced points across 6 completed capability groups:
 1. **Multi-warehouse, Storage Topology, Batch & Serial Tracking** (`SCM-ADV-001/002/003`, 5 pts): Hierarchical warehouses and location bins, batch/lot tracking with manufacturing/expiry dates and quarantine status, individual item serial tracking with warranty periods and movement audit.
@@ -178,11 +180,17 @@ All Advanced units except the delivered Survey-to-Action units (2), Wave A1 unit
 
 ## 7. Active phase
 
-**None.** Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Waves A1–A5, and unweighted Wave A5.1 are closed. All Core Product Readiness units and all weighted Wave A1–A5 units are complete.
+**Phase 0 Track A — Boundary Hardening & Contracts Seed (unweighted).** Founder-authorized 2026-10-06 to stabilize platform boundaries discovered during Phase 0 discovery, seed shared API/Web contracts, and reconcile canonical documentation. Scope: BN-01 (11 boundary-discipline findings), BN-02 (7 lint errors), BN-03 (validator parser fix), BN-04 (env vars), BN-05 (mode cleanup), BN-06 (contracts seed), BN-07 (canonical docs). Track B (next-phase E2E work) = HOLD. Release = NO-GO. Evidence recorded in [TRACK_A_EXECUTION_LOG.md](../../abixell-one-e2e-plan/14_execution_plan/TRACK_A_EXECUTION_LOG.md).
 
-Wave A5.1 is also **COMPLETED and MERGED** at `7b66c65`. No phase is active. Waves A6–A8, Phase 11G and deferred `SO-ADV-006` still require separate Founder authorization.
+Completed phases: Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Waves A1–A5, unweighted Wave A5.1, and all Core Product Readiness units.
+
+Pending: Waves A6–A8, Phase 11G, deferred `SO-ADV-006`, and Track B (Phase 0 expanded scope). These remain awaiting separate Founder authorization.
 
 ## 8. Progress change log
+
+### v1.27 — 2026-10-06: Phase 0 Track A boundary hardening (unweighted)
+
+Unweighted Phase 0 stabilization under Founder-authorized governance exception `EXC-TAEXEC-001` (recorded in `abixell-one-e2e-plan/15_master_development_plan/MASTER_DEVELOPMENT_DECISION_LOG.md`). Canonical reference moves to committed baseline `c3fe17e` (91 repository migrations). BN-01 fixed all 11 discovered platform-boundary-discipline violations across API/Web; BN-03 fixed a boundary-validator parser defect that undercounted permission codes containing a semicolon; the corrected validator reports 0 blocking findings, 1 expected Manifest advisory, and 197 migration-owned permissions (up from 149 at `7b66c65`, through migrations committed en route to `c3fe17e` plus the BN-01/BN-03 corrections). BN-02 fixed 7 lint errors. BN-06 seeded `packages/contracts` with foundational Error-envelope, Auth, Navigation, Role-assignment, master-data record, and RBAC DTOs (not yet imported by either app). BN-05 diagnosed 721 dirty-tree entries as Windows-mount mode/EOL noise (10 files carry real Track A changes); no destructive git operation was run. BN-07 is this reconciliation. Fresh verification: `apps/api` and `apps/web` typecheck 0 errors; lint 0 errors (49 pre-existing warnings, out of scope). Not rerun: API unit/integration suite (sandbox timeout, evidence gap — see `TRACK_A_EXECUTION_LOG.md`), production build, PWA validation, `npm audit`, browser E2E smoke, launcher `db:up`. Core remains 174/174 (100.0%); Full remains 287/353 (81.3%); no roadmap unit, numerator, or denominator changed — this is unweighted hardening, not new capability. Track B remains HOLD; Release remains NO-GO.
 
 ### v1.26 — 2026-09-15: Wave A5.1 reconciliation
 

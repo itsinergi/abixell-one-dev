@@ -147,6 +147,108 @@ interface MenuTreeRow {
 }
 
 /**
+ * Row shapes of the remaining dictionary tables, mirroring `AppWindowRow`:
+ * a renamed column fails the build instead of silently mapping to `undefined`.
+ * Tab/field/api-resource selects alias `name`/`description` through the
+ * terminology COALESCE, so those arrive as `string | null` even when the
+ * column itself is NOT NULL.
+ */
+interface AppTabRow {
+  id: string;
+  tenant_id: string;
+  window_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  sequence_no: number;
+  tab_type: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface AppProcessRow {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  module_code: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface AppTableRow {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  module_code: string;
+  physical_table_name: string | null;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface AppFieldRow {
+  id: string;
+  tenant_id: string;
+  table_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  sequence_no: number;
+  field_type: string;
+  is_mandatory: boolean;
+  is_readonly: boolean;
+  is_visible: boolean;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface AppApiResourceRow {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  module_code: string;
+  http_method: string;
+  path_pattern: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface AppFieldRuleVersionRow {
+  id: string;
+  tenant_id: string;
+  table_id: string;
+  version_number: number;
+  status: string;
+  is_current: boolean;
+  rules_definition: AppFieldRuleVersion["rulesDefinition"];
+  published_by: string | null;
+  published_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface AppFieldRuleRow {
+  id: string;
+  tenant_id: string;
+  table_id: string;
+  field_id: string;
+  rule_type: string;
+  version_id: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
  * One row per menu node, carrying its own parent's code so the tree assembles
  * without a second round trip. Ordered by `seq_no` then `code`, so every
  * sibling list is already in display order by the time it is built.
@@ -217,7 +319,7 @@ function mapMenuRow(r: MenuTreeRow): MenuNode {
   };
 }
 
-function mapTab(r: any): AppTab {
+function mapTab(r: AppTabRow): AppTab {
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -226,14 +328,14 @@ function mapTab(r: any): AppTab {
     name: r.name,
     description: r.description ?? undefined,
     sequenceNo: r.sequence_no,
-    tabType: r.tab_type,
+    tabType: r.tab_type as "fields" | "cards" | "wizard",
     isActive: r.is_active,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
 }
 
-function mapProcess(r: any): AppProcess {
+function mapProcess(r: AppProcessRow): AppProcess {
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -247,7 +349,7 @@ function mapProcess(r: any): AppProcess {
   };
 }
 
-function mapTable(r: any): AppTable {
+function mapTable(r: AppTableRow): AppTable {
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -262,7 +364,7 @@ function mapTable(r: any): AppTable {
   };
 }
 
-function mapField(r: any): AppField {
+function mapField(r: AppFieldRow): AppField {
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -281,7 +383,7 @@ function mapField(r: any): AppField {
   };
 }
 
-function mapApiResource(r: any): AppApiResource {
+function mapApiResource(r: AppApiResourceRow): AppApiResource {
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -297,13 +399,13 @@ function mapApiResource(r: any): AppApiResource {
   };
 }
 
-function mapRuleVersion(r: any): AppFieldRuleVersion {
+function mapRuleVersion(r: AppFieldRuleVersionRow): AppFieldRuleVersion {
   return {
     id: r.id,
     tenantId: r.tenant_id,
     tableId: r.table_id,
     versionNumber: r.version_number,
-    status: r.status,
+    status: r.status as "draft" | "published" | "retired",
     isCurrent: r.is_current,
     rulesDefinition: r.rules_definition,
     publishedBy: r.published_by ?? undefined,
@@ -313,13 +415,13 @@ function mapRuleVersion(r: any): AppFieldRuleVersion {
   };
 }
 
-function mapFieldRule(r: any): AppFieldRule {
+function mapFieldRule(r: AppFieldRuleRow): AppFieldRule {
   return {
     id: r.id,
     tenantId: r.tenant_id,
     tableId: r.table_id,
     fieldId: r.field_id,
-    ruleType: r.rule_type,
+    ruleType: r.rule_type as "mandatory" | "readonly" | "visible",
     versionId: r.version_id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,

@@ -44,10 +44,14 @@ exports.up = (pgm) => {
         ('tax_registration.delete', 'Deactivate or remove a tax registration'),
         ('tax_registration.verify', 'Mark a tax registration as verified or rejected'),
 
-        ('employee_profile.read', 'View Employee Profile details (sensitive; separate from workforce.read)'),
-        ('employee_profile.manage', 'Create and maintain Employee Profiles')
+        ('employee_profile.read', 'View Employee Profile details (sensitive, separate from workforce.read)'),
+        ('employee_profile.manage', 'Create and maintain Employee Profiles'),
+
+        ('organization_unit.change_request.create', 'Propose organizational structure changes (Wave 2 change request)'),
+        ('organization_unit.change_request.review', 'Review and publish organizational structure change proposals'),
+        ('organization_unit.tombstone', 'Mark an Organization Unit as deleted (reference census maintained)')
       ) AS v(code, description)
-     WHERE NOT EXISTS (SELECT 1 FROM permissions p WHERE p.code = v.code)
+     ON CONFLICT (code) DO NOTHING
   `);
 };
 
@@ -61,7 +65,8 @@ exports.down = (pgm) => {
        'bp_contact.create', 'bp_contact.read', 'bp_contact.update', 'bp_contact.delete', 'bp_contact.link_user',
        'bp_address.create', 'bp_address.read', 'bp_address.update', 'bp_address.delete',
        'tax_registration.create', 'tax_registration.read', 'tax_registration.update', 'tax_registration.delete', 'tax_registration.verify',
-       'employee_profile.read', 'employee_profile.manage'
+       'employee_profile.read', 'employee_profile.manage',
+       'organization_unit.change_request.create', 'organization_unit.change_request.review', 'organization_unit.tombstone'
      )
   `);
 };

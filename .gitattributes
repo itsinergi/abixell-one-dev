@@ -1,0 +1,32 @@
+# Repository-wide text normalization.
+# Keep source, config, and documentation stable across Windows/Linux checkouts.
+* text=auto eol=lf
+
+# Binary assets: never normalize or diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.avif binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.jar binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.bin binary
+*.node binary
+
+# SVG is text and benefits from LF normalization.
+*.svg text eol=lf

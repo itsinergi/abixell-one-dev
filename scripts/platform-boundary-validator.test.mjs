@@ -441,6 +441,18 @@ test("current repository has no blocking platform-boundary findings", async () =
   // `dictionary-seed-parity.test.ts` stays green.
   // Pinned deliberately: an unexplained change means a permission was
   // introduced or removed without the accompanying governance step.
-  assert.equal(result.permissionCount, 165);
+  // Updated 2026-10-06 (Track A BN-01, per Founder decision on the 11
+  // Epic 5/6 boundary-validator findings): this pin was already stale
+  // relative to the repository (the validator parser had a statement-
+  // termination bug — a literal `;` inside one permission description
+  // in `1790600000000_epic-6-g0-7-permissions.cjs` truncated that
+  // migration's parsed declarations, undercounting by 5 codes). Fixing
+  // that parser-breaking description plus adding the 3 governed
+  // `organization_unit.change_request.create/.review` and
+  // `organization_unit.tombstone` permissions (consumed by
+  // `organization-unit-hierarchy.service.ts` but previously undeclared)
+  // brings the verified actual total to 197. Re-pin here rather than
+  // carry forward the stale 165.
+  assert.equal(result.permissionCount, 197);
   assert.equal(result.advisoryCount, 1);
 });

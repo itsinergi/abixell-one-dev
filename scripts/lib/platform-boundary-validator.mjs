@@ -102,6 +102,10 @@ const REVIEWED_NEW_GLOBAL_TABLES = new Map([
     "app_parameters",
     "Product Core parameter catalogue shared by all tenants; tenant overrides stay in app_parameter_values.",
   ],
+  [
+    "entity_reference_registry",
+    "Platform metadata generated from pg_constraint; stores reference topology, not tenant business data.",
+  ],
 ]);
 
 const ROUTE_CONTAINER_EXCEPTIONS = [

@@ -17,7 +17,9 @@ exports.shorthands = undefined;
 exports.up = (pgm) => {
   pgm.createTable("legal_entity_attachment_references", {
     id: { type: "uuid", primaryKey: true, default: pgm.func("gen_random_uuid()") },
-    tenant_id: { type: "uuid", notNull: true },
+    // Direct tenant ownership made statically provable: the Phase 11A baseline
+    // validator requires this constraint inline so it can parse the column definition.
+    tenant_id: { type: "uuid", notNull: true, references: "tenants", onDelete: "CASCADE" },
     legal_entity_id: { type: "uuid", notNull: true },
     document_category: { type: "text", notNull: true },
     attachment_reference: { type: "text", notNull: true },
