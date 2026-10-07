@@ -133,6 +133,17 @@ export const DEFAULT_API_EXCEPTIONS = [
   ...ROUTE_CONTAINER_EXCEPTIONS,
   ...ADVANCED_ROUTE_CONTAINER_EXCEPTIONS,
   {
+    // Phase 1B — Accounting Kernel uses the Addendum module layout
+    // (`modules/accounting/kernel/{domain,application,infrastructure,api}`),
+    // so its route file does not match the `${moduleName}/core/api/${moduleName}.routes.ts`
+    // shape the generated exceptions above assume.
+    id: "route-container:accounting-kernel",
+    source: "apps/api/src/modules/accounting/kernel/api/accounting-kernel.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     id: "transition:service-operations-customer-service",
     source: "apps/api/src/modules/service-operations/core/application/service-operations.service.ts",
     target: "apps/api/src/application/customer/customer.service.ts",

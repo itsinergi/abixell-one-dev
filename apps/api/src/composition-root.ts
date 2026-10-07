@@ -113,6 +113,8 @@ import { PgAssetAdvancedRepository } from "./modules/asset/advanced/infrastructu
 import { AssetAdvancedService } from "./modules/asset/advanced/application/asset-advanced.service.js";
 import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finance.repository.pg.js";
 import { FinanceService } from "./modules/finance/core/application/finance.service.js";
+import { PgAccountingKernelRepository } from "./modules/accounting/kernel/infrastructure/accounting-kernel.repository.pg.js";
+import { AccountingKernelService } from "./modules/accounting/kernel/application/accounting-kernel.service.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
 import { HseService } from "./modules/hse/core/application/hse.service.js";
 import { PgProjectDeliveryRepository } from "./modules/project-delivery/core/infrastructure/project-delivery.repository.pg.js";
@@ -411,6 +413,18 @@ export function buildContainer() {
   const finance = new FinanceService(
     new PgFinanceRepository(pool),
     workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
+  // Phase 1B — Accounting Kernel. Sole writer of the General Ledger
+  // (ADR-0023 ACCEPTED). No workflow dependency: maker-checker SoD on period
+  // lock/reopen is handled by a tenant-authored Workflow Definition routing
+  // the approval step to a different role, not by a code-level check here.
+  const accountingKernel = new AccountingKernelService(
+    new PgAccountingKernelRepository(pool),
     configuration,
     audit,
     rbac,
@@ -763,6 +777,7 @@ export function buildContainer() {
     asset,
     assetAdvanced,
     finance,
+    accountingKernel,
     hse,
     projectDelivery,
     reportingInsight,

@@ -1,0 +1,385 @@
+/**
+ * Accounting Kernel — domain types (Phase 1A, WP-FIN-01.1).
+ *
+ * Built under the frozen target repository architecture
+ * (`modules/<module>/core/{domain,application,infrastructure,api}`) and the
+ * Addendum module layout used here: `modules/accounting/kernel/{domain,
+ * application,infrastructure,api}`.
+ *
+ * Scope discipline (ADR-0023 ACCEPTED): the Kernel is the **single writer of
+ * the General Ledger**. It maintains chart of accounts, fiscal periods,
+ * double-entry journals, GL entries, and the idempotency contract that makes
+ * posting a business event at-most-once. It does NOT contain cost-centre
+ * accounting, budgets, AP/AR, fixed assets, tax, bank reconciliation,
+ * multi-ledger, FX revaluation, or financial-statement presentation — those
+ * are Advanced Finance capabilities (Wave A6+).
+ *
+ * Two invariants are structural, not conventional:
+ *
+ * 1. **MONEY IS A STRING, EVERYWHERE.** `numeric(18,2)` is returned by
+ *    node-postgres as a string, and this module keeps it a string from the
+ *    database to the HTTP response. No money value is ever converted to a
+ *    JavaScript `number`, and no money arithmetic happens in JavaScript:
+ *    every total, balance and equality check is computed by PostgreSQL or by
+ *    exact string comparison in this module. Binary floating point can never
+ *    corrupt a stored total.
+ *
+ * 2. **DEBIT = CREDIT, PROVEN WITHOUT FLOATING POINT.** A journal is balanced
+ *    when the sum of debit lines equals the sum of credit lines exactly. The
+ *    check below adds the two-decimal integer parts (scaled to cents) rather
+ *    than parsing to a float, so `100.10` and `100.1` are the same amount and
+ *    no rounding artefact can make an unbalanced journal look balanced.
+ */
+
+/**
+ * A money amount carried as a decimal string. Two decimal places, always
+ * non-negative here (`normal_balance` / `debit` / `credit` carry the sign,
+ * not the value).
+ */
+export type Money = string;
+
+/** Two decimal places, non-negative, up to 18 significant digits. */
+export const MONEY_PATTERN = /^\d{1,16}(\.\d{1,2})?$/;
+
+/** Shape check on the TEXT. Zero is allowed here; callers decide if it may be. */
+export function isValidMoney(value: string): boolean {
+  return MONEY_PATTERN.test(value);
+}
+
+/**
+ * Exact integer cents from a two-decimal money string. Returns `null` when
+ * the string is not a well-formed money value, so callers can reject rather
+ * than silently coerce. Uses string arithmetic — never `parseFloat` — so a
+ * value beyond `Number.MAX_SAFE_INTEGER` in cents is still compared exactly
+ * up to 16 integer digits.
+ */
+export function toCents(value: Money): bigint | null {
+  if (!MONEY_PATTERN.test(value)) return null;
+  const [whole, frac = ""] = value.split(".");
+  const cents = (frac + "00").slice(0, 2);
+  return BigInt(whole) * 100n + BigInt(cents);
+}
+
+/**
+ * The double-entry invariant, decided with exact integer cents.
+ *
+ * A journal is balanced when total debit equals total credit. An empty set of
+ * lines is NOT balanced (a journal must move money somewhere), and any line
+ * that is not a well-formed money value makes the whole check fail closed.
+ */
+export function isBalanced(lines: readonly { debit: Money; credit: Money }[]): boolean {
+  if (lines.length === 0) return false;
+  let debitCents = 0n;
+  let creditCents = 0n;
+  for (const line of lines) {
+    const d = toCents(line.debit);
+    const c = toCents(line.credit);
+    if (d === null || c === null) return false;
+    debitCents += d;
+    creditCents += c;
+  }
+  return debitCents === creditCents;
+}
+
+// ---------------------------------------------------------------------------
+// Enumerations
+// ---------------------------------------------------------------------------
+
+/** Five fundamental account classes (element classification). */
+export type AccountClass = "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "EXPENSE";
+
+export const ACCOUNT_CLASSES: AccountClass[] = ["ASSET", "LIABILITY", "EQUITY", "INCOME", "EXPENSE"];
+
+/** Which side increases the account. */
+export type NormalBalance = "debit" | "credit";
+
+export const NORMAL_BALANCES: NormalBalance[] = ["debit", "credit"];
+
+export type AccountingPeriodType = "monthly" | "quarterly" | "annual";
+
+/**
+ * Fiscal period lifecycle. `open` accepts postings; `closed` refuses them;
+ * `reopenable` is a closed period eligible for a controlled reopen; `draft`
+ * has never been opened; `tombstone` is retired but retained for history.
+ */
+export type AccountingPeriodStatus = "draft" | "open" | "closed" | "reopenable" | "tombstone";
+
+export const ACCOUNTING_PERIOD_STATUSES: AccountingPeriodStatus[] = [
+  "draft",
+  "open",
+  "closed",
+  "reopenable",
+  "tombstone",
+];
+
+/** Journal lifecycle. `posted` journals have GL entries; nothing is edited. */
+export type JournalStatus = "pending" | "posted" | "failed" | "reversed";
+
+/** Result of a posting attempt, recorded on the idempotency key. */
+export type PostingAttemptStatus = "success" | "failure" | "pending";
+
+// ---------------------------------------------------------------------------
+// Entities
+// ---------------------------------------------------------------------------
+
+export interface AccountingPeriod {
+  id: string;
+  tenantId: string;
+  legalEntityId: string;
+  fiscalYearCode: string;
+  periodCode: string;
+  periodName: string;
+  periodType: AccountingPeriodType;
+  /** Plain `YYYY-MM-DD`. Never produced via `toISOString()`. */
+  dateFrom: string;
+  dateTo: string;
+  status: AccountingPeriodStatus;
+  lockedDate: Date | null;
+  lockedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChartOfAccounts {
+  id: string;
+  tenantId: string;
+  legalEntityId: string;
+  coaVersionCode: string;
+  coaVersionDate: string;
+  isActive: boolean;
+  approvedBy: string | null;
+  approvedDate: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AccountingAccount {
+  id: string;
+  tenantId: string;
+  legalEntityId: string;
+  coaId: string;
+  accountCode: string;
+  accountName: string;
+  accountClass: AccountClass;
+  normalBalance: NormalBalance;
+  accountType: string | null;
+  isActive: boolean;
+  deactivatedAt: Date | null;
+  deactivatedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface JournalHeader {
+  id: string;
+  tenantId: string;
+  legalEntityId: string;
+  journalNumber: string;
+  journalDate: string;
+  accountingDate: string;
+  periodId: string;
+  description: string | null;
+  postedDate: Date | null;
+  postedBy: string | null;
+  currency: string;
+  postingRuleVersionId: string | null;
+  /** Deterministic: `sha256(source_event_id + posting_rule_version_hash)`. */
+  idempotencyKey: string;
+  status: JournalStatus;
+  isBalanced: boolean;
+  reversalOfId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface JournalLine {
+  id: string;
+  tenantId: string;
+  journalHeaderId: string;
+  accountId: string;
+  lineNumber: number;
+  /** Exactly one of `debit` / `credit` is non-zero (DB CHECK enforces). */
+  debit: Money;
+  credit: Money;
+  lineDescription: string | null;
+  costCenterId: string | null;
+  projectId: string | null;
+  siteId: string | null;
+  reversalOfLineId: string | null;
+  createdAt: Date;
+}
+
+export interface GeneralLedgerEntry {
+  id: string;
+  tenantId: string;
+  accountId: string;
+  periodId: string;
+  journalLineId: string;
+  postingDate: Date;
+  debit: Money;
+  credit: Money;
+  balanceBefore: Money | null;
+  balanceAfter: Money | null;
+  documentType: string | null;
+  documentId: string | null;
+  createdAt: Date;
+}
+
+export interface GlBalance {
+  id: string;
+  tenantId: string;
+  accountId: string;
+  periodId: string;
+  openingBalance: Money;
+  debitTotal: Money;
+  creditTotal: Money;
+  closingBalance: Money;
+  lastRefreshed: Date;
+}
+
+export interface PostingIdempotencyKey {
+  id: string;
+  tenantId: string;
+  sourceEventId: string;
+  postingRuleVersionHash: string;
+  idempotencyKey: string;
+  journalHeaderId: string | null;
+  postingAttemptCount: number;
+  lastAttemptDate: Date;
+  lastAttemptStatus: PostingAttemptStatus | null;
+  failureReason: string | null;
+  createdAt: Date;
+}
+
+/** One debit or credit leg inside a rule's accounting formula (JSON). */
+export interface PostingRuleLeg {
+  accountCode: string;
+  side: NormalBalance;
+  /** Amount expression, evaluated by the poster (Phase 2). Never JS float. */
+  amountExpression: string;
+}
+
+export interface PostingRule {
+  id: string;
+  tenantId: string;
+  ruleCode: string;
+  ruleName: string;
+  ruleVersion: string;
+  triggerEventType: string;
+  accountingFormula: PostingRuleLeg[];
+  requiresApproval: boolean;
+  materialityThreshold: Money | null;
+  isActive: boolean;
+  effectiveDate: string;
+  deprecatedDate: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ---------------------------------------------------------------------------
+// Repository port
+// ---------------------------------------------------------------------------
+
+export interface CreatePeriodInput {
+  tenantId: string;
+  legalEntityId: string;
+  fiscalYearCode: string;
+  periodCode: string;
+  periodName: string;
+  periodType: AccountingPeriodType;
+  dateFrom: string;
+  dateTo: string;
+  createdBy: string | null;
+}
+
+export interface CreateAccountInput {
+  tenantId: string;
+  legalEntityId: string;
+  coaId: string;
+  accountCode: string;
+  accountName: string;
+  accountClass: AccountClass;
+  normalBalance: NormalBalance;
+  accountType: string | null;
+  createdBy: string | null;
+}
+
+export interface CreateJournalInput {
+  tenantId: string;
+  legalEntityId: string;
+  journalNumber: string;
+  journalDate: string;
+  accountingDate: string;
+  periodId: string;
+  description: string | null;
+  currency: string;
+  postingRuleVersionId: string | null;
+  idempotencyKey: string;
+  lines: ReadonlyArray<{
+    accountId: string;
+    lineNumber: number;
+    debit: Money;
+    credit: Money;
+    lineDescription: string | null;
+    projectId: string | null;
+    siteId: string | null;
+  }>;
+  createdBy: string | null;
+}
+
+/**
+ * Persistence port for the Accounting Kernel.
+ *
+ * The critical methods (`postJournal`, `recordIdempotencyKey`) do their
+ * arithmetic and their guarding inside PostgreSQL statements, under row
+ * locks, within a single database transaction — the same discipline the
+ * Finance Core `applyTransaction` follows. Nothing here trusts JavaScript
+ * arithmetic for a money total.
+ */
+export interface AccountingKernelRepository {
+  // --- Periods --------------------------------------------------------
+  createPeriod(input: CreatePeriodInput): Promise<AccountingPeriod>;
+  findPeriodById(id: string): Promise<AccountingPeriod | null>;
+  listPeriods(tenantId: string, filter: { legalEntityId?: string; status?: AccountingPeriodStatus }): Promise<AccountingPeriod[]>;
+  setPeriodStatus(id: string, status: AccountingPeriodStatus, updatedBy: string | null): Promise<AccountingPeriod | null>;
+
+  // --- Accounts -------------------------------------------------------
+  createAccount(input: CreateAccountInput): Promise<AccountingAccount>;
+  findAccountById(id: string): Promise<AccountingAccount | null>;
+  findAccountByCode(tenantId: string, legalEntityId: string, accountCode: string): Promise<AccountingAccount | null>;
+  listAccounts(tenantId: string, filter: { legalEntityId?: string; activeOnly?: boolean }): Promise<AccountingAccount[]>;
+
+  // --- Journals -------------------------------------------------------
+  createJournal(input: CreateJournalInput): Promise<JournalHeader>;
+  findJournalById(id: string): Promise<JournalHeader | null>;
+  listJournalLines(journalHeaderId: string): Promise<JournalLine[]>;
+  listJournals(tenantId: string, filter: { periodId?: string; status?: JournalStatus }): Promise<JournalHeader[]>;
+
+  /**
+   * Posts a draft journal: validates balance, writes GL entries, flips the
+   * header to `posted`, all inside ONE transaction. Returns `null` when the
+   * journal does not exist or is not in `pending`, and `{ unbalanced: true }`
+   * when the debit/credit invariant fails — in both cases NOTHING is written.
+   */
+  postJournal(
+    journalId: string,
+    postedBy: string | null,
+  ): Promise<{ journal: JournalHeader } | { unbalanced: true } | null>;
+
+  /** GL entries for an account within a period, ordered by posting date. */
+  listGlEntries(tenantId: string, filter: { accountId?: string; periodId?: string }): Promise<GeneralLedgerEntry[]>;
+
+  // --- Idempotency ----------------------------------------------------
+  findIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<PostingIdempotencyKey | null>;
+  recordIdempotencyKey(input: {
+    tenantId: string;
+    sourceEventId: string;
+    postingRuleVersionHash: string;
+    idempotencyKey: string;
+    lastAttemptStatus: PostingAttemptStatus;
+    failureReason: string | null;
+  }): Promise<PostingIdempotencyKey>;
+
+  // --- Cross-domain reads kept behind this port -----------------------
+  legalEntityExists(tenantId: string, legalEntityId: string): Promise<boolean>;
+}

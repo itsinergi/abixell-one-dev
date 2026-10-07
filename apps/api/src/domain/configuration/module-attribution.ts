@@ -276,6 +276,7 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
 
   // Finance.
   finance: "finance",
+  accounting: "finance",
 
   // HSE.
   hse: "hse",

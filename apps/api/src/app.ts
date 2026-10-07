@@ -52,6 +52,7 @@ import { registerProcurementRoutes } from "./modules/supply-chain/procurement/ap
 import { registerAssetRoutes } from "./modules/asset/core/api/asset.routes.js";
 import { registerAssetAdvancedRoutes } from "./modules/asset/advanced/api/asset-advanced.routes.js";
 import { registerFinanceRoutes } from "./modules/finance/core/api/finance.routes.js";
+import { registerAccountingKernelRoutes } from "./modules/accounting/kernel/api/accounting-kernel.routes.js";
 import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
 import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
@@ -207,6 +208,8 @@ export function buildApp(): FastifyInstance {
     registerAssetRoutes(scoped, container);
     registerAssetAdvancedRoutes(scoped, container);
     registerFinanceRoutes(scoped, container);
+    // Phase 1B — Accounting Kernel (sole writer of the General Ledger, ADR-0023)
+    registerAccountingKernelRoutes(scoped, container);
     // Phase 7 — HSE Core
     registerHseRoutes(scoped, container);
     // Phase 8 — Project Delivery Core

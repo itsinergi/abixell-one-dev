@@ -10,6 +10,7 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test": "cross-env SCHEDULER_DISABLED=true vitest run",
+    "validate:isolated-db": "tsx scripts/validate-isolated-db.ts",
     "migrate": "node-pg-migrate up -m migrations --envPath .env",
     "migrate:production": "node-pg-migrate up -m migrations --envPath /dev/null",
     "migrate:down": "node-pg-migrate down -m migrations --envPath .env",
