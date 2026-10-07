@@ -7,7 +7,7 @@ on:
 
 jobs:
   validate:
-    name: Lint, typecheck, test, build
+    name: CI 8-Gate Pipeline
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,17 +30,121 @@ jobs:
       PLATFORM_BOOTSTRAP_KEY: ci-bootstrap-secret
       SCHEDULER_DISABLED: "true"
       CORS_ORIGINS: http://localhost:5173
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - name: Install dependencies
+
+      # ──────────────────────────────────────────────
+      # GATE-1: Dependencies & Install (5 min)
+      # ──────────────────────────────────────────────
+      - name: "GATE-1: Install Dependencies"
         run: npm ci
-      - name: Run migrations
+        timeout-minutes: 5
+
+      # ──────────────────────────────────────────────
+      # GATE-2: Database Migration (3 min)
+      # ──────────────────────────────────────────────
+      - name: "GATE-2: Database Migration"
         run: npm run migrate -w apps/api
-      - name: Validate
-        run: npm run validate
+        timeout-minutes: 3
+
+      # ──────────────────────────────────────────────
+      # GATE-3: Platform Boundary Validation (2 min)
+      # ──────────────────────────────────────────────
+      - name: "GATE-3: Platform Boundary Validation"
+        run: node scripts/validate-platform-boundaries.mjs
+        timeout-minutes: 2
+
+      # ──────────────────────────────────────────────
+      # GATE-4: Lint (3 min)
+      # ──────────────────────────────────────────────
+      - name: "GATE-4: Lint"
+        run: npm run lint
+        timeout-minutes: 3
+
+      # ──────────────────────────────────────────────
+      # GATE-5: Typecheck (3 min)
+      # ──────────────────────────────────────────────
+      - name: "GATE-5: Typecheck"
+        run: npm run typecheck
+        timeout-minutes: 3
+
+      # ──────────────────────────────────────────────
+      # GATE-6: Unit Test (10 min)
+      # ──────────────────────────────────────────────
+      - name: Prepare test results directory
+        run: mkdir -p apps/api/test-results
+
+      - name: "GATE-6: Unit Test"
+        run: npx vitest run --reporter=junit --reporter=default --outputFile=test-results/junit.xml
+        working-directory: apps/api
+        timeout-minutes: 10
+
+      - name: Upload Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-junit
+          path: apps/api/test-results/junit.xml
+          retention-days: 90
+
+      # ──────────────────────────────────────────────
+      # GATE-7: Production Build (8 min)
+      # ──────────────────────────────────────────────
+      - name: "GATE-7: Production Build"
+        run: npm run build
+        timeout-minutes: 8
+
+      - name: Upload Build Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-dist
+          path: |
+            apps/api/dist
+            apps/web/dist
+          retention-days: 30
+
+      # ──────────────────────────────────────────────
+      # GATE-8: Security & PWA Audit (5 min)
+      # ──────────────────────────────────────────────
+      - name: "GATE-8a: PWA Validation"
+        run: npm run validate:pwa
+        timeout-minutes: 5
+
+      - name: "GATE-8b: Security Audit"
+        run: npm audit --omit=dev --json > security-audit.json || true
+        timeout-minutes: 5
+
+      - name: "GATE-8c: Check Security Threshold"
+        run: |
+          HIGH=$(node -e "
+            const a = require('./security-audit.json');
+            const v = a.vulnerabilities || {};
+            let count = 0;
+            for (const key in v) {
+              if (v[key].severity === 'high' || v[key].severity === 'critical') count++;
+            }
+            console.log(count);
+          ")
+          echo "High/Critical vulnerabilities: $HIGH"
+          if [ "$HIGH" -gt 0 ]; then
+            echo "::error::GATE-8 FAILED: $HIGH high/critical vulnerabilities found"
+            exit 1
+          fi
+          echo "GATE-8 PASS: No high/critical vulnerabilities"
+
+      - name: Upload Security Audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-report
+          path: security-audit.json
+          retention-days: 90
