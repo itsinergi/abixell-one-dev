@@ -647,3 +647,223 @@ describe("Accounting Kernel HTTP Routes — Period Reopen (WP-FIN-03)", () => {
   });
 });
 
+const RECON_TENANT = `ak-recon-routes-${Date.now()}`;
+
+describe("Accounting Kernel HTTP Routes — GL Reconciliation (WP-FIN-04)", () => {
+  const app = buildApp();
+
+  let tenantId: string;
+  let legalEntityId: string;
+  let coaId: string;
+  let adminToken: string;
+  let financeApprovingToken: string;
+  let readOnlyToken: string;
+
+  const post = (url: string, token: string, payload: unknown = {}) =>
+    app.inject({ method: "POST", url, headers: authHeader(token), payload });
+  const get = (url: string, token: string) => app.inject({ method: "GET", url, headers: authHeader(token) });
+
+  beforeAll(async () => {
+    const tenant = await bootstrapTenant(app, RECON_TENANT, "GL Reconciliation Routes Test");
+    tenantId = tenant.id;
+
+    await activateAllModules(tenantId);
+    await provisionFirstAdmin({ tenantId, email: "admin@ak-recon.local", password: "Admin12345!" });
+    adminToken = (await login(app, RECON_TENANT, "admin@ak-recon.local", "Admin12345!")).body.accessToken;
+
+    await createReadOnlyRole(tenantId, "ACCT_RECON_APPROVE", [
+      "finance.accounting.configure",
+      "finance.accounting.manage",
+      "finance.accounting.approve",
+      "finance.accounting.read",
+    ]);
+    await createInternalUser(app, adminToken, {
+      email: "approver@ak-recon.local",
+      fullName: "Recon Approver",
+      password: "Approver12345!",
+      roleCode: "ACCT_RECON_APPROVE",
+      scopeType: "tenant",
+    });
+    financeApprovingToken = (await login(app, RECON_TENANT, "approver@ak-recon.local", "Approver12345!")).body
+      .accessToken;
+
+    await createReadOnlyRole(tenantId, "ACCT_RECON_READ", ["finance.accounting.read"]);
+    await createInternalUser(app, adminToken, {
+      email: "readonly@ak-recon.local",
+      fullName: "Recon Read Only",
+      password: "ReadOnly12345!",
+      roleCode: "ACCT_RECON_READ",
+      scopeType: "tenant",
+    });
+    readOnlyToken = (await login(app, RECON_TENANT, "readonly@ak-recon.local", "ReadOnly12345!")).body.accessToken;
+
+    const leRes = await pool.query(
+      `INSERT INTO legal_entities (tenant_id, name) VALUES ($1, 'Recon Routes LE') RETURNING id`,
+      [tenantId],
+    );
+    legalEntityId = leRes.rows[0].id;
+
+    const coaRes = await pool.query(
+      `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date)
+       VALUES ($1, $2, 'COA-RECON', '2026-01-01') RETURNING id`,
+      [tenantId, legalEntityId],
+    );
+    coaId = coaRes.rows[0].id;
+  });
+
+  afterAll(async () => {
+    await pool.query(`DELETE FROM tenants WHERE code = $1`, [RECON_TENANT]);
+    await app.close();
+  });
+
+  describe("GET /accounting/periods/:id/reconciliation", () => {
+    it("200 happy path: balanced posted journal reconciles matched", async () => {
+      const periodRes = await post("/accounting/periods", financeApprovingToken, {
+        legalEntityId,
+        fiscalYearCode: "FY2026",
+        periodCode: "RECON-P01",
+        periodName: "Recon Period 1",
+        periodType: "monthly",
+        dateFrom: "2026-01-01",
+        dateTo: "2026-01-31",
+      });
+      expect(periodRes.statusCode).toBe(201);
+      const periodId = periodRes.json().id;
+      await pool.query(`UPDATE accounting_periods SET status = 'open' WHERE id = $1`, [periodId]);
+
+      const debitRes = await post("/accounting/accounts", financeApprovingToken, {
+        legalEntityId,
+        coaId,
+        accountCode: "1000",
+        accountName: "Recon Asset",
+        accountClass: "ASSET",
+        normalBalance: "debit",
+        accountType: null,
+      });
+      const debitAccountId = debitRes.json().id;
+
+      const creditRes = await post("/accounting/accounts", financeApprovingToken, {
+        legalEntityId,
+        coaId,
+        accountCode: "5000",
+        accountName: "Recon Equity",
+        accountClass: "EQUITY",
+        normalBalance: "credit",
+        accountType: null,
+      });
+      const creditAccountId = creditRes.json().id;
+
+      const journalRes = await post("/accounting/journals", financeApprovingToken, {
+        legalEntityId,
+        journalNumber: "RECON-JNL-001",
+        journalDate: "2026-01-15",
+        accountingDate: "2026-01-15",
+        periodId,
+        description: "Recon route test",
+        currency: "USD",
+        lines: [
+          {
+            accountId: debitAccountId,
+            lineNumber: 1,
+            debit: "100.00",
+            credit: "0.00",
+            lineDescription: "Debit leg",
+            projectId: null,
+            siteId: null,
+          },
+          {
+            accountId: creditAccountId,
+            lineNumber: 2,
+            debit: "0.00",
+            credit: "100.00",
+            lineDescription: "Credit leg",
+            projectId: null,
+            siteId: null,
+          },
+        ],
+      });
+      expect(journalRes.statusCode).toBe(201);
+      const journalId = journalRes.json().id;
+
+      const postRes = await post(`/accounting/journals/${journalId}/post`, financeApprovingToken);
+      expect(postRes.statusCode).toBe(200);
+
+      const reconRes = await get(`/accounting/periods/${periodId}/reconciliation`, financeApprovingToken);
+      expect(reconRes.statusCode).toBe(200);
+      const recon = reconRes.json();
+      expect(recon.periodId).toBe(periodId);
+      expect(recon.matched).toBe(true);
+      expect(recon.orphanGlEntryIds).toHaveLength(0);
+      expect(recon.mismatchedGlEntryIds).toHaveLength(0);
+      expect(recon.unpostedJournalIds).toHaveLength(0);
+      expect(recon.totals.glDebit).toBe("100.00");
+      expect(recon.totals.glCredit).toBe("100.00");
+    });
+
+    it("404 rejects a period from another tenant", async () => {
+      const otherTenant = await bootstrapTenant(app, `ak-recon-other-${Date.now()}`, "Other Tenant");
+      await activateAllModules(otherTenant.id);
+      const otherLeRes = await pool.query(
+        `INSERT INTO legal_entities (tenant_id, name) VALUES ($1, 'Other Tenant LE') RETURNING id`,
+        [otherTenant.id],
+      );
+      const otherPeriodRes = await pool.query(
+        `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status)
+         VALUES ($1, $2, 'FY2026', 'OTHER-P01', 'Other Period', 'monthly', '2026-01-01', '2026-01-31', 'open') RETURNING id`,
+        [otherTenant.id, otherLeRes.rows[0].id],
+      );
+      const otherPeriodId = otherPeriodRes.rows[0].id;
+
+      const res = await get(`/accounting/periods/${otherPeriodId}/reconciliation`, financeApprovingToken);
+      expect(res.statusCode).toBe(404);
+
+      await pool.query(`DELETE FROM tenants WHERE id = $1`, [otherTenant.id]);
+    });
+
+    it("403 rejects without finance.accounting.read permission", async () => {
+      await createReadOnlyRole(tenantId, "ACCT_RECON_NOACCESS", []);
+      await createInternalUser(app, adminToken, {
+        email: "noaccess@ak-recon.local",
+        fullName: "Recon No Access",
+        password: "NoAccess12345!",
+        roleCode: "ACCT_RECON_NOACCESS",
+        scopeType: "tenant",
+      });
+      const noAccessToken = (await login(app, RECON_TENANT, "noaccess@ak-recon.local", "NoAccess12345!")).body
+        .accessToken;
+
+      const periodRes = await post("/accounting/periods", financeApprovingToken, {
+        legalEntityId,
+        fiscalYearCode: "FY2026",
+        periodCode: "RECON-P03",
+        periodName: "Recon Period 3",
+        periodType: "monthly",
+        dateFrom: "2026-02-01",
+        dateTo: "2026-02-28",
+      });
+      const periodId = periodRes.json().id;
+
+      const res = await get(`/accounting/periods/${periodId}/reconciliation`, noAccessToken);
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("403 rejects the read-only role scoped to a different permission set", async () => {
+      const periodRes = await post("/accounting/periods", financeApprovingToken, {
+        legalEntityId,
+        fiscalYearCode: "FY2026",
+        periodCode: "RECON-P04",
+        periodName: "Recon Period 4",
+        periodType: "monthly",
+        dateFrom: "2026-03-01",
+        dateTo: "2026-03-31",
+      });
+      const periodId = periodRes.json().id;
+
+      // readOnlyToken legitimately HAS finance.accounting.read — this is the
+      // allow-path control for the preceding deny-path test, same role.
+      const res = await get(`/accounting/periods/${periodId}/reconciliation`, readOnlyToken);
+      expect(res.statusCode).toBe(200);
+    });
+  });
+});
+

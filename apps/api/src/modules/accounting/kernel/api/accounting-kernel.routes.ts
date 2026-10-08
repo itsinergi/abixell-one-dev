@@ -229,4 +229,16 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
       return reply.send(balance);
     },
   );
+
+  // --- GL reconciliation (WP-FIN-04) ------------------------------------------
+
+  app.get(
+    "/accounting/periods/:id/reconciliation",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const id = uuidSchema.parse((request.params as { id: string }).id);
+      const reconciliation = await svc().reconcileJournalVsGl(request.actor!, id);
+      return reply.send(reconciliation);
+    },
+  );
 }

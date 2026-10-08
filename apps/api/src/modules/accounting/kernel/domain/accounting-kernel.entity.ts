@@ -295,6 +295,20 @@ export interface GlBalance {
   lastRefreshed: Date;
 }
 
+export interface JournalGlReconciliation {
+  periodId: string;
+  matched: boolean;
+  orphanGlEntryIds: string[];
+  mismatchedGlEntryIds: string[];
+  unpostedJournalIds: string[];
+  totals: {
+    glDebit: Money;
+    glCredit: Money;
+    journalDebit: Money;
+    journalCredit: Money;
+  };
+}
+
 export interface PostingIdempotencyKey {
   id: string;
   tenantId: string;
@@ -506,6 +520,17 @@ export interface AccountingKernelRepository {
 
   /** GL entries for an account within a period, ordered by posting date. */
   listGlEntries(tenantId: string, filter: { accountId?: string; periodId?: string }): Promise<GeneralLedgerEntry[]>;
+
+  /** The materialized balance row refreshed at post/reverse time. `null` when none has been computed yet. */
+  findGlBalance(tenantId: string, accountId: string, periodId: string): Promise<GlBalance | null>;
+
+  /**
+   * Compares posted journals against their GL entries for a period (WP-FIN-04):
+   * orphan GL entries (no journal line), amount/period mismatches, unposted
+   * journals in the period, and the aggregate debit/credit totals on each
+   * side. A single read-only query set — writes nothing.
+   */
+  reconcileJournalVsGl(tenantId: string, periodId: string): Promise<JournalGlReconciliation>;
 
   /**
    * The earliest `open` period of a legal entity whose date range reaches
