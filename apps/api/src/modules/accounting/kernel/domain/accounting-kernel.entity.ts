@@ -158,6 +158,28 @@ export interface AccountingPeriod {
   status: AccountingPeriodStatus;
   lockedDate: Date | null;
   lockedBy: string | null;
+  // --- Reopen maker-checker trail (WP-FIN-03, Epic 14 §4.14) -------------
+  /** When reopen was requested; `null` unless a reopen has been requested. */
+  reopenRequestedDate: Date | null;
+  /** The operator who requested the reopen (the maker). */
+  reopenRequestedBy: string | null;
+  /** Free-text reason for the reopen (required, non-empty at request time). */
+  reopenReason: string | null;
+  /** Evidence of the impact that justifies reopening (required at request time). */
+  reopenImpactEvidence: string | null;
+  /** The operator who approved the reopen (the checker); set on approve. */
+  reopenApprovedBy: string | null;
+  /** When the reopen was approved; set on approve. */
+  reopenApprovedDate: Date | null;
+  /** The operator who rejected the reopen; set on reject. */
+  reopenRejectedBy: string | null;
+  /** When the reopen was rejected; set on reject. */
+  reopenRejectedDate: Date | null;
+  /** Reason the reopen was rejected; set on reject. */
+  reopenRejectReason: string | null;
+  /** Link to a Workflow Engine instance (nullable, reserved for a future
+   * Epic 9 integration; the local maker-checker flow does not write it). */
+  workflowInstanceId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -328,6 +350,31 @@ export interface CreatePeriodInput {
   createdBy: string | null;
 }
 
+/**
+ * Reopen request write input (WP-FIN-03). A closed period moves to
+ * `reopenable` with a non-empty reason and impact evidence. The requester
+ * is the maker; a different operator must approve.
+ */
+export interface RequestPeriodReopenInput {
+  periodId: string;
+  requestedBy: string | null;
+  reason: string;
+  impactEvidence: string;
+}
+
+/** Approve a pending reopen: stamps the approver and moves to `open`. */
+export interface ApprovePeriodReopenInput {
+  periodId: string;
+  approvedBy: string | null;
+}
+
+/** Reject a pending reopen: records the rejecter and reason, back to `closed`. */
+export interface RejectPeriodReopenInput {
+  periodId: string;
+  rejectedBy: string | null;
+  reason: string;
+}
+
 export interface CreateAccountInput {
   tenantId: string;
   legalEntityId: string;
@@ -401,6 +448,27 @@ export interface AccountingKernelRepository {
   findPeriodById(id: string): Promise<AccountingPeriod | null>;
   listPeriods(tenantId: string, filter: { legalEntityId?: string; status?: AccountingPeriodStatus }): Promise<AccountingPeriod[]>;
   setPeriodStatus(id: string, status: AccountingPeriodStatus, updatedBy: string | null): Promise<AccountingPeriod | null>;
+
+  /**
+   * Maker step of the reopen flow (WP-FIN-03): moves a `closed` period to
+   * `reopenable`, recording the requester, reason and impact evidence.
+   * Returns `null` when the period is not `closed` (the `status = 'closed'`
+   * guard lives in the UPDATE's WHERE clause, not in a prior read).
+   */
+  requestPeriodReopen(input: RequestPeriodReopenInput): Promise<AccountingPeriod | null>;
+
+  /**
+   * Checker step: moves a `reopenable` period back to `open`, stamping the
+   * approver. Returns `null` when the period is not `reopenable`.
+   */
+  approvePeriodReopen(input: ApprovePeriodReopenInput): Promise<AccountingPeriod | null>;
+
+  /**
+   * Rejection step: moves a `reopenable` period back to `closed`, recording
+   * the rejecter and reason. Returns `null` when the period is not
+   * `reopenable`.
+   */
+  rejectPeriodReopen(input: RejectPeriodReopenInput): Promise<AccountingPeriod | null>;
 
   // --- Accounts -------------------------------------------------------
   createAccount(input: CreateAccountInput): Promise<AccountingAccount>;

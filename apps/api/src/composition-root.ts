@@ -420,9 +420,11 @@ export function buildContainer() {
   );
 
   // Phase 1B — Accounting Kernel. Sole writer of the General Ledger
-  // (ADR-0023 ACCEPTED). No workflow dependency: maker-checker SoD on period
-  // lock/reopen is handled by a tenant-authored Workflow Definition routing
-  // the approval step to a different role, not by a code-level check here.
+  // (ADR-0023 ACCEPTED). Period reopen is a maker-checker flow enforced in
+  // code (AccountingKernelService.approvePeriodReopen: requester ≠ approver)
+  // and in the DB (guard_period_reopen trigger); no Workflow Definition
+  // dependency. workflow_instance_id on accounting_periods stays nullable for
+  // a future Epic 9 integration that can add it without a re-migration.
   const accountingKernel = new AccountingKernelService(
     new PgAccountingKernelRepository(pool),
     configuration,

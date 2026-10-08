@@ -280,13 +280,13 @@ describe("Accounting Kernel HTTP Routes — COA Hierarchy (WP-FIN-01)", () => {
       const hierarchyRes = await get(`/accounting/accounts/hierarchy?legalEntityId=${legalEntityId}`, financeToken);
       expect(hierarchyRes.statusCode).toBe(200);
 
-      const hierarchy = hierarchyRes.json();
+      const hierarchy = hierarchyRes.json() as Array<{ account: { id: string } }>;
       expect(Array.isArray(hierarchy)).toBe(true);
 
       // Parent should appear before children (parent-first order)
-      const parentIndex = hierarchy.findIndex((h: any) => h.account.id === parentId);
-      const child1Index = hierarchy.findIndex((h: any) => h.account.id === child1Id);
-      const child2Index = hierarchy.findIndex((h: any) => h.account.id === child2Id);
+      const parentIndex = hierarchy.findIndex((h) => h.account.id === parentId);
+      const child1Index = hierarchy.findIndex((h) => h.account.id === child1Id);
+      const child2Index = hierarchy.findIndex((h) => h.account.id === child2Id);
 
       expect(parentIndex).toBeGreaterThanOrEqual(0);
       expect(child1Index).toBeGreaterThan(parentIndex);
@@ -474,3 +474,176 @@ describe("Accounting Kernel HTTP Routes — Journal Reversal (WP-FIN-02)", () =>
     });
   });
 });
+
+const REOPEN_TENANT = `ak-reopen-routes-${Date.now()}`;
+
+describe("Accounting Kernel HTTP Routes — Period Reopen (WP-FIN-03)", () => {
+  const app = buildApp();
+
+  let tenantId: string;
+  let legalEntityId: string;
+  let adminToken: string;
+  let requesterToken: string;
+  let approverToken: string;
+  let readOnlyToken: string;
+
+  const post = (url: string, token: string, payload: unknown = {}) =>
+    app.inject({ method: "POST", url, headers: authHeader(token), payload });
+
+  async function createClosedPeriod(code: string): Promise<string> {
+    const periodRes = await post("/accounting/periods", adminToken, {
+      legalEntityId,
+      fiscalYearCode: "FY2026",
+      periodCode: code,
+      periodName: code,
+      periodType: "monthly",
+      dateFrom: "2026-04-01",
+      dateTo: "2026-04-30",
+    });
+    expect(periodRes.statusCode).toBe(201);
+    const id = periodRes.json().id;
+    await pool.query(`UPDATE accounting_periods SET status = 'closed' WHERE id = $1`, [id]);
+    return id;
+  }
+
+  beforeAll(async () => {
+    const tenant = await bootstrapTenant(app, REOPEN_TENANT, "Period Reopen Routes Test");
+    tenantId = tenant.id;
+
+    await activateAllModules(tenantId);
+    await provisionFirstAdmin({ tenantId, email: "admin@ak-reopen.local", password: "Admin12345!" });
+    adminToken = (await login(app, REOPEN_TENANT, "admin@ak-reopen.local", "Admin12345!")).body.accessToken;
+
+    await createReadOnlyRole(tenantId, "ACCT_REOPEN_REQUEST", [
+      "finance.accounting.period.lock",
+      "finance.accounting.read",
+    ]);
+    await createInternalUser(app, adminToken, {
+      email: "requester@ak-reopen.local",
+      fullName: "Reopen Requester",
+      password: "Requester12345!",
+      roleCode: "ACCT_REOPEN_REQUEST",
+      scopeType: "tenant",
+    });
+    requesterToken = (await login(app, REOPEN_TENANT, "requester@ak-reopen.local", "Requester12345!")).body.accessToken;
+
+    await createReadOnlyRole(tenantId, "ACCT_REOPEN_APPROVE", [
+      "finance.accounting.approve",
+      "finance.accounting.read",
+    ]);
+    await createInternalUser(app, adminToken, {
+      email: "approver@ak-reopen.local",
+      fullName: "Reopen Approver",
+      password: "Approver12345!",
+      roleCode: "ACCT_REOPEN_APPROVE",
+      scopeType: "tenant",
+    });
+    approverToken = (await login(app, REOPEN_TENANT, "approver@ak-reopen.local", "Approver12345!")).body.accessToken;
+
+    await createReadOnlyRole(tenantId, "ACCT_REOPEN_READ", ["finance.accounting.read"]);
+    await createInternalUser(app, adminToken, {
+      email: "readonly@ak-reopen.local",
+      fullName: "Read Only",
+      password: "ReadOnly12345!",
+      roleCode: "ACCT_REOPEN_READ",
+      scopeType: "tenant",
+    });
+    readOnlyToken = (await login(app, REOPEN_TENANT, "readonly@ak-reopen.local", "ReadOnly12345!")).body.accessToken;
+
+    const leRes = await pool.query(
+      `INSERT INTO legal_entities (tenant_id, name) VALUES ($1, 'Reopen Routes LE') RETURNING id`,
+      [tenantId],
+    );
+    legalEntityId = leRes.rows[0].id;
+  });
+
+  afterAll(async () => {
+    await pool.query(`DELETE FROM tenants WHERE code = $1`, [REOPEN_TENANT]);
+    await app.close();
+  });
+
+  it("204 happy path: request then approve by a different user", async () => {
+    const periodId = await createClosedPeriod("REOPEN-ROUTE-OK");
+
+    const requestRes = await post(`/accounting/periods/${periodId}/reopen`, requesterToken, {
+      reason: "Route reopen request",
+      impactEvidence: "Route evidence",
+    });
+    expect(requestRes.statusCode).toBe(204);
+
+    const approveRes = await post(`/accounting/periods/${periodId}/reopen/approve`, approverToken, {
+      note: "ok",
+    });
+    expect(approveRes.statusCode).toBe(204);
+
+    // Verify final state directly (204 carries no body)
+    const row = await pool.query(`SELECT status FROM accounting_periods WHERE id = $1`, [periodId]);
+    expect(row.rows[0].status).toBe("open");
+  });
+
+  it("409 rejects approval by the requester", async () => {
+    const periodId = await createClosedPeriod("REOPEN-ROUTE-SOD");
+    await createReadOnlyRole(tenantId, "ACCT_REOPEN_BOTH", [
+      "finance.accounting.period.lock",
+      "finance.accounting.approve",
+      "finance.accounting.read",
+    ]);
+    await createInternalUser(app, adminToken, {
+      email: "both@ak-reopen.local",
+      fullName: "Both Permissions",
+      password: "Both12345!",
+      roleCode: "ACCT_REOPEN_BOTH",
+      scopeType: "tenant",
+    });
+    const bothToken = (await login(app, REOPEN_TENANT, "both@ak-reopen.local", "Both12345!")).body.accessToken;
+
+    const requestRes = await post(`/accounting/periods/${periodId}/reopen`, bothToken, {
+      reason: "Self approve attempt",
+      impactEvidence: "Evidence",
+    });
+    expect(requestRes.statusCode).toBe(204);
+
+    const approveRes = await post(`/accounting/periods/${periodId}/reopen/approve`, bothToken, {});
+    expect(approveRes.statusCode).toBe(409);
+  });
+
+  it("400 rejects an empty request reason", async () => {
+    const periodId = await createClosedPeriod("REOPEN-ROUTE-EMPTY");
+    const res = await post(`/accounting/periods/${periodId}/reopen`, requesterToken, {
+      reason: "",
+      impactEvidence: "Evidence",
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("409 rejects request when the period is open", async () => {
+    const periodRes = await post("/accounting/periods", adminToken, {
+      legalEntityId,
+      fiscalYearCode: "FY2026",
+      periodCode: "REOPEN-ROUTE-OPEN",
+      periodName: "REOPEN-ROUTE-OPEN",
+      periodType: "monthly",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+    });
+    expect(periodRes.statusCode).toBe(201);
+    const periodId = periodRes.json().id;
+    await pool.query(`UPDATE accounting_periods SET status = 'open' WHERE id = $1`, [periodId]);
+
+    const res = await post(`/accounting/periods/${periodId}/reopen`, requesterToken, {
+      reason: "Should fail",
+      impactEvidence: "Evidence",
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("403 rejects request without finance.accounting.period.lock", async () => {
+    const periodId = await createClosedPeriod("REOPEN-ROUTE-FORBIDDEN");
+    const res = await post(`/accounting/periods/${periodId}/reopen`, readOnlyToken, {
+      reason: "No permission",
+      impactEvidence: "Evidence",
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+

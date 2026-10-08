@@ -111,6 +111,9 @@ export class AccountingKernelService {
     if (period.status === "closed") {
       throw new ConflictError("Period is already closed");
     }
+    if (period.status === "reopenable") {
+      throw new ConflictError("A pending reopen request must be approved or rejected before the period can be locked");
+    }
 
     await this.repo.setPeriodStatus(periodId, "closed", actor.userId);
 
@@ -125,6 +128,167 @@ export class AccountingKernelService {
         reason,
       },
     });
+  }
+
+  // --- Period reopen (maker-checker, WP-FIN-03, Epic 14 §4.14) --------------
+  //
+  // Reopening a closed period is its own maker-checker flow: the requester and
+  // the approver must be two different people, the reason and the impact
+  // evidence are mandatory, and the trail is append-only. No permission bypasses
+  // the "two different people" rule — a Super Admin with every permission still
+  // cannot approve their own request.
+
+  /** Maker step: request a reopen of a closed period. */
+  async requestPeriodReopen(
+    actor: ActorContext,
+    periodId: string,
+    input: { reason: string; impactEvidence: string },
+  ): Promise<AccountingPeriod> {
+    // The requester holds the same authority as the one who closes the period.
+    await this.rbac.requirePermission(actor, "finance.accounting.period.lock");
+
+    const period = await this.repo.findPeriodById(periodId);
+    if (!period || period.tenantId !== actor.tenantId) {
+      throw new NotFoundError("AccountingPeriod", periodId);
+    }
+
+    if (period.status !== "closed") {
+      throw new ConflictError("Only a closed period can be reopened");
+    }
+
+    const reason = (input.reason ?? "").trim();
+    if (!reason) {
+      throw new ValidationError("Reopen reason is required and cannot be empty");
+    }
+    const impactEvidence = (input.impactEvidence ?? "").trim();
+    if (!impactEvidence) {
+      throw new ValidationError("Reopen impact evidence is required and cannot be empty");
+    }
+
+    const updated = await this.repo.requestPeriodReopen({
+      periodId,
+      requestedBy: actor.userId,
+      reason,
+      impactEvidence,
+    });
+    if (!updated) {
+      // Lost the race: another request moved the period out of `closed`.
+      throw new ConflictError("Only a closed period can be reopened");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.period.reopen_requested",
+      entityType: "accounting_period",
+      entityId: periodId,
+      metadata: {
+        periodCode: period.periodCode,
+        reason,
+        impactEvidence,
+        requestedBy: actor.userId,
+      },
+    });
+
+    return updated;
+  }
+
+  /** Checker step: approve a pending reopen. Approver must differ from requester. */
+  async approvePeriodReopen(
+    actor: ActorContext,
+    periodId: string,
+    input: { note?: string } = {},
+  ): Promise<AccountingPeriod> {
+    await this.rbac.requirePermission(actor, "finance.accounting.approve");
+
+    const period = await this.repo.findPeriodById(periodId);
+    if (!period || period.tenantId !== actor.tenantId) {
+      throw new NotFoundError("AccountingPeriod", periodId);
+    }
+
+    if (period.status !== "reopenable") {
+      throw new ConflictError("No pending reopen request for this period");
+    }
+
+    // Maker-checker SoD: the approver must be a different person from the
+    // requester. This check is unconditional — no permission short-circuits it.
+    if (period.reopenRequestedBy === actor.userId) {
+      throw new ConflictError(
+        "The approver must be a different person from the requester (maker-checker)",
+      );
+    }
+
+    const updated = await this.repo.approvePeriodReopen({
+      periodId,
+      approvedBy: actor.userId,
+    });
+    if (!updated) {
+      throw new ConflictError("No pending reopen request for this period");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.period.reopen_approved",
+      entityType: "accounting_period",
+      entityId: periodId,
+      metadata: {
+        periodCode: period.periodCode,
+        requestedBy: period.reopenRequestedBy,
+        approvedBy: actor.userId,
+        note: input.note ?? null,
+      },
+    });
+
+    return updated;
+  }
+
+  /** Checker step (negative): reject a pending reopen, returning the period to closed. */
+  async rejectPeriodReopen(
+    actor: ActorContext,
+    periodId: string,
+    input: { reason: string },
+  ): Promise<AccountingPeriod> {
+    await this.rbac.requirePermission(actor, "finance.accounting.approve");
+
+    const period = await this.repo.findPeriodById(periodId);
+    if (!period || period.tenantId !== actor.tenantId) {
+      throw new NotFoundError("AccountingPeriod", periodId);
+    }
+
+    if (period.status !== "reopenable") {
+      throw new ConflictError("No pending reopen request for this period");
+    }
+
+    const reason = (input.reason ?? "").trim();
+    if (!reason) {
+      throw new ValidationError("Rejection reason is required and cannot be empty");
+    }
+
+    const updated = await this.repo.rejectPeriodReopen({
+      periodId,
+      rejectedBy: actor.userId,
+      reason,
+    });
+    if (!updated) {
+      throw new ConflictError("No pending reopen request for this period");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.period.reopen_rejected",
+      entityType: "accounting_period",
+      entityId: periodId,
+      metadata: {
+        periodCode: period.periodCode,
+        requestedBy: period.reopenRequestedBy,
+        rejectedBy: actor.userId,
+        reason,
+      },
+    });
+
+    return updated;
   }
 
   // --- Accounts ---------------------------------------------------------------
@@ -266,8 +430,8 @@ export class AccountingKernelService {
       throw new NotFoundError("AccountingPeriod", input.periodId);
     }
 
-    if (period.status === "closed") {
-      throw new ConflictError("Cannot create journal in a closed period");
+    if (period.status === "closed" || period.status === "reopenable") {
+      throw new ConflictError("Cannot create journal in a non-open accounting period");
     }
 
     const normalizedLines = input.lines.map((line) => ({
@@ -376,8 +540,8 @@ export class AccountingKernelService {
     // Check period not closed
     const period = await this.repo.findPeriodById(journal.periodId);
     if (!period) throw new NotFoundError("AccountingPeriod", journal.periodId);
-    if (period.status === "closed") {
-      throw new ConflictError("Cannot post journal to a closed accounting period");
+    if (period.status === "closed" || period.status === "reopenable") {
+      throw new ConflictError("Cannot post journal to a non-open accounting period");
     }
 
     // Post in repository (atomic transaction)
