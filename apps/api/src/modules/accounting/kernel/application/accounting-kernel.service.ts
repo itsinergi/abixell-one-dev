@@ -711,9 +711,7 @@ export class AccountingKernelService {
       // Fail-closed: if entries exist but gl_balances row is missing, flag inconsistency
       const entries = await this.repo.listGlEntries(actor.tenantId, { accountId, periodId });
       if (entries.length > 0) {
-        throw new Error(
-          `GL entries exist for account ${accountId} in period ${periodId} but materialized gl_balances row is missing. Data integrity issue.`,
-        );
+        throw new ConflictError("Materialized GL balance is missing for existing GL entries; data integrity issue");
       }
       // No entries = no activity = null balance
       return null;
