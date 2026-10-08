@@ -232,6 +232,16 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/finance/transactions/:id", windowCode: "route:/finance/transactions/:transactionId" },
   { method: "*", apiPath: "/finance/transactions", windowCode: "route:/finance/transactions" },
 
+  // --- accounting (Phase 1B) -----------------------------------------------
+  // Period and account configuration map to the accounts Window.
+  { method: "*", apiPath: "/accounting/periods", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/periods/:id/lock", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/accounts", windowCode: "route:/finance/accounts" },
+  // Journal operations (create, post, validate) map to the transactions Window.
+  { method: "*", apiPath: "/accounting/journals", windowCode: "route:/finance/transactions" },
+  { method: "*", apiPath: "/accounting/journals/:id", windowCode: "route:/finance/transactions" },
+  { method: "*", apiPath: "/accounting/journals/:id/post", windowCode: "route:/finance/transactions" },
+
   // --- hse -----------------------------------------------------------------
   // `POST /hse/records` is the report form; the `/hse` Window itself is a read
   // surface, so the exact path outranks the module-window prefix.

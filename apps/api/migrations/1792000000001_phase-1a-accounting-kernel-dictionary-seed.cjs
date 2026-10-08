@@ -14,6 +14,15 @@
  *
  * This migration follows the pattern established by Epic 6 G0 (1790800000000):
  * keep the prior seed function under its own name, extend canonical as UNION.
+ *
+ * Correction (2026-10-08): the first version of this migration referenced
+ * `config_dictionary_process_seed_epic6_g0()` directly instead of snapshotting
+ * the then-current canonical first. That name was already taken — by
+ * 1790800000000's OWN snapshot of the pre-Business-Partner state — so this
+ * migration was silently reading the WRONG, older snapshot and dropping all
+ * 26 bp_* rows Epic 6 G0 had added when it overwrote canonical. Fixed by
+ * adding the missing rename step, same as every other dictionary-seed
+ * migration (1789390000000, 1789399000000, 1790800000000).
  */
 
 exports.shorthands = undefined;
@@ -29,23 +38,43 @@ const PERMISSIONS = [
 const PROCESS_ROWS = PERMISSIONS.map(
   (p) => `      SELECT '${p.code}', '${p.description.replace(/'/g, "''")}', 'finance'
        WHERE NOT EXISTS (
-         SELECT 1 FROM config_dictionary_process_seed_epic6_g0() l WHERE l.code = '${p.code}'
+         SELECT 1 FROM config_dictionary_process_seed_phase1a() l WHERE l.code = '${p.code}'
        )`,
 ).join("\n      UNION\n");
 
 exports.up = (pgm) => {
   pgm.sql(`
-    -- 1. Redefine the canonical Process catalogue as Epic 6 G0 + accounting rows
-    --    (Epic 6 G0 migration already ran and created config_dictionary_process_seed_epic6_g0)
+    -- 1. Keep the prior (Epic 6 G0, bp_*-inclusive) Process catalogue
+    --    reachable under its own name.
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE p.proname = 'config_dictionary_process_seed'
+           AND n.nspname = current_schema()
+      ) AND NOT EXISTS (
+        SELECT 1 FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE p.proname = 'config_dictionary_process_seed_phase1a'
+           AND n.nspname = current_schema()
+      ) THEN
+        ALTER FUNCTION config_dictionary_process_seed()
+          RENAME TO config_dictionary_process_seed_phase1a;
+      END IF;
+    END
+    $$;
+
+    -- 2. Redefine the canonical Process catalogue as that snapshot + accounting
     CREATE OR REPLACE FUNCTION config_dictionary_process_seed()
     RETURNS TABLE (code TEXT, name TEXT, module_code TEXT) AS $seed$
       SELECT s.code, s.name, s.module_code
-        FROM config_dictionary_process_seed_epic6_g0() s
+        FROM config_dictionary_process_seed_phase1a() s
       UNION
 ${PROCESS_ROWS};
     $seed$ LANGUAGE sql IMMUTABLE;
 
-    -- 2. Existing tenants receive the new Process rows -----------------------
+    -- 3. Existing tenants receive the new Process rows -----------------------
     INSERT INTO app_processes (tenant_id, code, name, module_code)
     SELECT t.id, s.code, s.name, s.module_code
       FROM tenants t
@@ -63,12 +92,8 @@ exports.down = (pgm) => {
 
     DROP FUNCTION IF EXISTS config_dictionary_process_seed();
 
-    -- Rebuild canonical from Epic 6 G0 only (no accounting rows)
-    CREATE OR REPLACE FUNCTION config_dictionary_process_seed()
-    RETURNS TABLE (code TEXT, name TEXT, module_code TEXT) AS $seed$
-      SELECT s.code, s.name, s.module_code
-        FROM config_dictionary_process_seed_epic6_g0() s;
-    $seed$ LANGUAGE sql IMMUTABLE;
+    ALTER FUNCTION config_dictionary_process_seed_phase1a()
+      RENAME TO config_dictionary_process_seed;
 
     -- Permission rows were inserted by 1792000000000 migration, reverted there.
   `);
