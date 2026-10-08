@@ -2,6 +2,7 @@ import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type {
   AccountingAccount,
   AccountingPeriod,
+  ApprovePeriodReopenInput,
   CreateAccountInput,
   CreateJournalInput,
   CreatePeriodInput,
@@ -14,6 +15,8 @@ import type {
   AccountingPeriodStatus,
   JournalStatus,
   PostingAttemptStatus,
+  RejectPeriodReopenInput,
+  RequestPeriodReopenInput,
   ReverseJournalInput,
 } from "../domain/accounting-kernel.entity.js";
 import { recordGovernedAudit } from "../../../../infrastructure/persistence/repositories/governed-transaction.js";
@@ -106,9 +109,83 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     status: AccountingPeriodStatus,
     updatedBy: string | null,
   ): Promise<AccountingPeriod | null> {
+    // When a period is (re)closed, clear the reopen trail so the next reopen
+    // cycle starts clean. lockPeriod is the only caller that sets 'closed'
+    // here; the guard_period_reopen trigger only restricts transitions to
+    // 'open', so clearing these columns on a 'closed' transition is safe.
     const r = await this.pool.query(
-      `UPDATE accounting_periods SET status = $2, updated_by = $3, updated_at = now() WHERE id = $1 RETURNING *`,
+      `UPDATE accounting_periods
+         SET status = $2,
+             updated_by = $3,
+             updated_at = now(),
+             reopen_requested_date = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_requested_date END,
+             reopen_requested_by = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_requested_by END,
+             reopen_reason = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_reason END,
+             reopen_impact_evidence = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_impact_evidence END,
+             reopen_approved_by = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_approved_by END,
+             reopen_approved_date = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_approved_date END,
+             reopen_rejected_by = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_rejected_by END,
+             reopen_rejected_date = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_rejected_date END,
+             reopen_reject_reason = CASE WHEN $2 = 'closed' THEN NULL ELSE reopen_reject_reason END
+       WHERE id = $1 RETURNING *`,
       [id, status, updatedBy],
+    );
+    return r.rows[0] ? toPeriod(r.rows[0]) : null;
+  }
+
+  async requestPeriodReopen(input: RequestPeriodReopenInput): Promise<AccountingPeriod | null> {
+    const r = await this.pool.query(
+      `UPDATE accounting_periods
+         SET status = 'reopenable',
+             reopen_requested_date = now(),
+             reopen_requested_by = $2,
+             reopen_reason = $3,
+             reopen_impact_evidence = $4,
+             reopen_approved_by = NULL,
+             reopen_approved_date = NULL,
+             reopen_rejected_by = NULL,
+             reopen_rejected_date = NULL,
+             reopen_reject_reason = NULL,
+             updated_by = $2,
+             updated_at = now()
+       WHERE id = $1 AND status = 'closed'
+       RETURNING *`,
+      [input.periodId, input.requestedBy, input.reason, input.impactEvidence],
+    );
+    return r.rows[0] ? toPeriod(r.rows[0]) : null;
+  }
+
+  async approvePeriodReopen(input: ApprovePeriodReopenInput): Promise<AccountingPeriod | null> {
+    const r = await this.pool.query(
+      `UPDATE accounting_periods
+         SET status = 'open',
+             reopen_approved_by = $2,
+             reopen_approved_date = now(),
+             reopen_rejected_by = NULL,
+             reopen_rejected_date = NULL,
+             reopen_reject_reason = NULL,
+             updated_by = $2,
+             updated_at = now()
+       WHERE id = $1 AND status = 'reopenable'
+         AND reopen_requested_by IS DISTINCT FROM $2
+       RETURNING *`,
+      [input.periodId, input.approvedBy],
+    );
+    return r.rows[0] ? toPeriod(r.rows[0]) : null;
+  }
+
+  async rejectPeriodReopen(input: RejectPeriodReopenInput): Promise<AccountingPeriod | null> {
+    const r = await this.pool.query(
+      `UPDATE accounting_periods
+         SET status = 'closed',
+             reopen_rejected_by = $2,
+             reopen_rejected_date = now(),
+             reopen_reject_reason = $3,
+             updated_by = $2,
+             updated_at = now()
+       WHERE id = $1 AND status = 'reopenable'
+       RETURNING *`,
+      [input.periodId, input.rejectedBy, input.reason],
     );
     return r.rows[0] ? toPeriod(r.rows[0]) : null;
   }
@@ -760,6 +837,16 @@ function toPeriod(row: QueryResultRow): AccountingPeriod {
     status: row.status,
     lockedDate: row.locked_date,
     lockedBy: row.locked_by,
+    reopenRequestedDate: row.reopen_requested_date ?? null,
+    reopenRequestedBy: row.reopen_requested_by ?? null,
+    reopenReason: row.reopen_reason ?? null,
+    reopenImpactEvidence: row.reopen_impact_evidence ?? null,
+    reopenApprovedBy: row.reopen_approved_by ?? null,
+    reopenApprovedDate: row.reopen_approved_date ?? null,
+    reopenRejectedBy: row.reopen_rejected_by ?? null,
+    reopenRejectedDate: row.reopen_rejected_date ?? null,
+    reopenRejectReason: row.reopen_reject_reason ?? null,
+    workflowInstanceId: row.workflow_instance_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

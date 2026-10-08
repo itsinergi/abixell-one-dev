@@ -62,6 +62,19 @@ const lockPeriodSchema = z.object({
   reason: z.string().min(1),
 });
 
+const requestReopenSchema = z.object({
+  reason: z.string().min(1),
+  impactEvidence: z.string().min(1),
+});
+
+const approveReopenSchema = z.object({
+  note: z.string().optional(),
+});
+
+const rejectReopenSchema = z.object({
+  reason: z.string().min(1),
+});
+
 const periodStatusQuerySchema = z
   .enum(["draft", "open", "closed", "reopenable", "tombstone"])
   .optional();
@@ -98,6 +111,29 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
     const { id } = request.params as { id: string };
     const { reason } = lockPeriodSchema.parse(request.body);
     await svc().lockPeriod(request.actor!, id, reason);
+    return reply.status(204).send();
+  });
+
+  // --- Period reopen (maker-checker, WP-FIN-03) ---------------------------
+
+  app.post("/accounting/periods/:id/reopen", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const input = requestReopenSchema.parse(request.body);
+    await svc().requestPeriodReopen(request.actor!, id, input);
+    return reply.status(204).send();
+  });
+
+  app.post("/accounting/periods/:id/reopen/approve", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const input = approveReopenSchema.parse(request.body ?? {});
+    await svc().approvePeriodReopen(request.actor!, id, input);
+    return reply.status(204).send();
+  });
+
+  app.post("/accounting/periods/:id/reopen/reject", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const input = rejectReopenSchema.parse(request.body);
+    await svc().rejectPeriodReopen(request.actor!, id, input);
     return reply.status(204).send();
   });
 

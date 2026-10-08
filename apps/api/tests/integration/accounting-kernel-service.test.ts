@@ -305,7 +305,7 @@ describe("Phase 1B — Accounting Kernel Repository & Triggers", () => {
            VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000099', '1.00', '0.00', now())`,
           [tenantId, assetAccountId, closedPeriodId],
         ),
-      ).rejects.toThrow(/closed accounting period/i);
+      ).rejects.toThrow(/non-open accounting period/i);
     });
 
     it("trigger blocks INSERT to journal_headers when period is closed", async () => {
@@ -318,18 +318,31 @@ describe("Phase 1B — Accounting Kernel Repository & Triggers", () => {
                    $3, 'Should fail', 'IDR', 'pending', 'idem-closed-${Date.now()}')`,
           [tenantId, legalEntityId, closedPeriodId],
         ),
-      ).rejects.toThrow(/closed accounting period/i);
+      ).rejects.toThrow(/non-open accounting period/i);
     });
 
-    it("service layer also rejects posting to a closed period (ConflictError path)", async () => {
-      // Create journal in an open period first, then attempt to post after
-      // the period was closed — but since we cannot easily move journals
-      // across periods at repository level, we verify the guard at the
-      // DB trigger level is sufficient (tested above). This test documents
-      // the belt-and-suspenders design: trigger = DB level, ConflictError =
+    it("service layer also rejects creating a journal in a closed period (ConflictError path)", async () => {
+      // Belt-and-suspenders design: trigger = DB level, ConflictError =
       // service level. Both must agree.
-      const triggerWorks = true; // verified by the two tests above
-      expect(triggerWorks).toBe(true);
+      await expect(
+        repo.createJournal({
+          tenantId,
+          legalEntityId,
+          journalNumber: `JNL-SVC-CLOSED-${Date.now()}`,
+          journalDate: "2026-09-15",
+          accountingDate: "2026-09-15",
+          periodId: closedPeriodId,
+          description: "Should fail at service layer",
+          currency: "IDR",
+          postingRuleVersionId: null,
+          idempotencyKey: `idem-svc-closed-${Date.now()}`,
+          lines: [
+            { accountId: assetAccountId, lineNumber: 1, debit: "1.00", credit: "0.00", lineDescription: null, projectId: null, siteId: null },
+            { accountId: incomeAccountId, lineNumber: 2, debit: "0.00", credit: "1.00", lineDescription: null, projectId: null, siteId: null },
+          ],
+          createdBy: null,
+        }),
+      ).rejects.toThrow(/non-open accounting period/i);
     });
   });
 
