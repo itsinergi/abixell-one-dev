@@ -7,6 +7,8 @@ import type {
   CreateJournalInput,
   CreatePeriodInput,
   GeneralLedgerEntry,
+  GlBalance,
+  JournalGlReconciliation,
   JournalHeader,
   JournalLine,
   Money,
@@ -753,6 +755,84 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     return r.rows.map(toGlEntry);
   }
 
+  async findGlBalance(tenantId: string, accountId: string, periodId: string): Promise<GlBalance | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM gl_balances WHERE tenant_id = $1 AND account_id = $2 AND period_id = $3`,
+      [tenantId, accountId, periodId],
+    );
+    return r.rows[0] ? toGlBalance(r.rows[0]) : null;
+  }
+
+  async reconcileJournalVsGl(tenantId: string, periodId: string): Promise<JournalGlReconciliation> {
+    // Snapshot consistency: all four probes must see the same ledger state.
+    // Under READ COMMITTED with independent queries, a concurrent post/reverse
+    // between probes would yield internally contradictory totals (false
+    // mismatch) — a reconciliation tool must never report that.
+    return this.inTransaction(async (client) => {
+      await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+
+      const [orphans, mismatches, unposted, totals] = await Promise.all([
+        client.query(
+          `SELECT gle.id FROM general_ledger_entries gle
+             LEFT JOIN journal_lines jl ON jl.id = gle.journal_line_id
+            WHERE gle.tenant_id = $1 AND gle.period_id = $2 AND jl.id IS NULL`,
+          [tenantId, periodId],
+        ),
+        client.query(
+          `SELECT gle.id FROM general_ledger_entries gle
+             JOIN journal_lines jl ON jl.id = gle.journal_line_id
+             JOIN journal_headers jh ON jh.id = jl.journal_header_id
+            WHERE gle.tenant_id = $1 AND gle.period_id = $2
+              AND (gle.debit IS DISTINCT FROM jl.debit
+               OR gle.credit IS DISTINCT FROM jl.credit
+               OR gle.period_id IS DISTINCT FROM jh.period_id)`,
+          [tenantId, periodId],
+        ),
+        client.query(
+          `SELECT id FROM journal_headers WHERE tenant_id = $1 AND period_id = $2 AND status NOT IN ('posted', 'reversed')`,
+          [tenantId, periodId],
+        ),
+        client.query(
+          `SELECT
+             (SELECT COALESCE(SUM(debit), 0)::numeric(18,2) FROM general_ledger_entries
+               WHERE tenant_id = $1 AND period_id = $2) AS gl_debit,
+             (SELECT COALESCE(SUM(credit), 0)::numeric(18,2) FROM general_ledger_entries
+               WHERE tenant_id = $1 AND period_id = $2) AS gl_credit,
+             (SELECT COALESCE(SUM(jl.debit), 0)::numeric(18,2) FROM journal_lines jl
+                JOIN journal_headers jh ON jh.id = jl.journal_header_id
+               WHERE jh.tenant_id = $1 AND jh.period_id = $2 AND jh.status IN ('posted', 'reversed')) AS journal_debit,
+             (SELECT COALESCE(SUM(jl.credit), 0)::numeric(18,2) FROM journal_lines jl
+                JOIN journal_headers jh ON jh.id = jl.journal_header_id
+               WHERE jh.tenant_id = $1 AND jh.period_id = $2 AND jh.status IN ('posted', 'reversed')) AS journal_credit`,
+          [tenantId, periodId],
+        ),
+      ]);
+
+      const orphanGlEntryIds = orphans.rows.map((r) => r.id as string);
+      const mismatchedGlEntryIds = mismatches.rows.map((r) => r.id as string);
+      const unpostedJournalIds = unposted.rows.map((r) => r.id as string);
+      const totalsRow = totals.rows[0];
+      const glDebit = toMoney(totalsRow.gl_debit);
+      const glCredit = toMoney(totalsRow.gl_credit);
+      const journalDebit = toMoney(totalsRow.journal_debit);
+      const journalCredit = toMoney(totalsRow.journal_credit);
+
+      return {
+        periodId,
+        matched:
+          orphanGlEntryIds.length === 0 &&
+          mismatchedGlEntryIds.length === 0 &&
+          unpostedJournalIds.length === 0 &&
+          glDebit === journalDebit &&
+          glCredit === journalCredit,
+        orphanGlEntryIds,
+        mismatchedGlEntryIds,
+        unpostedJournalIds,
+        totals: { glDebit, glCredit, journalDebit, journalCredit },
+      };
+    });
+  }
+
   // --- Idempotency -----------------------------------------------------------
 
   async findIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<PostingIdempotencyKey | null> {
@@ -931,6 +1011,20 @@ function toGlEntry(row: QueryResultRow): GeneralLedgerEntry {
     documentType: row.document_type,
     documentId: row.document_id,
     createdAt: row.created_at,
+  };
+}
+
+function toGlBalance(row: QueryResultRow): GlBalance {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    accountId: row.account_id,
+    periodId: row.period_id,
+    openingBalance: toMoney(row.opening_balance),
+    debitTotal: toMoney(row.debit_total),
+    creditTotal: toMoney(row.credit_total),
+    closingBalance: toMoney(row.closing_balance),
+    lastRefreshed: row.last_refreshed,
   };
 }
 

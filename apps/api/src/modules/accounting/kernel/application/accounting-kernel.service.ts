@@ -705,31 +705,56 @@ export class AccountingKernelService {
       throw new NotFoundError("AccountingPeriod", periodId);
     }
 
-    // Return balance (may be null if not yet computed)
-    const entries = await this.repo.listGlEntries(actor.tenantId, { accountId, periodId });
-    if (entries.length === 0) return null;
-
-    // Aggregate from GL entries (in Phase 1B, gl_balances is materialized at post time)
-    let debitTotal = "0.00";
-    let creditTotal = "0.00";
-    for (const entry of entries) {
-      debitTotal = this.addMoney(debitTotal, entry.debit);
-      creditTotal = this.addMoney(creditTotal, entry.credit);
+    // Read materialized balance row
+    const balance = await this.repo.findGlBalance(actor.tenantId, accountId, periodId);
+    if (!balance) {
+      // Fail-closed: if entries exist but gl_balances row is missing, flag inconsistency
+      const entries = await this.repo.listGlEntries(actor.tenantId, { accountId, periodId });
+      if (entries.length > 0) {
+        throw new Error(
+          `GL entries exist for account ${accountId} in period ${periodId} but materialized gl_balances row is missing. Data integrity issue.`,
+        );
+      }
+      // No entries = no activity = null balance
+      return null;
     }
 
-    return {
-      id: `balance-${accountId}-${periodId}`,
+    return balance;
+  }
+
+  async reconcileJournalVsGl(actor: ActorContext, periodId: string): Promise<{
+    periodId: string;
+    matched: boolean;
+    orphanGlEntryIds: string[];
+    mismatchedGlEntryIds: string[];
+    unpostedJournalIds: string[];
+    totals: { glDebit: string; glCredit: string; journalDebit: string; journalCredit: string };
+  }> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
+
+    const period = await this.repo.findPeriodById(periodId);
+    if (!period || period.tenantId !== actor.tenantId) {
+      throw new NotFoundError("AccountingPeriod", periodId);
+    }
+
+    const reconciliation = await this.repo.reconcileJournalVsGl(actor.tenantId, periodId);
+
+    await this.audit.record({
       tenantId: actor.tenantId,
-      accountId,
-      periodId,
-      openingBalance: "0.00",
-      debitTotal,
-      creditTotal,
-      closingBalance: account.normalBalance === "debit"
-        ? this.subtractMoney(debitTotal, creditTotal)
-        : this.subtractMoney(creditTotal, debitTotal),
-      lastRefreshed: new Date(),
-    };
+      actorUserId: actor.userId,
+      action: "accounting.gl.reconciled",
+      entityType: "accounting_period",
+      entityId: periodId,
+      metadata: {
+        periodCode: period.periodCode,
+        matched: reconciliation.matched,
+        orphanCount: reconciliation.orphanGlEntryIds.length,
+        mismatchCount: reconciliation.mismatchedGlEntryIds.length,
+        unpostedCount: reconciliation.unpostedJournalIds.length,
+      },
+    });
+
+    return reconciliation;
   }
 
   // --- Helpers ---------------------------------------------------------------
