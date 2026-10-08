@@ -130,7 +130,7 @@ export async function recordGovernedAudit(
   client: PoolClient,
   input: {
     tenantId: string;
-    actorUserId: string;
+    actorUserId: string | null;
     action: string;
     entityType: string;
     entityId: string;
