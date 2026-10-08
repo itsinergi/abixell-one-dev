@@ -7,12 +7,13 @@
  * prior seed function kept under its own name; canonical defined as UNION;
  * existing tenants backfilled with ON CONFLICT DO NOTHING.
  *
- * Routes by method and path (12 total):
+ * Routes by method and path (13 total):
  *   POST   /accounting/periods
  *   GET    /accounting/periods
  *   POST   /accounting/periods/:id/lock
  *   POST   /accounting/accounts
  *   GET    /accounting/accounts
+ *   GET    /accounting/accounts/hierarchy
  *   POST   /accounting/journals
  *   GET    /accounting/journals
  *   GET    /accounting/journals/:id
@@ -32,6 +33,7 @@ const API_RESOURCE_ADDITIONS = `
         ('api:POST /accounting/periods/:id/lock', 'finance', 'POST', '/accounting/periods/:id/lock'),
         ('api:POST /accounting/accounts', 'finance', 'POST', '/accounting/accounts'),
         ('api:GET /accounting/accounts', 'finance', 'GET', '/accounting/accounts'),
+        ('api:GET /accounting/accounts/hierarchy', 'finance', 'GET', '/accounting/accounts/hierarchy'),
         ('api:POST /accounting/journals', 'finance', 'POST', '/accounting/journals'),
         ('api:GET /accounting/journals', 'finance', 'GET', '/accounting/journals'),
         ('api:GET /accounting/journals/:id', 'finance', 'GET', '/accounting/journals/:id'),

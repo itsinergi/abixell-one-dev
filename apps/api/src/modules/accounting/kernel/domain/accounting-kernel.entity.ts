@@ -115,6 +115,28 @@ export const ACCOUNTING_PERIOD_STATUSES: AccountingPeriodStatus[] = [
 /** Journal lifecycle. `posted` journals have GL entries; nothing is edited. */
 export type JournalStatus = "pending" | "posted" | "failed" | "reversed";
 
+/**
+ * Reversal mode (Epic 14 §4.14, WP-FIN-02).
+ *
+ * - `reverse_correct`: the correction lands on the original transaction date
+ *   in the original period. If that period is closed, the caller must use
+ *   `reverse_accrual` instead (dec #13: fail closed, no silent redirect).
+ * - `reverse_accrual`: the correction lands on the running date in the next
+ *   open period, deferring the correction into an open/future period.
+ */
+export type ReversalType = "reverse_correct" | "reverse_accrual";
+
+export const REVERSAL_TYPES: ReversalType[] = ["reverse_correct", "reverse_accrual"];
+
+/**
+ * Maximum number of levels in the tiered Chart of Accounts (DEC-001). A
+ * top-level account sits at depth 0, so `COA_MAX_DEPTH = 8` permits depths
+ * 0..7 (eight levels). The COA hierarchy trigger walks ancestors up to 32
+ * levels to detect cycles; 8 keeps reporting trees readable and well inside
+ * that guard.
+ */
+export const COA_MAX_DEPTH = 8;
+
 /** Result of a posting attempt, recorded on the idempotency key. */
 export type PostingAttemptStatus = "success" | "failure" | "pending";
 
@@ -163,6 +185,12 @@ export interface AccountingAccount {
   accountClass: AccountClass;
   normalBalance: NormalBalance;
   accountType: string | null;
+  /**
+   * Parent account for tiered COA (DEC-001). Nullable: top-level accounts
+   * have no parent. Enforced same-entity + no-cycle by DB triggers
+   * (migration 1792000000004_phase-1c-coa-hierarchy).
+   */
+  parentAccountId: string | null;
   isActive: boolean;
   deactivatedAt: Date | null;
   deactivatedBy: string | null;
@@ -188,6 +216,14 @@ export interface JournalHeader {
   status: JournalStatus;
   isBalanced: boolean;
   reversalOfId: string | null;
+  /**
+   * Reversal metadata, carried on the REVERSAL journal itself (WP-FIN-02).
+   * The original journal only flips `status` to `reversed`; its reason and
+   * operator live on the linked correction so the audit trail is one-way.
+   */
+  reversalReason: string | null;
+  reversalType: ReversalType | null;
+  reversedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -301,6 +337,8 @@ export interface CreateAccountInput {
   accountClass: AccountClass;
   normalBalance: NormalBalance;
   accountType: string | null;
+  /** Optional parent for tiered COA. Must belong to same (tenant, legal entity). */
+  parentAccountId: string | null;
   createdBy: string | null;
 }
 
@@ -328,6 +366,27 @@ export interface CreateJournalInput {
 }
 
 /**
+ * Reversal write input (WP-FIN-02). The reversal journal is a NEW header
+ * that points at the original via `reversalOfId`; its lines mirror the
+ * original with debit and credit swapped. Nothing on the original is edited
+ * except its `status` (→ `reversed`).
+ */
+export interface ReverseJournalInput {
+  tenantId: string;
+  legalEntityId: string;
+  reversalOfId: string;
+  /** Effective dates for the reversal (original date or running date) and its period. */
+  journalDate: string;
+  accountingDate: string;
+  periodId: string;
+  journalNumber: string;
+  idempotencyKey: string;
+  reversalReason: string;
+  reversalType: ReversalType;
+  reversedBy: string | null;
+}
+
+/**
  * Persistence port for the Accounting Kernel.
  *
  * The critical methods (`postJournal`, `recordIdempotencyKey`) do their
@@ -349,6 +408,17 @@ export interface AccountingKernelRepository {
   findAccountByCode(tenantId: string, legalEntityId: string, accountCode: string): Promise<AccountingAccount | null>;
   listAccounts(tenantId: string, filter: { legalEntityId?: string; activeOnly?: boolean }): Promise<AccountingAccount[]>;
 
+  /**
+   * Tiered COA tree (DEC-001): every account of a legal entity with its
+   * depth in the parent chain (top-level = 0), ordered for rendering.
+   * `depth` comes from a recursive CTE, so a hierarchy wider or deeper than
+   * the application expects cannot be flattened incorrectly.
+   */
+  listAccountHierarchy(
+    tenantId: string,
+    legalEntityId: string,
+  ): Promise<Array<{ account: AccountingAccount; depth: number }>>;
+
   // --- Journals -------------------------------------------------------
   createJournal(input: CreateJournalInput): Promise<JournalHeader>;
   findJournalById(id: string): Promise<JournalHeader | null>;
@@ -368,6 +438,30 @@ export interface AccountingKernelRepository {
 
   /** GL entries for an account within a period, ordered by posting date. */
   listGlEntries(tenantId: string, filter: { accountId?: string; periodId?: string }): Promise<GeneralLedgerEntry[]>;
+
+  /**
+   * The earliest `open` period of a legal entity whose date range reaches
+   * `onOrAfterDate` or later (WP-FIN-02, reverse_accrual routing). `null`
+   * when no open period exists at or after that date.
+   */
+  findNextOpenPeriod(
+    tenantId: string,
+    legalEntityId: string,
+    onOrAfterDate: string,
+  ): Promise<AccountingPeriod | null>;
+
+  /**
+   * Reverses a posted journal as a linked correction (ADR-0016 §2/§3): the
+   * original is never edited or deleted. Writes a NEW journal with swapped
+   * debit/credit lines pointing back via `reversalOfId`, posts its GL
+   * entries, refreshes balances, and flips the original's `status` to
+   * `reversed` — all inside one transaction. Returns `null` when the
+   * original does not exist, is not `posted`, or has already been reversed
+   * (one-time-reversal invariant).
+   */
+  reverseJournal(
+    input: ReverseJournalInput,
+  ): Promise<{ original: JournalHeader; reversal: JournalHeader } | null>;
 
   // --- Idempotency ----------------------------------------------------
   findIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<PostingIdempotencyKey | null>;
