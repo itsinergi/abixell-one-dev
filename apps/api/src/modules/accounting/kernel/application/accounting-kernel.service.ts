@@ -708,10 +708,18 @@ export class AccountingKernelService {
     // Read materialized balance row
     const balance = await this.repo.findGlBalance(actor.tenantId, accountId, periodId);
     if (!balance) {
-      // Fail-closed: if entries exist but gl_balances row is missing, flag inconsistency
+      // Fail-closed: entries with no materialized row is an integrity problem —
+      // but re-check once first, because a concurrent post commits its GL
+      // entries before the balance refresh lands (TOCTOU false positive).
       const entries = await this.repo.listGlEntries(actor.tenantId, { accountId, periodId });
       if (entries.length > 0) {
-        throw new ConflictError("Materialized GL balance is missing for existing GL entries; data integrity issue");
+        const refreshed = await this.repo.findGlBalance(actor.tenantId, accountId, periodId);
+        if (!refreshed) {
+          throw new ConflictError(
+            "Materialized GL balance is missing for existing GL entries; data integrity issue",
+          );
+        }
+        return refreshed;
       }
       // No entries = no activity = null balance
       return null;

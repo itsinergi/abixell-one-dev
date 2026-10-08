@@ -770,6 +770,8 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     // mismatch) — a reconciliation tool must never report that.
     return this.inTransaction(async (client) => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      // Aggregate scans must never stall vacuum by running unbounded.
+      await client.query("SET LOCAL statement_timeout = '30s'");
 
       const [orphans, mismatches, unposted, totals] = await Promise.all([
         client.query(
