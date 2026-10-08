@@ -603,4 +603,98 @@ describe("Phase 1 — Accounting Kernel", () => {
       ).rejects.toThrow();
     });
   });
+
+  // =========================================================================
+  // COA Hierarchy — WP-FIN-01 (Phase 1C: parent_account_id, triggers, depth)
+  // =========================================================================
+
+  describe("COA Hierarchy — parent_account_id triggers (WP-FIN-01)", () => {
+    //
+    it("parent must belong to the same tenant + legal entity", async () => {
+      // Other legal entity under the SAME tenant
+      const otherLE = await pool.query(
+        `INSERT INTO legal_entities (tenant_id, name) VALUES ($1, 'Other LE Hierarchy') RETURNING id`,
+        [tenantId],
+      );
+      const coaOther = await pool.query(
+        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date)
+         VALUES ($1, $2, 'COA-X-LE', '2026-01-01') RETURNING id`,
+        [tenantId, otherLE.rows[0].id],
+      );
+      // Parent in other LE
+      const parentOtherLE = await pool.query(
+        `INSERT INTO accounting_accounts
+           (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance)
+         VALUES ($1, $2, $3, '1000', 'Parent Other LE', 'ASSET', 'debit') RETURNING id`,
+        [tenantId, otherLE.rows[0].id, coaOther.rows[0].id],
+      );
+
+      // Child in main LE trying to use cross-entity parent — must fail
+      const coaMain = await pool.query(
+        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date)
+         VALUES ($1, $2, 'COA-HIER', '2026-01-01') RETURNING id`,
+        [tenantId, legalEntityId],
+      );
+      await expect(
+        pool.query(
+          `INSERT INTO accounting_accounts
+             (tenant_id, legal_entity_id, coa_id, account_code, account_name,
+              account_class, normal_balance, parent_account_id)
+           VALUES ($1, $2, $3, '1100', 'Cross Entity Child', 'ASSET', 'debit', $4)`,
+          [tenantId, legalEntityId, coaMain.rows[0].id, parentOtherLE.rows[0].id],
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("valid same-entity parent is accepted and persists parent_account_id", async () => {
+      const coa = await pool.query(
+        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date)
+         VALUES ($1, $2, 'COA-VALID', '2026-01-01') RETURNING id`,
+        [tenantId, legalEntityId],
+      );
+      const parent = await pool.query(
+        `INSERT INTO accounting_accounts
+           (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance)
+         VALUES ($1, $2, $3, '2000', 'Parent', 'ASSET', 'debit') RETURNING id`,
+        [tenantId, legalEntityId, coa.rows[0].id],
+      );
+      const child = await pool.query(
+        `INSERT INTO accounting_accounts
+           (tenant_id, legal_entity_id, coa_id, account_code, account_name,
+            account_class, normal_balance, parent_account_id)
+         VALUES ($1, $2, $3, '2100', 'Child', 'ASSET', 'debit', $4) RETURNING *`,
+        [tenantId, legalEntityId, coa.rows[0].id, parent.rows[0].id],
+      );
+      expect(child.rows[0].parent_account_id).toBe(parent.rows[0].id);
+    });
+
+    it("cycle is prevented: A→B→A raises check_violation", async () => {
+      const coa = await pool.query(
+        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date)
+         VALUES ($1, $2, 'COA-CYCLE', '2026-01-01') RETURNING id`,
+        [tenantId, legalEntityId],
+      );
+      const a = await pool.query(
+        `INSERT INTO accounting_accounts
+           (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance)
+         VALUES ($1, $2, $3, '3000', 'A', 'ASSET', 'debit') RETURNING id`,
+        [tenantId, legalEntityId, coa.rows[0].id],
+      );
+      const b = await pool.query(
+        `INSERT INTO accounting_accounts
+           (tenant_id, legal_entity_id, coa_id, account_code, account_name,
+            account_class, normal_balance, parent_account_id)
+         VALUES ($1, $2, $3, '3100', 'B', 'ASSET', 'debit', $4) RETURNING id`,
+        [tenantId, legalEntityId, coa.rows[0].id, a.rows[0].id],
+      );
+
+      // Now try to set A's parent to B — closing the cycle A→B→A
+      await expect(
+        pool.query(
+          `UPDATE accounting_accounts SET parent_account_id = $2 WHERE id = $1`,
+          [a.rows[0].id, b.rows[0].id],
+        ),
+      ).rejects.toThrow();
+    });
+  });
 });

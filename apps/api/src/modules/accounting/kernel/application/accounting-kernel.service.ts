@@ -19,8 +19,9 @@ import type {
   AccountingKernelRepository,
   AccountingPeriodStatus,
   AccountClass,
+  ReversalType,
 } from "../domain/accounting-kernel.entity.js";
-import { ACCOUNT_CLASSES, isValidMoney } from "../domain/accounting-kernel.entity.js";
+import { ACCOUNT_CLASSES, COA_MAX_DEPTH, isValidMoney } from "../domain/accounting-kernel.entity.js";
 
 /**
  * Accounting Kernel Service (Phase 1B, WP-FIN-01.2).
@@ -138,6 +139,7 @@ export class AccountingKernelService {
       accountClass: string;
       normalBalance: string;
       accountType: string | null;
+      parentAccountId?: string | null;
     },
   ): Promise<AccountingAccount> {
     await this.rbac.requirePermission(actor, "finance.accounting.configure");
@@ -145,6 +147,27 @@ export class AccountingKernelService {
     const legalEntityId = await this.resolveLegalEntity(actor, input.legalEntityId);
     const accountClass = this.parseAccountClass(input.accountClass);
     const normalBalance = this.parseNormalBalance(input.normalBalance);
+
+    // Tiered COA (DEC-001): validate the parent belongs to the same legal
+    // entity and that the resulting chain stays within the tier depth limit.
+    let parentAccountId: string | null = null;
+    if (input.parentAccountId) {
+      const parent = await this.repo.findAccountById(input.parentAccountId);
+      if (!parent || parent.tenantId !== actor.tenantId || parent.legalEntityId !== legalEntityId) {
+        throw new ValidationError("Parent account must belong to the same tenant and legal entity");
+      }
+      if (!parent.isActive) {
+        throw new ConflictError("Parent account is deactivated");
+      }
+      const parentDepth = await this.getAccountDepth(actor.tenantId, legalEntityId, parent.id);
+      // parentDepth is 0-based; a child under it would sit at parentDepth+1.
+      // COA_MAX_DEPTH counts LEVELS, so the child's 1-based level is
+      // (parentDepth + 2) and must not exceed COA_MAX_DEPTH.
+      if (parentDepth + 2 > COA_MAX_DEPTH) {
+        throw new ValidationError(`Account hierarchy exceeds maximum depth of ${COA_MAX_DEPTH} levels`);
+      }
+      parentAccountId = parent.id;
+    }
 
     const account = await this.repo.createAccount({
       tenantId: actor.tenantId,
@@ -155,6 +178,7 @@ export class AccountingKernelService {
       accountClass,
       normalBalance,
       accountType: input.accountType,
+      parentAccountId,
       createdBy: actor.userId,
     });
 
@@ -168,6 +192,7 @@ export class AccountingKernelService {
         accountCode: account.accountCode,
         accountClass,
         normalBalance,
+        parentAccountId,
       },
     });
 
@@ -180,6 +205,31 @@ export class AccountingKernelService {
   ): Promise<AccountingAccount[]> {
     await this.rbac.requirePermission(actor, "finance.accounting.read");
     return this.repo.listAccounts(actor.tenantId, filter);
+  }
+
+  /**
+   * Tiered COA tree (DEC-001) for a legal entity. Read-gated like other
+   * finance reads. Cross-entity hierarchy is impossible by construction:
+   * the recursive CTE only descends through accounts of the same entity.
+   */
+  async listAccountHierarchy(
+    actor: ActorContext,
+    legalEntityId: string,
+  ): Promise<Array<{ account: AccountingAccount; depth: number }>> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
+    const resolved = await this.resolveLegalEntity(actor, legalEntityId);
+    return this.repo.listAccountHierarchy(actor.tenantId, resolved);
+  }
+
+  /** Depth (0-based) of an account via the repository hierarchy walk. */
+  private async getAccountDepth(tenantId: string, legalEntityId: string, accountId: string): Promise<number> {
+    const hierarchy = await this.repo.listAccountHierarchy(tenantId, legalEntityId);
+    const hit = hierarchy.find((n) => n.account.id === accountId);
+    if (!hit) {
+      // Unreachable for a same-entity active parent; fail closed anyway.
+      throw new ConflictError("Parent account is not part of this entity's account hierarchy");
+    }
+    return hit.depth;
   }
 
   // --- Journals ---------------------------------------------------------------
@@ -284,10 +334,24 @@ export class AccountingKernelService {
     return journal;
   }
 
-  async validateJournal(journalId: string): Promise<{ balanced: boolean; debitTotal: Money; creditTotal: Money }> {
-    const journal = await this.repo.findJournalById(journalId);
-    if (!journal) throw new NotFoundError("JournalHeader", journalId);
+  async validateJournal(
+    actor: ActorContext,
+    journalId: string,
+  ): Promise<{ balanced: boolean; debitTotal: Money; creditTotal: Money }> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
 
+    const journal = await this.repo.findJournalById(journalId);
+    if (!journal || journal.tenantId !== actor.tenantId) {
+      throw new NotFoundError("JournalHeader", journalId);
+    }
+
+    return this.computeJournalBalance(journalId);
+  }
+
+  /** Internal, unauthorized balance computation — callers must authorize first. */
+  private async computeJournalBalance(
+    journalId: string,
+  ): Promise<{ balanced: boolean; debitTotal: Money; creditTotal: Money }> {
     const lines = await this.repo.listJournalLines(journalId);
 
     let debitTotal = "0.00";
@@ -324,7 +388,7 @@ export class AccountingKernelService {
     }
 
     if ("unbalanced" in result) {
-      const { balanced, debitTotal, creditTotal } = await this.validateJournal(journalId);
+      const { balanced, debitTotal, creditTotal } = await this.computeJournalBalance(journalId);
       throw new ValidationError("Journal is unbalanced", {
         debitTotal,
         creditTotal,
@@ -347,6 +411,107 @@ export class AccountingKernelService {
     });
 
     return result.journal;
+  }
+
+  async reverseJournal(
+    actor: ActorContext,
+    journalId: string,
+    input: { type: ReversalType; reason: string },
+  ): Promise<{ original: JournalHeader; reversal: JournalHeader }> {
+    await this.rbac.requirePermission(actor, "finance.accounting.approve");
+
+    // Validate reason is not blank
+    const reason = (input.reason ?? "").trim();
+    if (!reason) {
+      throw new ValidationError("Reversal reason is required and cannot be empty");
+    }
+
+    // Load original journal
+    const original = await this.repo.findJournalById(journalId);
+    if (!original || original.tenantId !== actor.tenantId) {
+      throw new NotFoundError("JournalHeader", journalId);
+    }
+
+    // Guard: only posted journals can be reversed (also catches already-reversed)
+    if (original.status !== "posted") {
+      throw new ConflictError("Journal must be posted before it can be reversed");
+    }
+
+    // Determine effective date and target period based on reversal type
+    let effectiveDate: string;
+    let targetPeriodId: string;
+
+    if (input.type === "reverse_correct") {
+      // Reverse Correct: use original date & period.
+      // Original period must be open; if not, caller must use reverse_accrual.
+      effectiveDate = original.accountingDate;
+      const period = await this.repo.findPeriodById(original.periodId);
+      if (!period) throw new NotFoundError("AccountingPeriod", original.periodId);
+      if (period.status !== "open") {
+        throw new ConflictError(
+          "Original period must be open to use reverse_correct; use reverse_accrual to defer the reversal to the next open period"
+        );
+      }
+      targetPeriodId = original.periodId;
+    } else {
+      // Reverse Accrual: use running date and find the next open period.
+      const today = new Date();
+      const y = today.getUTCFullYear();
+      const m = String(today.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(today.getUTCDate()).padStart(2, "0");
+      const todayStr = `${y}-${m}-${d}`;
+
+      const nextPeriod = await this.repo.findNextOpenPeriod(
+        actor.tenantId,
+        original.legalEntityId,
+        todayStr
+      );
+      if (!nextPeriod) {
+        throw new ConflictError(
+          "No open accounting period found on or after today; cannot create reversal"
+        );
+      }
+      // If the selected period has not started yet, date the posting at the
+      // period's start — never before it.
+      effectiveDate = nextPeriod.dateFrom > todayStr ? nextPeriod.dateFrom : todayStr;
+      targetPeriodId = nextPeriod.id;
+    }
+
+    // Call repo to perform the atomic reversal
+    const result = await this.repo.reverseJournal({
+      tenantId: actor.tenantId,
+      legalEntityId: original.legalEntityId,
+      reversalOfId: journalId,
+      journalDate: effectiveDate,
+      accountingDate: effectiveDate,
+      periodId: targetPeriodId,
+      journalNumber: `${original.journalNumber}-REV-${Date.now()}`,
+      idempotencyKey: `rev-${journalId}-${Date.now()}`,
+      reversalReason: reason,
+      reversalType: input.type,
+      reversedBy: actor.userId,
+    });
+
+    if (result === null) {
+      throw new ConflictError("Journal reversal could not be completed; the journal may have already been reversed");
+    }
+
+    // Emit event
+    await this.eventBus.publish({
+      tenantId: actor.tenantId,
+      eventType: "accounting.journal.reversed",
+      entityType: "journal_header",
+      entityId: result.reversal.id,
+      payload: {
+        originalJournalNumber: original.journalNumber,
+        reversalJournalNumber: result.reversal.journalNumber,
+        reversalType: input.type,
+        reason,
+      },
+      createdBy: actor.userId,
+    });
+
+    return result;
   }
 
   async listGlEntries(

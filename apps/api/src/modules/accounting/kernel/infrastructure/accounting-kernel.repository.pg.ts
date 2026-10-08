@@ -14,6 +14,7 @@ import type {
   AccountingPeriodStatus,
   JournalStatus,
   PostingAttemptStatus,
+  ReverseJournalInput,
 } from "../domain/accounting-kernel.entity.js";
 import { recordGovernedAudit } from "../../../../infrastructure/persistence/repositories/governed-transaction.js";
 
@@ -118,8 +119,8 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     const r = await this.pool.query(
       `INSERT INTO accounting_accounts
          (tenant_id, legal_entity_id, coa_id, account_code, account_name,
-          account_class, normal_balance, is_active, created_by, updated_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $8)
+          account_class, normal_balance, parent_account_id, is_active, created_by, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $9)
        RETURNING *`,
       [
         input.tenantId,
@@ -129,6 +130,7 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
         input.accountName,
         input.accountClass,
         input.normalBalance,
+        input.parentAccountId,
         input.createdBy,
       ],
     );
@@ -170,6 +172,37 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
       params,
     );
     return r.rows.map(toAccount);
+  }
+
+  async listAccountHierarchy(
+    tenantId: string,
+    legalEntityId: string,
+  ): Promise<Array<{ account: AccountingAccount; depth: number }>> {
+    // Recursive CTE: roots are accounts with no (in-scope) parent; each level
+    // increments depth. The `path` array guards against a cycle should one
+    // ever slip past the DB trigger, by refusing to revisit an id.
+    const r = await this.pool.query(
+      `WITH RECURSIVE tree AS (
+         SELECT a.*, 0 AS depth, ARRAY[a.id] AS path
+           FROM accounting_accounts a
+          WHERE a.tenant_id = $1 AND a.legal_entity_id = $2
+            AND (a.parent_account_id IS NULL
+                 OR NOT EXISTS (
+                   SELECT 1 FROM accounting_accounts p
+                    WHERE p.id = a.parent_account_id
+                      AND p.tenant_id = a.tenant_id
+                      AND p.legal_entity_id = a.legal_entity_id))
+         UNION ALL
+         SELECT c.*, t.depth + 1, t.path || c.id
+           FROM accounting_accounts c
+           JOIN tree t ON c.parent_account_id = t.id
+          WHERE c.tenant_id = $1 AND c.legal_entity_id = $2
+            AND NOT c.id = ANY(t.path)
+       )
+       SELECT * FROM tree ORDER BY path`,
+      [tenantId, legalEntityId],
+    );
+    return r.rows.map((row) => ({ account: toAccount(row), depth: Number(row.depth) }));
   }
 
   // --- Journals ---------------------------------------------------------------
@@ -278,7 +311,9 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
       const totals = await client.query(
         `SELECT
            COALESCE(SUM(debit), 0)::numeric(18,2) AS total_debit,
-           COALESCE(SUM(credit), 0)::numeric(18,2) AS total_credit
+           COALESCE(SUM(credit), 0)::numeric(18,2) AS total_credit,
+           COALESCE(SUM(debit), 0)::numeric(18,2) =
+             COALESCE(SUM(credit), 0)::numeric(18,2) AS balanced
          FROM journal_lines
          WHERE journal_header_id = $1`,
         [journalId],
@@ -288,8 +323,8 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
       const debitStr = String(row.total_debit);
       const creditStr = String(row.total_credit);
 
-      // Check balance using exact string comparison
-      if (debitStr !== creditStr) {
+      // Compare as PostgreSQL numerics; never rely on textual formatting.
+      if (!row.balanced) {
         return { unbalanced: true as const };
       }
 
@@ -343,7 +378,7 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
       // Audit inside transaction
       await recordGovernedAudit(client, {
         tenantId: header.tenantId,
-        actorUserId: postedBy ?? "system",
+        actorUserId: postedBy,
         action: "accounting.journal.posted",
         entityType: "journal_header",
         entityId: journalId,
@@ -365,6 +400,13 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     accountId: string,
     periodId: string,
   ): Promise<void> {
+    // Serialize concurrent balance refreshes for the same (tenant, account, period)
+    // to prevent lost-update race under READ COMMITTED.
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext($1 || ':' || $2 || ':' || $3))`,
+      [tenantId, accountId, periodId],
+    );
+
     // Compute current GL totals for this account in this period
     const totals = await client.query(
       `SELECT
@@ -384,7 +426,11 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
       `SELECT normal_balance FROM accounting_accounts WHERE id = $1`,
       [accountId],
     );
-    const normalBalance = acc.rows[0]?.normal_balance;
+    const accRow = acc.rows[0];
+    if (!accRow) {
+      throw new Error(`Account ${accountId} not found while refreshing GL balance`);
+    }
+    const normalBalance = accRow.normal_balance;
 
     // For Phase 1B, opening_balance is 0 (opening balance logic deferred to Wave A6)
     const openingBalance = "0.00";
@@ -422,6 +468,191 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
          last_refreshed = now()`,
       [tenantId, accountId, periodId, openingBalance, debitTotal, creditTotal, closingBalance],
     );
+  }
+
+  async findNextOpenPeriod(
+    tenantId: string,
+    legalEntityId: string,
+    onOrAfterDate: string,
+  ): Promise<AccountingPeriod | null> {
+    // The earliest `open` period that ends on or after the requested date.
+    // A period containing `onOrAfterDate` is preferred; if none contains it,
+    // a strictly future open period is returned (the caller must then date the
+    // posting at that period's `date_from`, never before it).
+    const r = await this.pool.query(
+      `SELECT * FROM accounting_periods
+        WHERE tenant_id = $1
+          AND legal_entity_id = $2
+          AND status = 'open'
+          AND date_to >= $3::date
+        ORDER BY date_from
+        LIMIT 1`,
+      [tenantId, legalEntityId, onOrAfterDate],
+    );
+    return r.rows[0] ? toPeriod(r.rows[0]) : null;
+  }
+
+  async reverseJournal(
+    input: ReverseJournalInput,
+  ): Promise<{ original: JournalHeader; reversal: JournalHeader } | null> {
+    return this.inTransaction(async (client) => {
+      // 1. Lock the original journal; concurrent reversals serialize here.
+      const origRes = await client.query(
+        `SELECT * FROM journal_headers WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+        [input.reversalOfId, input.tenantId],
+      );
+      if (!origRes.rows[0]) return null;
+      const original = toJournalHeader(origRes.rows[0]);
+
+      // Tenant/entity isolation: validate target period belongs to original journal's tenant+entity.
+      // Use original.legalEntityId, not input (which can be spoofed).
+      const periodRes = await client.query(
+        `SELECT id FROM accounting_periods
+          WHERE id = $1
+            AND tenant_id = $2
+            AND legal_entity_id = $3
+            AND status = 'open'
+          FOR UPDATE`,
+        [input.periodId, input.tenantId, original.legalEntityId],
+      );
+      if (!periodRes.rows[0]) return null;
+
+      // 2. Guard: only a posted journal can be reversed.
+      if (original.status !== "posted") return null;
+
+      // 3. One-time-reversal invariant: no live (pending/posted) reversal
+      //    child already exists for this journal.
+      const existing = await client.query(
+        `SELECT 1 FROM journal_headers
+          WHERE reversal_of_id = $1
+            AND tenant_id = $2
+            AND status IN ('pending', 'posted')`,
+        [input.reversalOfId, input.tenantId],
+      );
+      if ((existing.rowCount ?? 0) > 0) return null;
+
+      // 4. Insert the reversal header — a NEW posted journal that points back.
+      //    Status is `posted` immediately: the reversal is a posted correction,
+      //    not a draft (it has already-validated swapped lines and GL entries).
+      const revHdr = await client.query(
+        `INSERT INTO journal_headers
+           (tenant_id, legal_entity_id, journal_number, journal_date, accounting_date,
+            period_id, description, currency, posting_rule_version_id, idempotency_key,
+            status, is_balanced, posted_date, posted_by, reversal_of_id,
+            reversal_reason, reversal_type, reversed_by, created_by, updated_by)
+         VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, NULL, $9,
+                 'posted', true, now(), $10, $11,
+                 $12, $13, $10, $10, $10)
+         RETURNING *`,
+        [
+          input.tenantId,
+          original.legalEntityId,
+          input.journalNumber,
+          input.journalDate,
+          input.accountingDate,
+          input.periodId,
+          `Reversal of ${original.journalNumber}: ${input.reversalReason}`,
+          original.currency,
+          input.idempotencyKey,
+          input.reversedBy,
+          input.reversalOfId,
+          input.reversalReason,
+          input.reversalType,
+        ],
+      );
+      const reversal = toJournalHeader(revHdr.rows[0]);
+
+      // 5. Insert reversal lines with debit/credit SWAPPED, each linked back
+      //    to its source line. Also write the GL entry for each line.
+      const origLines = await client.query(
+        `SELECT * FROM journal_lines WHERE journal_header_id = $1 ORDER BY line_number`,
+        [input.reversalOfId],
+      );
+
+      const touchedAccounts = new Set<string>();
+      for (const line of origLines.rows) {
+        const swappedDebit = String(line.credit);
+        const swappedCredit = String(line.debit);
+
+        const revLine = await client.query(
+          `INSERT INTO journal_lines
+             (tenant_id, journal_header_id, account_id, line_number,
+              debit, credit, line_description, project_id, site_id,
+              reversal_of_line_id, created_by)
+           VALUES ($1, $2, $3, $4, $5::numeric, $6::numeric, $7, $8, $9, $10, $11)
+           RETURNING *`,
+          [
+            input.tenantId,
+            reversal.id,
+            line.account_id,
+            line.line_number,
+            swappedDebit,
+            swappedCredit,
+            `Reversal: ${line.line_description ?? ""}`,
+            line.project_id,
+            line.site_id,
+            line.id,
+            input.reversedBy,
+          ],
+        );
+
+        const revLineId = revLine.rows[0].id;
+        touchedAccounts.add(line.account_id);
+
+        // GL entry for the reversal line (debit/credit already swapped)
+        await client.query(
+          `INSERT INTO general_ledger_entries
+             (tenant_id, account_id, period_id, journal_line_id, posting_date,
+              debit, credit, created_by)
+           VALUES ($1, $2, $3, $4, now(), $5::numeric, $6::numeric, $7)`,
+          [
+            input.tenantId,
+            line.account_id,
+            input.periodId,
+            revLineId,
+            swappedDebit,
+            swappedCredit,
+            input.reversedBy,
+          ],
+        );
+      }
+
+      // 6. Refresh GL balances for touched accounts in the reversal period.
+      for (const accountId of touchedAccounts) {
+        await this.refreshGlBalance(client, input.tenantId, accountId, input.periodId);
+      }
+
+      // 7. Flip the original's status to 'reversed' (no other field touched).
+      const updatedOrig = await client.query(
+        `UPDATE journal_headers
+         SET status = 'reversed', updated_by = $2, updated_at = now()
+         WHERE id = $1
+         RETURNING *`,
+        [input.reversalOfId, input.reversedBy],
+      );
+
+      // 8. Audit inside the transaction.
+      await recordGovernedAudit(client, {
+        tenantId: input.tenantId,
+        actorUserId: input.reversedBy,
+        action: "accounting.journal.reversed",
+        entityType: "journal_header",
+        entityId: reversal.id,
+        metadata: {
+          originalJournalId: input.reversalOfId,
+          originalJournalNumber: original.journalNumber,
+          reversalJournalNumber: input.journalNumber,
+          reversalType: input.reversalType,
+          reason: input.reversalReason,
+          periodId: input.periodId,
+        },
+      });
+
+      return {
+        original: toJournalHeader(updatedOrig.rows[0]),
+        reversal,
+      };
+    });
   }
 
   async listGlEntries(
@@ -545,6 +776,7 @@ function toAccount(row: QueryResultRow): AccountingAccount {
     accountClass: row.account_class,
     normalBalance: row.normal_balance,
     accountType: row.account_type,
+    parentAccountId: row.parent_account_id,
     isActive: row.is_active,
     deactivatedAt: row.deactivated_at,
     deactivatedBy: row.deactivated_by,
@@ -571,6 +803,9 @@ function toJournalHeader(row: QueryResultRow): JournalHeader {
     status: row.status,
     isBalanced: row.is_balanced,
     reversalOfId: row.reversal_of_id,
+    reversalReason: row.reversal_reason ?? null,
+    reversalType: row.reversal_type ?? null,
+    reversedBy: row.reversed_by ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
