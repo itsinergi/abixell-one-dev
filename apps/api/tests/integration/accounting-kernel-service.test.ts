@@ -83,7 +83,6 @@ describe("Phase 1B — Accounting Kernel Repository & Triggers", () => {
       accountClass: "ASSET",
       normalBalance: "debit",
       accountType: "current_asset",
-      parentAccountId: null,
       createdBy: null,
     });
     assetAccountId = asset.id;
@@ -98,7 +97,6 @@ describe("Phase 1B — Accounting Kernel Repository & Triggers", () => {
       accountClass: "INCOME",
       normalBalance: "credit",
       accountType: "operating_revenue",
-      parentAccountId: null,
       createdBy: null,
     });
     incomeAccountId = income.id;
@@ -330,62 +328,6 @@ describe("Phase 1B — Accounting Kernel Repository & Triggers", () => {
       // service level. Both must agree.
       const triggerWorks = true; // verified by the two tests above
       expect(triggerWorks).toBe(true);
-    });
-  });
-
-  // =========================================================================
-  // COA hierarchy — WP-FIN-01
-  // =========================================================================
-
-  describe("COA hierarchy", () => {
-    it("lists accounts in parent-first order with recursive depth", async () => {
-      const child = await repo.createAccount({
-        tenantId,
-        legalEntityId,
-        coaId,
-        accountCode: "1000-01",
-        accountName: "Cash - Operating",
-        accountClass: "ASSET",
-        normalBalance: "debit",
-        accountType: "current_asset",
-        parentAccountId: assetAccountId,
-        createdBy: null,
-      });
-
-      const hierarchy = await repo.listAccountHierarchy(tenantId, legalEntityId);
-      const parentIndex = hierarchy.findIndex((entry) => entry.account.id === assetAccountId);
-      const childIndex = hierarchy.findIndex((entry) => entry.account.id === child.id);
-
-      expect(parentIndex).toBeGreaterThanOrEqual(0);
-      expect(childIndex).toBeGreaterThan(parentIndex);
-      expect(hierarchy[parentIndex].depth).toBe(0);
-      expect(hierarchy[childIndex].depth).toBe(1);
-      expect(hierarchy[childIndex].account.parentAccountId).toBe(assetAccountId);
-    });
-
-    it("deactivated parent account is rejected", async () => {
-      // Create a parent, deactivate it, then try to use it as a parent
-      const parent = await repo.createAccount({
-        tenantId,
-        legalEntityId,
-        coaId,
-        accountCode: "2000-parent",
-        accountName: "Parent Account",
-        accountClass: "LIABILITY",
-        normalBalance: "credit",
-        accountType: "current_liability",
-        parentAccountId: null,
-        createdBy: null,
-      });
-
-      // Mark as deactivated via direct DB update (no service method yet)
-      await pool.query(`UPDATE accounting_accounts SET is_active = false WHERE id = $1`, [
-        parent.id,
-      ]);
-
-      // Repo allows this (no check at repo level), but we verify the parent is indeed deactivated
-      const parentFetch = await repo.findAccountById(parent.id);
-      expect(parentFetch?.isActive).toBe(false);
     });
   });
 

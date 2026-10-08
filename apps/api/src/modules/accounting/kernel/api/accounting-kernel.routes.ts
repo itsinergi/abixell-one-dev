@@ -34,7 +34,6 @@ const accountSchema = z.object({
   accountClass: z.enum(["ASSET", "LIABILITY", "EQUITY", "INCOME", "EXPENSE"]),
   normalBalance: z.enum(["debit", "credit"]),
   accountType: z.string().nullable(),
-  parentAccountId: uuidSchema.nullable().optional(),
 });
 
 const journalLineSchema = z.object({
@@ -67,11 +66,6 @@ const periodStatusQuerySchema = z
   .optional();
 
 const journalStatusQuerySchema = z.enum(["pending", "posted", "failed", "reversed"]).optional();
-
-const reverseJournalSchema = z.object({
-  type: z.enum(["reverse_correct", "reverse_accrual"]),
-  reason: z.string().min(1),
-});
 
 export function registerAccountingKernelRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.accountingKernel;
@@ -118,15 +112,6 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
     return reply.send(accounts);
   });
 
-  app.get("/accounting/accounts/hierarchy", { preHandler: app.authenticate }, async (request, reply) => {
-    const query = request.query as { legalEntityId?: string };
-    if (!query.legalEntityId) {
-      return reply.status(400).send({ message: "legalEntityId query parameter is required" });
-    }
-    const hierarchy = await svc().listAccountHierarchy(request.actor!, query.legalEntityId);
-    return reply.send(hierarchy);
-  });
-
   // --- Journals (CRUD + posting) -----------------------------------------------
 
   app.post("/accounting/journals", { preHandler: app.authenticate }, async (request, reply) => {
@@ -153,7 +138,7 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
 
   app.post("/accounting/journals/:id/validate", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const validation = await svc().validateJournal(request.actor!, id);
+    const validation = await svc().validateJournal(id);
     return reply.send(validation);
   });
 
@@ -161,13 +146,6 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
     const { id } = request.params as { id: string };
     const posted = await svc().postJournal(request.actor!, id);
     return reply.send(posted);
-  });
-
-  app.post("/accounting/journals/:id/reverse", { preHandler: app.authenticate }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const input = reverseJournalSchema.parse(request.body);
-    const result = await svc().reverseJournal(request.actor!, id, input);
-    return reply.status(201).send(result.reversal);
   });
 
   // --- GL Entries (read-only) ------------------------------------------------
