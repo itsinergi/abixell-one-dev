@@ -59,6 +59,7 @@ import type {
   CreateScmSupplierBidInput,
   CreateScmSupplierContractInput,
   CreateScmSupplierEvaluationInput,
+  CreateScmVendorInvoiceInput,
   CreateScmValuationLayerAllocationInput,
   CreateScmValuationLayerInput,
   CreateScmWarehouseInput,
@@ -131,6 +132,10 @@ import type {
   ScmServiceAcceptanceFilter,
   ScmServiceAcceptanceLine,
   ScmServiceAcceptanceStatus,
+  ScmVendorInvoice,
+  ScmVendorInvoiceFilter,
+  ScmVendorInvoiceLine,
+  ScmVendorInvoiceStatus,
   ScmSpendAnalyticsSnapshot,
   ScmSpendAnalyticsSnapshotFilter,
   ScmStockCondition,
@@ -176,6 +181,7 @@ import type {
   UpdateScmReceivingRecordStatusInput,
   UpdateScmRfqProjectionInput,
   UpdateScmServiceAcceptanceStatusInput,
+  UpdateScmVendorInvoiceStatusInput,
   UpdateScmStockOpnameProjectionInput,
   UpdateScmStockTransferProjectionInput,
   UpdateScmSupplierBidScoreInput,
@@ -213,6 +219,7 @@ export const SCM_SERVICE_ACCEPTANCE_NUMBERING_CODE = "scm_service_acceptance";
 export const SCM_CONSIGNMENT_SETTLEMENT_NUMBERING_CODE = "scm_consignment_settlement";
 export const SCM_INVENTORY_DISPOSAL_NUMBERING_CODE = "scm_inventory_disposal";
 export const SCM_WAREHOUSE_TASK_NUMBERING_CODE = "scm_warehouse_task";
+export const SCM_VENDOR_INVOICE_NUMBERING_CODE = "scm_vendor_invoice";
 
 /** Workflow definition codes for Supply Chain Advanced. */
 export const SCM_STOCK_TRANSFER_WORKFLOW_DEFINITION_CODE = "scm_stock_transfer";
@@ -3135,6 +3142,283 @@ export class SupplyChainAdvancedService {
     });
 
     return this.getServiceAcceptance(actor, serviceAcceptanceId);
+  }
+
+  // =========================================================================
+  // Phase 2 WP-PRO-01: Vendor Invoices (AP Invoice, PO-based)
+  // =========================================================================
+
+  async createVendorInvoice(
+    actor: ActorContext,
+    input: Omit<CreateScmVendorInvoiceInput, "invoiceNumber" | "createdBy"> & { invoiceNumber?: string },
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.vendor_invoice.manage");
+
+    // Validate GR exists and is linked to this PO
+    const grResult = await this.repo.findReceivingRecordById(actor.tenantId, input.receivingRecordId);
+    if (!grResult || grResult.receiving.purchaseOrderId !== input.purchaseOrderId) {
+      throw new ValidationError(`Receiving record must be linked to PO ${input.purchaseOrderId}`);
+    }
+
+    // Simple over-invoicing guard: invoice amount should not exceed received amount + 15% tolerance
+    // Full 3-way match (qty, amount) is handled in WP-PRO-02.
+    const grTotalReceived = grResult.lines.reduce((sum, line) => {
+      const lineAmount = (line.quantityReceived ?? 0) * (line.unitCost ?? 0);
+      return sum + lineAmount;
+    }, 0);
+    if (input.invoiceAmount > grTotalReceived * 1.15) {
+      throw new ValidationError(
+        `Invoice amount ${input.invoiceAmount} exceeds receiving record total ${grTotalReceived} by more than 15%`,
+      );
+    }
+
+    const replayed = await this.repo.findVendorInvoiceByIdempotencyKey(actor.tenantId, input.idempotencyKey);
+    if (replayed) return replayed;
+
+    const invoiceNumber =
+      input.invoiceNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_VENDOR_INVOICE_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createVendorInvoice(actor.tenantId, {
+          ...input,
+          invoiceNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findVendorInvoiceByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Vendor invoice with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: "scm_vendor_invoice",
+        entityId: result.vendorInvoice.id,
+        contextData: {
+          invoiceNumber: result.vendorInvoice.invoiceNumber,
+          purchaseOrderId: input.purchaseOrderId,
+          supplierId: input.supplierId,
+          invoiceAmount: input.invoiceAmount,
+        },
+      });
+      workflowInstanceId = instance.id;
+
+      // After the 23505 idempotency race both losers replay the winner's row
+      // and reach here; only ONE of them may attach its workflow instance, or
+      // the second COALESCE-write would orphan the first (a pending approval
+      // task nobody can act on). The atomic claim makes exactly one winner;
+      // losers cancel their surplus instance instead of linking it.
+      const claimed = await this.repo.claimVendorInvoiceWorkflowInstance(
+        actor.tenantId,
+        result.vendorInvoice.id,
+        workflowInstanceId,
+      );
+      if (claimed) {
+        result.vendorInvoice = { ...result.vendorInvoice, workflowInstanceId };
+      }
+    } catch (err) {
+      await this.repo.deleteVendorInvoiceWithoutWorkflow(actor.tenantId, result.vendorInvoice.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.vendor_invoice.created",
+      entityType: "scm_vendor_invoice",
+      entityId: result.vendorInvoice.id,
+      metadata: {
+        invoiceNumber: result.vendorInvoice.invoiceNumber,
+        purchaseOrderId: input.purchaseOrderId,
+        invoiceAmount: input.invoiceAmount,
+        lineCount: result.lines.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getVendorInvoice(
+    actor: ActorContext,
+    vendorInvoiceId: string,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.vendor_invoice.read");
+    const result = await this.repo.findVendorInvoiceById(actor.tenantId, vendorInvoiceId);
+    if (!result) {
+      throw new NotFoundError("ScmVendorInvoice", vendorInvoiceId);
+    }
+    return result;
+  }
+
+  async listVendorInvoices(
+    actor: ActorContext,
+    filter: ScmVendorInvoiceFilter = {},
+  ): Promise<ScmVendorInvoice[]> {
+    await this.rbac.requirePermission(actor, "supply_chain.vendor_invoice.read");
+    return this.repo.listVendorInvoices(actor.tenantId, filter);
+  }
+
+  async submitVendorInvoice(
+    actor: ActorContext,
+    vendorInvoiceId: string,
+    comment?: string,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.vendor_invoice.approve");
+    const result = await this.repo.findVendorInvoiceById(actor.tenantId, vendorInvoiceId);
+    if (!result) {
+      throw new NotFoundError("ScmVendorInvoice", vendorInvoiceId);
+    }
+
+    if (result.vendorInvoice.status !== "draft") {
+      throw new ConflictError(`Vendor invoice must be in draft status to submit (current: ${result.vendorInvoice.status})`);
+    }
+
+    if (!result.vendorInvoice.workflowInstanceId) {
+      throw new ValidationError(`Vendor invoice ${vendorInvoiceId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.vendorInvoice.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending submit action exists on this vendor invoice");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, "submit", comment ?? null);
+
+    await this.repo.updateVendorInvoiceStatus(actor.tenantId, {
+      vendorInvoiceId,
+      status: "submitted",
+      submittedAt: new Date(),
+      submittedBy: actor.userId,
+      updatedBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.vendor_invoice.submitted",
+      entityType: "scm_vendor_invoice",
+      entityId: vendorInvoiceId,
+      metadata: { comment },
+    });
+
+    return this.getVendorInvoice(actor, vendorInvoiceId);
+  }
+
+  async approveVendorInvoice(
+    actor: ActorContext,
+    vendorInvoiceId: string,
+    comment?: string,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.vendor_invoice.approve");
+    const result = await this.repo.findVendorInvoiceById(actor.tenantId, vendorInvoiceId);
+    if (!result) {
+      throw new NotFoundError("ScmVendorInvoice", vendorInvoiceId);
+    }
+
+    if (result.vendorInvoice.status !== "submitted") {
+      throw new ConflictError(`Vendor invoice must be in submitted status to approve (current: ${result.vendorInvoice.status})`);
+    }
+
+    if (!result.vendorInvoice.workflowInstanceId) {
+      throw new ValidationError(`Vendor invoice ${vendorInvoiceId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.vendorInvoice.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending approve action exists on this vendor invoice");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, "approve", comment ?? null);
+    const workflowStatus = await this.workflow.getEntityStatus(actor, result.vendorInvoice.workflowInstanceId);
+
+    let projectedStatus: ScmVendorInvoiceStatus = result.vendorInvoice.status;
+    let approvedAt: Date | undefined;
+    let approvedBy: string | undefined;
+    let rejectedAt: Date | undefined;
+    let rejectedBy: string | undefined;
+    let rejectionReason: string | undefined;
+
+    if (workflowStatus.instanceStatus === "approved") {
+      projectedStatus = "approved";
+      approvedAt = new Date();
+      approvedBy = actor.userId;
+    } else if (workflowStatus.instanceStatus === "rejected") {
+      projectedStatus = "rejected";
+      rejectedAt = new Date();
+      rejectedBy = actor.userId;
+      rejectionReason = comment;
+    } else if (workflowStatus.instanceStatus === "cancelled") {
+      projectedStatus = "cancelled";
+    }
+
+    // Approval is atomic: the terminal status and every per-line accounting
+    // event + freeze commit together, so a crash mid-way can never leave an
+    // "approved" invoice with missing AP postings (the status guard would
+    // block re-entry). Event idempotency keys make the whole call replay-safe.
+    const lineEvents =
+      projectedStatus === "approved" && approvedAt
+        ? result.lines.map((line, idx) => ({
+            lineId: line.id,
+            event: {
+              eventType: "vendor.invoice.approved" as const,
+              sourceDocumentType: "scm_vendor_invoice",
+              sourceDocumentId: vendorInvoiceId,
+              sourceDocumentLineId: line.id,
+              effectiveAt: approvedAt,
+              currency: line.currency,
+              amount: line.lineAmount,
+              quantity: line.quantityInvoiced,
+              unitCost: line.unitPrice,
+              accountAssignmentType: line.accountAssignmentType,
+              accountAssignmentDimensions: line.accountAssignmentDimensions,
+              idempotencyKey: `${result.vendorInvoice.idempotencyKey}:line:${line.sortOrder ?? idx}`,
+              payload: {
+                invoiceNumber: result.vendorInvoice.invoiceNumber,
+                purchaseOrderId: result.vendorInvoice.purchaseOrderId,
+                purchaseOrderLineId: line.purchaseOrderLineId,
+                supplierId: result.vendorInvoice.supplierId,
+              },
+              createdBy: actor.userId,
+            },
+          }))
+        : [];
+
+    await this.repo.approveVendorInvoiceWithEvents(actor.tenantId, {
+      vendorInvoiceId,
+      status: projectedStatus,
+      approvedAt,
+      approvedBy,
+      rejectedAt,
+      rejectedBy,
+      rejectionReason,
+      updatedBy: actor.userId,
+    }, lineEvents);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.vendor_invoice.approved",
+      entityType: "scm_vendor_invoice",
+      entityId: vendorInvoiceId,
+      metadata: { status: projectedStatus, comment },
+    });
+
+    return this.getVendorInvoice(actor, vendorInvoiceId);
   }
 
   // =========================================================================

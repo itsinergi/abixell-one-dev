@@ -20,6 +20,7 @@ import type {
   CreateScmReturnToVendorInput,
   CreateScmServiceAcceptanceInput,
   CreateScmSpendAnalyticsSnapshotInput,
+  CreateScmVendorInvoiceInput,
   CreateScmStockOpnameInput,
   CreateScmStockReservationInput,
   CreateScmStockTransferInput,
@@ -94,6 +95,10 @@ import type {
   ScmServiceAcceptanceFilter,
   ScmServiceAcceptanceLine,
   ScmServiceAcceptanceStatus,
+  ScmVendorInvoice,
+  ScmVendorInvoiceFilter,
+  ScmVendorInvoiceLine,
+  ScmVendorInvoiceStatus,
   ScmSpendAnalyticsPeriodType,
   ScmSpendAnalyticsSnapshot,
   ScmSpendAnalyticsSnapshotFilter,
@@ -139,6 +144,7 @@ import type {
   UpdateScmReceivingRecordStatusInput,
   UpdateScmRfqProjectionInput,
   UpdateScmServiceAcceptanceStatusInput,
+  UpdateScmVendorInvoiceStatusInput,
   UpdateScmStockOpnameProjectionInput,
   UpdateScmStockTransferProjectionInput,
   UpdateScmSupplierBidScoreInput,
@@ -3904,6 +3910,312 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
   }
 
   // =========================================================================
+  // Phase 2 WP-PRO-01: Vendor Invoices (AP Invoice, PO-based)
+  // =========================================================================
+
+  async createVendorInvoice(
+    tenantId: string,
+    input: CreateScmVendorInvoiceInput,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }> {
+    return this.inTransaction(async (client) => {
+      const viRes = await client.query(
+        `INSERT INTO scm_vendor_invoices (
+           tenant_id, invoice_number, idempotency_key, purchase_order_id,
+           receiving_record_id, supplier_id, invoice_amount, currency,
+           notes, created_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING *`,
+        [
+          tenantId,
+          input.invoiceNumber,
+          input.idempotencyKey,
+          input.purchaseOrderId,
+          input.receivingRecordId,
+          input.supplierId,
+          input.invoiceAmount,
+          input.currency ?? "IDR",
+          input.notes ?? null,
+          input.createdBy ?? null,
+        ],
+      );
+      const vendorInvoice = toVendorInvoice(viRes.rows[0]!);
+
+      const lines: ScmVendorInvoiceLine[] = [];
+      let sort = 0;
+      for (const line of input.lines) {
+        const lRes = await client.query(
+          `INSERT INTO scm_vendor_invoice_lines (
+             tenant_id, vendor_invoice_id, purchase_order_line_id, receiving_line_id,
+             description, quantity_invoiced, unit_price, currency, line_amount,
+             account_assignment_type, account_assignment_dimensions,
+             notes, sort_order
+           ) VALUES (
+             $1, $2, $3, $4,
+             $5, $6, $7, $8, $9,
+             $10, $11,
+             $12, $13
+           )
+           RETURNING *`,
+          [
+            tenantId,
+            vendorInvoice.id,
+            line.purchaseOrderLineId,
+            line.receivingLineId ?? null,
+            line.description,
+            line.quantityInvoiced,
+            line.unitPrice,
+            line.currency ?? "IDR",
+            line.lineAmount,
+            line.accountAssignmentType ?? "expense",
+            JSON.stringify(line.accountAssignmentDimensions ?? {}),
+            line.notes ?? null,
+            line.sortOrder ?? sort++,
+          ],
+        );
+        lines.push(toVendorInvoiceLine(lRes.rows[0]!));
+      }
+
+      return { vendorInvoice, lines };
+    });
+  }
+
+  async deleteVendorInvoiceWithoutWorkflow(
+    tenantId: string,
+    vendorInvoiceId: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM scm_vendor_invoices WHERE tenant_id = $1 AND id = $2 AND workflow_instance_id IS NULL`,
+      [tenantId, vendorInvoiceId],
+    );
+  }
+
+  /**
+   * Atomically claim the workflow-instance slot for a vendor invoice. Returns
+   * true if THIS caller won the claim; false if another concurrent retry
+   * already started the workflow. Guards against the 23505 idempotency race
+   * where both losers of the insert race would otherwise each start their own
+   * workflow instance for the same invoice.
+   */
+  async claimVendorInvoiceWorkflowInstance(
+    tenantId: string,
+    vendorInvoiceId: string,
+    workflowInstanceId: string,
+  ): Promise<boolean> {
+    const r = await this.pool.query(
+      `UPDATE scm_vendor_invoices
+         SET workflow_instance_id = $3,
+             updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND workflow_instance_id IS NULL
+       RETURNING id`,
+      [tenantId, vendorInvoiceId, workflowInstanceId],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  async updateVendorInvoiceStatus(
+    tenantId: string,
+    input: UpdateScmVendorInvoiceStatusInput,
+  ): Promise<ScmVendorInvoice | null> {
+    const r = await this.pool.query(
+      `UPDATE scm_vendor_invoices
+         SET status = $3,
+             workflow_instance_id = COALESCE($4, workflow_instance_id),
+             submitted_at = COALESCE($5, submitted_at),
+             submitted_by = COALESCE($6, submitted_by),
+             approved_at = COALESCE($7, approved_at),
+             approved_by = COALESCE($8, approved_by),
+             rejected_at = COALESCE($9, rejected_at),
+             rejected_by = COALESCE($10, rejected_by),
+             rejection_reason = COALESCE($11, rejection_reason),
+             updated_by = COALESCE($12, updated_by),
+             updated_at = now()
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING *`,
+      [
+        tenantId,
+        input.vendorInvoiceId,
+        input.status,
+        input.workflowInstanceId ?? null,
+        input.submittedAt ?? null,
+        input.submittedBy ?? null,
+        input.approvedAt ?? null,
+        input.approvedBy ?? null,
+        input.rejectedAt ?? null,
+        input.rejectedBy ?? null,
+        input.rejectionReason ?? null,
+        input.updatedBy ?? null,
+      ],
+    );
+    return r.rows[0] ? toVendorInvoice(r.rows[0]) : null;
+  }
+
+  async freezeVendorInvoiceLineAssignment(
+    tenantId: string,
+    lineId: string,
+    frozenAt: Date,
+    accountingReadyEventId?: string | null,
+  ): Promise<ScmVendorInvoiceLine | null> {
+    const r = await this.pool.query(
+      `UPDATE scm_vendor_invoice_lines
+         SET frozen_account_assignment_at = $3,
+             accounting_ready_event_id = COALESCE($4, accounting_ready_event_id)
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING *`,
+      [tenantId, lineId, frozenAt, accountingReadyEventId ?? null],
+    );
+    return r.rows[0] ? toVendorInvoiceLine(r.rows[0]) : null;
+  }
+
+  /**
+   * Phase 2 WP-PRO-01 — atomic approval: set the invoice's terminal status and
+   * emit one accounting-ready event + freeze per line in a single transaction.
+   * Without this, a crash or constraint failure between the status update and
+   * the per-line event loop leaves an "approved" invoice with missing AP
+   * postings and the status guard blocks any recovery.
+   */
+  async approveVendorInvoiceWithEvents(
+    tenantId: string,
+    input: UpdateScmVendorInvoiceStatusInput,
+    events: Array<{
+      lineId: string;
+      event: CreateScmAccountingReadyEventInput;
+    }>,
+  ): Promise<ScmVendorInvoice | null> {
+    return this.inTransaction(async (client) => {
+      const r = await client.query(
+        `UPDATE scm_vendor_invoices
+           SET status = $3,
+               workflow_instance_id = COALESCE($4, workflow_instance_id),
+               submitted_at = COALESCE($5, submitted_at),
+               submitted_by = COALESCE($6, submitted_by),
+               approved_at = COALESCE($7, approved_at),
+               approved_by = COALESCE($8, approved_by),
+               rejected_at = COALESCE($9, rejected_at),
+               rejected_by = COALESCE($10, rejected_by),
+               rejection_reason = COALESCE($11, rejection_reason),
+               updated_by = COALESCE($12, updated_by),
+               updated_at = now()
+         WHERE tenant_id = $1 AND id = $2
+         RETURNING *`,
+        [
+          tenantId,
+          input.vendorInvoiceId,
+          input.status,
+          input.workflowInstanceId ?? null,
+          input.submittedAt ?? null,
+          input.submittedBy ?? null,
+          input.approvedAt ?? null,
+          input.approvedBy ?? null,
+          input.rejectedAt ?? null,
+          input.rejectedBy ?? null,
+          input.rejectionReason ?? null,
+          input.updatedBy ?? null,
+        ],
+      );
+      const invoice = r.rows[0] ? toVendorInvoice(r.rows[0]) : null;
+
+      for (const { lineId, event } of events) {
+        const created = await this.createAccountingReadyEventTx(client, tenantId, event);
+        await client.query(
+          `UPDATE scm_vendor_invoice_lines
+             SET frozen_account_assignment_at = $3,
+                 accounting_ready_event_id = COALESCE($4, accounting_ready_event_id)
+           WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, lineId, created.effectiveAt ?? null, created.id],
+        );
+      }
+      return invoice;
+    });
+  }
+
+  async findVendorInvoiceById(
+    tenantId: string,
+    vendorInvoiceId: string,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] } | null> {
+    const viRes = await this.pool.query(
+      `SELECT * FROM scm_vendor_invoices WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, vendorInvoiceId],
+    );
+    if (!viRes.rows[0]) return null;
+
+    const linesRes = await this.pool.query(
+      `SELECT * FROM scm_vendor_invoice_lines WHERE tenant_id = $1 AND vendor_invoice_id = $2 ORDER BY sort_order ASC, id ASC`,
+      [tenantId, vendorInvoiceId],
+    );
+    return {
+      vendorInvoice: toVendorInvoice(viRes.rows[0]),
+      lines: linesRes.rows.map(toVendorInvoiceLine),
+    };
+  }
+
+  async findVendorInvoiceByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] } | null> {
+    const viRes = await this.pool.query(
+      `SELECT id FROM scm_vendor_invoices WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    if (!viRes.rows[0]) return null;
+    return this.findVendorInvoiceById(tenantId, viRes.rows[0].id);
+  }
+
+  async sumVendorInvoiceAmountsForPurchaseOrder(
+    tenantId: string,
+    purchaseOrderId: string,
+    excludeStatuses: ScmVendorInvoiceStatus[] = ["rejected", "cancelled"],
+  ): Promise<number> {
+    const r = await this.pool.query(
+      `SELECT COALESCE(SUM(invoice_amount), 0) AS total
+         FROM scm_vendor_invoices
+        WHERE tenant_id = $1 AND purchase_order_id = $2 AND status != ALL($3)`,
+      [tenantId, purchaseOrderId, excludeStatuses],
+    );
+    return num(r.rows[0]?.total ?? 0);
+  }
+
+  async listVendorInvoices(
+    tenantId: string,
+    filter: ScmVendorInvoiceFilter = {},
+  ): Promise<ScmVendorInvoice[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+
+    if (filter.purchaseOrderId) {
+      params.push(filter.purchaseOrderId);
+      conditions.push(`purchase_order_id = $${params.length}`);
+    }
+    if (filter.supplierId) {
+      params.push(filter.supplierId);
+      conditions.push(`supplier_id = $${params.length}`);
+    }
+    if (filter.status) {
+      params.push(filter.status);
+      conditions.push(`status = $${params.length}`);
+    }
+    if (filter.createdFrom) {
+      params.push(filter.createdFrom);
+      conditions.push(`created_at >= $${params.length}`);
+    }
+    if (filter.createdTo) {
+      params.push(filter.createdTo);
+      conditions.push(`created_at <= $${params.length}`);
+    }
+
+    const limit = filter.limit && filter.limit > 0 ? filter.limit : 100;
+    params.push(limit);
+
+    const r = await this.pool.query(
+      `SELECT * FROM scm_vendor_invoices
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY created_at DESC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return r.rows.map(toVendorInvoice);
+  }
+
+  // =========================================================================
   // Stage 2: Consignment Settlements
   // =========================================================================
 
@@ -4794,6 +5106,58 @@ function toServiceAcceptanceLine(r: QueryResultRow): ScmServiceAcceptanceLine {
     unitPrice: num(r.unit_price),
     currency: r.currency,
     amount: num(r.amount),
+    accountAssignmentType: r.account_assignment_type as ScmAccountAssignmentType,
+    accountAssignmentDimensions: dims,
+    frozenAccountAssignmentAt: r.frozen_account_assignment_at,
+    accountingReadyEventId: r.accounting_ready_event_id,
+    notes: r.notes,
+    sortOrder: num(r.sort_order),
+  };
+}
+
+function toVendorInvoice(r: QueryResultRow): ScmVendorInvoice {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    invoiceNumber: r.invoice_number,
+    idempotencyKey: r.idempotency_key,
+    purchaseOrderId: r.purchase_order_id,
+    receivingRecordId: r.receiving_record_id,
+    supplierId: r.supplier_id,
+    invoiceAmount: num(r.invoice_amount),
+    currency: r.currency,
+    status: r.status as ScmVendorInvoiceStatus,
+    workflowInstanceId: r.workflow_instance_id,
+    submittedAt: r.submitted_at,
+    submittedBy: r.submitted_by,
+    approvedAt: r.approved_at,
+    approvedBy: r.approved_by,
+    rejectedAt: r.rejected_at,
+    rejectedBy: r.rejected_by,
+    rejectionReason: r.rejection_reason,
+    notes: r.notes,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+    updatedAt: r.updated_at,
+    updatedBy: r.updated_by,
+  };
+}
+
+function toVendorInvoiceLine(r: QueryResultRow): ScmVendorInvoiceLine {
+  const dims: ScmAccountAssignmentDimensions = typeof r.account_assignment_dimensions === "string"
+    ? JSON.parse(r.account_assignment_dimensions)
+    : r.account_assignment_dimensions || {};
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    vendorInvoiceId: r.vendor_invoice_id,
+    purchaseOrderLineId: r.purchase_order_line_id,
+    receivingLineId: r.receiving_line_id,
+    description: r.description,
+    quantityInvoiced: num(r.quantity_invoiced),
+    unitPrice: num(r.unit_price),
+    currency: r.currency,
+    lineAmount: num(r.line_amount),
     accountAssignmentType: r.account_assignment_type as ScmAccountAssignmentType,
     accountAssignmentDimensions: dims,
     frozenAccountAssignmentAt: r.frozen_account_assignment_at,
