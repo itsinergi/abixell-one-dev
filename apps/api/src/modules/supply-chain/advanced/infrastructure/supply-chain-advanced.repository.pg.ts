@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { Pool, PoolClient, QueryResultRow } from "pg";
-import { ConflictError } from "../../../../domain/shared-kernel/errors.js";
+import { ConflictError, ValidationError } from "../../../../domain/shared-kernel/errors.js";
+import { fromExactUnits, multiplyQuantityCost, toExactUnits } from "../domain/valuation-policy.js";
 import type {
   ApplyScmLandedCostInput,
   AwardScmSupplierBidInput,
@@ -3913,11 +3914,135 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
   // Phase 2 WP-PRO-01: Vendor Invoices (AP Invoice, PO-based)
   // =========================================================================
 
+  /**
+   * Validate (Rules 1-5 per ADR-0023) and create a vendor invoice atomically.
+   * All validation reads and the INSERTs run in one transaction that takes a
+   * FOR UPDATE lock on the PO lines, so two concurrent invoices for the same
+   * PO line cannot both pass the cumulative-quantity rule (TOCTOU race).
+   */
   async createVendorInvoice(
     tenantId: string,
     input: CreateScmVendorInvoiceInput,
   ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }> {
     return this.inTransaction(async (client) => {
+      // Lock PO lines for validation and inserts
+      const poLineIds = input.lines.map((line) => line.purchaseOrderLineId);
+      const poLinesResult = await client.query(
+        `SELECT pol.id, pol.unit_price, po.currency
+           FROM purchase_order_lines pol
+           JOIN purchase_orders po ON po.id = pol.purchase_order_id AND po.tenant_id = pol.tenant_id
+          WHERE pol.tenant_id = $1 AND pol.purchase_order_id = $2
+          FOR UPDATE OF pol`,
+        [tenantId, input.purchaseOrderId],
+      );
+      const poLines = poLinesResult.rows.map((row) => ({
+        id: row.id as string,
+        unitPrice: row.unit_price === null ? 0 : num(row.unit_price),
+        currency: (row.currency as string | null) ?? "IDR",
+      }));
+      const poLinesById = new Map(poLines.map((pol) => [pol.id, pol]));
+
+      // Read prior invoiced quantities (exclude rejected/cancelled)
+      const invoicedQtyRes = await client.query(
+        `SELECT vil.purchase_order_line_id, COALESCE(SUM(vil.quantity_invoiced), 0) AS qty
+           FROM scm_vendor_invoice_lines vil
+           JOIN scm_vendor_invoices vi ON vi.id = vil.vendor_invoice_id AND vi.tenant_id = vil.tenant_id
+          WHERE vil.tenant_id = $1 AND vil.purchase_order_line_id = ANY($2) AND vi.status != ALL($3)
+          GROUP BY vil.purchase_order_line_id`,
+        [tenantId, poLineIds, ["rejected", "cancelled"]],
+      );
+      const invoicedQtyByPoLine = new Map<string, number>();
+      for (const row of invoicedQtyRes.rows) {
+        invoicedQtyByPoLine.set(row.purchase_order_line_id as string, num(row.qty));
+      }
+
+      // Read GR accepted-eligible quantities
+      const acceptedQtyRes = await client.query(
+        `SELECT sl.purchase_order_line_id,
+                COALESCE(SUM(sl.quantity_accepted - sl.quantity_returned - sl.quantity_reversed), 0) AS qty
+           FROM scm_receiving_lines sl
+           JOIN scm_receiving_records sr ON sr.id = sl.receiving_record_id AND sr.tenant_id = sl.tenant_id
+          WHERE sl.tenant_id = $1 AND sr.purchase_order_id = $2
+          GROUP BY sl.purchase_order_line_id`,
+        [tenantId, input.purchaseOrderId],
+      );
+      const acceptedQtyByPoLine = new Map<string, number>();
+      for (const row of acceptedQtyRes.rows) {
+        acceptedQtyByPoLine.set(row.purchase_order_line_id as string, num(row.qty));
+      }
+
+      // Validate Rules 1-5 (Rules 4-5 use exact BigInt arithmetic)
+      const invoiceCurrency = input.currency ?? "IDR";
+      let lineAmountSumUnits = 0n;
+      const invoiceAmountUnits = toExactUnits(input.invoiceAmount);
+
+      for (let i = 0; i < input.lines.length; i++) {
+        const line = input.lines[i]!;
+        const lineIndex = i + 1;
+
+        // Rule 1: PO line belongs to the specified PO
+        const poLine = poLinesById.get(line.purchaseOrderLineId);
+        if (!poLine) {
+          throw new ValidationError(
+            `Line ${lineIndex}: PO line ${line.purchaseOrderLineId} not found in PO ${input.purchaseOrderId}`,
+          );
+        }
+
+        // Rule 4: Amount consistency (server-side recomputation, exact decimal)
+        const computedLineAmount = multiplyQuantityCost(line.quantityInvoiced, line.unitPrice);
+        const computedLineAmountUnits = toExactUnits(computedLineAmount);
+        const inputLineAmountUnits = toExactUnits(line.lineAmount);
+        if (computedLineAmountUnits !== inputLineAmountUnits) {
+          throw new ValidationError(
+            `Line ${lineIndex}: lineAmount ${line.lineAmount} does not match qty ${line.quantityInvoiced} × unitPrice ${line.unitPrice} (computed: ${computedLineAmount})`,
+          );
+        }
+
+        // Rule 3: Price within 0.5% tolerance of PO unit_price
+        const priceTolerance = poLine.unitPrice * 0.005;
+        if (Math.abs(line.unitPrice - poLine.unitPrice) > priceTolerance) {
+          throw new ValidationError(
+            `Line ${lineIndex}: unitPrice ${line.unitPrice} differs from PO ${poLine.unitPrice} by more than 0.5%`,
+          );
+        }
+
+        // Rule 2: Cumulative invoiced qty (within locked transaction, no race)
+        const priorInvoiced = invoicedQtyByPoLine.get(line.purchaseOrderLineId) ?? 0;
+        const cumulativeInvoiced = priorInvoiced + line.quantityInvoiced;
+        const acceptedEligible = acceptedQtyByPoLine.get(line.purchaseOrderLineId) ?? 0;
+
+        if (cumulativeInvoiced > acceptedEligible) {
+          throw new ValidationError(
+            `Line ${lineIndex}: cumulative invoiced qty ${cumulativeInvoiced} exceeds GR accepted-eligible qty ${acceptedEligible}`,
+          );
+        }
+
+        // Accumulate line amounts for header check
+        lineAmountSumUnits += computedLineAmountUnits;
+
+        // Currency consistency: each line currency must match PO currency AND invoice currency
+        const lineCurrency = line.currency ?? "IDR";
+        if (lineCurrency !== invoiceCurrency) {
+          throw new ValidationError(
+            `Line ${lineIndex}: currency ${lineCurrency} does not match invoice currency ${invoiceCurrency}`,
+          );
+        }
+        if (lineCurrency !== poLine.currency) {
+          throw new ValidationError(
+            `Line ${lineIndex}: currency ${lineCurrency} does not match PO currency ${poLine.currency}`,
+          );
+        }
+      }
+
+      // Rule 5: Header consistency (exact BigInt match)
+      if (lineAmountSumUnits !== invoiceAmountUnits) {
+        const lineAmountSum = fromExactUnits(lineAmountSumUnits);
+        throw new ValidationError(
+          `Invoice header: sum of line amounts ${lineAmountSum} does not match invoice amount ${input.invoiceAmount}`,
+        );
+      }
+
+      // All validations passed; now INSERT (within same transaction/lock)
       const viRes = await client.query(
         `INSERT INTO scm_vendor_invoices (
            tenant_id, invoice_number, idempotency_key, purchase_order_id,
@@ -3933,7 +4058,7 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
           input.receivingRecordId,
           input.supplierId,
           input.invoiceAmount,
-          input.currency ?? "IDR",
+          invoiceCurrency,
           input.notes ?? null,
           input.createdBy ?? null,
         ],

@@ -196,9 +196,6 @@ import type {
 import {
   allocateLandedCost,
   divideCostQuantity,
-  fromExactUnits,
-  multiplyQuantityCost,
-  toExactUnits,
 } from "../domain/valuation-policy.js";
 
 /** Configuration numbering codes for Supply Chain Advanced. */
@@ -3158,18 +3155,6 @@ export class SupplyChainAdvancedService {
     const grResult = await this.repo.findReceivingRecordById(actor.tenantId, input.receivingRecordId);
     if (!grResult || grResult.receiving.purchaseOrderId !== input.purchaseOrderId) {
       throw new ValidationError(`Receiving record must be linked to PO ${input.purchaseOrderId}`);
-    }
-
-    // Simple over-invoicing guard: invoice amount should not exceed received amount + 15% tolerance
-    // Full 3-way match (qty, amount) is handled in WP-PRO-02.
-    const grTotalReceived = grResult.lines.reduce((sum, line) => {
-      const lineAmount = (line.quantityReceived ?? 0) * (line.unitCost ?? 0);
-      return sum + lineAmount;
-    }, 0);
-    if (input.invoiceAmount > grTotalReceived * 1.15) {
-      throw new ValidationError(
-        `Invoice amount ${input.invoiceAmount} exceeds receiving record total ${grTotalReceived} by more than 15%`,
-      );
     }
 
     const replayed = await this.repo.findVendorInvoiceByIdempotencyKey(actor.tenantId, input.idempotencyKey);
