@@ -3,7 +3,15 @@ import type { IntegrationService } from "../integration/integration.service.js";
 import type { ServiceQualityService } from "../service-quality/service-quality.service.js";
 import type { WorkflowService } from "../workflow/workflow.service.js";
 import type { SchedulerService } from "./scheduler.service.js";
-import type { AccountingEventConsumerService } from "../../modules/accounting/consumer/accounting-event-consumer.service.js";
+
+interface AccountingEventConsumerJob {
+  processTenant(tenantId: string): Promise<{
+    events: number;
+    posted: number;
+    failed: number;
+    errors: string[];
+  }>;
+}
 
 /**
  * Registers every known Scheduled Job handler by `handlerKey`. This is
@@ -26,7 +34,7 @@ export function registerJobHandlers(
     workflow: WorkflowService;
     integration: IntegrationService;
     serviceQuality: ServiceQualityService;
-    accountingEventConsumer: AccountingEventConsumerService;
+    accountingEventConsumer: AccountingEventConsumerJob;
   },
 ): void {
   scheduler.registerHandler("workflow-escalation-sweep", async ({ actor }) => {
