@@ -3989,6 +3989,29 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     );
   }
 
+  /**
+   * Atomically claim the workflow-instance slot for a vendor invoice. Returns
+   * true if THIS caller won the claim; false if another concurrent retry
+   * already started the workflow. Guards against the 23505 idempotency race
+   * where both losers of the insert race would otherwise each start their own
+   * workflow instance for the same invoice.
+   */
+  async claimVendorInvoiceWorkflowInstance(
+    tenantId: string,
+    vendorInvoiceId: string,
+    workflowInstanceId: string,
+  ): Promise<boolean> {
+    const r = await this.pool.query(
+      `UPDATE scm_vendor_invoices
+         SET workflow_instance_id = $3,
+             updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND workflow_instance_id IS NULL
+       RETURNING id`,
+      [tenantId, vendorInvoiceId, workflowInstanceId],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
   async updateVendorInvoiceStatus(
     tenantId: string,
     input: UpdateScmVendorInvoiceStatusInput,
@@ -4041,6 +4064,68 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       [tenantId, lineId, frozenAt, accountingReadyEventId ?? null],
     );
     return r.rows[0] ? toVendorInvoiceLine(r.rows[0]) : null;
+  }
+
+  /**
+   * Phase 2 WP-PRO-01 — atomic approval: set the invoice's terminal status and
+   * emit one accounting-ready event + freeze per line in a single transaction.
+   * Without this, a crash or constraint failure between the status update and
+   * the per-line event loop leaves an "approved" invoice with missing AP
+   * postings and the status guard blocks any recovery.
+   */
+  async approveVendorInvoiceWithEvents(
+    tenantId: string,
+    input: UpdateScmVendorInvoiceStatusInput,
+    events: Array<{
+      lineId: string;
+      event: CreateScmAccountingReadyEventInput;
+    }>,
+  ): Promise<ScmVendorInvoice | null> {
+    return this.inTransaction(async (client) => {
+      const r = await client.query(
+        `UPDATE scm_vendor_invoices
+           SET status = $3,
+               workflow_instance_id = COALESCE($4, workflow_instance_id),
+               submitted_at = COALESCE($5, submitted_at),
+               submitted_by = COALESCE($6, submitted_by),
+               approved_at = COALESCE($7, approved_at),
+               approved_by = COALESCE($8, approved_by),
+               rejected_at = COALESCE($9, rejected_at),
+               rejected_by = COALESCE($10, rejected_by),
+               rejection_reason = COALESCE($11, rejection_reason),
+               updated_by = COALESCE($12, updated_by),
+               updated_at = now()
+         WHERE tenant_id = $1 AND id = $2
+         RETURNING *`,
+        [
+          tenantId,
+          input.vendorInvoiceId,
+          input.status,
+          input.workflowInstanceId ?? null,
+          input.submittedAt ?? null,
+          input.submittedBy ?? null,
+          input.approvedAt ?? null,
+          input.approvedBy ?? null,
+          input.rejectedAt ?? null,
+          input.rejectedBy ?? null,
+          input.rejectionReason ?? null,
+          input.updatedBy ?? null,
+        ],
+      );
+      const invoice = r.rows[0] ? toVendorInvoice(r.rows[0]) : null;
+
+      for (const { lineId, event } of events) {
+        const created = await this.createAccountingReadyEventTx(client, tenantId, event);
+        await client.query(
+          `UPDATE scm_vendor_invoice_lines
+             SET frozen_account_assignment_at = $3,
+                 accounting_ready_event_id = COALESCE($4, accounting_ready_event_id)
+           WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, lineId, created.effectiveAt ?? null, created.id],
+        );
+      }
+      return invoice;
+    });
   }
 
   async findVendorInvoiceById(

@@ -2304,6 +2304,12 @@ export interface SupplyChainAdvancedRepository {
   ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }>;
   /** Compensating delete when workflow instance creation fails right after createVendorInvoice. */
   deleteVendorInvoiceWithoutWorkflow(tenantId: string, vendorInvoiceId: string): Promise<void>;
+  /** Atomically claims the empty workflow-instance slot for one concurrent creator. */
+  claimVendorInvoiceWorkflowInstance(
+    tenantId: string,
+    vendorInvoiceId: string,
+    workflowInstanceId: string,
+  ): Promise<boolean>;
   updateVendorInvoiceStatus(
     tenantId: string,
     input: UpdateScmVendorInvoiceStatusInput,
@@ -2314,6 +2320,15 @@ export interface SupplyChainAdvancedRepository {
     frozenAt: Date,
     accountingReadyEventId?: string | null,
   ): Promise<ScmVendorInvoiceLine | null>;
+  /** Atomic approval: terminal status update + per-line accounting events and freezes in one transaction. */
+  approveVendorInvoiceWithEvents(
+    tenantId: string,
+    input: UpdateScmVendorInvoiceStatusInput,
+    events: Array<{
+      lineId: string;
+      event: CreateScmAccountingReadyEventInput;
+    }>,
+  ): Promise<ScmVendorInvoice | null>;
   findVendorInvoiceById(
     tenantId: string,
     vendorInvoiceId: string,

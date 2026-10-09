@@ -3209,14 +3209,19 @@ export class SupplyChainAdvancedService {
         },
       });
       workflowInstanceId = instance.id;
-      const updated = await this.repo.updateVendorInvoiceStatus(actor.tenantId, {
-        vendorInvoiceId: result.vendorInvoice.id,
-        status: "draft",
+
+      // After the 23505 idempotency race both losers replay the winner's row
+      // and reach here; only ONE of them may attach its workflow instance, or
+      // the second COALESCE-write would orphan the first (a pending approval
+      // task nobody can act on). The atomic claim makes exactly one winner;
+      // losers cancel their surplus instance instead of linking it.
+      const claimed = await this.repo.claimVendorInvoiceWorkflowInstance(
+        actor.tenantId,
+        result.vendorInvoice.id,
         workflowInstanceId,
-        updatedBy: actor.userId,
-      });
-      if (updated) {
-        result.vendorInvoice = updated;
+      );
+      if (claimed) {
+        result.vendorInvoice = { ...result.vendorInvoice, workflowInstanceId };
       }
     } catch (err) {
       await this.repo.deleteVendorInvoiceWithoutWorkflow(actor.tenantId, result.vendorInvoice.id);
@@ -3287,6 +3292,8 @@ export class SupplyChainAdvancedService {
     if (!pending) {
       throw new ConflictError("No pending submit action exists on this vendor invoice");
     }
+
+    await this.workflow.actOnAssignment(actor, pending.id, "submit", comment ?? null);
 
     await this.repo.updateVendorInvoiceStatus(actor.tenantId, {
       vendorInvoiceId,
@@ -3359,7 +3366,39 @@ export class SupplyChainAdvancedService {
       projectedStatus = "cancelled";
     }
 
-    await this.repo.updateVendorInvoiceStatus(actor.tenantId, {
+    // Approval is atomic: the terminal status and every per-line accounting
+    // event + freeze commit together, so a crash mid-way can never leave an
+    // "approved" invoice with missing AP postings (the status guard would
+    // block re-entry). Event idempotency keys make the whole call replay-safe.
+    const lineEvents =
+      projectedStatus === "approved" && approvedAt
+        ? result.lines.map((line, idx) => ({
+            lineId: line.id,
+            event: {
+              eventType: "vendor.invoice.approved" as const,
+              sourceDocumentType: "scm_vendor_invoice",
+              sourceDocumentId: vendorInvoiceId,
+              sourceDocumentLineId: line.id,
+              effectiveAt: approvedAt,
+              currency: line.currency,
+              amount: line.lineAmount,
+              quantity: line.quantityInvoiced,
+              unitCost: line.unitPrice,
+              accountAssignmentType: line.accountAssignmentType,
+              accountAssignmentDimensions: line.accountAssignmentDimensions,
+              idempotencyKey: `${result.vendorInvoice.idempotencyKey}:line:${line.sortOrder ?? idx}`,
+              payload: {
+                invoiceNumber: result.vendorInvoice.invoiceNumber,
+                purchaseOrderId: result.vendorInvoice.purchaseOrderId,
+                purchaseOrderLineId: line.purchaseOrderLineId,
+                supplierId: result.vendorInvoice.supplierId,
+              },
+              createdBy: actor.userId,
+            },
+          }))
+        : [];
+
+    await this.repo.approveVendorInvoiceWithEvents(actor.tenantId, {
       vendorInvoiceId,
       status: projectedStatus,
       approvedAt,
@@ -3368,36 +3407,7 @@ export class SupplyChainAdvancedService {
       rejectedBy,
       rejectionReason,
       updatedBy: actor.userId,
-    });
-
-    if (projectedStatus === "approved" && approvedAt) {
-      for (let idx = 0; idx < result.lines.length; idx++) {
-        const line = result.lines[idx]!;
-        const event = await this.repo.createAccountingReadyEvent(actor.tenantId, {
-          eventType: "vendor.invoice.approved",
-          sourceDocumentType: "scm_vendor_invoice",
-          sourceDocumentId: vendorInvoiceId,
-          sourceDocumentLineId: line.id,
-          effectiveAt: approvedAt,
-          currency: line.currency,
-          amount: line.lineAmount,
-          quantity: line.quantityInvoiced,
-          unitCost: line.unitPrice,
-          accountAssignmentType: line.accountAssignmentType,
-          accountAssignmentDimensions: line.accountAssignmentDimensions,
-          idempotencyKey: `${result.vendorInvoice.idempotencyKey}:line:${line.sortOrder ?? idx}`,
-          payload: {
-            invoiceNumber: result.vendorInvoice.invoiceNumber,
-            purchaseOrderId: result.vendorInvoice.purchaseOrderId,
-            purchaseOrderLineId: line.purchaseOrderLineId,
-            supplierId: result.vendorInvoice.supplierId,
-          },
-          createdBy: actor.userId,
-        });
-
-        await this.repo.freezeVendorInvoiceLineAssignment(actor.tenantId, line.id, approvedAt, event.id);
-      }
-    }
+    }, lineEvents);
 
     await this.audit.record({
       tenantId: actor.tenantId,
