@@ -76,7 +76,8 @@ export type ScmAccountingReadyEventType =
   | "inventory.landed_cost_applied"
   | "inventory.consignment_consumed"
   | "service.accepted"
-  | "inventory.disposed";
+  | "inventory.disposed"
+  | "vendor.invoice.approved";
 export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
 export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";
@@ -1502,6 +1503,7 @@ export interface ScmValuationLayerAllocationFilter {
 
 export type ScmReplacementDeliveryStatus = "received" | "partially_inspected" | "accepted" | "cancelled";
 export type ScmServiceAcceptanceStatus = "draft" | "submitted" | "approved" | "rejected" | "cancelled";
+export type ScmVendorInvoiceStatus = "draft" | "submitted" | "approved" | "rejected" | "cancelled";
 export type ScmConsignmentSettlementStatus = "settled" | "cancelled";
 export type ScmDisposalType = "write_off" | "scrap" | "donation" | "destruction" | "expired";
 export type ScmDisposalStatus = "draft" | "submitted" | "approved" | "rejected" | "executed" | "cancelled";
@@ -1687,6 +1689,103 @@ export interface ScmServiceAcceptanceFilter {
   supplierId?: string;
   organizationUnitIds?: string[] | null;
   status?: ScmServiceAcceptanceStatus;
+  createdFrom?: Date;
+  createdTo?: Date;
+  limit?: number;
+}
+
+// === Phase 2 WP-PRO-01: Vendor Invoice (AP Invoice, PO-based) ================
+
+export interface ScmVendorInvoice {
+  id: string;
+  tenantId: string;
+  invoiceNumber: string;
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  receivingRecordId: string;
+  supplierId: string;
+  invoiceAmount: number;
+  currency: string;
+  status: ScmVendorInvoiceStatus;
+  workflowInstanceId: string | null;
+  submittedAt: Date | null;
+  submittedBy: string | null;
+  approvedAt: Date | null;
+  approvedBy: string | null;
+  rejectedAt: Date | null;
+  rejectedBy: string | null;
+  rejectionReason: string | null;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface ScmVendorInvoiceLine {
+  id: string;
+  tenantId: string;
+  vendorInvoiceId: string;
+  purchaseOrderLineId: string;
+  receivingLineId: string | null;
+  description: string;
+  quantityInvoiced: number;
+  unitPrice: number;
+  currency: string;
+  lineAmount: number;
+  accountAssignmentType: ScmAccountAssignmentType;
+  accountAssignmentDimensions: ScmAccountAssignmentDimensions;
+  frozenAccountAssignmentAt: Date | null;
+  accountingReadyEventId: string | null;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface CreateScmVendorInvoiceInput {
+  invoiceNumber: string;
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  receivingRecordId: string;
+  supplierId: string;
+  invoiceAmount: number;
+  currency?: string;
+  notes?: string | null;
+  createdBy?: string | null;
+  lines: CreateScmVendorInvoiceLineInput[];
+}
+
+export interface CreateScmVendorInvoiceLineInput {
+  purchaseOrderLineId: string;
+  receivingLineId?: string | null;
+  description: string;
+  quantityInvoiced: number;
+  unitPrice: number;
+  currency?: string;
+  lineAmount: number;
+  accountAssignmentType?: ScmAccountAssignmentType;
+  accountAssignmentDimensions?: ScmAccountAssignmentDimensions;
+  notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateScmVendorInvoiceStatusInput {
+  vendorInvoiceId: string;
+  status: ScmVendorInvoiceStatus;
+  workflowInstanceId?: string | null;
+  submittedAt?: Date | null;
+  submittedBy?: string | null;
+  approvedAt?: Date | null;
+  approvedBy?: string | null;
+  rejectedAt?: Date | null;
+  rejectedBy?: string | null;
+  rejectionReason?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface ScmVendorInvoiceFilter {
+  purchaseOrderId?: string;
+  supplierId?: string;
+  status?: ScmVendorInvoiceStatus;
   createdFrom?: Date;
   createdTo?: Date;
   limit?: number;
@@ -2197,6 +2296,38 @@ export interface SupplyChainAdvancedRepository {
     idempotencyKey: string,
   ): Promise<{ serviceAcceptance: ScmServiceAcceptance; lines: ScmServiceAcceptanceLine[] } | null>;
   listServiceAcceptances(tenantId: string, filter?: ScmServiceAcceptanceFilter): Promise<ScmServiceAcceptance[]>;
+
+  // Phase 2 WP-PRO-01: Vendor invoices (AP invoice, PO-based)
+  createVendorInvoice(
+    tenantId: string,
+    input: CreateScmVendorInvoiceInput,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] }>;
+  /** Compensating delete when workflow instance creation fails right after createVendorInvoice. */
+  deleteVendorInvoiceWithoutWorkflow(tenantId: string, vendorInvoiceId: string): Promise<void>;
+  updateVendorInvoiceStatus(
+    tenantId: string,
+    input: UpdateScmVendorInvoiceStatusInput,
+  ): Promise<ScmVendorInvoice | null>;
+  freezeVendorInvoiceLineAssignment(
+    tenantId: string,
+    lineId: string,
+    frozenAt: Date,
+    accountingReadyEventId?: string | null,
+  ): Promise<ScmVendorInvoiceLine | null>;
+  findVendorInvoiceById(
+    tenantId: string,
+    vendorInvoiceId: string,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] } | null>;
+  findVendorInvoiceByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ vendorInvoice: ScmVendorInvoice; lines: ScmVendorInvoiceLine[] } | null>;
+  sumVendorInvoiceAmountsForPurchaseOrder(
+    tenantId: string,
+    purchaseOrderId: string,
+    excludeStatuses?: ScmVendorInvoiceStatus[],
+  ): Promise<number>;
+  listVendorInvoices(tenantId: string, filter?: ScmVendorInvoiceFilter): Promise<ScmVendorInvoice[]>;
 
   // Stage 2: Consignment settlements
   createConsignmentSettlement(

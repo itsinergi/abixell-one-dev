@@ -33,3 +33,4 @@ backups/
 # Session scratch output (analysis dumps, scans, staging scripts)
 _*
 .worktrees/
+.pr_body.txt

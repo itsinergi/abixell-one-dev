@@ -103,6 +103,7 @@ import {
   SupplierGovernanceService,
   SupplierContractService,
   ServiceAcceptanceService,
+  VendorInvoiceService,
   SpendAnalyticsService,
 } from "./modules/supply-chain/procurement/index.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
@@ -369,6 +370,7 @@ export function buildContainer() {
     supplierGovernance: new SupplierGovernanceService(supplyChainAdvanced),
     supplierContract: new SupplierContractService(supplyChainAdvanced),
     serviceAcceptance: new ServiceAcceptanceService(supplyChainAdvanced),
+    vendorInvoice: new VendorInvoiceService(supplyChainAdvanced),
     spendAnalytics: new SpendAnalyticsService(supplyChainAdvanced),
   };
 

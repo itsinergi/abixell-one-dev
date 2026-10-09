@@ -6,9 +6,11 @@ import type {
   SpendAnalyticsService,
   SupplierContractService,
   SupplierGovernanceService,
+  VendorInvoiceService,
 } from "../application/index.js";
 import type {
   CreateScmServiceAcceptanceInput,
+  CreateScmVendorInvoiceInput,
   ScmProcurementType,
   ScmRfqStatus,
   ScmServiceAcceptanceStatus,
@@ -17,6 +19,7 @@ import type {
   ScmSupplierContractType,
   ScmSupplierEvaluationStatus,
   ScmSupplierRatingGrade,
+  ScmVendorInvoiceStatus,
 } from "../../advanced/domain/supply-chain-advanced.entity.js";
 
 export interface ProcurementRouteDeps {
@@ -25,6 +28,7 @@ export interface ProcurementRouteDeps {
     supplierGovernance: SupplierGovernanceService;
     supplierContract: SupplierContractService;
     serviceAcceptance: ServiceAcceptanceService;
+    vendorInvoice: VendorInvoiceService;
     spendAnalytics: SpendAnalyticsService;
   };
 }
@@ -147,6 +151,39 @@ const computeSpendSnapshotSchema = z.object({
   periodStart: z.string().regex(dateOnlyRegex),
   periodEnd: z.string().regex(dateOnlyRegex),
   organizationUnitId: z.string().uuid().optional(),
+});
+
+const createVendorInvoiceLineSchema = z.object({
+  purchaseOrderLineId: z.string().uuid(),
+  receivingLineId: z.string().uuid().nullable().optional(),
+  description: z.string().min(1),
+  quantityInvoiced: z.number().positive(),
+  unitPrice: z.number().nonnegative(),
+  currency: z.string().optional(),
+  lineAmount: z.number().nonnegative(),
+  accountAssignmentType: z.enum([
+    "stock",
+    "expense",
+    "asset",
+    "project",
+    "work_order",
+    "service",
+  ]).optional(),
+  accountAssignmentDimensions: z.record(z.unknown()).optional(),
+  notes: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+const createVendorInvoiceSchema = z.object({
+  idempotencyKey: z.string().min(1),
+  invoiceNumber: z.string().optional(),
+  purchaseOrderId: z.string().uuid(),
+  receivingRecordId: z.string().uuid(),
+  supplierId: z.string().uuid(),
+  invoiceAmount: z.number().nonnegative(),
+  currency: z.string().optional(),
+  notes: z.string().nullable().optional(),
+  lines: z.array(createVendorInvoiceLineSchema).min(1),
 });
 
 const createServiceAcceptanceLineSchema = z.object({
@@ -376,5 +413,44 @@ export function registerProcurementRoutes(
     const { id } = idParamSchema.parse(req.params);
     const body = commentBodySchema.parse(req.body ?? {});
     return reply.send(await deps.procurement.serviceAcceptance.approveServiceAcceptance(req.actor!, id, body.comment));
+  });
+
+  // 5. Vendor Invoices (AP Invoice, PO-based) — WP-PRO-01
+  app.post(route(prefix, "/invoices"), { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createVendorInvoiceSchema.parse(req.body);
+    return reply.status(201).send(
+      await deps.procurement.vendorInvoice.createVendorInvoice(
+        req.actor!,
+        body as unknown as Omit<CreateScmVendorInvoiceInput, "invoiceNumber" | "createdBy"> & { invoiceNumber?: string },
+      ),
+    );
+  });
+
+  app.get(route(prefix, "/invoices/:id"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    return reply.send(await deps.procurement.vendorInvoice.getVendorInvoice(req.actor!, id));
+  });
+
+  app.get(route(prefix, "/invoices"), { preHandler: app.authenticate }, async (req, reply) => {
+    const q = query(req.query);
+    return reply.send(
+      await deps.procurement.vendorInvoice.listVendorInvoices(req.actor!, {
+        purchaseOrderId: q.purchaseOrderId,
+        supplierId: q.supplierId,
+        status: q.status as ScmVendorInvoiceStatus | undefined,
+      }),
+    );
+  });
+
+  app.post(route(prefix, "/invoices/:id/submit"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = commentBodySchema.parse(req.body ?? {});
+    return reply.send(await deps.procurement.vendorInvoice.submitVendorInvoice(req.actor!, id, body.comment));
+  });
+
+  app.post(route(prefix, "/invoices/:id/approve"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = commentBodySchema.parse(req.body ?? {});
+    return reply.send(await deps.procurement.vendorInvoice.approveVendorInvoice(req.actor!, id, body.comment));
   });
 }

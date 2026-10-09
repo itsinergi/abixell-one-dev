@@ -209,12 +209,14 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/procurement/evaluations", windowCode: "route:/procurement/rfqs" },
   { method: "*", apiPath: "/procurement/contracts", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/procurement/service-acceptances", windowCode: "route:/procurement/contracts" },
+  { method: "*", apiPath: "/procurement/invoices", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/procurement/spend-analytics", windowCode: "route:/procurement/spend-analytics" },
   { method: "*", apiPath: "/supply-chain/advanced/rfqs", windowCode: "route:/procurement/rfqs" },
   { method: "*", apiPath: "/supply-chain/advanced/bids", windowCode: "route:/procurement/rfqs" },
   { method: "*", apiPath: "/supply-chain/advanced/evaluations", windowCode: "route:/procurement/rfqs" },
   { method: "*", apiPath: "/supply-chain/advanced/contracts", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/supply-chain/advanced/service-acceptances", windowCode: "route:/procurement/contracts" },
+  { method: "*", apiPath: "/supply-chain/advanced/invoices", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/supply-chain/advanced/spend-analytics", windowCode: "route:/procurement/spend-analytics" },
 
   // --- asset ---------------------------------------------------------------
@@ -249,6 +251,9 @@ export const WINDOW_RULES: WindowRule[] = [
   // transactions, matching journal creation.
   { method: "*", apiPath: "/accounting/posting-rules", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/posting-rules/generate", windowCode: "route:/finance/transactions" },
+  // Manual requeue of a terminally-failed event (Phase 2 WP-INT-03) resets it
+  // for re-posting, the same write surface as posting a journal.
+  { method: "*", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
 
   // --- hse -----------------------------------------------------------------
   // `POST /hse/records` is the report form; the `/hse` Window itself is a read
