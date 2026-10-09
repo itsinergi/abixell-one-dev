@@ -553,6 +553,14 @@ export interface AccountingKernelRepository {
   // --- Journals -------------------------------------------------------
   createJournal(input: CreateJournalInput): Promise<JournalHeader>;
   findJournalById(id: string): Promise<JournalHeader | null>;
+  /**
+   * The journal header that recorded the given idempotency key for a tenant.
+   * Backs the consumer's idempotent-conflict path: when
+   * `generateJournalInternal` throws `idempotency_key_conflict`, the existing
+   * journal is looked up here so it can be posted (if still pending) and
+   * linked in the idempotency ledger. `null` when no such journal exists.
+   */
+  findJournalByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<JournalHeader | null>;
   listJournalLines(journalHeaderId: string): Promise<JournalLine[]>;
   listJournals(tenantId: string, filter: { periodId?: string; status?: JournalStatus }): Promise<JournalHeader[]>;
 
@@ -614,7 +622,16 @@ export interface AccountingKernelRepository {
     idempotencyKey: string;
     lastAttemptStatus: PostingAttemptStatus;
     failureReason: string | null;
+    journalHeaderId?: string | null;
   }): Promise<PostingIdempotencyKey>;
+
+  /**
+   * Manual requeue support (Phase 2 WP-INT-03): resets the attempt counter
+   * so a terminally-failed event can retry. `recordIdempotencyKey` always
+   * increments on conflict, so a reset needs its own statement. No-op if no
+   * row exists yet for this key (attempt count is implicitly 0 already).
+   */
+  resetIdempotencyKeyAttempts(tenantId: string, idempotencyKey: string): Promise<void>;
 
   // --- Posting rules (WP-FIN-05) ---------------------------------------
   /**

@@ -129,6 +129,7 @@ const generateJournalFromRuleSchema = z.object({
 
 export function registerAccountingKernelRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.accountingKernel;
+  const consumer = () => container.accountingEventConsumer;
 
   // --- Periods (CRUD) --------------------------------------------------------
 
@@ -337,4 +338,20 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
     });
     return reply.status(201).send(journal);
   });
+
+  // --- Event requeue (Phase 2 WP-INT-03) --------------------------------------
+  // Manual requeue of a terminally-failed SCM accounting event: resets the
+  // outbox state to 'pending' and zeroes the attempt counter so the
+  // scheduler sweep re-claims and retries it. Permission:
+  // finance.accounting.configure.
+  app.post(
+    "/accounting/events/:id/requeue",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      await container.rbac.requirePermission(request.actor!, "finance.accounting.configure");
+      await consumer().requeueEvent(request.actor!.tenantId, id);
+      return reply.status(204).send();
+    },
+  );
 }

@@ -68,6 +68,23 @@ export interface AccountingEventWritePort {
   ): Promise<ScmAccountingReadyEvent[]>;
 
   /**
+   * Claim up to `limit` pending events for accounting consumption
+   * (Phase 2 WP-INT-01). Uses `FOR UPDATE SKIP LOCKED` so two concurrent
+   * claims never hand out the same row.
+   *
+   * The outbox CHECK constraint has no `claimed` state, so the lock is held
+   * only for the duration of this statement — the consumer's real
+   * concurrency fence is the scheduler's persisted execution lease
+   * (`SchedulerService.claimExecution`) plus the journal idempotency key.
+   * This method exists so the claiming read is explicit and ordered
+   * oldest-first rather than a plain filtered list.
+   */
+  claimPendingEvents(
+    tenantId: string,
+    limit: number,
+  ): Promise<ScmAccountingReadyEvent[]>;
+
+  /**
    * Transition an event's outbox or reconciliation lifecycle state with an audit trail.
    */
   updateEventState(

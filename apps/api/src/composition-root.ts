@@ -115,6 +115,8 @@ import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finan
 import { FinanceService } from "./modules/finance/core/application/finance.service.js";
 import { PgAccountingKernelRepository } from "./modules/accounting/kernel/infrastructure/accounting-kernel.repository.pg.js";
 import { AccountingKernelService } from "./modules/accounting/kernel/application/accounting-kernel.service.js";
+import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
+import { PgAccountingEventWritePort } from "./modules/supply-chain/ports/accounting-event.port.pg.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
 import { HseService } from "./modules/hse/core/application/hse.service.js";
 import { PgProjectDeliveryRepository } from "./modules/project-delivery/core/infrastructure/project-delivery.repository.pg.js";
@@ -425,12 +427,19 @@ export function buildContainer() {
   // and in the DB (guard_period_reopen trigger); no Workflow Definition
   // dependency. workflow_instance_id on accounting_periods stays nullable for
   // a future Epic 9 integration that can add it without a re-migration.
+  const accountingKernelRepo = new PgAccountingKernelRepository(pool);
+  const accountingEventPort = new PgAccountingEventWritePort(pool);
   const accountingKernel = new AccountingKernelService(
-    new PgAccountingKernelRepository(pool),
+    accountingKernelRepo,
     configuration,
     audit,
     rbac,
     eventBus,
+  );
+  const accountingEventConsumer = new AccountingEventConsumerService(
+    accountingKernel,
+    accountingEventPort,
+    accountingKernelRepo,
   );
 
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
@@ -721,7 +730,13 @@ export function buildContainer() {
     },
     { timersDisabled: process.env.SCHEDULER_DISABLED === "true" },
   );
-  registerJobHandlers(scheduler, { tenantRepo, workflow, integration, serviceQuality });
+  registerJobHandlers(scheduler, {
+    tenantRepo,
+    workflow,
+    integration,
+    serviceQuality,
+    accountingEventConsumer,
+  });
 
   return {
     pool,
@@ -780,6 +795,7 @@ export function buildContainer() {
     assetAdvanced,
     finance,
     accountingKernel,
+    accountingEventConsumer,
     hse,
     projectDelivery,
     reportingInsight,

@@ -3,6 +3,7 @@ import type { IntegrationService } from "../integration/integration.service.js";
 import type { ServiceQualityService } from "../service-quality/service-quality.service.js";
 import type { WorkflowService } from "../workflow/workflow.service.js";
 import type { SchedulerService } from "./scheduler.service.js";
+import type { AccountingEventConsumerService } from "../../modules/accounting/consumer/accounting-event-consumer.service.js";
 
 /**
  * Registers every known Scheduled Job handler by `handlerKey`. This is
@@ -25,6 +26,7 @@ export function registerJobHandlers(
     workflow: WorkflowService;
     integration: IntegrationService;
     serviceQuality: ServiceQualityService;
+    accountingEventConsumer: AccountingEventConsumerService;
   },
 ): void {
   scheduler.registerHandler("workflow-escalation-sweep", async ({ actor }) => {
@@ -107,6 +109,38 @@ export function registerJobHandlers(
       throw new Error(
         `Service Quality reconciliation failed for ${totals.failed} of ${totals.scanned} event(s)`,
       );
+    }
+    return {
+      tenantsSwept: tenants.length,
+      ...totals,
+      ...(actor ? {} : { perTenant }),
+    };
+  });
+
+  // Phase 2 WP-INT-01..03 — Accounting Event Poster. Sweeps each Tenant's
+  // SCM accounting-ready outbox, generates + posts GL journals via the
+  // system-principal internal methods, and records posting idempotency.
+  // Multi-replica safety is inherited from the Scheduler's persisted
+  // execution lease (claimExecution + heartbeat), so the handler itself
+  // needs no extra fencing beyond the FOR UPDATE SKIP LOCKED claim.
+  scheduler.registerHandler("accounting-event-poster", async ({ actor }) => {
+    const tenants = actor
+      ? [await deps.tenantRepo.findById(actor.tenantId)].filter((tenant) => tenant !== null)
+      : await deps.tenantRepo.list();
+    const totals = { events: 0, posted: 0, failed: 0 };
+    const perTenant: Record<string, Record<string, number>> = {};
+    for (const tenant of tenants) {
+      const result = await deps.accountingEventConsumer.processTenant(tenant.id);
+      if (!actor) {
+        perTenant[tenant.code] = {
+          events: result.events,
+          posted: result.posted,
+          failed: result.failed,
+        };
+      }
+      totals.events += result.events;
+      totals.posted += result.posted;
+      totals.failed += result.failed;
     }
     return {
       tenantsSwept: tenants.length,
