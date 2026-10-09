@@ -4215,6 +4215,65 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     return r.rows.map(toVendorInvoice);
   }
 
+  async findPurchaseOrderLines(
+    tenantId: string,
+    purchaseOrderId: string,
+  ): Promise<Array<{ id: string; unitPrice: number; currency: string }>> {
+    const r = await this.pool.query(
+      `SELECT pol.id, pol.unit_price, po.currency
+         FROM purchase_order_lines pol
+         JOIN purchase_orders po ON po.id = pol.purchase_order_id AND po.tenant_id = pol.tenant_id
+        WHERE pol.tenant_id = $1 AND pol.purchase_order_id = $2`,
+      [tenantId, purchaseOrderId],
+    );
+    return r.rows.map((row) => ({
+      id: row.id as string,
+      unitPrice: row.unit_price === null ? 0 : num(row.unit_price),
+      currency: (row.currency as string | null) ?? "IDR",
+    }));
+  }
+
+  async sumInvoicedQuantitiesByPoLineIds(
+    tenantId: string,
+    poLineIds: string[],
+    excludeStatuses: ScmVendorInvoiceStatus[] = ["rejected", "cancelled"],
+  ): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (poLineIds.length === 0) return out;
+    const r = await this.pool.query(
+      `SELECT vil.purchase_order_line_id, COALESCE(SUM(vil.quantity_invoiced), 0) AS qty
+         FROM scm_vendor_invoice_lines vil
+         JOIN scm_vendor_invoices vi ON vi.id = vil.vendor_invoice_id AND vi.tenant_id = vil.tenant_id
+        WHERE vil.tenant_id = $1 AND vil.purchase_order_line_id = ANY($2) AND vi.status != ALL($3)
+        GROUP BY vil.purchase_order_line_id`,
+      [tenantId, poLineIds, excludeStatuses],
+    );
+    for (const row of r.rows) {
+      out.set(row.purchase_order_line_id as string, num(row.qty));
+    }
+    return out;
+  }
+
+  async sumReceivingAcceptedQuantitiesByPoLine(
+    tenantId: string,
+    purchaseOrderId: string,
+  ): Promise<Map<string, number>> {
+    const r = await this.pool.query(
+      `SELECT sl.purchase_order_line_id,
+              COALESCE(SUM(sl.quantity_accepted - sl.quantity_returned - sl.quantity_reversed), 0) AS qty
+         FROM scm_receiving_lines sl
+         JOIN scm_receiving_records sr ON sr.id = sl.receiving_record_id AND sr.tenant_id = sl.tenant_id
+        WHERE sl.tenant_id = $1 AND sr.purchase_order_id = $2
+        GROUP BY sl.purchase_order_line_id`,
+      [tenantId, purchaseOrderId],
+    );
+    const out = new Map<string, number>();
+    for (const row of r.rows) {
+      out.set(row.purchase_order_line_id as string, num(row.qty));
+    }
+    return out;
+  }
+
   // =========================================================================
   // Stage 2: Consignment Settlements
   // =========================================================================

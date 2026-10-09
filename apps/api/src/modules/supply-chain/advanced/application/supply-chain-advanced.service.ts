@@ -60,6 +60,7 @@ import type {
   CreateScmSupplierContractInput,
   CreateScmSupplierEvaluationInput,
   CreateScmVendorInvoiceInput,
+  CreateScmVendorInvoiceLineInput,
   CreateScmValuationLayerAllocationInput,
   CreateScmValuationLayerInput,
   CreateScmWarehouseInput,
@@ -3160,20 +3161,18 @@ export class SupplyChainAdvancedService {
       throw new ValidationError(`Receiving record must be linked to PO ${input.purchaseOrderId}`);
     }
 
-    // Simple over-invoicing guard: invoice amount should not exceed received amount + 15% tolerance
-    // Full 3-way match (qty, amount) is handled in WP-PRO-02.
-    const grTotalReceived = grResult.lines.reduce((sum, line) => {
-      const lineAmount = (line.quantityReceived ?? 0) * (line.unitCost ?? 0);
-      return sum + lineAmount;
-    }, 0);
-    if (input.invoiceAmount > grTotalReceived * 1.15) {
-      throw new ValidationError(
-        `Invoice amount ${input.invoiceAmount} exceeds receiving record total ${grTotalReceived} by more than 15%`,
-      );
-    }
-
     const replayed = await this.repo.findVendorInvoiceByIdempotencyKey(actor.tenantId, input.idempotencyKey);
     if (replayed) return replayed;
+
+    // WP-PRO-02: per-line 3-way match (PO / GR / Invoice) — replaces the
+    // coarse header guard from WP-PRO-01. Throws ValidationError on mismatch.
+    await this.matchVendorInvoiceLines(
+      actor.tenantId,
+      input.purchaseOrderId,
+      input.currency ?? "IDR",
+      input.invoiceAmount,
+      input.lines,
+    );
 
     const invoiceNumber =
       input.invoiceNumber ??
@@ -3243,6 +3242,99 @@ export class SupplyChainAdvancedService {
     });
 
     return result;
+  }
+
+  /**
+   * WP-PRO-02: Validates 3-way match (PO/GR/Invoice) per invoice line.
+   * Rules (throw ValidationError on mismatch):
+   * 1. Line references PO line of the specified PO
+   * 2. Quantity: cumulative invoiced + this invoice ≤ GR accepted-eligible (accepted-returned-reversed)
+   * 3. Price: ≤0.5% rounding difference vs PO unit_price
+   * 4. Amount: lineAmount === quantityInvoiced * unitPrice (recomputed)
+   * 5. Header: Σ lineAmounts === invoiceAmount, currency consistent
+   */
+  private async matchVendorInvoiceLines(
+    tenantId: string,
+    purchaseOrderId: string,
+    invoiceCurrency: string,
+    invoiceAmount: number,
+    lines: CreateScmVendorInvoiceLineInput[],
+  ): Promise<void> {
+    // Fetch PO lines
+    const poLines = await this.repo.findPurchaseOrderLines(tenantId, purchaseOrderId);
+    const poLinesById = new Map(poLines.map((pol) => [pol.id, pol]));
+
+    // Fetch prior invoiced quantities (exclude rejected/cancelled)
+    const poLineIds = lines.map((line) => line.purchaseOrderLineId);
+    const invoicedQtyByPoLine = await this.repo.sumInvoicedQuantitiesByPoLineIds(tenantId, poLineIds);
+
+    // Fetch GR accepted-eligible quantities per PO line (across all receiving records of this PO)
+    const acceptedQtyByPoLine = await this.repo.sumReceivingAcceptedQuantitiesByPoLine(tenantId, purchaseOrderId);
+
+    // Use exact decimal arithmetic for line amount accumulation
+    let lineAmountSumUnits = 0n;
+    const invoiceAmountUnits = toExactUnits(invoiceAmount);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      const lineIndex = i + 1;
+
+      // Rule 1: PO line belongs to the specified PO
+      const poLine = poLinesById.get(line.purchaseOrderLineId);
+      if (!poLine) {
+        throw new ValidationError(
+          `Line ${lineIndex}: PO line ${line.purchaseOrderLineId} not found in PO ${purchaseOrderId}`,
+        );
+      }
+
+      // Rule 4: Amount consistency (compute server-side, must match input exactly)
+      const computedLineAmount = multiplyQuantityCost(line.quantityInvoiced, line.unitPrice);
+      const computedLineAmountUnits = toExactUnits(computedLineAmount);
+      const inputLineAmountUnits = toExactUnits(line.lineAmount);
+      if (computedLineAmountUnits !== inputLineAmountUnits) {
+        throw new ValidationError(
+          `Line ${lineIndex}: lineAmount ${line.lineAmount} does not match qty ${line.quantityInvoiced} × unitPrice ${line.unitPrice} (computed: ${computedLineAmount})`,
+        );
+      }
+
+      // Rule 3: Price within 0.5% of PO unit_price (ponytail: rounding tolerance constant)
+      const priceTolerance = poLine.unitPrice * 0.005; // 0.5%
+      if (Math.abs(line.unitPrice - poLine.unitPrice) > priceTolerance) {
+        throw new ValidationError(
+          `Line ${lineIndex}: unitPrice ${line.unitPrice} differs from PO ${poLine.unitPrice} by more than 0.5%`,
+        );
+      }
+
+      // Rule 2: Quantity check
+      const priorInvoiced = invoicedQtyByPoLine.get(line.purchaseOrderLineId) ?? 0;
+      const cumulativeInvoiced = priorInvoiced + line.quantityInvoiced;
+      const acceptedEligible = acceptedQtyByPoLine.get(line.purchaseOrderLineId) ?? 0;
+
+      if (cumulativeInvoiced > acceptedEligible) {
+        throw new ValidationError(
+          `Line ${lineIndex}: cumulative invoiced qty ${cumulativeInvoiced} exceeds GR accepted-eligible qty ${acceptedEligible}`,
+        );
+      }
+
+      // Accumulate line amounts for header check (using exact decimal)
+      lineAmountSumUnits += computedLineAmountUnits;
+
+      // Currency consistency: each line uses invoice currency (or empty => default)
+      const lineCurrency = line.currency ?? "IDR";
+      if (lineCurrency !== invoiceCurrency) {
+        throw new ValidationError(
+          `Line ${lineIndex}: currency ${lineCurrency} does not match invoice currency ${invoiceCurrency}`,
+        );
+      }
+    }
+
+    // Rule 5: Header consistency (exact match via BigInt arithmetic)
+    if (lineAmountSumUnits !== invoiceAmountUnits) {
+      const lineAmountSum = fromExactUnits(lineAmountSumUnits);
+      throw new ValidationError(
+        `Invoice header: sum of line amounts ${lineAmountSum} does not match invoice amount ${invoiceAmount}`,
+      );
+    }
   }
 
   async getVendorInvoice(

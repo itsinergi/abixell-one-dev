@@ -159,9 +159,9 @@ describe("WP-PRO-01: AP Invoice (Vendor Invoice PO-based)", () => {
     receivingRecordId = result.rows[0].id;
 
     result = await pool.query(
-      `INSERT INTO scm_receiving_lines (tenant_id, receiving_record_id, purchase_order_line_id, item_id, warehouse_id, quantity_received, unit_cost, account_assignment_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [tenantId, receivingRecordId, purchaseOrderLineId, itemId, warehouseId, 100, 10000, "expense"],
+      `INSERT INTO scm_receiving_lines (tenant_id, receiving_record_id, purchase_order_line_id, item_id, warehouse_id, quantity_received, quantity_accepted, unit_cost, account_assignment_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [tenantId, receivingRecordId, purchaseOrderLineId, itemId, warehouseId, 1000, 1000, 10000, "expense"],
     );
     receivingLineId = result.rows[0].id;
 
@@ -634,7 +634,7 @@ describe("WP-PRO-01: AP Invoice (Vendor Invoice PO-based)", () => {
   // TEST 10: Authorization Gate (RBAC)
   // ============================================================================
   it("TEST 10: should reject if user lacks supply_chain.vendor_invoice.manage", async () => {
-    // Create role without permission
+    // Create role without the required permission
     const roleResult = await pool.query(
       `INSERT INTO roles (tenant_id, code, name)
        VALUES ($1, $2, $3) RETURNING id`,
@@ -642,9 +642,25 @@ describe("WP-PRO-01: AP Invoice (Vendor Invoice PO-based)", () => {
     );
     const roleId = roleResult.rows[0].id;
 
+    // Create assignment for this user with the no-permission role
+    const assignmentResult = await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
+       VALUES ($1, $2, 'tenant') RETURNING id`,
+      [userId, roleId],
+    );
+    const assignmentId = assignmentResult.rows[0].id;
+
     const unauthedActor: ActorContext = {
-      ...actor,
+      userId,
+      tenantId,
+      sessionId: randomUUID(),
+      assignmentId,
       roleId,
+      roleCode: "ROLE_READONLY",
+      scopeType: "tenant",
+      scopeLegalEntityId: null,
+      scopeOrganizationUnitId: null,
+      scopeCustomerId: null,
     };
 
     const svc = new SupplyChainAdvancedService(
@@ -710,7 +726,10 @@ describe("WP-PRO-01: AP Invoice (Vendor Invoice PO-based)", () => {
       });
       expect.fail("Should reject over-invoicing");
     } catch (err: unknown) {
-      expect((err as Error).message).toMatch(/exceed|over.?invoic|total/i);
+      // WP-PRO-02 replaced the header guard with per-line 3-way match; this
+      // fixture's price deviation (unitPrice 15000 vs PO 10000) now trips
+      // the price-match rule before the amount would exceed a qty ceiling.
+      expect((err as Error).message).toMatch(/exceed|over.?invoic|total|price|match/i);
     }
   });
 });
