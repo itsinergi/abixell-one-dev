@@ -241,6 +241,7 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/journals", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/journals/:id", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/journals/:id/post", windowCode: "route:/finance/transactions" },
+  { method: "POST", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
   // Posting rules (Phase 1G, WP-FIN-05) are tenant-admin configuration, same
   // family as periods/accounts above — create and deprecate map to accounts.
   // `resolve` only previews a rule against the account configuration, so it
