@@ -6,6 +6,7 @@ import type {
   CreateAccountInput,
   CreateJournalInput,
   CreatePeriodInput,
+  CreatePostingRuleInput,
   GeneralLedgerEntry,
   GlBalance,
   JournalGlReconciliation,
@@ -13,6 +14,9 @@ import type {
   JournalLine,
   Money,
   PostingIdempotencyKey,
+  PostingRule,
+  PostingRuleFilter,
+  PostingRuleLeg,
   AccountingKernelRepository,
   AccountingPeriodStatus,
   JournalStatus,
@@ -292,9 +296,9 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
       const hdr = await client.query(
         `INSERT INTO journal_headers
            (tenant_id, legal_entity_id, journal_number, journal_date, accounting_date,
-            period_id, description, currency, idempotency_key, status, is_balanced,
-            created_by, updated_by)
-         VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending', false, $10, $10)
+            period_id, description, currency, posting_rule_version_id, idempotency_key,
+            status, is_balanced, created_by, updated_by)
+         VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, 'pending', false, $11, $11)
          RETURNING *`,
         [
           input.tenantId,
@@ -305,6 +309,7 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
           input.periodId,
           input.description,
           input.currency,
+          input.postingRuleVersionId,
           input.idempotencyKey,
           input.createdBy,
         ],
@@ -835,6 +840,134 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     });
   }
 
+  // --- Posting rules (WP-FIN-05) ------------------------------------------------
+
+  async createPostingRule(input: CreatePostingRuleInput): Promise<PostingRule> {
+    const r = await this.pool.query(
+      `INSERT INTO posting_rules
+         (tenant_id, rule_code, rule_name, rule_version, trigger_event_type,
+          accounting_formula, requires_approval, materiality_threshold,
+          is_active, effective_date, created_by, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::numeric, true, $9::date, $10, $10)
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.ruleCode,
+        input.ruleName,
+        input.ruleVersion,
+        input.triggerEventType,
+        JSON.stringify(input.accountingFormula),
+        input.requiresApproval,
+        input.materialityThreshold,
+        input.effectiveDate,
+        input.createdBy,
+      ],
+    );
+    return toPostingRule(r.rows[0]);
+  }
+
+  async findPostingRuleById(id: string): Promise<PostingRule | null> {
+    const r = await this.pool.query(`SELECT * FROM posting_rules WHERE id = $1`, [id]);
+    return r.rows[0] ? toPostingRule(r.rows[0]) : null;
+  }
+
+  async listPostingRules(
+    tenantId: string,
+    filter: PostingRuleFilter,
+  ): Promise<PostingRule[]> {
+    const conditions = [`tenant_id = $1`];
+    const params: unknown[] = [tenantId];
+    if (filter.triggerEventType) {
+      params.push(filter.triggerEventType);
+      conditions.push(`trigger_event_type = $${params.length}`);
+    }
+    if (filter.isActive !== undefined) {
+      params.push(filter.isActive);
+      conditions.push(`is_active = $${params.length}`);
+    }
+    const r = await this.pool.query(
+      `SELECT * FROM posting_rules WHERE ${conditions.join(" AND ")} ORDER BY rule_code, rule_version DESC`,
+      params,
+    );
+    return r.rows.map(toPostingRule);
+  }
+
+  async findActivePostingRule(
+    tenantId: string,
+    triggerEventType: string,
+    onDate: string,
+  ): Promise<PostingRule | null> {
+    // Resolves the active posting rule for a trigger event type as of a date:
+    // - effective_date <= onDate
+    // - deprecated_date IS NULL OR deprecated_date > onDate
+    // - is_active = true
+    // - Latest rule_version (ties broken by numeric ordering, e.g. v10 > v9, not lexicographic).
+    //   Extract numeric components and sort descending, then by full version string for consistency.
+    const r = await this.pool.query(
+      `SELECT * FROM posting_rules
+        WHERE tenant_id = $1
+          AND trigger_event_type = $2
+          AND is_active = true
+          AND effective_date <= $3::date
+          AND (deprecated_date IS NULL OR deprecated_date > $3::date)
+        ORDER BY NULLIF(regexp_replace(rule_version, '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, rule_version DESC
+        LIMIT 1`,
+      [tenantId, triggerEventType, onDate],
+    );
+    return r.rows[0] ? toPostingRule(r.rows[0]) : null;
+  }
+
+  async deprecatePostingRule(
+    tenantId: string,
+    id: string,
+    deprecatedDate: string,
+    updatedBy: string | null,
+  ): Promise<PostingRule | null> {
+    const r = await this.pool.query(
+      `UPDATE posting_rules
+        SET deprecated_date = $3::date,
+            is_active = false,
+            updated_by = $4,
+            updated_at = now()
+        WHERE id = $2 AND tenant_id = $1
+        RETURNING *`,
+      [tenantId, id, deprecatedDate, updatedBy],
+    );
+    return r.rows[0] ? toPostingRule(r.rows[0]) : null;
+  }
+
+  async evaluateAmountExpression(expression: string, amount: Money): Promise<Money> {
+    // The expression is pre-validated by the service caller to contain only
+    // the token AMOUNT, numeric literals, operators + - * / and parentheses.
+    // Defense-in-depth: re-validate here before substitution, so the repo does
+    // not trust the caller's whitelist alone. This guards against future changes
+    // that might accidentally bypass service validation.
+    const trimmed = (expression ?? "").trim();
+    if (!trimmed) {
+      throw new Error("amountExpression must not be empty");
+    }
+    if (!/^[\d.+\-*/()\s]*$/.test(trimmed.replace(/\bAMOUNT\b/g, ""))) {
+      throw new Error("amountExpression contains invalid characters after removing AMOUNT token");
+    }
+    // AMOUNT is the only allowed identifier.
+    const identifiers = trimmed.match(/[a-zA-Z]+/g) ?? [];
+    for (const id of identifiers) {
+      if (id !== "AMOUNT") {
+        throw new Error(`amountExpression contains forbidden identifier: ${id}`);
+      }
+    }
+
+    // AMOUNT is substituted with the bound $1 parameter — the amount value is
+    // never string-interpolated into the SQL. PostgreSQL evaluates the
+    // arithmetic in exact numeric; the result is cast to numeric(18,2).
+    const sqlExpr = trimmed.replace(/\bAMOUNT\b/g, "$1");
+    const r = await this.pool.query(
+      `SELECT (${sqlExpr})::numeric(18,2) AS result`,
+      [amount],
+    );
+    return toMoney(r.rows[0].result);
+  }
+
   // --- Idempotency -----------------------------------------------------------
 
   async findIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<PostingIdempotencyKey | null> {
@@ -1043,5 +1176,26 @@ function toIdempotencyKey(row: QueryResultRow): PostingIdempotencyKey {
     lastAttemptStatus: row.last_attempt_status,
     failureReason: row.failure_reason,
     createdAt: row.created_at,
+  };
+}
+
+function toPostingRule(row: QueryResultRow): PostingRule {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    ruleCode: row.rule_code,
+    ruleName: row.rule_name,
+    ruleVersion: row.rule_version,
+    triggerEventType: row.trigger_event_type,
+    accountingFormula: Array.isArray(row.accounting_formula)
+      ? (row.accounting_formula as PostingRuleLeg[])
+      : [],
+    requiresApproval: row.requires_approval,
+    materialityThreshold: row.materiality_threshold !== null ? toMoney(row.materiality_threshold) : null,
+    isActive: row.is_active,
+    effectiveDate: toDateString(row.effective_date),
+    deprecatedDate: row.deprecated_date ? toDateString(row.deprecated_date) : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }

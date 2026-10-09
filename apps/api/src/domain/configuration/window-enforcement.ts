@@ -241,6 +241,14 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/journals", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/journals/:id", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/journals/:id/post", windowCode: "route:/finance/transactions" },
+  // Posting rules (Phase 1G, WP-FIN-05) are tenant-admin configuration, same
+  // family as periods/accounts above — create and deprecate map to accounts.
+  // `resolve` only previews a rule against the account configuration, so it
+  // stays under accounts too. `generate` produces a pending journal draft, so
+  // the longer prefix below overrides the blanket rule to put it under
+  // transactions, matching journal creation.
+  { method: "*", apiPath: "/accounting/posting-rules", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/posting-rules/generate", windowCode: "route:/finance/transactions" },
 
   // --- hse -----------------------------------------------------------------
   // `POST /hse/records` is the report form; the `/hse` Window itself is a read

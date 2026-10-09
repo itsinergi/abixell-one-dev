@@ -70,7 +70,7 @@ exports.up = (pgm) => {
   pgm.createIndex(
     "general_ledger_entries",
     ["tenant_id", "period_id"],
-    { name: "general_ledger_entries_tenant_period_idx" },
+    { name: "general_ledger_entries_tenant_period_idx", ifNotExists: true },
   );
 };
 
