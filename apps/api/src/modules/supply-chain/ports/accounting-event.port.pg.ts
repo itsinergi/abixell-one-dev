@@ -224,6 +224,31 @@ export class PgAccountingEventWritePort implements AccountingEventWritePort {
     return r.rows.map(toAccountingReadyEvent);
   }
 
+  async claimPendingEvents(
+    tenantId: string,
+    limit: number,
+  ): Promise<ScmAccountingReadyEvent[]> {
+    const own = await this.pool.connect();
+    try {
+      await own.query("BEGIN");
+      const r = await own.query(
+        `SELECT * FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND outbox_state = 'pending'
+          ORDER BY created_at ASC
+          LIMIT $2
+          FOR UPDATE SKIP LOCKED`,
+        [tenantId, limit],
+      );
+      await own.query("COMMIT");
+      return r.rows.map(toAccountingReadyEvent);
+    } catch (err) {
+      await own.query("ROLLBACK");
+      throw err;
+    } finally {
+      own.release();
+    }
+  }
+
   async updateEventState(
     tenantId: string,
     input: UpdateScmAccountingReadyEventStateInput,

@@ -347,6 +347,14 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     return r.rows[0] ? toJournalHeader(r.rows[0]) : null;
   }
 
+  async findJournalByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<JournalHeader | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM journal_headers WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    return r.rows[0] ? toJournalHeader(r.rows[0]) : null;
+  }
+
   async listJournalLines(journalHeaderId: string): Promise<JournalLine[]> {
     const r = await this.pool.query(
       `SELECT * FROM journal_lines WHERE journal_header_id = $1 ORDER BY line_number`,
@@ -985,17 +993,23 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     idempotencyKey: string;
     lastAttemptStatus: PostingAttemptStatus;
     failureReason: string | null;
+    journalHeaderId?: string | null;
   }): Promise<PostingIdempotencyKey> {
     const r = await this.pool.query(
       `INSERT INTO posting_idempotency_keys
          (tenant_id, source_event_id, posting_rule_version_hash, idempotency_key,
-          last_attempt_status, failure_reason)
-       VALUES ($1, $2, $3, $4, $5, $6)
+          last_attempt_status, failure_reason, journal_header_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (tenant_id, idempotency_key) DO UPDATE SET
          last_attempt_status = EXCLUDED.last_attempt_status,
          failure_reason = EXCLUDED.failure_reason,
-         posting_attempt_count = posting_attempt_count + 1,
-         last_attempt_date = now()
+         posting_attempt_count = CASE
+           WHEN EXCLUDED.last_attempt_status = 'failure'
+             THEN posting_idempotency_keys.posting_attempt_count + 1
+           ELSE posting_idempotency_keys.posting_attempt_count
+         END,
+         last_attempt_date = now(),
+         journal_header_id = COALESCE(EXCLUDED.journal_header_id, posting_idempotency_keys.journal_header_id)
        RETURNING *`,
       [
         input.tenantId,
@@ -1004,9 +1018,32 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
         input.idempotencyKey,
         input.lastAttemptStatus,
         input.failureReason,
+        input.journalHeaderId ?? null,
       ],
     );
     return toIdempotencyKey(r.rows[0]);
+  }
+
+  /**
+   * Phase 2 WP-INT-03: manual requeue support. Resets the attempt counter to
+   * zero so a terminally-failed event can retry from scratch. Unlike
+   * recordIdempotencyKey (which always increments on conflict), this is a
+   * plain UPDATE that sets posting_attempt_count = 0. No-op if the row does
+   * not exist yet (attempt count is implicitly 0 in that case).
+   */
+  async resetIdempotencyKeyAttempts(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE posting_idempotency_keys
+         SET posting_attempt_count = 0,
+             last_attempt_status = 'pending',
+             failure_reason = NULL,
+             last_attempt_date = now()
+       WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
   }
 
   // --- Cross-domain reads ----------------------------------------------------

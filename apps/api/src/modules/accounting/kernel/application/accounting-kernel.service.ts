@@ -582,6 +582,61 @@ export class AccountingKernelService {
     return result.journal;
   }
 
+  /**
+   * Internal journal posting without authorization — callers must authorize first.
+   * Extracted from postJournal for use by the event consumer (a system principal
+   * that holds no assignment row, so rbac.requirePermission cannot be satisfied).
+   * No RBAC gate; createdBy set to null (system/internal posting).
+   *
+   * TRUST BOUNDARY: public for in-process internal callers only. Never wire this
+   * to an HTTP route — every external caller goes through postJournal(actor, ...).
+   */
+  async postJournalInternal(tenantId: string, journalId: string): Promise<JournalHeader> {
+    const journal = await this.repo.findJournalById(journalId);
+    if (!journal || journal.tenantId !== tenantId) {
+      throw new NotFoundError("JournalHeader", journalId);
+    }
+
+    // Check period not closed
+    const period = await this.repo.findPeriodById(journal.periodId);
+    if (!period) throw new NotFoundError("AccountingPeriod", journal.periodId);
+    if (period.status === "closed" || period.status === "reopenable") {
+      throw new ConflictError("Cannot post journal to a non-open accounting period");
+    }
+
+    // Post in repository (atomic transaction)
+    const result = await this.repo.postJournal(journalId, null);
+
+    if (result === null) {
+      throw new NotFoundError("JournalHeader", journalId);
+    }
+
+    if ("unbalanced" in result) {
+      const { balanced, debitTotal, creditTotal } = await this.computeJournalBalance(journalId);
+      throw new ValidationError("Journal is unbalanced", {
+        debitTotal,
+        creditTotal,
+        difference: balanced ? "0.00" : this.subtractMoney(debitTotal, creditTotal),
+      });
+    }
+
+    // Emit event
+    await this.eventBus.publish({
+      tenantId,
+      eventType: "accounting.journal.posted",
+      entityType: "journal_header",
+      entityId: journal.id,
+      payload: {
+        journalNumber: journal.journalNumber,
+        periodCode: period.periodCode,
+        accountingDate: journal.accountingDate,
+      },
+      createdBy: null,
+    });
+
+    return result.journal;
+  }
+
   async reverseJournal(
     actor: ActorContext,
     journalId: string,
@@ -1062,6 +1117,141 @@ export class AccountingKernelService {
     await this.audit.record({
       tenantId: actor.tenantId,
       actorUserId: actor.userId,
+      action: "accounting.journal.created",
+      entityType: "journal_header",
+      entityId: journal.id,
+      metadata: {
+        journalNumber: journal.journalNumber,
+        lineCount: lines.length,
+        postingRuleId: rule.id,
+        triggerEventType: input.triggerEventType,
+      },
+    });
+
+    return journal;
+  }
+
+  /**
+   * Internal journal generation without authorization — callers must authorize first.
+   * Extracted from generateJournalFromRule for use by the event consumer (a system
+   * principal that holds no assignment row, so rbac.requirePermission cannot be
+   * satisfied). No RBAC gate; createdBy set to null (system/internal posting).
+   *
+   * TRUST BOUNDARY: public for in-process internal callers only. Never wire this
+   * to an HTTP route — every external caller goes through generateJournalFromRule.
+   */
+  async generateJournalInternal(
+    tenantId: string,
+    input: {
+      legalEntityId: string;
+      triggerEventType: string;
+      journalNumber: string;
+      journalDate: string;
+      accountingDate: string;
+      periodId: string;
+      amount: string;
+      idempotencyKey: string;
+      description: string | null;
+      currency: string;
+    },
+  ): Promise<JournalHeader> {
+    if (!(await this.repo.legalEntityExists(tenantId, input.legalEntityId))) {
+      throw new NotFoundError("LegalEntity", input.legalEntityId);
+    }
+    const legalEntityId = input.legalEntityId;
+    const journalDate = this.parseDate(input.journalDate, "journalDate");
+    const accountingDate = this.parseDate(input.accountingDate, "accountingDate");
+
+    const idempotencyKey = (input.idempotencyKey ?? "").trim();
+    if (!idempotencyKey) {
+      throw new ValidationError("idempotencyKey is required");
+    }
+
+    const period = await this.repo.findPeriodById(input.periodId);
+    if (!period || period.tenantId !== tenantId) {
+      throw new NotFoundError("AccountingPeriod", input.periodId);
+    }
+    if (period.status === "closed" || period.status === "reopenable") {
+      throw new ConflictError("Cannot create journal in a non-open accounting period");
+    }
+
+    // Resolve the posting rule + evaluate legs (fail closed if no active rule).
+    const { rule, resolvedLegs } = await this.resolvePostingRuleInternal(
+      tenantId,
+      input.triggerEventType,
+      accountingDate,
+      this.parseMoney(input.amount),
+    );
+
+    // Resolve account codes to account IDs within the legal entity.
+    const lines: Array<{
+      accountId: string;
+      lineNumber: number;
+      debit: Money;
+      credit: Money;
+      lineDescription: string | null;
+      projectId: string | null;
+      siteId: string | null;
+    }> = [];
+    let lineNumber = 1;
+    for (const leg of resolvedLegs) {
+      const account = await this.repo.findAccountByCode(tenantId, legalEntityId, leg.accountCode);
+      if (!account) {
+        throw new ValidationError(`Account code ${leg.accountCode} not found in this legal entity`);
+      }
+      if (!account.isActive) {
+        throw new ConflictError(`Account ${leg.accountCode} is deactivated`);
+      }
+      lines.push({
+        accountId: account.id,
+        lineNumber,
+        debit: leg.side === "debit" ? leg.amount : "0.00",
+        credit: leg.side === "credit" ? leg.amount : "0.00",
+        lineDescription: null,
+        projectId: null,
+        siteId: null,
+      });
+      lineNumber++;
+    }
+
+    // Call repo.createJournal directly to preserve posting_rule_version_id and
+    // the caller-supplied idempotency key.
+    let journal: JournalHeader;
+    try {
+      journal = await this.repo.createJournal({
+        tenantId,
+        legalEntityId,
+        journalNumber: input.journalNumber,
+        journalDate,
+        accountingDate,
+        periodId: input.periodId,
+        description: input.description,
+        currency: input.currency,
+        postingRuleVersionId: rule.id,
+        idempotencyKey,
+        lines,
+        createdBy: null,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError(
+          "A journal with this idempotency key already exists",
+          "idempotency_key_conflict",
+        );
+      }
+      throw error;
+    }
+
+    // Post-condition: enforce the no-auto-post guarantee.
+    if (journal.status !== "pending") {
+      throw new Error(
+        `generateJournalInternal must produce a pending draft; got status "${journal.status}"`,
+      );
+    }
+
+    await this.audit.record({
+      tenantId,
+      actorUserId: null,
       action: "accounting.journal.created",
       entityType: "journal_header",
       entityId: journal.id,
