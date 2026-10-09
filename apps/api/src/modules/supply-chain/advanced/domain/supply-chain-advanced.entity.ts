@@ -2343,22 +2343,6 @@ export interface SupplyChainAdvancedRepository {
     excludeStatuses?: ScmVendorInvoiceStatus[],
   ): Promise<number>;
   listVendorInvoices(tenantId: string, filter?: ScmVendorInvoiceFilter): Promise<ScmVendorInvoice[]>;
-  /** Fetch PO lines by PO ID: id, unit_price, currency. WP-PRO-02 3-way match gate. */
-  findPurchaseOrderLines(
-    tenantId: string,
-    purchaseOrderId: string,
-  ): Promise<Array<{ id: string; unitPrice: number; currency: string }>>;
-  /** Sum invoiced quantities by PO line IDs, excluding specified statuses. WP-PRO-02. */
-  sumInvoicedQuantitiesByPoLineIds(
-    tenantId: string,
-    poLineIds: string[],
-    excludeStatuses?: ScmVendorInvoiceStatus[],
-  ): Promise<Map<string, number>>;
-  /** Sum receiving accepted-eligible quantities (accepted - returned - reversed) by PO line, across all receiving records of a PO. WP-PRO-02. */
-  sumReceivingAcceptedQuantitiesByPoLine(
-    tenantId: string,
-    purchaseOrderId: string,
-  ): Promise<Map<string, number>>;
 
   // Stage 2: Consignment settlements
   createConsignmentSettlement(

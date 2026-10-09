@@ -804,4 +804,92 @@ describe("WP-PRO-02: 3-Way Match (PO/GR/Invoice) Validation", () => {
     expect(vendorInvoice.status).toBe("draft");
     expect(lines.length).toBe(2);
   });
+
+  // ============================================================================
+  // TEST 13: Concurrent Invoicing (TOCTOU Race Guard)
+  // ============================================================================
+  it("TEST 13: concurrent invoices each requesting full qty (TOCTOU guard) → one OK, one fails", async () => {
+    const fx = await makeFixture({ unitPrice: 10000, quantityAccepted: 100 });
+
+    // Fire both invoices concurrently with distinct idempotency keys, each requesting 100% of accepted qty.
+    // The lock-inside-transaction ensures only ONE will successfully read cumulative=0 and pass Rule 2.
+    const [result1, result2] = await Promise.allSettled([
+      service.createVendorInvoice(actor, {
+        invoiceNumber: `INV${Date.now()}013A`,
+        idempotencyKey: `${randomUUID()}:13a`,
+        purchaseOrderId: fx.purchaseOrderId,
+        receivingRecordId: fx.receivingRecordId,
+        supplierId,
+        invoiceAmount: 1000000,
+        currency: "IDR",
+        lines: [
+          {
+            purchaseOrderLineId: fx.purchaseOrderLineId,
+            description: "Concurrent 1",
+            quantityInvoiced: 100,
+            unitPrice: 10000,
+            currency: "IDR",
+            lineAmount: 1000000,
+          },
+        ],
+      }),
+      service.createVendorInvoice(actor, {
+        invoiceNumber: `INV${Date.now()}013B`,
+        idempotencyKey: `${randomUUID()}:13b`,
+        purchaseOrderId: fx.purchaseOrderId,
+        receivingRecordId: fx.receivingRecordId,
+        supplierId,
+        invoiceAmount: 1000000,
+        currency: "IDR",
+        lines: [
+          {
+            purchaseOrderLineId: fx.purchaseOrderLineId,
+            description: "Concurrent 2",
+            quantityInvoiced: 100,
+            unitPrice: 10000,
+            currency: "IDR",
+            lineAmount: 1000000,
+          },
+        ],
+      }),
+    ]);
+
+    // One should succeed
+    const successes = [result1, result2].filter((r) => r.status === "fulfilled");
+    expect(successes.length).toBe(1);
+
+    // One should fail with cumulative qty exceeded
+    const failures = [result1, result2].filter((r) => r.status === "rejected");
+    expect(failures.length).toBe(1);
+    expect((failures[0] as PromiseRejectedResult).reason.message).toMatch(/cumulative invoiced qty|exceeds GR/i);
+  });
+
+  // ============================================================================
+  // TEST 14: PO Currency Mismatch
+  // ============================================================================
+  it("TEST 14: PO currency (IDR) vs invoice currency (USD) mismatch → ValidationError", async () => {
+    const fx = await makeFixture({ unitPrice: 10000, quantityAccepted: 100 });
+
+    await expect(
+      service.createVendorInvoice(actor, {
+        invoiceNumber: `INV${Date.now()}014`,
+        idempotencyKey: `${randomUUID()}:14`,
+        purchaseOrderId: fx.purchaseOrderId,
+        receivingRecordId: fx.receivingRecordId,
+        supplierId,
+        invoiceAmount: 1000000,
+        currency: "USD",
+        lines: [
+          {
+            purchaseOrderLineId: fx.purchaseOrderLineId,
+            description: "Wrong currency",
+            quantityInvoiced: 100,
+            unitPrice: 10000,
+            currency: "USD",
+            lineAmount: 1000000,
+          },
+        ],
+      }),
+    ).rejects.toThrow(/currency.*does not match.*IDR/i);
+  });
 });
