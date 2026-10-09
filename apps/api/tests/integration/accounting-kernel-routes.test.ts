@@ -867,3 +867,436 @@ describe("Accounting Kernel HTTP Routes — GL Reconciliation (WP-FIN-04)", () =
   });
 });
 
+const POSTING_RULES_TENANT = `ak-pr-routes-${Date.now()}`;
+
+describe("Accounting Kernel HTTP Routes — Posting Rules (WP-FIN-05)", () => {
+  const app = buildApp();
+
+  let tenantId: string;
+  let legalEntityId: string;
+  let coaId: string;
+  let adminToken: string;
+  let financeToken: string;
+  let readOnlyToken: string;
+
+  const post = (url: string, token: string, payload: unknown = {}) =>
+    app.inject({ method: "POST", url, headers: authHeader(token), payload });
+  const get = (url: string, token: string) => app.inject({ method: "GET", url, headers: authHeader(token) });
+
+  beforeAll(async () => {
+    const tenant = await bootstrapTenant(app, POSTING_RULES_TENANT, "Posting Rules Routes Test");
+    tenantId = tenant.id;
+
+    await activateAllModules(tenantId);
+    await provisionFirstAdmin({ tenantId, email: "admin@ak-pr.local", password: "Admin12345!" });
+    adminToken = (await login(app, POSTING_RULES_TENANT, "admin@ak-pr.local", "Admin12345!")).body.accessToken;
+
+    await createReadOnlyRole(tenantId, "ACCT_POSTING_RULES", [
+      "finance.accounting.configure",
+      "finance.accounting.manage",
+      "finance.accounting.approve",
+      "finance.accounting.read",
+    ]);
+    await createInternalUser(app, adminToken, {
+      email: "finance@ak-pr.local",
+      fullName: "Finance User",
+      password: "Finance12345!",
+      roleCode: "ACCT_POSTING_RULES",
+      scopeType: "tenant",
+    });
+    financeToken = (await login(app, POSTING_RULES_TENANT, "finance@ak-pr.local", "Finance12345!")).body.accessToken;
+
+    await createReadOnlyRole(tenantId, "ACCT_PR_READ", ["finance.accounting.read"]);
+    await createInternalUser(app, adminToken, {
+      email: "readonly@ak-pr.local",
+      fullName: "Read Only",
+      password: "ReadOnly12345!",
+      roleCode: "ACCT_PR_READ",
+      scopeType: "tenant",
+    });
+    readOnlyToken = (await login(app, POSTING_RULES_TENANT, "readonly@ak-pr.local", "ReadOnly12345!")).body
+      .accessToken;
+
+    const leRes = await pool.query(
+      `INSERT INTO legal_entities (tenant_id, name) VALUES ($1, 'Posting Rules Routes LE') RETURNING id`,
+      [tenantId],
+    );
+    legalEntityId = leRes.rows[0].id;
+
+    const coaRes = await pool.query(
+      `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date)
+       VALUES ($1, $2, 'COA-PR', '2026-01-01') RETURNING id`,
+      [tenantId, legalEntityId],
+    );
+    coaId = coaRes.rows[0].id;
+
+    await post("/accounting/accounts", financeToken, {
+      legalEntityId,
+      coaId,
+      accountCode: "1000",
+      accountName: "Cash",
+      accountClass: "ASSET",
+      normalBalance: "debit",
+      accountType: null,
+    });
+    await post("/accounting/accounts", financeToken, {
+      legalEntityId,
+      coaId,
+      accountCode: "4000",
+      accountName: "Revenue",
+      accountClass: "INCOME",
+      normalBalance: "credit",
+      accountType: null,
+    });
+  });
+
+  afterAll(async () => {
+    await pool.query(`DELETE FROM tenants WHERE code = $1`, [POSTING_RULES_TENANT]);
+    await app.close();
+  });
+
+  describe("POST /accounting/posting-rules", () => {
+    it("201 happy path: creates a balanced posting rule", async () => {
+      const res = await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_OK",
+        ruleName: "HTTP Rule",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_HTTP",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+      expect(res.statusCode).toBe(201);
+      const rule = res.json();
+      expect(rule.ruleCode).toBe("RULE_HTTP_OK");
+      expect(rule.isActive).toBe(true);
+    });
+
+    it("403 rejects without finance.accounting.configure", async () => {
+      const res = await post("/accounting/posting-rules", readOnlyToken, {
+        ruleCode: "RULE_HTTP_NOPERM",
+        ruleName: "No Permission",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_NOPERM",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+      expect(res.statusCode).toBe(403);
+    });
+  });
+
+  describe("GET /accounting/posting-rules", () => {
+    it("200 happy path: lists posting rules by trigger event type", async () => {
+      await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_LIST",
+        ruleName: "List Rule",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_HTTP_LIST",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+
+      const res = await get(`/accounting/posting-rules?triggerEventType=TEST_HTTP_LIST`, financeToken);
+      expect(res.statusCode).toBe(200);
+      const rules = res.json() as Array<{ ruleCode: string }>;
+      expect(Array.isArray(rules)).toBe(true);
+      expect(rules.some((r) => r.ruleCode === "RULE_HTTP_LIST")).toBe(true);
+    });
+
+    it("403 rejects without finance.accounting.read", async () => {
+      await createReadOnlyRole(tenantId, "ACCT_PR_NOACCESS", []);
+      await createInternalUser(app, adminToken, {
+        email: "noaccess@ak-pr.local",
+        fullName: "No Access",
+        password: "NoAccess12345!",
+        roleCode: "ACCT_PR_NOACCESS",
+        scopeType: "tenant",
+      });
+      const noAccessToken = (await login(app, POSTING_RULES_TENANT, "noaccess@ak-pr.local", "NoAccess12345!")).body
+        .accessToken;
+
+      const res = await get(`/accounting/posting-rules`, noAccessToken);
+      expect(res.statusCode).toBe(403);
+    });
+  });
+
+  describe("POST /accounting/posting-rules/:id/deprecate", () => {
+    it("200 happy path: deprecates a posting rule", async () => {
+      const createRes = await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_DEPRECATE",
+        ruleName: "Deprecate Rule",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_DEPRECATE",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+      const ruleId = createRes.json().id;
+
+      const res = await post(`/accounting/posting-rules/${ruleId}/deprecate`, financeToken);
+      expect(res.statusCode).toBe(200);
+      const deprecated = res.json();
+      expect(deprecated.isActive).toBe(false);
+      expect(deprecated.deprecatedDate).toBeTruthy();
+    });
+
+    it("404 rejects a non-existent rule", async () => {
+      const fakeId = "00000000-0000-4000-8000-000000000001";
+      const res = await post(`/accounting/posting-rules/${fakeId}/deprecate`, financeToken);
+      expect(res.statusCode).toBe(404);
+    });
+
+    it("403 rejects without finance.accounting.configure", async () => {
+      const createRes = await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_DEPRECATE_NOPERM",
+        ruleName: "Deprecate No Perm",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_DEPRECATE_NOPERM",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+      const ruleId = createRes.json().id;
+
+      const res = await post(`/accounting/posting-rules/${ruleId}/deprecate`, readOnlyToken);
+      expect(res.statusCode).toBe(403);
+    });
+  });
+
+  describe("POST /accounting/posting-rules/resolve", () => {
+    it("200 happy path: resolves a rule and returns evaluated legs", async () => {
+      await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_RESOLVE",
+        ruleName: "Resolve Rule",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_RESOLVE",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+
+      const res = await post("/accounting/posting-rules/resolve", financeToken, {
+        triggerEventType: "TEST_RESOLVE",
+        accountingDate: "2026-06-01",
+        amount: "50.00",
+      });
+      expect(res.statusCode).toBe(200);
+      const result = res.json();
+      expect(result.rule).toBeTruthy();
+      expect(result.resolvedLegs).toHaveLength(2);
+      expect(result.resolvedLegs[0].amount).toBe("50.00");
+      expect(result.resolvedLegs[1].amount).toBe("50.00");
+    });
+
+    it("404 rejects an unresolvable trigger event type", async () => {
+      const res = await post("/accounting/posting-rules/resolve", financeToken, {
+        triggerEventType: "NONEXISTENT_EVENT",
+        accountingDate: "2026-06-01",
+        amount: "50.00",
+      });
+      expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe("POST /accounting/posting-rules/generate", () => {
+    it("201 happy path: generates a draft journal with posting_rule_version_id set", async () => {
+      const ruleRes = await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_GENERATE",
+        ruleName: "Generate Rule",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_GENERATE",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+      const ruleId = ruleRes.json().id;
+
+      const periodRes = await post("/accounting/periods", financeToken, {
+        legalEntityId,
+        fiscalYearCode: "FY2026",
+        periodCode: "PR-GEN-P01",
+        periodName: "Posting Rules Generate Period",
+        periodType: "monthly",
+        dateFrom: "2026-01-01",
+        dateTo: "2026-01-31",
+      });
+      const periodId = periodRes.json().id;
+      await pool.query(`UPDATE accounting_periods SET status = 'open' WHERE id = $1`, [periodId]);
+
+      const res = await post("/accounting/posting-rules/generate", financeToken, {
+        legalEntityId,
+        triggerEventType: "TEST_GENERATE",
+        journalNumber: "GEN-JNL-001",
+        journalDate: "2026-01-15",
+        accountingDate: "2026-01-15",
+        periodId,
+        amount: "100.00",
+        idempotencyKey: `${POSTING_RULES_TENANT}-gen-key-1`,
+        description: null,
+        currency: "USD",
+      });
+      expect(res.statusCode).toBe(201);
+      const journal = res.json();
+      expect(journal.status).toBe("pending");
+      expect(journal.postingRuleVersionId).toBe(ruleId);
+    });
+
+    it("409 rejects duplicate idempotency key", async () => {
+      await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_GENERATE_DUP",
+        ruleName: "Generate Dup Rule",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_GENERATE_DUP",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+
+      const periodRes = await post("/accounting/periods", financeToken, {
+        legalEntityId,
+        fiscalYearCode: "FY2026",
+        periodCode: "PR-GEN-P02",
+        periodName: "Posting Rules Generate Period 2",
+        periodType: "monthly",
+        dateFrom: "2026-02-01",
+        dateTo: "2026-02-28",
+      });
+      const periodId = periodRes.json().id;
+      await pool.query(`UPDATE accounting_periods SET status = 'open' WHERE id = $1`, [periodId]);
+
+      const idempotencyKey = `${POSTING_RULES_TENANT}-gen-key-dup`;
+
+      await post("/accounting/posting-rules/generate", financeToken, {
+        legalEntityId,
+        triggerEventType: "TEST_GENERATE_DUP",
+        journalNumber: "GEN-JNL-DUP-1",
+        journalDate: "2026-02-15",
+        accountingDate: "2026-02-15",
+        periodId,
+        amount: "100.00",
+        idempotencyKey,
+        description: null,
+        currency: "USD",
+      });
+
+      const res = await post("/accounting/posting-rules/generate", financeToken, {
+        legalEntityId,
+        triggerEventType: "TEST_GENERATE_DUP",
+        journalNumber: "GEN-JNL-DUP-2",
+        journalDate: "2026-02-15",
+        accountingDate: "2026-02-15",
+        periodId,
+        amount: "100.00",
+        idempotencyKey,
+        description: null,
+        currency: "USD",
+      });
+      expect(res.statusCode).toBe(409);
+    });
+
+    it("409 rejects when period is closed", async () => {
+      await post("/accounting/posting-rules", financeToken, {
+        ruleCode: "RULE_HTTP_GENERATE_CLOSED",
+        ruleName: "Generate Closed Period",
+        ruleVersion: "v1",
+        triggerEventType: "TEST_GENERATE_CLOSED",
+        accountingFormula: [
+          { accountCode: "1000", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "4000", side: "credit", amountExpression: "AMOUNT" },
+        ],
+        requiresApproval: false,
+        materialityThreshold: null,
+        effectiveDate: "2026-01-01",
+      });
+
+      const periodRes = await post("/accounting/periods", financeToken, {
+        legalEntityId,
+        fiscalYearCode: "FY2026",
+        periodCode: "PR-GEN-P03",
+        periodName: "Posting Rules Generate Period 3",
+        periodType: "monthly",
+        dateFrom: "2026-03-01",
+        dateTo: "2026-03-31",
+      });
+      const periodId = periodRes.json().id;
+      await pool.query(`UPDATE accounting_periods SET status = 'closed' WHERE id = $1`, [periodId]);
+
+      const res = await post("/accounting/posting-rules/generate", financeToken, {
+        legalEntityId,
+        triggerEventType: "TEST_GENERATE_CLOSED",
+        journalNumber: "GEN-JNL-CLOSED",
+        journalDate: "2026-03-15",
+        accountingDate: "2026-03-15",
+        periodId,
+        amount: "100.00",
+        idempotencyKey: `${POSTING_RULES_TENANT}-gen-key-closed`,
+        description: null,
+        currency: "USD",
+      });
+      expect(res.statusCode).toBe(409);
+    });
+
+    it("403 rejects without finance.accounting.manage", async () => {
+      const periodRes = await post("/accounting/periods", financeToken, {
+        legalEntityId,
+        fiscalYearCode: "FY2026",
+        periodCode: "PR-GEN-P04",
+        periodName: "Posting Rules Generate Period 4",
+        periodType: "monthly",
+        dateFrom: "2026-04-01",
+        dateTo: "2026-04-30",
+      });
+      const periodId = periodRes.json().id;
+      await pool.query(`UPDATE accounting_periods SET status = 'open' WHERE id = $1`, [periodId]);
+
+      const res = await post("/accounting/posting-rules/generate", readOnlyToken, {
+        legalEntityId,
+        triggerEventType: "TEST_GENERATE",
+        journalNumber: "GEN-JNL-NOPERM",
+        journalDate: "2026-04-15",
+        accountingDate: "2026-04-15",
+        periodId,
+        amount: "100.00",
+        idempotencyKey: `${POSTING_RULES_TENANT}-gen-key-noperm`,
+        description: null,
+        currency: "USD",
+      });
+      expect(res.statusCode).toBe(403);
+    });
+  });
+});
+

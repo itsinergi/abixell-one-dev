@@ -86,6 +86,47 @@ const reverseJournalSchema = z.object({
   reason: z.string().min(1),
 });
 
+const postingRuleLegSchema = z.object({
+  accountCode: z.string().min(1),
+  side: z.enum(["debit", "credit"]),
+  amountExpression: z.string().min(1),
+});
+
+const createPostingRuleSchema = z.object({
+  ruleCode: z.string().min(1),
+  ruleName: z.string().min(1),
+  ruleVersion: z.string().min(1),
+  triggerEventType: z.string().min(1),
+  accountingFormula: z.array(postingRuleLegSchema).min(2),
+  requiresApproval: z.boolean(),
+  materialityThreshold: moneySchema.nullable().optional(),
+  effectiveDate: dateSchema,
+});
+
+const postingRuleFilterSchema = z.object({
+  triggerEventType: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+const resolvePostingRuleSchema = z.object({
+  triggerEventType: z.string().min(1),
+  accountingDate: dateSchema,
+  amount: moneySchema,
+});
+
+const generateJournalFromRuleSchema = z.object({
+  legalEntityId: uuidSchema,
+  triggerEventType: z.string().min(1),
+  journalNumber: z.string().min(1),
+  journalDate: dateSchema,
+  accountingDate: dateSchema,
+  periodId: uuidSchema,
+  amount: moneySchema,
+  idempotencyKey: z.string().min(1),
+  description: z.string().nullable().optional(),
+  currency: z.string().min(3).max(3),
+});
+
 export function registerAccountingKernelRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.accountingKernel;
 
@@ -241,4 +282,59 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
       return reply.send(reconciliation);
     },
   );
+
+  // --- Posting rules (WP-FIN-05) ----------------------------------------------
+
+  app.post("/accounting/posting-rules", { preHandler: app.authenticate }, async (request, reply) => {
+    const input = createPostingRuleSchema.parse(request.body);
+    const rule = await svc().createPostingRule(request.actor!, {
+      ...input,
+      materialityThreshold:
+        input.materialityThreshold === undefined || input.materialityThreshold === null
+          ? null
+          : String(input.materialityThreshold),
+    });
+    return reply.status(201).send(rule);
+  });
+
+  app.get("/accounting/posting-rules", { preHandler: app.authenticate }, async (request, reply) => {
+    const query = request.query as { triggerEventType?: string; isActive?: string };
+    const filter = postingRuleFilterSchema.parse({
+      triggerEventType: query.triggerEventType,
+      isActive: query.isActive === undefined ? undefined : query.isActive === "true",
+    });
+    const rules = await svc().listPostingRules(request.actor!, filter);
+    return reply.send(rules);
+  });
+
+  app.post(
+    "/accounting/posting-rules/:id/deprecate",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const rule = await svc().deprecatePostingRule(request.actor!, id);
+      return reply.send(rule);
+    },
+  );
+
+  app.post("/accounting/posting-rules/resolve", { preHandler: app.authenticate }, async (request, reply) => {
+    const input = resolvePostingRuleSchema.parse(request.body);
+    const result = await svc().resolvePostingRule(
+      request.actor!,
+      input.triggerEventType,
+      input.accountingDate,
+      String(input.amount),
+    );
+    return reply.send(result);
+  });
+
+  app.post("/accounting/posting-rules/generate", { preHandler: app.authenticate }, async (request, reply) => {
+    const input = generateJournalFromRuleSchema.parse(request.body);
+    const journal = await svc().generateJournalFromRule(request.actor!, {
+      ...input,
+      amount: String(input.amount),
+      description: input.description ?? null,
+    });
+    return reply.status(201).send(journal);
+  });
 }

@@ -348,6 +348,55 @@ export interface PostingRule {
   updatedAt: Date;
 }
 
+// Input types for posting rule operations
+export interface CreatePostingRuleInput {
+  tenantId: string;
+  ruleCode: string;
+  ruleName: string;
+  ruleVersion: string;
+  triggerEventType: string;
+  accountingFormula: PostingRuleLeg[];
+  requiresApproval: boolean;
+  materialityThreshold: Money | null;
+  effectiveDate: string;
+  createdBy: string | null;
+}
+
+export interface PostingRuleFilter {
+  triggerEventType?: string;
+  isActive?: boolean;
+}
+
+export interface ResolvePostingRuleInput {
+  tenantId: string;
+  triggerEventType: string;
+  accountingDate: string;
+  amount: Money;
+}
+
+export interface ResolvePostingRuleResult {
+  rule: PostingRule;
+  resolvedLegs: Array<{
+    accountCode: string;
+    side: NormalBalance;
+    amount: Money;
+  }>;
+}
+
+export interface GenerateJournalFromRuleInput {
+  tenantId: string;
+  legalEntityId: string;
+  triggerEventType: string;
+  journalNumber: string;
+  journalDate: string;
+  accountingDate: string;
+  periodId: string;
+  amount: Money;
+  idempotencyKey: string;
+  description: string | null;
+  currency: string;
+}
+
 // ---------------------------------------------------------------------------
 // Repository port
 // ---------------------------------------------------------------------------
@@ -566,6 +615,43 @@ export interface AccountingKernelRepository {
     lastAttemptStatus: PostingAttemptStatus;
     failureReason: string | null;
   }): Promise<PostingIdempotencyKey>;
+
+  // --- Posting rules (WP-FIN-05) ---------------------------------------
+  /**
+   * Inserts a new rule version. The DB unique constraint on
+   * `(tenant_id, rule_code, rule_version)` is the sole duplicate guard —
+   * callers do not pre-check existence.
+   */
+  createPostingRule(input: CreatePostingRuleInput): Promise<PostingRule>;
+  findPostingRuleById(id: string): Promise<PostingRule | null>;
+  listPostingRules(tenantId: string, filter: PostingRuleFilter): Promise<PostingRule[]>;
+
+  /**
+   * The active rule for a trigger event type as of a given date: highest
+   * `effective_date <= onDate`, `deprecated_date IS NULL OR > onDate`,
+   * `is_active = true`, ties broken by latest `rule_version`. `null` when no
+   * rule matches — callers must fail closed, never fall back to a hardcoded
+   * mapping (§4.14 decision #9).
+   */
+  findActivePostingRule(tenantId: string, triggerEventType: string, onDate: string): Promise<PostingRule | null>;
+
+  /** Soft end-of-life: sets `deprecated_date`, never deletes the row. */
+  deprecatePostingRule(
+    tenantId: string,
+    id: string,
+    deprecatedDate: string,
+    updatedBy: string | null,
+  ): Promise<PostingRule | null>;
+
+  /**
+   * Evaluates a whitelisted amount expression against an amount value using
+   * PostgreSQL `numeric` arithmetic. The expression is pre-validated by the
+   * caller to contain only the token `AMOUNT`, numeric literals, and the
+   * operators `+ - * / ( )`. `AMOUNT` is substituted as a bound `$1` parameter
+   * — the amount value is never string-interpolated. Result is rounded to
+   * `numeric(18,2)` by the cast.
+   */
+  evaluateAmountExpression(expression: string, amount: Money): Promise<Money>;
 
   // --- Cross-domain reads kept behind this port -----------------------
   legalEntityExists(tenantId: string, legalEntityId: string): Promise<boolean>;

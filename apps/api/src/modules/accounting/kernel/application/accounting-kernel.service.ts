@@ -16,6 +16,11 @@ import type {
   JournalHeader,
   JournalStatus,
   Money,
+  NormalBalance,
+  PostingRule,
+  PostingRuleLeg,
+  PostingRuleFilter,
+  ResolvePostingRuleResult,
   AccountingKernelRepository,
   AccountingPeriodStatus,
   AccountClass,
@@ -761,6 +766,379 @@ export class AccountingKernelService {
     });
 
     return reconciliation;
+  }
+
+  // --- Posting rules (WP-FIN-05, Epic 14 §4.14 decision #9) -------------------
+  //
+  // Account mapping is tenant-admin DATA, not code. Rules are configured via
+  // these methods and resolved at posting time. The expression evaluator is
+  // whitelist-only (token AMOUNT, numeric literals, + - * /) and evaluated by
+  // PostgreSQL numeric — money never touches JavaScript binary floats.
+
+  async createPostingRule(
+    actor: ActorContext,
+    input: {
+      ruleCode: string;
+      ruleName: string;
+      ruleVersion: string;
+      triggerEventType: string;
+      accountingFormula: Array<{ accountCode: string; side: NormalBalance; amountExpression: string }>;
+      requiresApproval: boolean;
+      materialityThreshold: string | null;
+      effectiveDate: string;
+    },
+  ): Promise<PostingRule> {
+    await this.rbac.requirePermission(actor, "finance.accounting.configure");
+
+    const ruleCode = (input.ruleCode ?? "").trim();
+    const ruleName = (input.ruleName ?? "").trim();
+    const ruleVersion = (input.ruleVersion ?? "").trim();
+    const triggerEventType = (input.triggerEventType ?? "").trim();
+    if (!ruleCode || !ruleName || !ruleVersion || !triggerEventType) {
+      throw new ValidationError("ruleCode, ruleName, ruleVersion, and triggerEventType are required");
+    }
+
+    const effectiveDate = this.parseDate(input.effectiveDate, "effectiveDate");
+
+    if (!Array.isArray(input.accountingFormula) || input.accountingFormula.length < 2) {
+      throw new ValidationError("accountingFormula must contain at least two legs");
+    }
+
+    const legs: PostingRuleLeg[] = [];
+    let hasDebit = false;
+    let hasCredit = false;
+    for (const raw of input.accountingFormula) {
+      const accountCode = (raw.accountCode ?? "").trim();
+      const side = this.parseNormalBalance(raw.side);
+      const amountExpression = (raw.amountExpression ?? "").trim();
+      if (!accountCode) {
+        throw new ValidationError("Each formula leg requires an accountCode");
+      }
+      this.validateAmountExpression(amountExpression);
+      legs.push({ accountCode, side, amountExpression });
+      if (side === "debit") hasDebit = true;
+      else hasCredit = true;
+    }
+    if (!hasDebit || !hasCredit) {
+      throw new ValidationError("accountingFormula must have at least one debit and one credit leg");
+    }
+
+    // Balance check: evaluate all expressions with a sample amount to catch
+    // obvious imbalances before the rule is saved. The authoritative balance
+    // check runs at resolution time with the actual amount.
+    const sampleAmount: Money = "100.00";
+    let debitSum: Money = "0.00";
+    let creditSum: Money = "0.00";
+    for (const leg of legs) {
+      let evaluated: Money;
+      try {
+        evaluated = await this.repo.evaluateAmountExpression(leg.amountExpression, sampleAmount);
+      } catch {
+        throw new ValidationError(`amountExpression "${leg.amountExpression}" could not be evaluated`);
+      }
+      if (leg.side === "debit") debitSum = this.addMoney(debitSum, evaluated);
+      else creditSum = this.addMoney(creditSum, evaluated);
+    }
+    if (debitSum !== creditSum) {
+      throw new ValidationError("accountingFormula is imbalanced", {
+        debitTotal: debitSum,
+        creditTotal: creditSum,
+        sampleAmount,
+      });
+    }
+
+    const materialityThreshold = input.materialityThreshold
+      ? this.parseMoney(input.materialityThreshold)
+      : null;
+
+    let rule: PostingRule;
+    try {
+      rule = await this.repo.createPostingRule({
+        tenantId: actor.tenantId,
+        ruleCode,
+        ruleName,
+        ruleVersion,
+        triggerEventType,
+        accountingFormula: legs,
+        requiresApproval: input.requiresApproval,
+        materialityThreshold,
+        effectiveDate,
+        createdBy: actor.userId,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError(`Posting rule ${ruleCode} version ${ruleVersion} already exists`);
+      }
+      throw error;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.posting_rule.created",
+      entityType: "accounting_posting_rule",
+      entityId: rule.id,
+      metadata: {
+        ruleCode,
+        ruleVersion,
+        triggerEventType,
+        legCount: legs.length,
+      },
+    });
+
+    return rule;
+  }
+
+  async listPostingRules(
+    actor: ActorContext,
+    filter: PostingRuleFilter = {},
+  ): Promise<PostingRule[]> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
+    return this.repo.listPostingRules(actor.tenantId, filter);
+  }
+
+  async deprecatePostingRule(
+    actor: ActorContext,
+    ruleId: string,
+  ): Promise<PostingRule> {
+    await this.rbac.requirePermission(actor, "finance.accounting.configure");
+
+    const rule = await this.repo.findPostingRuleById(ruleId);
+    if (!rule || rule.tenantId !== actor.tenantId) {
+      throw new NotFoundError("PostingRule", ruleId);
+    }
+    if (rule.deprecatedDate !== null || !rule.isActive) {
+      throw new ConflictError("Posting rule is already deprecated");
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const deprecated = await this.repo.deprecatePostingRule(
+      actor.tenantId,
+      ruleId,
+      today,
+      actor.userId,
+    );
+    if (!deprecated) {
+      throw new NotFoundError("PostingRule", ruleId);
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.posting_rule.deprecated",
+      entityType: "accounting_posting_rule",
+      entityId: ruleId,
+      metadata: {
+        ruleCode: rule.ruleCode,
+        ruleVersion: rule.ruleVersion,
+        deprecatedDate: today,
+      },
+    });
+
+    return deprecated;
+  }
+
+  async resolvePostingRule(
+    actor: ActorContext,
+    triggerEventType: string,
+    accountingDate: string,
+    amount: string,
+  ): Promise<ResolvePostingRuleResult> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
+    const date = this.parseDate(accountingDate, "accountingDate");
+    const amountMoney = this.parseMoney(amount);
+    return this.resolvePostingRuleInternal(actor.tenantId, triggerEventType, date, amountMoney);
+  }
+
+  async generateJournalFromRule(
+    actor: ActorContext,
+    input: {
+      legalEntityId: string;
+      triggerEventType: string;
+      journalNumber: string;
+      journalDate: string;
+      accountingDate: string;
+      periodId: string;
+      amount: string;
+      idempotencyKey: string;
+      description: string | null;
+      currency: string;
+    },
+  ): Promise<JournalHeader> {
+    await this.rbac.requirePermission(actor, "finance.accounting.manage");
+
+    const legalEntityId = await this.resolveLegalEntity(actor, input.legalEntityId);
+    const journalDate = this.parseDate(input.journalDate, "journalDate");
+    const accountingDate = this.parseDate(input.accountingDate, "accountingDate");
+
+    const idempotencyKey = (input.idempotencyKey ?? "").trim();
+    if (!idempotencyKey) {
+      throw new ValidationError("idempotencyKey is required");
+    }
+
+    const period = await this.repo.findPeriodById(input.periodId);
+    if (!period || period.tenantId !== actor.tenantId) {
+      throw new NotFoundError("AccountingPeriod", input.periodId);
+    }
+    if (period.status === "closed" || period.status === "reopenable") {
+      throw new ConflictError("Cannot create journal in a non-open accounting period");
+    }
+
+    // Resolve the posting rule + evaluate legs (fail closed if no active rule).
+    const { rule, resolvedLegs } = await this.resolvePostingRuleInternal(
+      actor.tenantId,
+      input.triggerEventType,
+      accountingDate,
+      this.parseMoney(input.amount),
+    );
+
+    // Resolve account codes to account IDs within the legal entity.
+    const lines: Array<{
+      accountId: string;
+      lineNumber: number;
+      debit: Money;
+      credit: Money;
+      lineDescription: string | null;
+      projectId: string | null;
+      siteId: string | null;
+    }> = [];
+    let lineNumber = 1;
+    for (const leg of resolvedLegs) {
+      const account = await this.repo.findAccountByCode(actor.tenantId, legalEntityId, leg.accountCode);
+      if (!account) {
+        throw new ValidationError(`Account code ${leg.accountCode} not found in this legal entity`);
+      }
+      if (!account.isActive) {
+        throw new ConflictError(`Account ${leg.accountCode} is deactivated`);
+      }
+      lines.push({
+        accountId: account.id,
+        lineNumber,
+        debit: leg.side === "debit" ? leg.amount : "0.00",
+        credit: leg.side === "credit" ? leg.amount : "0.00",
+        lineDescription: null,
+        projectId: null,
+        siteId: null,
+      });
+      lineNumber++;
+    }
+
+    // Call repo.createJournal directly to preserve posting_rule_version_id and
+    // the caller-supplied idempotency key (service.createJournal hardcodes both).
+    // No auto-post: the journal stays pending; posting uses postJournal with
+    // finance.accounting.approve, unchanged.
+    let journal: JournalHeader;
+    try {
+      journal = await this.repo.createJournal({
+        tenantId: actor.tenantId,
+        legalEntityId,
+        journalNumber: input.journalNumber,
+        journalDate,
+        accountingDate,
+        periodId: input.periodId,
+        description: input.description,
+        currency: input.currency,
+        postingRuleVersionId: rule.id,
+        idempotencyKey,
+        lines,
+        createdBy: actor.userId,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError("A journal with this idempotency key already exists");
+      }
+      throw error;
+    }
+
+    // Post-condition: enforce the no-auto-post guarantee directly at the
+    // return site. Any future change that accidentally posts inside this
+    // method fails loudly instead of silently breaking the contract.
+    if (journal.status !== "pending") {
+      throw new Error(
+        `generateJournalFromRule must produce a pending draft; got status "${journal.status}"`,
+      );
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.journal.created",
+      entityType: "journal_header",
+      entityId: journal.id,
+      metadata: {
+        journalNumber: journal.journalNumber,
+        lineCount: lines.length,
+        postingRuleId: rule.id,
+        triggerEventType: input.triggerEventType,
+      },
+    });
+
+    return journal;
+  }
+
+  /**
+   * Internal rule resolution without authorization — callers must authorize
+   * first. Finds the active rule for a trigger event type as of a date,
+   * evaluates each leg's expression via PostgreSQL numeric arithmetic, and
+   * verifies the resulting journal is balanced.
+   */
+  private async resolvePostingRuleInternal(
+    tenantId: string,
+    triggerEventType: string,
+    accountingDate: string,
+    amountMoney: Money,
+  ): Promise<ResolvePostingRuleResult> {
+    const rule = await this.repo.findActivePostingRule(tenantId, triggerEventType, accountingDate);
+    if (!rule) {
+      throw new NotFoundError("PostingRule", `active rule for ${triggerEventType} on ${accountingDate}`);
+    }
+
+    const resolvedLegs: ResolvePostingRuleResult["resolvedLegs"] = [];
+    let debitTotal: Money = "0.00";
+    let creditTotal: Money = "0.00";
+    for (const leg of rule.accountingFormula) {
+      this.validateAmountExpression(leg.amountExpression);
+      const evaluated = await this.repo.evaluateAmountExpression(leg.amountExpression, amountMoney);
+      resolvedLegs.push({ accountCode: leg.accountCode, side: leg.side, amount: evaluated });
+      if (leg.side === "debit") debitTotal = this.addMoney(debitTotal, evaluated);
+      else creditTotal = this.addMoney(creditTotal, evaluated);
+    }
+
+    if (debitTotal !== creditTotal) {
+      throw new ValidationError("Resolved posting rule produces an imbalanced journal", {
+        debitTotal,
+        creditTotal,
+        difference: this.subtractMoney(debitTotal, creditTotal),
+      });
+    }
+
+    return { rule, resolvedLegs };
+  }
+
+  /**
+   * Whitelist-only expression validator. Allows the token AMOUNT, numeric
+   * literals, operators + - * /, parentheses, and whitespace. Rejects
+   * everything else — including eval, process, backtick, and SQL comment
+   * syntax (--) — so no JavaScript eval or SQL injection vector exists.
+   * The actual arithmetic is performed by PostgreSQL numeric in the repo.
+   */
+  private validateAmountExpression(expr: string): void {
+    const trimmed = (expr ?? "").trim();
+    if (!trimmed) {
+      throw new ValidationError("amountExpression must not be empty");
+    }
+    if (trimmed.includes("--") || trimmed.includes("`")) {
+      throw new ValidationError("amountExpression must not contain '--' or backtick");
+    }
+    if (!/^[\da-zA-Z.+\-*/()\s]+$/.test(trimmed)) {
+      throw new ValidationError("amountExpression contains forbidden characters");
+    }
+    const identifiers = trimmed.match(/[a-zA-Z]+/g) ?? [];
+    for (const id of identifiers) {
+      if (id !== "AMOUNT") {
+        throw new ValidationError(`amountExpression contains forbidden identifier: ${id}`);
+      }
+    }
   }
 
   // --- Helpers ---------------------------------------------------------------
