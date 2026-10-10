@@ -210,6 +210,7 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/procurement/contracts", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/procurement/service-acceptances", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/procurement/invoices", windowCode: "route:/procurement/contracts" },
+  { method: "*", apiPath: "/procurement/payments", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/procurement/spend-analytics", windowCode: "route:/procurement/spend-analytics" },
   { method: "*", apiPath: "/supply-chain/advanced/rfqs", windowCode: "route:/procurement/rfqs" },
   { method: "*", apiPath: "/supply-chain/advanced/bids", windowCode: "route:/procurement/rfqs" },
@@ -217,6 +218,7 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/supply-chain/advanced/contracts", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/supply-chain/advanced/service-acceptances", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/supply-chain/advanced/invoices", windowCode: "route:/procurement/contracts" },
+  { method: "*", apiPath: "/supply-chain/advanced/payments", windowCode: "route:/procurement/contracts" },
   { method: "*", apiPath: "/supply-chain/advanced/spend-analytics", windowCode: "route:/procurement/spend-analytics" },
 
   // --- asset ---------------------------------------------------------------

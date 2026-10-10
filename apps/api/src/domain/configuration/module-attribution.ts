@@ -154,6 +154,7 @@ export const PERMISSION_MODULE_PREFIXES: ReadonlyArray<readonly [string, ModuleC
   // Supply Chain — sourcing, contracts, acceptance, analytics.
   ["supply_chain.service_acceptance.", "procurement_management"],
   ["supply_chain.vendor_invoice.", "procurement_management"],
+  ["supply_chain.payment.", "procurement_management"],
   ["supply_chain.procurement.", "procurement_management"],
   ["supply_chain.contract.", "procurement_management"],
   ["supply_chain.analytics.", "procurement_management"],
@@ -384,6 +385,7 @@ export const API_PATH_MODULE_OVERRIDES: ReadonlyArray<readonly [string, ModuleCo
   ["/supply-chain/advanced/spend-analytics", "procurement_management"],
   ["/supply-chain/advanced/service-acceptances", "procurement_management"],
   ["/supply-chain/advanced/invoices", "procurement_management"],
+  ["/supply-chain/advanced/payments", "procurement_management"],
 
   // Legacy-only: cross-cutting account-assignment configuration, which stays
   // on the SCM core (the same split `PERMISSION_MODULE_PREFIXES` makes for
