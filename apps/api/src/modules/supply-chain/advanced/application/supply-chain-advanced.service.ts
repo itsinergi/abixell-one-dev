@@ -46,6 +46,7 @@ import type {
   CreateScmItemBatchInput,
   CreateScmItemSerialInput,
   CreateScmLandedCostInput,
+  CreateScmPaymentBatchInput,
   CreateScmReceiptReversalInput,
   CreateScmReceivingRecordInput,
   CreateScmReplacementDeliveryInput,
@@ -128,10 +129,15 @@ import type {
   ScmRfqFilter,
   ScmRfqInvitedSupplier,
   ScmRfqItem,
+  ScmRfqStatus,
   ScmServiceAcceptance,
   ScmServiceAcceptanceFilter,
   ScmServiceAcceptanceLine,
   ScmServiceAcceptanceStatus,
+  ScmPaymentBatch,
+  ScmPaymentBatchFilter,
+  ScmPaymentBatchStatus,
+  ScmPaymentLine,
   ScmVendorInvoice,
   ScmVendorInvoiceFilter,
   ScmVendorInvoiceLine,
@@ -151,6 +157,7 @@ import type {
   ScmSupplierBid,
   ScmSupplierBidFilter,
   ScmSupplierBidLine,
+  ScmSupplierBidStatus,
   ScmSupplierContract,
   ScmSupplierContractFilter,
   ScmSupplierContractItem,
@@ -217,6 +224,11 @@ export const SCM_CONSIGNMENT_SETTLEMENT_NUMBERING_CODE = "scm_consignment_settle
 export const SCM_INVENTORY_DISPOSAL_NUMBERING_CODE = "scm_inventory_disposal";
 export const SCM_WAREHOUSE_TASK_NUMBERING_CODE = "scm_warehouse_task";
 export const SCM_VENDOR_INVOICE_NUMBERING_CODE = "scm_vendor_invoice";
+export const SCM_PAYMENT_BATCH_NUMBERING_CODE = "scm_payment_batch";
+
+/** WP-PRO-04: bid/RFQ states from which an award is still eligible. */
+const SUPPLIER_BID_AWARDABLE_STATUSES = new Set<ScmSupplierBidStatus>(["evaluated", "shortlisted"]);
+const RFQ_AWARDABLE_STATUSES = new Set<ScmRfqStatus>(["published", "in_evaluation"]);
 
 /** Workflow definition codes for Supply Chain Advanced. */
 export const SCM_STOCK_TRANSFER_WORKFLOW_DEFINITION_CODE = "scm_stock_transfer";
@@ -1732,13 +1744,55 @@ export class SupplyChainAdvancedService {
       await this.assertOrganizationUnitInScope(actor, rfq.rfq.organizationUnitId);
     }
 
+    const rejectAward = async (reason: string): Promise<never> => {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        actorUserId: actor.userId,
+        action: "scm_advanced.supplier_bid.award_rejected",
+        entityType: "scm_supplier_bid",
+        entityId: bidId,
+        metadata: {
+          reason,
+          supplierId: existing.bid.supplierId,
+          bidStatus: existing.bid.status,
+          rfqId: existing.bid.rfqId,
+          rfqStatus: rfq?.rfq.status ?? null,
+        },
+      });
+      throw new ValidationError(reason);
+    };
+
+    // WP-PRO-04 pre-award eligibility gate (DEC-005). A bid may only be awarded
+    // while the supplier is still active, the bid is in a decided-but-unsettled
+    // state, and the RFQ is still open for award. Each rejection names the rule
+    // and is persisted to audit so the refusal is traceable for appeal.
+    if (!SUPPLIER_BID_AWARDABLE_STATUSES.has(existing.bid.status)) {
+      await rejectAward(
+        `Bid status is '${existing.bid.status}', cannot award (eligible: ${[...SUPPLIER_BID_AWARDABLE_STATUSES].join(", ")})`,
+      );
+    }
+
+    if (rfq && !RFQ_AWARDABLE_STATUSES.has(rfq.rfq.status)) {
+      await rejectAward(
+        `RFQ status is '${rfq.rfq.status}', cannot award (eligible: ${[...RFQ_AWARDABLE_STATUSES].join(", ")})`,
+      );
+    }
+
+    const supplierActive = await this.repo.findSupplierActive(actor.tenantId, existing.bid.supplierId);
+    if (supplierActive === null) {
+      await rejectAward(`Supplier ${existing.bid.supplierId} not found, cannot award`);
+    }
+    if (!supplierActive) {
+      await rejectAward(`Supplier is inactive, cannot award bid ${bidId}`);
+    }
+
     const awarded = await this.repo.awardSupplierBid(actor.tenantId, {
       bidId,
       resultingPurchaseOrderId,
       updatedBy: actor.userId,
     });
     if (!awarded) {
-      throw new NotFoundError("ScmSupplierBid", bidId);
+      throw new ConflictError("Supplier bid could not be awarded; status changed concurrently");
     }
 
     // Update RFQ status to awarded
@@ -3404,6 +3458,377 @@ export class SupplyChainAdvancedService {
     });
 
     return this.getVendorInvoice(actor, vendorInvoiceId);
+  }
+
+  // =========================================================================
+  // Phase 2 WP-PRO-03: AP Payment Batch (Approved Invoice Payment)
+  // =========================================================================
+
+  async createPaymentBatch(
+    actor: ActorContext,
+    input: Omit<CreateScmPaymentBatchInput, "batchNumber" | "createdBy"> & { batchNumber?: string },
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.payment.manage");
+
+    // Validate organization unit in scope
+    await this.assertOrganizationUnitInScope(actor, input.organizationUnitId);
+
+    // The repo layer validates each invoice status='approved', rejects duplicate
+    // lines (within the batch and across non-cancelled batches), and calculates
+    // approvedAmount atomically inside one transaction. The idempotency replay
+    // check happens before that to short-circuit retries.
+
+    const replayed = await this.repo.findPaymentBatchByIdempotencyKey(actor.tenantId, input.idempotencyKey);
+    if (replayed) return replayed;
+
+    const batchNumber =
+      input.batchNumber ??
+      (
+        await this.configuration.generateNumberForTenant(
+          actor.tenantId,
+          SCM_PAYMENT_BATCH_NUMBERING_CODE,
+          actor.userId,
+        )
+      ).number;
+
+    const result = await this.runIdempotent(
+      () =>
+        this.repo.createPaymentBatch(actor.tenantId, {
+          ...input,
+          batchNumber,
+          createdBy: actor.userId,
+        }),
+      () => this.repo.findPaymentBatchByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      `Payment batch with idempotency key ${input.idempotencyKey} already exists`,
+    );
+
+    // Start workflow
+    let workflowInstanceId: string | null = null;
+    try {
+      const { instance } = await this.workflow.startInstance(actor, {
+        definitionCode: "scm_payment_batch",
+        entityId: result.paymentBatch.id,
+        contextData: {
+          batchNumber: result.paymentBatch.batchNumber,
+          approvedAmount: result.paymentBatch.approvedAmount,
+          currency: result.paymentBatch.currency,
+          lineCount: result.lines.length,
+        },
+      });
+      workflowInstanceId = instance.id;
+
+      const claimed = await this.repo.claimPaymentBatchWorkflowInstance(
+        actor.tenantId,
+        result.paymentBatch.id,
+        workflowInstanceId,
+      );
+      if (claimed) {
+        result.paymentBatch = { ...result.paymentBatch, workflowInstanceId };
+      }
+    } catch (err) {
+      await this.repo.deletePaymentBatchWithoutWorkflow(actor.tenantId, result.paymentBatch.id);
+      throw err;
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.payment_batch.created",
+      entityType: "scm_payment_batch",
+      entityId: result.paymentBatch.id,
+      metadata: {
+        batchNumber: result.paymentBatch.batchNumber,
+        approvedAmount: result.paymentBatch.approvedAmount,
+        currency: result.paymentBatch.currency,
+        lineCount: result.lines.length,
+      },
+    });
+
+    return result;
+  }
+
+  async getPaymentBatch(
+    actor: ActorContext,
+    batchId: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.payment.read");
+    const result = await this.repo.findPaymentBatchById(actor.tenantId, batchId);
+    if (!result) {
+      throw new NotFoundError("ScmPaymentBatch", batchId);
+    }
+    await this.assertOrganizationUnitInScope(actor, result.paymentBatch.organizationUnitId);
+    return result;
+  }
+
+  async listPaymentBatches(
+    actor: ActorContext,
+    filter?: ScmPaymentBatchFilter,
+  ): Promise<ScmPaymentBatch[]> {
+    await this.rbac.requirePermission(actor, "supply_chain.payment.read");
+    const scopedOrgUnitIds = await this.resolveScopedOrganizationUnitIds(actor, filter?.organizationUnitId);
+    return this.repo.listPaymentBatches(actor.tenantId, { ...filter, organizationUnitIds: scopedOrgUnitIds ?? undefined });
+  }
+
+  async submitPaymentBatch(
+    actor: ActorContext,
+    batchId: string,
+    comment?: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.payment.manage");
+    const result = await this.repo.findPaymentBatchById(actor.tenantId, batchId);
+    if (!result) {
+      throw new NotFoundError("ScmPaymentBatch", batchId);
+    }
+
+    await this.assertOrganizationUnitInScope(actor, result.paymentBatch.organizationUnitId);
+
+    if (result.paymentBatch.status !== "draft") {
+      throw new ConflictError(`Payment batch must be in draft status to submit (current: ${result.paymentBatch.status})`);
+    }
+
+    if (!result.paymentBatch.workflowInstanceId) {
+      throw new ValidationError(`Payment batch ${batchId} has no associated workflow instance`);
+    }
+
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.paymentBatch.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending submit action exists on this payment batch");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, "submit", comment ?? null);
+
+    const submitted = await this.repo.updatePaymentBatchStatus(actor.tenantId, batchId, "submitted", {
+      userId: actor.userId,
+      at: new Date(),
+    });
+
+    if (!submitted) {
+      throw new ConflictError("Payment batch could not be submitted; concurrent state change");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.payment_batch.submitted",
+      entityType: "scm_payment_batch",
+      entityId: batchId,
+      metadata: { comment },
+    });
+
+    return this.getPaymentBatch(actor, batchId);
+  }
+
+  async approvePaymentBatch(
+    actor: ActorContext,
+    batchId: string,
+    comment?: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.payment.approve");
+    const result = await this.repo.findPaymentBatchById(actor.tenantId, batchId);
+    if (!result) {
+      throw new NotFoundError("ScmPaymentBatch", batchId);
+    }
+
+    await this.assertOrganizationUnitInScope(actor, result.paymentBatch.organizationUnitId);
+
+    if (result.paymentBatch.status !== "submitted") {
+      throw new ConflictError(
+        `Payment batch must be in submitted status to approve (current: ${result.paymentBatch.status})`,
+      );
+    }
+
+    if (!result.paymentBatch.workflowInstanceId) {
+      throw new ValidationError(`Payment batch ${batchId} has no associated workflow instance`);
+    }
+
+    // Enforce nominal-limit gate (DEC-004-FU): a line above the approver's
+    // configured nominal limit needs BOTH a documented override reason AND a
+    // different person than the submitter (person separation). A NULL limit
+    // means the mechanism is dormant (value deferred to Phase 4 G1).
+    const limits = await this.repo.findPaymentApprovalLimits(actor.tenantId, [actor.roleCode ?? ""]);
+    const effectiveLimit = this.resolvePaymentApprovalLimit(limits);
+
+    if (effectiveLimit !== null) {
+      for (const line of result.lines) {
+        if (Number(line.amount) <= effectiveLimit) continue;
+
+        if (!line.approvalOverrideReason) {
+          throw new ValidationError(
+            `Line amount ${line.amount} exceeds approval limit ${effectiveLimit}; approval_override_reason required`,
+          );
+        }
+        if (result.paymentBatch.submittedBy === actor.userId) {
+          throw new ValidationError(
+            `Line amount ${line.amount} exceeds approval limit ${effectiveLimit}; approver must differ from submitter`,
+          );
+        }
+      }
+    }
+
+    // Get workflow assignment and act on it
+    const { assignments } = await this.workflow.getInstanceForEntityOwner(
+      actor.tenantId,
+      result.paymentBatch.workflowInstanceId,
+    );
+    const pending = assignments.find((a) => a.status === "pending");
+    if (!pending) {
+      throw new ConflictError("No pending approve action exists on this payment batch");
+    }
+
+    await this.workflow.actOnAssignment(actor, pending.id, "approve", comment ?? null);
+
+    // Resolve legalEntityId from organizationUnitId (for GL posting)
+    const legalEntityId = await this.repo.findLegalEntityIdForOrganizationUnit(
+      actor.tenantId,
+      result.paymentBatch.organizationUnitId,
+    );
+    if (!legalEntityId) {
+      throw new ValidationError(
+        `Organization unit ${result.paymentBatch.organizationUnitId} has no associated legal entity`,
+      );
+    }
+
+    // Resolve periodId from approval date (today) — GL posting needs open period
+    const approvedAt = new Date();
+    const periodId = await this.resolveOpenPeriodForDate(actor.tenantId, legalEntityId, approvedAt);
+    if (!periodId) {
+      throw new ConflictError(
+        `No open accounting period for date ${approvedAt.toISOString().split("T")[0]} in legal entity ${legalEntityId}`,
+      );
+    }
+
+    // Build the per-line accounting events; the repo writes them in the SAME
+    // transaction as the batch status update (approvePaymentBatch), so the batch
+    // goes to 'approved' and all GL outbox rows commit together — or neither does.
+    const lineEvents = result.lines.map((line, idx) => ({
+      lineId: line.id,
+      event: {
+        eventType: "vendor.invoice.payment_approved" as const,
+        sourceDocumentType: "scm_payment_batch",
+        sourceDocumentId: batchId,
+        sourceDocumentLineId: line.id,
+        effectiveAt: approvedAt,
+        currency: line.currency,
+        amount: line.amount,
+        idempotencyKey: `${result.paymentBatch.idempotencyKey}:line:${idx}`,
+        payload: {
+          legalEntityId,
+          periodId,
+          batchNumber: result.paymentBatch.batchNumber,
+          vendorInvoiceId: line.vendorInvoiceId,
+        },
+        createdBy: actor.userId,
+      },
+    }));
+
+    const approved = await this.repo.approvePaymentBatch(
+      actor.tenantId,
+      {
+        paymentBatchId: batchId,
+        approvedBy: actor.userId,
+        approvedAt,
+        financeTransactionId: null,
+      },
+      lineEvents.map(({ lineId, event }) => ({
+        lineId,
+        event: { ...event, sourceDocumentLineId: lineId },
+      })),
+    );
+
+    if (!approved) {
+      throw new ConflictError("Payment batch could not be approved; concurrent state change");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.payment_batch.approved",
+      entityType: "scm_payment_batch",
+      entityId: batchId,
+      metadata: {
+        approvedAmount: result.paymentBatch.approvedAmount,
+        lineCount: result.lines.length,
+        nominalLimitEnforced: effectiveLimit !== null,
+      },
+    });
+
+    return this.getPaymentBatch(actor, batchId);
+  }
+
+  async cancelPaymentBatch(
+    actor: ActorContext,
+    batchId: string,
+    reason?: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] }> {
+    await this.rbac.requirePermission(actor, "supply_chain.payment.manage");
+    const result = await this.repo.findPaymentBatchById(actor.tenantId, batchId);
+    if (!result) {
+      throw new NotFoundError("ScmPaymentBatch", batchId);
+    }
+
+    await this.assertOrganizationUnitInScope(actor, result.paymentBatch.organizationUnitId);
+
+    if (!["draft", "submitted"].includes(result.paymentBatch.status)) {
+      throw new ConflictError(
+        `Payment batch can only be cancelled from draft or submitted status (current: ${result.paymentBatch.status})`,
+      );
+    }
+
+    // No workflow-cancel API exists on WorkflowService (same as cancelPurchaseOrder /
+    // cancelStockReservation elsewhere in this service): the batch status moves to
+    // 'cancelled' directly; any pending workflow assignment is simply never acted on.
+    const cancelled = await this.repo.updatePaymentBatchStatus(actor.tenantId, batchId, "cancelled", {
+      userId: actor.userId,
+      at: new Date(),
+    });
+
+    if (!cancelled) {
+      throw new ConflictError("Payment batch could not be cancelled; concurrent state change");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.payment_batch.cancelled",
+      entityType: "scm_payment_batch",
+      entityId: batchId,
+      metadata: { reason },
+    });
+
+    return this.getPaymentBatch(actor, batchId);
+  }
+
+  /** Resolve nominal limit for single active roleCode (actor.roleCode). NULL = unbounded. */
+  private resolvePaymentApprovalLimit(
+    limits: Array<{ roleCode: string; nominalLimit: number | null }>,
+  ): number | null {
+    if (limits.length === 0) return null;
+    // Return the max of all matching role limits; if any is NULL (unbounded), return NULL
+    let max: number | null = 0;
+    for (const { nominalLimit } of limits) {
+      if (nominalLimit === null) return null;
+      max = Math.max(max, nominalLimit);
+    }
+    return max;
+  }
+
+  /** Resolve open period that contains the approval date. */
+  private async resolveOpenPeriodForDate(
+    tenantId: string,
+    legalEntityId: string,
+    approvedAt: Date,
+  ): Promise<string | null> {
+    const periods = await this.repo.listOpenPeriods(tenantId, legalEntityId);
+    const matching = periods.find((p) => {
+      const from = new Date(p.dateFrom);
+      const to = new Date(p.dateTo);
+      return approvedAt >= from && approvedAt <= to;
+    });
+    return matching?.id ?? null;
   }
 
   // =========================================================================

@@ -150,39 +150,6 @@ export const DEFAULT_API_EXCEPTIONS = [
     symbols: ["CustomerService"],
     typeOnly: true,
   },
-  {
-    // Phase 2 WP-INT-01..03 — the scheduler's generic job-handler registry
-    // needs the accounting consumer's TS type so the accounting-event-poster
-    // job can be registered alongside every other job. Composition-root
-    // injects the concrete service; job-handlers.ts only references the type.
-    id: "transition:job-handlers-accounting-consumer",
-    source: "apps/api/src/application/scheduler/job-handlers.ts",
-    target: "apps/api/src/modules/accounting/consumer/accounting-event-consumer.service.ts",
-    symbols: ["AccountingEventConsumerService"],
-    typeOnly: true,
-  },
-  {
-    // Phase 2 WP-INT-01..03 — ADR-0023: the accounting event consumer posts
-    // SCM outbox events into GL journals. SCM publishes the write port as its
-    // boundary; the consumer consumes it type-only. The port file itself is
-    // the published surface, so importing it (not a copy) is the intent.
-    id: "transition:accounting-consumer-scm-event-port",
-    source: "apps/api/src/modules/accounting/consumer/accounting-event-consumer.service.ts",
-    target: "apps/api/src/modules/supply-chain/ports/accounting-event-write-port.ts",
-    symbols: ["AccountingEventWritePort"],
-    typeOnly: true,
-  },
-  {
-    // Phase 2 WP-INT-01..03 — the consumer receives ScmAccountingReadyEvent
-    // payloads produced by SCM; the event shape is SCM's contract and is
-    // re-exported through the write port, so the consumer imports it
-    // type-only rather than duplicating the interface.
-    id: "transition:accounting-consumer-scm-event-type",
-    source: "apps/api/src/modules/accounting/consumer/accounting-event-consumer.service.ts",
-    target: "apps/api/src/modules/supply-chain/advanced/domain/supply-chain-advanced.entity.ts",
-    symbols: ["ScmAccountingReadyEvent"],
-    typeOnly: true,
-  },
 ];
 
 const CHECK_DEFINITIONS = [

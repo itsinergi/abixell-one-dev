@@ -14,6 +14,7 @@ import type {
   CreateScmItemBatchInput,
   CreateScmItemSerialInput,
   CreateScmLandedCostInput,
+  CreateScmPaymentBatchInput,
   CreateScmReceiptReversalInput,
   CreateScmReceivingRecordInput,
   CreateScmReplacementDeliveryInput,
@@ -72,6 +73,10 @@ import type {
   ScmLandedCost,
   ScmLandedCostAllocation,
   ScmLandedCostFilter,
+  ScmPaymentBatch,
+  ScmPaymentBatchFilter,
+  ScmPaymentBatchStatus,
+  ScmPaymentLine,
   ScmReceiptReversal,
   ScmReceiptReversalLine,
   ScmReceivingLine,
@@ -1996,6 +2001,7 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
               updated_by = $4,
               updated_at = now()
         WHERE tenant_id = $1 AND id = $2
+          AND status IN ('evaluated', 'shortlisted')
         RETURNING *`,
       [tenantId, input.bidId, input.resultingPurchaseOrderId ?? null, input.updatedBy ?? null],
     );
@@ -4341,6 +4347,350 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
   }
 
   // =========================================================================
+  // Phase 2 WP-PRO-03: AP Payment Batch
+  // =========================================================================
+
+  /**
+   * Atomically create a payment batch. Validates each invoice is status='approved'
+   * and not already on a non-cancelled payment line. Returns batch + lines.
+   */
+  async createPaymentBatch(
+    tenantId: string,
+    input: CreateScmPaymentBatchInput,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] }> {
+    return this.inTransaction(async (client) => {
+      // Validate each invoice: status='approved', fetch amount + currency
+      const invoiceIds = input.lines.map((l) => l.vendorInvoiceId);
+      if (invoiceIds.length === 0) {
+        throw new ValidationError("Payment batch must have at least one line");
+      }
+
+      const invoicesRes = await client.query(
+        `SELECT id, status, invoice_amount, currency FROM scm_vendor_invoices
+          WHERE tenant_id = $1 AND id = ANY($2::uuid[])
+          FOR UPDATE`,
+        [tenantId, invoiceIds],
+      );
+
+      const invoicesMap = new Map(invoicesRes.rows.map((r) => [r.id, r]));
+
+      for (const invId of invoiceIds) {
+        const inv = invoicesMap.get(invId);
+        if (!inv) {
+          throw new ValidationError(`Vendor invoice ${invId} not found`);
+        }
+        if (inv.status !== "approved") {
+          throw new ValidationError(`Vendor invoice ${invId} has status '${inv.status}', must be 'approved'`);
+        }
+      }
+
+      // Check for duplicates within this batch
+      const uniqueIds = new Set(invoiceIds);
+      if (uniqueIds.size !== invoiceIds.length) {
+        throw new ValidationError("Duplicate vendor invoice in payment batch lines");
+      }
+
+      // Check if any invoice is already on a non-cancelled payment line. The
+      // payment_lines FK to vendor_invoices is RESTRICT, so we hold the invoice
+      // row lock taken above for the duration of this read + the line INSERT,
+      // closing the window where two concurrent batches could each reserve the
+      // same invoice before either line exists. The existing-line scan is
+      // shipped under the invoice FOR UPDATE lock, not the line table, because
+      // the FK RESTRICT direction makes the invoice the serialization point.
+      const existingRes = await client.query(
+        `SELECT DISTINCT pl.vendor_invoice_id
+           FROM scm_payment_lines pl
+           JOIN scm_payment_batches pb
+             ON pb.id = pl.payment_batch_id AND pb.tenant_id = pl.tenant_id
+          WHERE pl.tenant_id = $1
+            AND pl.vendor_invoice_id = ANY($2::uuid[])
+            AND pb.status <> 'cancelled'`,
+        [tenantId, invoiceIds],
+      );
+      if (existingRes.rows.length > 0) {
+        throw new ConflictError(
+          `One or more invoices already exist on a payment batch: ${existingRes.rows.map((r) => r.vendor_invoice_id).join(", ")}`,
+        );
+      }
+
+      // Calculate approved amount
+      let approvedAmount = 0;
+      let currency = input.currency;
+      for (const line of input.lines) {
+        const inv = invoicesMap.get(line.vendorInvoiceId);
+        if (inv) {
+          approvedAmount += num(inv.invoice_amount);
+          if (!currency) {
+            currency = inv.currency;
+          }
+        }
+      }
+
+      // Insert batch header
+      const batchRes = await client.query(
+        `INSERT INTO scm_payment_batches (
+           tenant_id, batch_number, idempotency_key, organization_unit_id, status,
+           approved_amount, currency, created_by, updated_by
+         ) VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $7)
+         RETURNING *`,
+        [
+          tenantId,
+          input.batchNumber,
+          input.idempotencyKey,
+          input.organizationUnitId,
+          approvedAmount,
+          currency ?? "IDR",
+          input.createdBy ?? null,
+        ],
+      );
+
+      const batch = toPaymentBatch(batchRes.rows[0]!);
+
+      // Insert lines
+      const lines: ScmPaymentLine[] = [];
+      for (const line of input.lines) {
+        const inv = invoicesMap.get(line.vendorInvoiceId);
+        if (!inv) continue;
+
+        const lineRes = await client.query(
+          `INSERT INTO scm_payment_lines (
+             tenant_id, payment_batch_id, vendor_invoice_id, amount, currency, approval_override_reason
+           ) VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING *`,
+          [
+            tenantId,
+            batch.id,
+            line.vendorInvoiceId,
+            num(inv.invoice_amount),
+            inv.currency,
+            line.overrideReason ?? null,
+          ],
+        );
+        lines.push(toPaymentLine(lineRes.rows[0]!));
+      }
+
+      return { paymentBatch: batch, lines };
+    });
+  }
+
+  async deletePaymentBatchWithoutWorkflow(tenantId: string, paymentBatchId: string): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM scm_payment_batches
+        WHERE tenant_id = $1 AND id = $2 AND workflow_instance_id IS NULL`,
+      [tenantId, paymentBatchId],
+    );
+  }
+
+  async claimPaymentBatchWorkflowInstance(
+    tenantId: string,
+    paymentBatchId: string,
+    workflowInstanceId: string,
+  ): Promise<boolean> {
+    const r = await this.pool.query(
+      `UPDATE scm_payment_batches
+         SET workflow_instance_id = $3,
+             updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND workflow_instance_id IS NULL
+       RETURNING id`,
+      [tenantId, paymentBatchId, workflowInstanceId],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  async findPaymentBatchById(
+    tenantId: string,
+    paymentBatchId: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] } | null> {
+    const batchRes = await this.pool.query(
+      `SELECT * FROM scm_payment_batches WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, paymentBatchId],
+    );
+    if (!batchRes.rows[0]) return null;
+
+    const linesRes = await this.pool.query(
+      `SELECT * FROM scm_payment_lines WHERE tenant_id = $1 AND payment_batch_id = $2 ORDER BY created_at ASC, id ASC`,
+      [tenantId, paymentBatchId],
+    );
+
+    return {
+      paymentBatch: toPaymentBatch(batchRes.rows[0]),
+      lines: linesRes.rows.map(toPaymentLine),
+    };
+  }
+
+  async findPaymentBatchByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] } | null> {
+    const batchRes = await this.pool.query(
+      `SELECT id FROM scm_payment_batches WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, idempotencyKey],
+    );
+    if (!batchRes.rows[0]) return null;
+    return this.findPaymentBatchById(tenantId, batchRes.rows[0].id);
+  }
+
+  async listPaymentBatches(
+    tenantId: string,
+    filter: ScmPaymentBatchFilter = {},
+  ): Promise<ScmPaymentBatch[]> {
+    const conditions = ["tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+
+    if (filter.organizationUnitIds) {
+      if (filter.organizationUnitIds.length === 0) return [];
+      params.push(filter.organizationUnitIds);
+      conditions.push(`organization_unit_id = ANY($${params.length}::uuid[])`);
+    } else if (filter.organizationUnitId) {
+      params.push(filter.organizationUnitId);
+      conditions.push(`organization_unit_id = $${params.length}`);
+    }
+    if (filter.status) {
+      params.push(filter.status);
+      conditions.push(`status = $${params.length}`);
+    }
+    if (filter.createdFrom) {
+      params.push(filter.createdFrom);
+      conditions.push(`created_at >= $${params.length}`);
+    }
+    if (filter.createdTo) {
+      params.push(filter.createdTo);
+      conditions.push(`created_at <= $${params.length}`);
+    }
+
+    const limit = filter.limit && filter.limit > 0 ? filter.limit : 100;
+    params.push(limit);
+
+    const r = await this.pool.query(
+      `SELECT * FROM scm_payment_batches
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY created_at DESC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return r.rows.map(toPaymentBatch);
+  }
+
+  async approvePaymentBatch(
+    tenantId: string,
+    input: {
+      paymentBatchId: string;
+      approvedBy: string | null;
+      approvedAt: Date;
+      financeTransactionId: string | null;
+    },
+    events: Array<{
+      lineId: string;
+      event: CreateScmAccountingReadyEventInput;
+    }>,
+  ): Promise<ScmPaymentBatch | null> {
+    return this.inTransaction(async (client) => {
+      const r = await client.query(
+        `UPDATE scm_payment_batches
+           SET status = 'approved',
+               approved_at = $3,
+               approved_by = $4,
+               finance_transaction_id = $5,
+               updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND status = 'submitted'
+         RETURNING *`,
+        [tenantId, input.paymentBatchId, input.approvedAt, input.approvedBy, input.financeTransactionId],
+      );
+      const paymentBatch = r.rows[0] ? toPaymentBatch(r.rows[0]) : null;
+      if (!paymentBatch) return null;
+
+      for (const { event } of events) {
+        await this.createAccountingReadyEventTx(client, tenantId, event);
+      }
+
+      return paymentBatch;
+    });
+  }
+
+  async updatePaymentBatchStatus(
+    tenantId: string,
+    paymentBatchId: string,
+    status: ScmPaymentBatchStatus,
+    actor: { userId: string | null; at: Date },
+  ): Promise<ScmPaymentBatch | null> {
+    let submittedAt: Date | null = null;
+    let submittedBy: string | null = null;
+    let cancelledAt: Date | null = null;
+    let cancelledBy: string | null = null;
+    let transitionGuard = "status NOT IN ('approved', 'cancelled')";
+
+    if (status === "submitted") {
+      submittedAt = actor.at;
+      submittedBy = actor.userId;
+      transitionGuard = "status = 'draft'";
+    } else if (status === "cancelled") {
+      cancelledAt = actor.at;
+      cancelledBy = actor.userId;
+      transitionGuard = "status IN ('draft', 'submitted')";
+    }
+
+    const r = await this.pool.query(
+      `UPDATE scm_payment_batches
+         SET status = $3,
+             submitted_at = COALESCE($4, submitted_at),
+             submitted_by = COALESCE($5, submitted_by),
+             cancelled_at = COALESCE($6, cancelled_at),
+             cancelled_by = COALESCE($7, cancelled_by),
+             updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND ${transitionGuard}
+       RETURNING *`,
+      [tenantId, paymentBatchId, status, submittedAt, submittedBy, cancelledAt, cancelledBy],
+    );
+    return r.rows[0] ? toPaymentBatch(r.rows[0]) : null;
+  }
+
+  async findLegalEntityIdForOrganizationUnit(
+    tenantId: string,
+    organizationUnitId: string,
+  ): Promise<string | null> {
+    const r = await this.pool.query(
+      `SELECT legal_entity_id FROM organization_units
+        WHERE tenant_id = $1 AND id = $2 AND legal_entity_id IS NOT NULL`,
+      [tenantId, organizationUnitId],
+    );
+    return r.rows[0]?.legal_entity_id ?? null;
+  }
+
+  async findPaymentApprovalLimits(
+    tenantId: string,
+    roleCodes: string[],
+  ): Promise<Array<{ roleCode: string; nominalLimit: number | null }>> {
+    if (roleCodes.length === 0) return [];
+
+    const r = await this.pool.query(
+      `SELECT role_code, nominal_limit FROM scm_payment_approval_limits
+        WHERE tenant_id = $1 AND role_code = ANY($2::text[])`,
+      [tenantId, roleCodes],
+    );
+    return r.rows.map((row) => ({
+      roleCode: row.role_code,
+      nominalLimit: row.nominal_limit ? num(row.nominal_limit) : null,
+    }));
+  }
+
+  /** WP-PRO-03 period-ID resolution: read-only lookup into the Accounting Kernel's periods table. */
+  async listOpenPeriods(
+    tenantId: string,
+    legalEntityId: string,
+  ): Promise<Array<{ id: string; dateFrom: Date; dateTo: Date }>> {
+    const r = await this.pool.query(
+      `SELECT id, date_from, date_to FROM accounting_periods
+        WHERE tenant_id = $1 AND legal_entity_id = $2 AND status = 'open'`,
+      [tenantId, legalEntityId],
+    );
+    return r.rows.map((row) => ({
+      id: row.id,
+      dateFrom: row.date_from,
+      dateTo: row.date_to,
+    }));
+  }
+
+  // =========================================================================
   // Stage 2: Consignment Settlements
   // =========================================================================
 
@@ -5120,6 +5470,15 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     return (r.rowCount ?? 0) > 0;
   }
 
+  /** WP-PRO-04 eligibility gate: null when the supplier does not exist. */
+  async findSupplierActive(tenantId: string, supplierId: string): Promise<boolean | null> {
+    const r = await this.pool.query(`SELECT is_active FROM suppliers WHERE tenant_id = $1 AND id = $2`, [
+      tenantId,
+      supplierId,
+    ]);
+    return r.rows[0] ? (r.rows[0].is_active as boolean) : null;
+  }
+
   async purchaseOrderExists(tenantId: string, purchaseOrderId: string): Promise<boolean> {
     const r = await this.pool.query(`SELECT 1 FROM purchase_orders WHERE tenant_id = $1 AND id = $2`, [tenantId, purchaseOrderId]);
     return (r.rowCount ?? 0) > 0;
@@ -5289,6 +5648,43 @@ function toVendorInvoiceLine(r: QueryResultRow): ScmVendorInvoiceLine {
     accountingReadyEventId: r.accounting_ready_event_id,
     notes: r.notes,
     sortOrder: num(r.sort_order),
+  };
+}
+
+function toPaymentBatch(r: QueryResultRow): ScmPaymentBatch {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    batchNumber: r.batch_number,
+    idempotencyKey: r.idempotency_key,
+    organizationUnitId: r.organization_unit_id,
+    status: r.status as ScmPaymentBatchStatus,
+    approvedAmount: num(r.approved_amount),
+    currency: r.currency,
+    workflowInstanceId: r.workflow_instance_id,
+    submittedAt: r.submitted_at,
+    submittedBy: r.submitted_by,
+    approvedAt: r.approved_at,
+    approvedBy: r.approved_by,
+    cancelledAt: r.cancelled_at,
+    cancelledBy: r.cancelled_by,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+    updatedAt: r.updated_at,
+    updatedBy: r.updated_by,
+  };
+}
+
+function toPaymentLine(r: QueryResultRow): ScmPaymentLine {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    paymentBatchId: r.payment_batch_id,
+    vendorInvoiceId: r.vendor_invoice_id,
+    amount: num(r.amount),
+    currency: r.currency,
+    approvalOverrideReason: r.approval_override_reason,
+    createdAt: r.created_at,
   };
 }
 
