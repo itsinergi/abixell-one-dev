@@ -23,6 +23,11 @@ import type {
   WorkflowVersion,
 } from "../../domain/workflow/workflow.entity.js";
 import { evaluateCondition } from "./condition-evaluator.js";
+import type { ApprovalAuthorityService } from "../../domain/rbac/approval-authority.service.js";
+import {
+  MissingConversionRateError,
+  type ApprovalDecision,
+} from "../../domain/rbac/approval-authority.entity.js";
 
 /**
  * Checkpoint 1C.2 — generic, read-only projections a business module
@@ -162,6 +167,11 @@ export class WorkflowService {
      * Notification dispatch is simply skipped; `workflow_notification_hooks`
      * (0D) still records every hook point regardless. */
     private readonly eventBus?: EventBus,
+    /** WP-APR-01 — optional approval authority resolver (DEC-002/005). When
+     * absent, assignment routing keeps its original role/specific_user
+     * behavior; when present, a role-typed Step on a document with an amount
+     * is routed through the ceiling resolver instead. */
+    private readonly approvalAuthority?: ApprovalAuthorityService,
   ) {}
 
   // ======================================================================
@@ -459,7 +469,7 @@ export class WorkflowService {
       metadata: { definitionCode: definition.code, versionNumber: version.versionNumber },
     });
 
-    const assignment = await this.createAssignmentForStep(instance, initialStep.id, initialStep.code, initialStep.slaHours);
+    const assignment = await this.createAssignmentForStep(instance, initialStep.id, initialStep.code, initialStep.slaHours, actor);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -875,7 +885,7 @@ export class WorkflowService {
         createdBy: actor.userId,
       });
     } else {
-      newAssignment = await this.createAssignmentForStep(instance, nextStep.id, nextStep.code, nextStep.slaHours);
+      newAssignment = await this.createAssignmentForStep(instance, nextStep.id, nextStep.code, nextStep.slaHours, actor);
     }
 
     await this.audit.record({
@@ -945,7 +955,7 @@ export class WorkflowService {
       comment: input.comment,
       metadata: null,
     });
-    const newAssignment = await this.createAssignmentForStep(instance, toStep.id, toStep.code, toStep.slaHours);
+    const newAssignment = await this.createAssignmentForStep(instance, toStep.id, toStep.code, toStep.slaHours, actor);
 
     await this.eventBus?.publish({
       tenantId: actor.tenantId,
@@ -1194,6 +1204,10 @@ export class WorkflowService {
     stepId: string,
     stepCode: string,
     slaHours: number | null,
+    /** WP-APR-01 — the acting user at assignment time (the starter on
+     * startInstance, the actor on act/reopen). The ceiling resolver walks
+     * THEIR approval authority, iDempiere-style. */
+    actor?: ActorContext,
   ): Promise<WorkflowInstanceAssignment> {
     const rules = await this.repo.listAssignmentRules(stepId);
     const matched = rules
@@ -1206,6 +1220,13 @@ export class WorkflowService {
     let assignedRoleCode: string | null = null;
     let assignedOrganizationUnitId: string | null = null;
     let assignedUserId: string | null = null;
+    // The ceiling resolver can override a role-typed rule by naming a specific
+    // approver. When it does, the assignment's type must become
+    // `specific_user` — `assertEligible` routes on that type, and a `role`
+    // assignment with a NULL role code and a user id is a dead task no actor
+    // can act on. `resolvedAssignmentType` starts as the rule's own type and
+    // only flips when the resolver names someone.
+    let resolvedAssignmentType: WorkflowAssignmentType = matched.assignmentType;
 
     if (matched.assignmentType === "role") {
       assignedRoleCode = matched.roleCode;
@@ -1214,6 +1235,60 @@ export class WorkflowService {
           ? ((instance.contextData as Record<string, unknown>).organizationUnitId as string | undefined) ??
             null
           : null;
+
+      // WP-APR-01 — approval ceiling routing (DEC-002/005). Only when the
+      // resolver is wired AND the acting user is known AND the document
+      // carries an amount: resolve the approver by authority instead of
+      // blindly assigning the role. NULL amount / missing config keeps the
+      // legacy role assignment untouched.
+      const amount = documentAmountOf(instance);
+      if (this.approvalAuthority && actor) {
+        const context = instance.contextData as Record<string, unknown>;
+        const organizationUnitId =
+          assignedOrganizationUnitId ??
+          (context.organizationUnitId as string | undefined) ??
+          null;
+        const currencyCode =
+          (context.currencyCode as string | undefined) ??
+          (context.currency as string | undefined) ??
+          "IDR";
+        let decision: ApprovalDecision;
+        try {
+          decision = await this.approvalAuthority.resolveApprover(actor, {
+            documentUserId: instance.startedBy,
+            amount,
+            currencyCode,
+            organizationUnitId,
+            documentTable: instance.entityType,
+            documentId: instance.entityId,
+          });
+        } catch (error) {
+          if (error instanceof MissingConversionRateError) {
+            throw new ConflictError(error.message);
+          }
+          throw error;
+        }
+        if (decision.kind === "escalate") {
+          assignedUserId = decision.nextApproverUserId;
+          assignedRoleCode = null;
+          assignedOrganizationUnitId = null;
+          resolvedAssignmentType = "specific_user";
+        } else if (decision.kind === "no-approver") {
+          throw new ConflictError(
+            "No eligible approver found for the document amount (approval ceiling exhausted)",
+          );
+        } else if (decision.kind === "approve" && decision.approverUserId === actor.userId) {
+          // The starter is themselves within ceiling — assign the step to
+          // them directly so they can clear it in one action.
+          assignedUserId = actor.userId;
+          assignedRoleCode = null;
+          assignedOrganizationUnitId = null;
+          resolvedAssignmentType = "specific_user";
+        }
+        // "self-approved" (amount null/0) and "ceiling-inactive" (tenant has
+        // no positive approval limits configured) keep the legacy role
+        // assignment.
+      }
     } else {
       assignedUserId =
         matched.specificUserSource === "submitter" ? instance.startedBy : matched.fixedUserId;
@@ -1224,7 +1299,7 @@ export class WorkflowService {
     const assignment = await this.repo.createAssignment({
       workflowInstanceId: instance.id,
       stepId,
-      assignmentType: matched.assignmentType,
+      assignmentType: resolvedAssignmentType,
       assignedRoleCode,
       assignedOrganizationUnitId,
       assignedUserId,
@@ -1236,7 +1311,7 @@ export class WorkflowService {
       eventType: "assigned",
       payload: {
         assignmentId: assignment.id,
-        assignmentType: matched.assignmentType,
+        assignmentType: resolvedAssignmentType,
         roleCode: assignedRoleCode,
         organizationUnitId: assignedOrganizationUnitId,
         userId: assignedUserId,

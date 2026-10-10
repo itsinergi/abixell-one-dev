@@ -253,7 +253,11 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
   observability: "platform",
   "organization-units": "platform",
   "organization-unit-change-requests": "platform",
+  // WP-APR-02/03 — SoD governance and central rule registry are platform-level
+  // configuration surfaces (config.read/manage), same posture as `config`.
+  "rule-registry": "platform",
   scheduler: "platform",
+  sod: "platform",
   tenants: "platform",
   users: "platform",
   workflow: "platform",

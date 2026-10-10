@@ -31,6 +31,7 @@ class ScriptedRepo implements ApprovalAuthorityRepository {
   supervisors = new Map<string, string | null>();
   accumulated: Record<string, string> = {};
   orgSupervisor: string | null = null;
+  orgSupervisorCalls: string[] = [];
   accumulationCalls: { userId: string; documentTable: string; days: number }[] = [];
 
   async getActiveRoleApprovalLimits(
@@ -59,7 +60,11 @@ class ScriptedRepo implements ApprovalAuthorityRepository {
     return chain;
   }
 
-  async getOrganizationUnitSupervisor(): Promise<string | null> {
+  async getOrganizationUnitSupervisor(
+    _tenantId: string,
+    organizationUnitId: string,
+  ): Promise<string | null> {
+    this.orgSupervisorCalls.push(organizationUnitId);
     return this.orgSupervisor;
   }
 
@@ -179,7 +184,11 @@ describe("ApprovalAuthorityService.resolveApprover (§4.1 cases 5–11)", () => 
     expect(decision).toEqual({ kind: "escalate", nextApproverUserId: SUPERVISOR });
   });
 
-  it("a role with a NULL (or zero) limit is skipped, never treated as unlimited", async () => {
+  it("a chain with no configured limit at all reports ceiling-inactive, never no-approver", async () => {
+    // Neither hop carries a positive limit → the tenant has not configured
+    // approval ceilings. That is NOT a hard failure: the caller keeps its
+    // ordinary role-based assignment. A NULL/zero limit is still never read
+    // as "unlimited" — it simply does not participate.
     const repo = new ScriptedRepo();
     repo.limits.set(ACTOR.userId, limits({ roleAmt: null }));
     repo.limits.set(SUPERVISOR, limits({ roleAmt: "0.00" }));
@@ -187,7 +196,44 @@ describe("ApprovalAuthorityService.resolveApprover (§4.1 cases 5–11)", () => 
     repo.supervisors.set(SUPERVISOR, null);
 
     const decision = await new ApprovalAuthorityService(repo).resolveApprover(ACTOR, input());
+    expect(decision).toEqual({ kind: "ceiling-inactive" });
+  });
+
+  it("one configured limit anywhere in the walk turns an exhausted chain into no-approver", async () => {
+    // The actor has no limit but their supervisor does — the supervisor is
+    // over it, and the chain ends. Ceilings ARE configured, so exhausting
+    // them is a real no-approver, not "inactive".
+    const repo = new ScriptedRepo();
+    repo.limits.set(ACTOR.userId, limits({ roleAmt: null }));
+    repo.limits.set(SUPERVISOR, limits({ roleAmt: "1.00" }));
+    repo.supervisors.set(ACTOR.userId, SUPERVISOR);
+    repo.supervisors.set(SUPERVISOR, null);
+    repo.orgSupervisor = null;
+
+    const decision = await new ApprovalAuthorityService(repo).resolveApprover(
+      ACTOR,
+      input({ amount: "100.00" }),
+    );
     expect(decision).toEqual({ kind: "no-approver" });
+  });
+
+  it("a missing organizationUnitId skips the org-unit lookup instead of aborting on a UUID cast", async () => {
+    // The workflow call site passes null when the document carries no org
+    // unit. The original regression used an empty-string fallback, which would
+    // reach SQL and abort as a UUID cast error (22P02) instead of keeping the
+    // legacy role assignment. No configured limit anywhere → the walk must end
+    // as ceiling-inactive, and the repository must never be asked to look up a
+    // supervisor for a missing id.
+    const repo = new ScriptedRepo();
+    repo.limits.set(ACTOR.userId, limits({ roleAmt: null }));
+    repo.supervisors.set(ACTOR.userId, null);
+
+    const decision = await new ApprovalAuthorityService(repo).resolveApprover(
+      ACTOR,
+      input({ organizationUnitId: null }),
+    );
+    expect(decision).toEqual({ kind: "ceiling-inactive" });
+    expect(repo.orgSupervisorCalls).toEqual([]);
   });
 
   it("no supervisor and no org-unit supervisor fails clean with no-approver", async () => {

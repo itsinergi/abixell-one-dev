@@ -62,6 +62,15 @@ const UNIQUE_VIOLATION = "23505";
  * same way it recognises the exact-assignment unique index. */
 const SCOPE_EXCLUSIVITY_CONSTRAINT =
   "user_role_assignments_scope_exclusivity_check";
+/** The Segregation of Duties trigger's constraint name (WP-APR-03). A BEFORE
+ * trigger raises with this CONSTRAINT + ERRCODE 23514, so every assignment
+ * write path can map a violation to a 409 instead of a raw 500. */
+const SOD_VIOLATION_CONSTRAINT = "user_role_assignments_sod_violation_check";
+/** SoD violation message, shared across all assignment write paths so the
+ * client gets one consistent 409 regardless of which surface tripped the
+ * trigger. */
+const SOD_VIOLATION_MESSAGE =
+  "This role combination is forbidden by a Segregation of Duties rule in this tenant";
 
 /** Permissions whose combined presence defines Role Definition authority.
  * Removing any of them from a Role is the class of edit that can strand a
@@ -1378,6 +1387,9 @@ export class PgRbacRepository implements RbacRepository {
         if (databaseError.constraint === SCOPE_EXCLUSIVITY_CONSTRAINT) {
           throw new ConflictError(SCOPE_EXCLUSIVITY_MESSAGE);
         }
+        if (databaseError.constraint === SOD_VIOLATION_CONSTRAINT) {
+          throw new ConflictError(SOD_VIOLATION_MESSAGE);
+        }
         throw error;
       }
 
@@ -2209,6 +2221,9 @@ export class PgRbacRepository implements RbacRepository {
         if (databaseError.constraint === SCOPE_EXCLUSIVITY_CONSTRAINT) {
           throw new ConflictError(SCOPE_EXCLUSIVITY_MESSAGE);
         }
+        if (databaseError.constraint === SOD_VIOLATION_CONSTRAINT) {
+          throw new ConflictError(SOD_VIOLATION_MESSAGE);
+        }
         throw error;
       }
 
@@ -2350,7 +2365,7 @@ export class PgRbacRepository implements RbacRepository {
           input.pairs,
           visibility,
         );
-        const inserted = await client.query<{
+        let insertedRows!: {
           id: string;
           role_id: string;
           scope_type: ScopeType;
@@ -2358,27 +2373,57 @@ export class PgRbacRepository implements RbacRepository {
           scope_organization_unit_id: string | null;
           created_at: Date;
           created_by: string;
-        }>(
-          `INSERT INTO user_role_assignments
-             (user_id, role_id, scope_type, scope_legal_entity_id,
-              scope_organization_unit_id, scope_customer_id, created_by)
-           SELECT $1, r.id, p.scope_type, p.scope_legal_entity_id,
-                  p.scope_organization_unit_id, NULL, $2
-             FROM unnest($3::uuid[], $4::text[], $5::uuid[], $6::uuid[])
-               AS p(role_id, scope_type, scope_legal_entity_id,
-                    scope_organization_unit_id)
+        }[];
+        try {
+          const inserted = await client.query<{
+            id: string;
+            role_id: string;
+            scope_type: ScopeType;
+            scope_legal_entity_id: string | null;
+            scope_organization_unit_id: string | null;
+            created_at: Date;
+            created_by: string;
+          }>(
+            `INSERT INTO user_role_assignments
+               (user_id, role_id, scope_type, scope_legal_entity_id,
+                scope_organization_unit_id, scope_customer_id, created_by)
+             SELECT $1, r.id, p.scope_type, p.scope_legal_entity_id,
+                    p.scope_organization_unit_id, NULL, $2
+               FROM unnest($3::uuid[], $4::text[], $5::uuid[], $6::uuid[])
+                 AS p(role_id, scope_type, scope_legal_entity_id,
+                      scope_organization_unit_id)
              JOIN roles r ON r.id = p.role_id
-           RETURNING id, role_id, scope_type, scope_legal_entity_id,
-                     scope_organization_unit_id, created_at, created_by`,
-          [
-            created.id,
-            actor.userId,
-            writePairs.map((p) => p.roleId),
-            writePairs.map((p) => p.scopeType),
-            writePairs.map((p) => p.scopeLegalEntityId),
-            writePairs.map((p) => p.scopeOrganizationUnitId),
-          ],
-        );
+             RETURNING id, role_id, scope_type, scope_legal_entity_id,
+                       scope_organization_unit_id, created_at, created_by`,
+            [
+              created.id,
+              actor.userId,
+              writePairs.map((p) => p.roleId),
+              writePairs.map((p) => p.scopeType),
+              writePairs.map((p) => p.scopeLegalEntityId),
+              writePairs.map((p) => p.scopeOrganizationUnitId),
+            ],
+          );
+          insertedRows = inserted.rows;
+        } catch (error) {
+          const databaseError = error as { code?: string; constraint?: string };
+          if (
+            databaseError.code === UNIQUE_VIOLATION &&
+            databaseError.constraint ===
+              "user_role_assignments_exact_assignment_unique"
+          ) {
+            throw new ConflictError(
+              "One or more of these Role assignments already exist for this User",
+            );
+          }
+          if (databaseError.constraint === SCOPE_EXCLUSIVITY_CONSTRAINT) {
+            throw new ConflictError(SCOPE_EXCLUSIVITY_MESSAGE);
+          }
+          if (databaseError.constraint === SOD_VIOLATION_CONSTRAINT) {
+            throw new ConflictError(SOD_VIOLATION_MESSAGE);
+          }
+          throw error;
+        }
 
         await recordAssignmentBatchAudit(client, {
           tenantId: actor.tenantId,
@@ -2397,7 +2442,7 @@ export class PgRbacRepository implements RbacRepository {
             index,
           ]),
         );
-        assignments = inserted.rows.map((row) => {
+        assignments = insertedRows.map((row) => {
           const summary =
             summaries[
               indexByKey.get(
@@ -4060,23 +4105,51 @@ export class PgRbacRepository implements RbacRepository {
       );
       if (!roleResult.rows[0]) throw new NotFoundError("Role", input.roleId);
 
-      const result = await client.query(
-        `INSERT INTO user_role_assignments
-           (user_id, role_id, scope_type, scope_legal_entity_id,
-            scope_organization_unit_id, scope_customer_id, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
-        [
-          input.userId,
-          input.roleId,
-          input.scopeType,
-          input.scopeLegalEntityId ?? null,
-          input.scopeOrganizationUnitId ?? null,
-          input.scopeCustomerId ?? null,
-          createdBy,
-        ],
-      );
-      const row = result.rows[0];
+      let row!: {
+        id: string;
+        user_id: string;
+        role_id: string;
+        scope_type: ScopeType;
+        scope_legal_entity_id: string | null;
+        scope_organization_unit_id: string | null;
+        scope_customer_id: string | null;
+      };
+      try {
+        const result = await client.query<typeof row>(
+          `INSERT INTO user_role_assignments
+             (user_id, role_id, scope_type, scope_legal_entity_id,
+              scope_organization_unit_id, scope_customer_id, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, user_id, role_id, scope_type, scope_legal_entity_id,
+                     scope_organization_unit_id, scope_customer_id`,
+          [
+            input.userId,
+            input.roleId,
+            input.scopeType,
+            input.scopeLegalEntityId ?? null,
+            input.scopeOrganizationUnitId ?? null,
+            input.scopeCustomerId ?? null,
+            createdBy,
+          ],
+        );
+        row = result.rows[0];
+      } catch (error) {
+        const databaseError = error as { code?: string; constraint?: string };
+        if (
+          databaseError.code === UNIQUE_VIOLATION &&
+          databaseError.constraint ===
+            "user_role_assignments_exact_assignment_unique"
+        ) {
+          throw new ConflictError("This exact Role assignment already exists");
+        }
+        if (databaseError.constraint === SCOPE_EXCLUSIVITY_CONSTRAINT) {
+          throw new ConflictError(SCOPE_EXCLUSIVITY_MESSAGE);
+        }
+        if (databaseError.constraint === SOD_VIOLATION_CONSTRAINT) {
+          throw new ConflictError(SOD_VIOLATION_MESSAGE);
+        }
+        throw error;
+      }
       return {
         id: row.id,
         userId: row.user_id,

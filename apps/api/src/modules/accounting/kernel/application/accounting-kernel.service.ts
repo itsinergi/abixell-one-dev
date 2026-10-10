@@ -27,6 +27,7 @@ import type {
   ReversalType,
 } from "../domain/accounting-kernel.entity.js";
 import { ACCOUNT_CLASSES, COA_MAX_DEPTH, isValidMoney } from "../domain/accounting-kernel.entity.js";
+import type { RuleRegistryRepository } from "../../../../domain/rules/rule-registry.entity.js";
 
 /**
  * Accounting Kernel Service (Phase 1B, WP-FIN-01.2).
@@ -43,6 +44,9 @@ export class AccountingKernelService {
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
     private readonly eventBus: EventBus,
+    /** WP-APR-02 — optional central rule registry; consulted before the
+     * posting-rules table (rule_key `finance.posting_rule:<event>`). */
+    private readonly ruleRegistry?: RuleRegistryRepository,
   ) {}
 
   // --- Periods ---------------------------------------------------------------
@@ -1267,6 +1271,51 @@ export class AccountingKernelService {
   }
 
   /**
+   * WP-APR-02 — resolve through the central Rule Registry first
+   * (rule_key `finance.posting_rule:<triggerEventType>`, payload carries the
+   * accounting formula legs). Falls back to the posting-rules table so
+   * existing tenants and rules keep working unchanged.
+   */
+  private async resolveRuleThroughRegistry(
+    tenantId: string,
+    triggerEventType: string,
+    accountingDate: string,
+  ): Promise<PostingRule | null> {
+    if (!this.ruleRegistry) {
+      return this.repo.findActivePostingRule(tenantId, triggerEventType, accountingDate);
+    }
+    const entry = await this.ruleRegistry.findActive(
+      tenantId,
+      `finance.posting_rule:${triggerEventType}`,
+    );
+    if (!entry) {
+      return this.repo.findActivePostingRule(tenantId, triggerEventType, accountingDate);
+    }
+    const legs = entry.payload.legs as PostingRuleLeg[] | undefined;
+    if (!Array.isArray(legs) || legs.length === 0) {
+      throw new ValidationError(
+        `Registry rule ${entry.ruleKey} v${entry.version} payload must carry a non-empty legs array`,
+      );
+    }
+    return {
+      id: entry.id,
+      tenantId: entry.tenantId,
+      ruleCode: entry.ruleKey,
+      ruleName: entry.ruleKey,
+      ruleVersion: `v${entry.version}`,
+      triggerEventType,
+      accountingFormula: legs,
+      requiresApproval: entry.payload.requiresApproval === true,
+      materialityThreshold: (entry.payload.materialityThreshold as Money | null) ?? null,
+      isActive: true,
+      effectiveDate: entry.validFrom.toISOString().slice(0, 10),
+      deprecatedDate: null,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+    };
+  }
+
+  /**
    * Internal rule resolution without authorization — callers must authorize
    * first. Finds the active rule for a trigger event type as of a date,
    * evaluates each leg's expression via PostgreSQL numeric arithmetic, and
@@ -1278,7 +1327,11 @@ export class AccountingKernelService {
     accountingDate: string,
     amountMoney: Money,
   ): Promise<ResolvePostingRuleResult> {
-    const rule = await this.repo.findActivePostingRule(tenantId, triggerEventType, accountingDate);
+    const rule = await this.resolveRuleThroughRegistry(
+      tenantId,
+      triggerEventType,
+      accountingDate,
+    );
     if (!rule) {
       throw new NotFoundError("PostingRule", `active rule for ${triggerEventType} on ${accountingDate}`);
     }
