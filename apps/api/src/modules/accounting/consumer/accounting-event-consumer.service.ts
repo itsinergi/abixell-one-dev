@@ -25,61 +25,6 @@ import { NotFoundError, ConflictError, ValidationError } from "../../../domain/s
 const MAX_POSTING_ATTEMPTS = 5;
 const BATCH_SIZE = 50; // Claim up to 50 pending events per sweep
 
-type ConsumerOutboxState = "pending" | "published" | "failed" | "suppressed";
-type ConsumerReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
-
-export interface ConsumerOutboxEvent {
-  id: string;
-  eventType: string;
-  sourceDocumentType: string;
-  effectiveAt: Date;
-  currency: string;
-  amount: number;
-  idempotencyKey: string;
-  outboxState: ConsumerOutboxState;
-  payload: Record<string, unknown>;
-}
-
-export interface ConsumerOutboxPort {
-  claimPendingEvents(tenantId: string, limit: number): Promise<ConsumerOutboxEvent[]>;
-  getEventById(tenantId: string, eventId: string): Promise<ConsumerOutboxEvent | null>;
-  updateEventState(
-    tenantId: string,
-    input: {
-      accountingEventId: string;
-      stateKind: "outbox" | "reconciliation";
-      toState: ConsumerOutboxState | ConsumerReconciliationState;
-      reason?: string | null;
-      occurredAt?: Date;
-      occurredBy?: string | null;
-    },
-  ): Promise<unknown>;
-}
-
-export interface ConsumerJournal {
-  id: string;
-  status: string;
-}
-
-export interface ConsumerKernelPort {
-  generateJournalInternal(
-    tenantId: string,
-    input: {
-      legalEntityId: string;
-      triggerEventType: string;
-      journalNumber: string;
-      journalDate: string;
-      accountingDate: string;
-      periodId: string;
-      amount: string;
-      idempotencyKey: string;
-      description: string | null;
-      currency: string;
-    },
-  ): Promise<ConsumerJournal>;
-  postJournalInternal(tenantId: string, journalId: string): Promise<ConsumerJournal>;
-}
-
 /**
  * Local structural port for the SCM accounting-ready outbox.
  *
