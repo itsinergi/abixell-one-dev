@@ -105,6 +105,7 @@ import {
   ServiceAcceptanceService,
   VendorInvoiceService,
   SpendAnalyticsService,
+  PaymentService,
 } from "./modules/supply-chain/procurement/index.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
@@ -338,8 +339,21 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Phase 6 — Finance Core.
+  const finance = new FinanceService(
+    new PgFinanceRepository(pool),
+    workflow,
+    configuration,
+    audit,
+    rbac,
+    eventBus,
+  );
+
   // Wave A5 / SCM-ADV-001…008 — Supply Chain Advanced extends inventory,
   // valuation, procurement/tendering, vendor contracts, and spend analytics.
+  // WP-PRO-03 payment-batch GL posting goes through the accounting-ready-event
+  // outbox (consumed by the Accounting Kernel), not through Finance Core, so
+  // this service has no dependency on `finance`.
   const supplyChainAdvanced = new SupplyChainAdvancedService(
     new PgSupplyChainAdvancedRepository(pool),
     rbac,
@@ -372,6 +386,7 @@ export function buildContainer() {
     serviceAcceptance: new ServiceAcceptanceService(supplyChainAdvanced),
     vendorInvoice: new VendorInvoiceService(supplyChainAdvanced),
     spendAnalytics: new SpendAnalyticsService(supplyChainAdvanced),
+    payment: new PaymentService(supplyChainAdvanced),
   };
 
   // Phase 5 — Asset Core. Built before DocumentService so its `asset` Entity
@@ -410,18 +425,12 @@ export function buildContainer() {
     eventBus,
   );
 
-  // Phase 6 — Finance Core. Built before DocumentService so its
-  // `finance_transaction` Entity Authorization Resolver can close over
-  // `finance.canAccessForDocument` (ADR-0012). Financial evidence is gated
-  // by a dedicated capability AND the transaction's Data Scope.
-  const finance = new FinanceService(
-    new PgFinanceRepository(pool),
-    workflow,
-    configuration,
-    audit,
-    rbac,
-    eventBus,
-  );
+  // Phase 6 — Finance Core is built earlier (above, before Supply Chain
+  // Advanced) so its `finance_transaction` Entity Authorization Resolver can
+  // still close over `finance.canAccessForDocument` (ADR-0012) ahead of
+  // DocumentService, and so WP-PRO-03 payment approval can record cash
+  // movement. Financial evidence is gated by a dedicated capability AND the
+  // transaction's Data Scope.
 
   // Phase 1B — Accounting Kernel. Sole writer of the General Ledger
   // (ADR-0023 ACCEPTED). Period reopen is a maker-checker flow enforced in

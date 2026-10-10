@@ -77,7 +77,8 @@ export type ScmAccountingReadyEventType =
   | "inventory.consignment_consumed"
   | "service.accepted"
   | "inventory.disposed"
-  | "vendor.invoice.approved";
+  | "vendor.invoice.approved"
+  | "vendor.invoice.payment_approved";
 export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
 export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";
@@ -1791,6 +1792,66 @@ export interface ScmVendorInvoiceFilter {
   limit?: number;
 }
 
+// === Phase 2 WP-PRO-03: AP Payment Batch =====================================
+
+export type ScmPaymentBatchStatus = "draft" | "submitted" | "approved" | "cancelled";
+
+export interface ScmPaymentBatch {
+  id: string;
+  tenantId: string;
+  batchNumber: string;
+  idempotencyKey: string;
+  organizationUnitId: string;
+  status: ScmPaymentBatchStatus;
+  approvedAmount: number;
+  currency: string;
+  workflowInstanceId: string | null;
+  submittedAt: Date | null;
+  submittedBy: string | null;
+  approvedAt: Date | null;
+  approvedBy: string | null;
+  cancelledAt: Date | null;
+  cancelledBy: string | null;
+  createdAt: Date;
+  createdBy: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
+export interface ScmPaymentLine {
+  id: string;
+  tenantId: string;
+  paymentBatchId: string;
+  vendorInvoiceId: string;
+  amount: number;
+  currency: string;
+  approvalOverrideReason: string | null;
+  createdAt: Date;
+}
+
+export interface CreateScmPaymentBatchInput {
+  batchNumber: string;
+  idempotencyKey: string;
+  organizationUnitId: string;
+  currency?: string;
+  createdBy?: string | null;
+  lines: CreateScmPaymentLineInput[];
+}
+
+export interface CreateScmPaymentLineInput {
+  vendorInvoiceId: string;
+  overrideReason?: string | null;
+}
+
+export interface ScmPaymentBatchFilter {
+  organizationUnitId?: string;
+  organizationUnitIds?: string[] | null;
+  status?: ScmPaymentBatchStatus;
+  createdFrom?: Date;
+  createdTo?: Date;
+  limit?: number;
+}
+
 // === Stage 2: Consignment Settlement =========================================
 
 export interface ScmConsignmentSettlement {
@@ -2344,6 +2405,68 @@ export interface SupplyChainAdvancedRepository {
   ): Promise<number>;
   listVendorInvoices(tenantId: string, filter?: ScmVendorInvoiceFilter): Promise<ScmVendorInvoice[]>;
 
+  // Phase 2 WP-PRO-03: AP Payment Batch
+  createPaymentBatch(
+    tenantId: string,
+    input: CreateScmPaymentBatchInput,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] }>;
+  deletePaymentBatchWithoutWorkflow(tenantId: string, paymentBatchId: string): Promise<void>;
+  /** Atomically claims the empty workflow-instance slot for one concurrent creator. */
+  claimPaymentBatchWorkflowInstance(
+    tenantId: string,
+    paymentBatchId: string,
+    workflowInstanceId: string,
+  ): Promise<boolean>;
+  findPaymentBatchById(
+    tenantId: string,
+    paymentBatchId: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] } | null>;
+  findPaymentBatchByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<{ paymentBatch: ScmPaymentBatch; lines: ScmPaymentLine[] } | null>;
+  listPaymentBatches(tenantId: string, filter?: ScmPaymentBatchFilter): Promise<ScmPaymentBatch[]>;
+  /**
+   * Atomically approves a payment batch: terminal status update + the per-line
+   * accounting-ready events in one transaction. Returns the updated batch or
+   * null when a concurrent transition already moved the row (in which case the
+   * transaction rolls back and NO event is written).
+   */
+  approvePaymentBatch(
+    tenantId: string,
+    input: {
+      paymentBatchId: string;
+      approvedBy: string | null;
+      approvedAt: Date;
+      financeTransactionId: string | null;
+    },
+    events: Array<{
+      lineId: string;
+      event: CreateScmAccountingReadyEventInput;
+    }>,
+  ): Promise<ScmPaymentBatch | null>;
+  updatePaymentBatchStatus(
+    tenantId: string,
+    paymentBatchId: string,
+    status: ScmPaymentBatchStatus,
+    actor: { userId: string | null; at: Date },
+  ): Promise<ScmPaymentBatch | null>;
+  /** Resolve legal_entity_id from an organization unit (NOT NULL FK chain). */
+  findLegalEntityIdForOrganizationUnit(
+    tenantId: string,
+    organizationUnitId: string,
+  ): Promise<string | null>;
+  /** Fetch nominal-limit rows for the given role codes (DEC-004-FU mechanism). */
+  findPaymentApprovalLimits(
+    tenantId: string,
+    roleCodes: string[],
+  ): Promise<Array<{ roleCode: string; nominalLimit: number | null }>>;
+  /** Query open accounting periods for period-ID resolution. */
+  listOpenPeriods(
+    tenantId: string,
+    legalEntityId: string,
+  ): Promise<Array<{ id: string; dateFrom: Date; dateTo: Date }>>;
+
   // Stage 2: Consignment settlements
   createConsignmentSettlement(
     tenantId: string,
@@ -2585,6 +2708,8 @@ export interface SupplyChainAdvancedRepository {
   // Cross-domain reference checks (mirrors Core's pattern)
   itemExists(tenantId: string, itemId: string): Promise<boolean>;
   supplierExists(tenantId: string, supplierId: string): Promise<boolean>;
+  /** WP-PRO-04 eligibility gate: null when the supplier does not exist. */
+  findSupplierActive(tenantId: string, supplierId: string): Promise<boolean | null>;
   purchaseOrderExists(tenantId: string, purchaseOrderId: string): Promise<boolean>;
   purchaseRequestExists(tenantId: string, purchaseRequestId: string): Promise<boolean>;
   organizationUnitExists(tenantId: string, organizationUnitId: string): Promise<boolean>;

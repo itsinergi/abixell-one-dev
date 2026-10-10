@@ -7,10 +7,13 @@ import type {
   SupplierContractService,
   SupplierGovernanceService,
   VendorInvoiceService,
+  PaymentService,
 } from "../application/index.js";
 import type {
   CreateScmServiceAcceptanceInput,
+  CreateScmPaymentBatchInput,
   CreateScmVendorInvoiceInput,
+  ScmPaymentBatchStatus,
   ScmProcurementType,
   ScmRfqStatus,
   ScmServiceAcceptanceStatus,
@@ -30,6 +33,7 @@ export interface ProcurementRouteDeps {
     serviceAcceptance: ServiceAcceptanceService;
     vendorInvoice: VendorInvoiceService;
     spendAnalytics: SpendAnalyticsService;
+    payment: PaymentService;
   };
 }
 
@@ -216,6 +220,21 @@ const createServiceAcceptanceSchema = z.object({
   servicePeriodEnd: z.string().regex(dateOnlyRegex).nullable().optional(),
   notes: z.string().nullable().optional(),
   lines: z.array(createServiceAcceptanceLineSchema).min(1),
+});
+
+const createPaymentBatchSchema = z.object({
+  idempotencyKey: z.string().min(1),
+  batchNumber: z.string().optional(),
+  organizationUnitId: z.string().uuid(),
+  currency: z.string().optional(),
+  lines: z
+    .array(
+      z.object({
+        vendorInvoiceId: z.string().uuid(),
+        overrideReason: z.string().nullable().optional(),
+      }),
+    )
+    .min(1),
 });
 
 function query(q: unknown): Record<string, string | undefined> {
@@ -452,5 +471,51 @@ export function registerProcurementRoutes(
     const { id } = idParamSchema.parse(req.params);
     const body = commentBodySchema.parse(req.body ?? {});
     return reply.send(await deps.procurement.vendorInvoice.approveVendorInvoice(req.actor!, id, body.comment));
+  });
+
+  // 6. AP Payment Batches — WP-PRO-03
+  app.post(route(prefix, "/payments"), { preHandler: app.authenticate }, async (req, reply) => {
+    const body = createPaymentBatchSchema.parse(req.body);
+    return reply.status(201).send(
+      await deps.procurement.payment.createPaymentBatch(
+        req.actor!,
+        body as unknown as Omit<CreateScmPaymentBatchInput, "batchNumber" | "createdBy"> & {
+          batchNumber?: string;
+        },
+      ),
+    );
+  });
+
+  app.get(route(prefix, "/payments/:id"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    return reply.send(await deps.procurement.payment.getPaymentBatch(req.actor!, id));
+  });
+
+  app.get(route(prefix, "/payments"), { preHandler: app.authenticate }, async (req, reply) => {
+    const q = query(req.query);
+    return reply.send(
+      await deps.procurement.payment.listPaymentBatches(req.actor!, {
+        organizationUnitIds: q.organizationUnitId ? [q.organizationUnitId] : undefined,
+        status: q.status as ScmPaymentBatchStatus | undefined,
+      }),
+    );
+  });
+
+  app.post(route(prefix, "/payments/:id/submit"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = commentBodySchema.parse(req.body ?? {});
+    return reply.send(await deps.procurement.payment.submitPaymentBatch(req.actor!, id, body.comment));
+  });
+
+  app.post(route(prefix, "/payments/:id/approve"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = commentBodySchema.parse(req.body ?? {});
+    return reply.send(await deps.procurement.payment.approvePaymentBatch(req.actor!, id, body.comment));
+  });
+
+  app.post(route(prefix, "/payments/:id/cancel"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = commentBodySchema.parse(req.body ?? {});
+    return reply.send(await deps.procurement.payment.cancelPaymentBatch(req.actor!, id, body.comment));
   });
 }

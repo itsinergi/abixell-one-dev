@@ -451,8 +451,10 @@ test("current repository has no blocking platform-boundary findings", async () =
   // `organization_unit.change_request.create/.review` and
   // `organization_unit.tombstone` permissions (consumed by
   // `organization-unit-hierarchy.service.ts` but previously undeclared)
-  // brings the verified actual total to 197. Re-pin here rather than
-  // carry forward the stale 165.
-  assert.equal(result.permissionCount, 197);
+  // brings the verified actual total to 197. WP-PRO-01 adds eight governed
+  // procurement permissions; WP-PRO-03 adds exactly three governed AP payment
+  // permissions: supply_chain.payment.read/.manage/.approve. Re-pin here rather
+  // than carry forward the stale 165.
+  assert.equal(result.permissionCount, 208);
   assert.equal(result.advisoryCount, 1);
 });
