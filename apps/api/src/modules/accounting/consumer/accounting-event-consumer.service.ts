@@ -81,6 +81,76 @@ export interface ConsumerKernelPort {
 }
 
 /**
+ * Local structural port for the SCM accounting-ready outbox.
+ *
+ * Declared here rather than imported from the Supply Chain module: the
+ * platform boundary validator blocks cross-module implementation imports,
+ * and the consumer only needs these four reads/writes. The concrete
+ * `PgAccountingEventWritePort` satisfies this shape structurally and is
+ * injected by the composition root.
+ */
+type ConsumerOutboxState = "pending" | "published" | "failed" | "suppressed";
+type ConsumerReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
+
+export interface ConsumerOutboxEvent {
+  id: string;
+  eventType: string;
+  sourceDocumentType: string;
+  effectiveAt: Date;
+  currency: string;
+  amount: number;
+  idempotencyKey: string;
+  outboxState: ConsumerOutboxState;
+  payload: Record<string, unknown>;
+}
+
+export interface ConsumerOutboxPort {
+  claimPendingEvents(tenantId: string, limit: number): Promise<ConsumerOutboxEvent[]>;
+  getEventById(tenantId: string, eventId: string): Promise<ConsumerOutboxEvent | null>;
+  updateEventState(
+    tenantId: string,
+    input: {
+      accountingEventId: string;
+      stateKind: "outbox" | "reconciliation";
+      toState: ConsumerOutboxState | ConsumerReconciliationState;
+      reason?: string | null;
+      occurredAt?: Date;
+      occurredBy?: string | null;
+    },
+  ): Promise<unknown>;
+}
+
+/**
+ * Local structural port for the Accounting Kernel's system-principal
+ * posting surface. Both methods live on `AccountingKernelService` in this
+ * same module; the narrow shape keeps the consumer from depending on the
+ * service's full public surface.
+ */
+export interface ConsumerJournal {
+  id: string;
+  status: string;
+}
+
+export interface ConsumerKernelPort {
+  generateJournalInternal(
+    tenantId: string,
+    input: {
+      legalEntityId: string;
+      triggerEventType: string;
+      journalNumber: string;
+      journalDate: string;
+      accountingDate: string;
+      periodId: string;
+      amount: string;
+      idempotencyKey: string;
+      description: string | null;
+      currency: string;
+    },
+  ): Promise<ConsumerJournal>;
+  postJournalInternal(tenantId: string, journalId: string): Promise<ConsumerJournal>;
+}
+
+/**
  * Payload fields that must exist for event posting.
  * Generated events MUST include legalEntityId + periodId.
  */
