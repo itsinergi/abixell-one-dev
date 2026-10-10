@@ -12,6 +12,8 @@ import { PgConfigurationRepository } from "./infrastructure/persistence/reposito
 import { PgAppMetadataRepository } from "./infrastructure/persistence/repositories/app-metadata.repository.pg.js";
 import { PgWorkflowRepository } from "./infrastructure/persistence/repositories/workflow.repository.pg.js";
 import { PgApprovalAuthorityRepository } from "./infrastructure/persistence/repositories/approval-authority.repository.pg.js";
+import { PgSodRepository } from "./infrastructure/persistence/repositories/sod.repository.pg.js";
+import { PgRuleRegistryRepository } from "./infrastructure/persistence/repositories/rule-registry.repository.pg.js";
 import { PgDomainEventRepository } from "./infrastructure/persistence/repositories/domain-event.repository.pg.js";
 import { PgNotificationRepository } from "./infrastructure/persistence/repositories/notification.repository.pg.js";
 import { PgDocumentRepository } from "./infrastructure/persistence/repositories/document.repository.pg.js";
@@ -35,6 +37,8 @@ import { LocalFileStorage } from "./infrastructure/storage/local-file-storage.js
 
 import { AuditService } from "./application/audit/audit.service.js";
 import { RbacService } from "./application/rbac/rbac.service.js";
+import { SodService } from "./application/rbac/sod.service.js";
+import { RuleRegistryService } from "./application/rules/rule-registry.service.js";
 import { ApprovalAuthorityService } from "./domain/rbac/approval-authority.service.js";
 import { TenantService } from "./application/tenant/tenant.service.js";
 import { LegalEntityService } from "./application/legal-entity/legal-entity.service.js";
@@ -200,7 +204,7 @@ export function buildContainer() {
     console.error(`[EventBus] subscriber for '${eventType}' failed:`, error);
   });
 
-  const workflow = new WorkflowService(workflowRepo, audit, rbac, eventBus);
+  const workflow = new WorkflowService(workflowRepo, audit, rbac, eventBus, approvalAuthority);
   const notification = new NotificationService(notificationRepo, rbacRepo, audit, rbac);
   const integration = new IntegrationService(integrationRepo, tenantRepo, eventBus, audit, rbac);
 
@@ -440,12 +444,16 @@ export function buildContainer() {
   // a future Epic 9 integration that can add it without a re-migration.
   const accountingKernelRepo = new PgAccountingKernelRepository(pool);
   const accountingEventPort = new PgAccountingEventWritePort(pool);
+  // WP-APR-02 — central rule registry repository; the kernel consults it
+  // before the posting-rules table (DEC-008/BR-013 single source of truth).
+  const ruleRegistryRepo = new PgRuleRegistryRepository(pool);
   const accountingKernel = new AccountingKernelService(
     accountingKernelRepo,
     configuration,
     audit,
     rbac,
     eventBus,
+    ruleRegistryRepo,
   );
   const accountingEventConsumer = new AccountingEventConsumerService(
     accountingKernel,
@@ -771,6 +779,9 @@ export function buildContainer() {
     ),
     departments: new DepartmentService(departmentRepo, rbac),
     businessPartner: new BusinessPartnerService(businessPartnerRepo, rbac),
+    // WP-APR-03 / WP-APR-02 — SoD governance surface and central rule registry.
+    sod: new SodService(new PgSodRepository(pool), rbac),
+    ruleRegistry: new RuleRegistryService(ruleRegistryRepo, rbac),
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
     configuration,

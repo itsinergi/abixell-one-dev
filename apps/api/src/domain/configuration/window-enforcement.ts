@@ -284,6 +284,10 @@ export const WINDOW_RULES: WindowRule[] = [
   // the same `/administration` surface as identity and org structure.
   { method: "*", apiPath: "/business-partners", windowCode: "route:/administration" },
   { method: "*", apiPath: "/config", windowCode: "route:/administration" },
+  // WP-APR-03 / WP-APR-02 — SoD governance + central rule registry are
+  // platform configuration, edited from the same `/administration` surface.
+  { method: "*", apiPath: "/sod", windowCode: "route:/administration" },
+  { method: "*", apiPath: "/rule-registry", windowCode: "route:/administration" },
   // Identity, org structure and tenancy are all edited from `/administration`
   // (DashboardPage) and read from `/admin`; `/administration` owns them.
   { method: "*", apiPath: "/legal-entities", windowCode: "route:/administration" },

@@ -12,8 +12,6 @@
  * values (`scaleToBigInt`), never on parseFloat. iDempiere uses BigDecimal
  * for exactly the same reason: binary floats cannot hold 0.1.
  */
-import type { ActorContext } from "../shared-kernel/audit-context.js";
-
 export interface ApprovalAuthorityInput {
   /** The user who acted to start the document (Doc_User_ID convention —
    * the DOCUMENT user, not the DB row's created_by). */
@@ -21,7 +19,11 @@ export interface ApprovalAuthorityInput {
   /** numeric(18,2) string, or null when the document carries no amount. */
   amount: string | null;
   currencyCode: string;
-  organizationUnitId: string;
+  /** The document's Organization Unit, or null when it carries none. NEVER an
+   * empty string: a blank id would reach `WHERE id = $2` as an invalid UUID
+   * literal and abort the walk with a cast error instead of simply finding no
+   * org-unit supervisor. */
+  organizationUnitId: string | null;
   /** The transaction table the document lives in, for the accumulation
    * window (iDempiere's getAmtAccum counts on the same table). */
   documentTable: string;
@@ -32,7 +34,8 @@ export type ApprovalDecision =
   | { kind: "self-approved" }
   | { kind: "approve"; approverUserId: string }
   | { kind: "escalate"; nextApproverUserId: string }
-  | { kind: "no-approver" };
+  | { kind: "no-approver" }
+  | { kind: "ceiling-inactive" };
 
 /** One supervisor hop in the escalation walk. */
 export interface SupervisorChainNode {

@@ -14,14 +14,24 @@
  *    stay under the accumulator.
  * 7. Pass → "approve". Fail → escalate to users.supervisor_user_id, then
  *    organization_units.supervisor_user_id, with a visited-set cycle guard.
- * 8. Chain exhausted → "no-approver" (a clean failure, not an exception).
+ * 8. Chain exhausted → "no-approver" (a clean failure, not an exception) —
+ *    but ONLY when at least one hop in the walk actually carried a
+ *    configured limit (roleAmt > 0). When NO hop has one, the tenant has
+ *    not configured approval ceilings at all: the resolver reports
+ *    "ceiling-inactive" and the caller keeps its ordinary role-based
+ *    assignment. This is the one deliberate departure from iDempiere —
+ *    there AmtApproval is mandatory, so an all-NULL chain means a
+ *    misconfigured deployment; here the ceiling is additive on top of an
+ *    already-working role-assignment engine, so "nobody configured a
+ *    limit" must not turn every amount-carrying document into a hard
+ *    failure. NULL still never means "unlimited": a hop WITH a limit IS
+ *    seen, and the walk still escalates past it.
  */
 import type { ActorContext } from "../shared-kernel/audit-context.js";
 import type {
   ApprovalAuthorityInput,
   ApprovalAuthorityRepository,
   ApprovalDecision,
-  RoleApprovalLimits,
   SupervisorChainNode,
 } from "./approval-authority.entity.js";
 import {
@@ -50,10 +60,16 @@ export class ApprovalAuthorityService {
     const ownDocument = actor.userId === input.documentUserId;
     let candidateUserId = actor.userId;
     const visited = new Set<string>([actor.userId]);
+    // Whether ANY hop in the walk carried a configured ceiling. Distinguishes
+    // "ceilings exist and this document exhausted them" from "this tenant has
+    // no ceilings configured at all" — see step 8 in the header.
+    let ceilingConfigured = false;
 
     while (true) {
       // 2-6. Can THIS user approve?
-      if (await this.userCanApprove(actor, candidateUserId, ownDocument, input)) {
+      const verdict = await this.userCanApprove(actor, candidateUserId, ownDocument, input);
+      ceilingConfigured = ceilingConfigured || verdict.limitConfigured;
+      if (verdict.canApprove) {
         return candidateUserId === actor.userId
           ? { kind: "approve", approverUserId: candidateUserId }
           : { kind: "escalate", nextApproverUserId: candidateUserId };
@@ -62,7 +78,7 @@ export class ApprovalAuthorityService {
       // 7. Escalate: user's supervisor, then the org unit's.
       const next = await this.nextSupervisor(actor.tenantId, candidateUserId, input, visited);
       if (next === null) {
-        return { kind: "no-approver" };
+        return ceilingConfigured ? { kind: "no-approver" } : { kind: "ceiling-inactive" };
       }
       visited.add(next);
       candidateUserId = next;
@@ -71,31 +87,36 @@ export class ApprovalAuthorityService {
 
   /** Steps 2-6 for one candidate. Own-document check applies ONLY to the
    * document user: a supervisor approving their subordinate's document is
-   * not self-approval. */
+   * not self-approval.
+   *
+   * `limitConfigured` says whether THIS hop carried a positive ceiling —
+   * `resolveApprover` uses it to tell "ceilings exist and were exhausted"
+   * apart from "this tenant configured no ceilings at all". */
   private async userCanApprove(
     actor: ActorContext,
     candidateUserId: string,
     ownDocument: boolean,
     input: ApprovalAuthorityInput,
-  ): Promise<boolean> {
+  ): Promise<{ canApprove: boolean; limitConfigured: boolean }> {
     const limits = await this.repo.getActiveRoleApprovalLimits(
       actor.tenantId,
       candidateUserId,
       candidateUserId === actor.userId ? actor.assignmentId : null,
     );
-    if (!limits) return false;
+    if (!limits) return { canApprove: false, limitConfigured: false };
     // Step 1 in resolveApprover already returned on a null amount; the
     // guard here re-narrows for THIS function's signature.
-    if (input.amount === null) return false;
-
-    // 2. Self-approval block (MWFActivity.java:766-767).
-    if (ownDocument && candidateUserId === input.documentUserId && !limits.isCanApproveOwnDoc) {
-      return false;
-    }
+    if (input.amount === null) return { canApprove: false, limitConfigured: false };
 
     // 3. No limit set → this role does not participate (769-770).
     if (limits.roleAmt === null || compareAmounts(limits.roleAmt, "0") === 0) {
-      return false;
+      return { canApprove: false, limitConfigured: false };
+    }
+    const limitConfigured = true;
+
+    // 2. Self-approval block (MWFActivity.java:766-767).
+    if (ownDocument && candidateUserId === input.documentUserId && !limits.isCanApproveOwnDoc) {
+      return { canApprove: false, limitConfigured };
     }
 
     // 4. Currency conversion (771-779). The ROLE's limit is expressed in
@@ -116,7 +137,7 @@ export class ApprovalAuthorityService {
     }
 
     // 5. amount <= roleAmt (780).
-    if (compareAmounts(documentAmount, limits.roleAmt) > 0) return false;
+    if (compareAmounts(documentAmount, limits.roleAmt) > 0) return { canApprove: false, limitConfigured };
 
     // 6. Accumulation window (786-798): only when BOTH accumulator columns
     // are configured — the schema's roles_approval_accum_check pins that.
@@ -133,11 +154,11 @@ export class ApprovalAuthorityService {
         limits.daysApprovalAccum,
       );
       if (addAmounts(alreadyApproved, documentAmount) > limits.amtApprovalAccum) {
-        return false;
+        return { canApprove: false, limitConfigured };
       }
     }
 
-    return true;
+    return { canApprove: true, limitConfigured };
   }
 
   /** Step 7: user's supervisor first; when they have none, the
@@ -159,10 +180,12 @@ export class ApprovalAuthorityService {
       if (visited.has(node.supervisorUserId)) continue; // cycle guard
       return node.supervisorUserId;
     }
-    const orgSupervisor = await this.repo.getOrganizationUnitSupervisor(
-      tenantId,
-      input.organizationUnitId,
-    );
+    // A missing/blank org-unit id means the document carries no org unit. Skip
+    // the lookup — no org unit → no org-unit supervisor — rather than let an
+    // empty string reach `WHERE id = $2` and abort as a UUID cast error.
+    const orgSupervisor = input.organizationUnitId
+      ? await this.repo.getOrganizationUnitSupervisor(tenantId, input.organizationUnitId)
+      : null;
     if (orgSupervisor !== null && !visited.has(orgSupervisor)) {
       return orgSupervisor;
     }
