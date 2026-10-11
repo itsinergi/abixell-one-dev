@@ -1,6 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
+import { PgAuditLogRepository } from "../../src/infrastructure/persistence/repositories/audit-log.repository.pg.js";
+import { PgDomainEventRepository } from "../../src/infrastructure/persistence/repositories/domain-event.repository.pg.js";
+import { PgLegalEntityRepository } from "../../src/infrastructure/persistence/repositories/legal-entity.repository.pg.js";
+import { PgOrganizationUnitRepository } from "../../src/infrastructure/persistence/repositories/organization-unit.repository.pg.js";
+import { PgRbacRepository } from "../../src/infrastructure/persistence/repositories/rbac.repository.pg.js";
+import { AuditService } from "../../src/application/audit/audit.service.js";
+import { EventBus } from "../../src/application/event/event-bus.js";
+import { RbacService } from "../../src/application/rbac/rbac.service.js";
+import { AccountingEventConsumerService } from "../../src/modules/accounting/consumer/accounting-event-consumer.service.js";
+import { AccountingKernelService } from "../../src/modules/accounting/kernel/application/accounting-kernel.service.js";
+import { PgAccountingKernelRepository } from "../../src/modules/accounting/kernel/infrastructure/accounting-kernel.repository.pg.js";
+import { PgAccountingEventWritePort } from "../../src/modules/supply-chain/ports/accounting-event.port.pg.js";
 import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
 
 /**
@@ -282,6 +294,37 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
       name: "Other Division",
     });
     otherOrgUnitId = otherOuRes.json().id;
+
+    const coaRes = await pool.query(
+      `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
+       VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3) RETURNING id`,
+      [tenantId, legalEntityId, adminUserId],
+    );
+    await pool.query(
+      `INSERT INTO accounting_accounts (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance, is_active, created_by)
+       VALUES
+         ($1, $2, $3, '6101', 'Payroll Expense', 'EXPENSE', 'debit', true, $4),
+         ($1, $2, $3, '2101', 'Payroll Payable', 'LIABILITY', 'credit', true, $4)`,
+      [tenantId, legalEntityId, coaRes.rows[0].id, adminUserId],
+    );
+    await pool.query(
+      `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status, created_by)
+       VALUES ($1, $2, 'FY2026', 'P-ALL', 'Open Payroll Test Period', 'annual', '2026-01-01', '2026-12-31', 'open', $3)`,
+      [tenantId, legalEntityId, adminUserId],
+    );
+    await pool.query(
+      `INSERT INTO posting_rules (tenant_id, rule_code, rule_name, rule_version, trigger_event_type, accounting_formula, requires_approval, effective_date, is_active, created_by, updated_by)
+       VALUES ($1, 'RULE_PAYROLL_RUN_POSTED', 'Payroll Run Posted', 'v1', 'payroll.run_posted', $2::jsonb, false, '2026-01-01', true, $3, $3)
+       ON CONFLICT (tenant_id, rule_code, rule_version) DO NOTHING`,
+      [
+        tenantId,
+        JSON.stringify([
+          { accountCode: "6101", side: "debit", amountExpression: "AMOUNT" },
+          { accountCode: "2101", side: "credit", amountExpression: "AMOUNT" },
+        ]),
+        adminUserId,
+      ],
+    );
 
     // -----------------------------------------------------------------------
     // 4. Core Workforce Positions & Employees
@@ -840,9 +883,130 @@ describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
       expect(approveRes.statusCode).toBe(200);
       expect(approveRes.json().payrollRun.approvedAt).toBeTruthy();
 
+      const eventRes = await pool.query(
+        `SELECT event_type, source_document_id, idempotency_key, payload
+           FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND source_document_id = $2
+          ORDER BY created_at DESC`,
+        [tenantId, payrollRunId],
+      );
+      expect(eventRes.rows).toHaveLength(1);
+      expect(eventRes.rows[0].event_type).toBe("payroll.run_posted");
+      expect(eventRes.rows[0].idempotency_key).toBe(`payroll-run:${payrollRunId}:approve`);
+      expect(eventRes.rows[0].payload.legalEntityId).toBe(legalEntityId);
+      expect(eventRes.rows[0].payload.periodId).toBeTruthy();
+
+      const accountingRepo = new PgAccountingKernelRepository(pool);
+      const accountingKernel = new AccountingKernelService(
+        accountingRepo,
+        {} as never,
+        new AuditService(new PgAuditLogRepository(pool)),
+        new RbacService(
+          new PgRbacRepository(pool),
+          new PgOrganizationUnitRepository(pool),
+          new PgLegalEntityRepository(pool),
+        ),
+        new EventBus(new PgDomainEventRepository(pool), () => {}),
+      );
+      const accountingConsumer = new AccountingEventConsumerService(
+        accountingKernel,
+        new PgAccountingEventWritePort(pool),
+        accountingRepo,
+      );
+      const consumeResult = await accountingConsumer.processTenant(tenantId);
+      expect(consumeResult.posted).toBeGreaterThanOrEqual(1);
+
+      const postedEventRes = await pool.query(
+        `SELECT outbox_state, reconciliation_state
+           FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND idempotency_key = $2`,
+        [tenantId, `payroll-run:${payrollRunId}:approve`],
+      );
+      expect(postedEventRes.rows[0].outbox_state).toBe("published");
+      expect(postedEventRes.rows[0].reconciliation_state).toBe("matched");
+
+      const journalRes = await pool.query(
+        `SELECT id, status, period_id
+           FROM journal_headers
+          WHERE tenant_id = $1 AND idempotency_key = $2`,
+        [tenantId, `payroll-run:${payrollRunId}:approve`],
+      );
+      expect(journalRes.rows).toHaveLength(1);
+      expect(journalRes.rows[0].status).toBe("posted");
+      expect(journalRes.rows[0].period_id).toBe(eventRes.rows[0].payload.periodId);
+
+      const glRes = await pool.query(
+        `SELECT gle.id
+           FROM general_ledger_entries gle
+           JOIN journal_lines jl ON jl.id = gle.journal_line_id
+          WHERE gle.tenant_id = $1
+            AND jl.journal_header_id = $2`,
+        [tenantId, journalRes.rows[0].id],
+      );
+      expect(glRes.rows).toHaveLength(2);
+
       // Recalculating now fails with 409 Conflict
       const recalcRes = await post(`/workforce/advanced/payroll-runs/${payrollRunId}/calculate`, hrStaffToken);
       expect(recalcRes.statusCode).toBe(409);
+
+      await expect(
+        pool.query(
+          `UPDATE workforce_payroll_runs
+              SET total_gross = total_gross + 1
+            WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, payrollRunId],
+        ),
+      ).rejects.toThrow(/facts cannot be changed/);
+
+      await expect(
+        pool.query(
+          `DELETE FROM workforce_payroll_runs
+            WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, payrollRunId],
+        ),
+      ).rejects.toThrow(/cannot be deleted/);
+
+      const payslipRes = await pool.query(
+        `SELECT id FROM workforce_payslips
+          WHERE tenant_id = $1 AND payroll_run_id = $2
+          LIMIT 1`,
+        [tenantId, payrollRunId],
+      );
+      expect(payslipRes.rows).toHaveLength(1);
+      const payslipId = payslipRes.rows[0].id;
+
+      await expect(
+        pool.query(
+          `UPDATE workforce_payslips
+              SET gross_salary = gross_salary + 1
+            WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, payslipId],
+        ),
+      ).rejects.toThrow(/approved payroll run cannot be changed/);
+
+      await expect(
+        pool.query(
+          `DELETE FROM workforce_payslips
+            WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, payslipId],
+        ),
+      ).rejects.toThrow(/approved payroll run cannot be changed/);
+
+      await pool.query(
+        `UPDATE workforce_payroll_runs
+            SET closed_at = NOW()
+          WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, payrollRunId],
+      );
+
+      await expect(
+        pool.query(
+          `UPDATE workforce_payroll_runs
+              SET closed_at = NULL
+            WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, payrollRunId],
+        ),
+      ).rejects.toThrow(/cannot be reopened/);
     });
   });
 

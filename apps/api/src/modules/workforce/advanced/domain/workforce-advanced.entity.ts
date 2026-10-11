@@ -776,6 +776,11 @@ export interface WorkforceAdvancedRepository {
   // -- narrow Core read port --------------------------------------------
   findEmployeeReference(tenantId: string, employeeId: string): Promise<EmployeeReference | null>;
   organizationUnitExists(tenantId: string, organizationUnitId: string): Promise<boolean>;
+  findLegalEntityIdForOrganizationUnit(tenantId: string, organizationUnitId: string): Promise<string | null>;
+  listOpenAccountingPeriods(
+    tenantId: string,
+    legalEntityId: string,
+  ): Promise<Array<{ id: string; dateFrom: Date; dateTo: Date }>>;
   positionExists(tenantId: string, positionId: string): Promise<boolean>;
   listOrganizationUnitDescendantIds(tenantId: string, rootIds: string[]): Promise<string[]>;
   listActiveEmployeeReferences(tenantId: string, organizationUnitIds?: string[] | null): Promise<EmployeeReference[]>;

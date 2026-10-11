@@ -78,7 +78,8 @@ export type ScmAccountingReadyEventType =
   | "service.accepted"
   | "inventory.disposed"
   | "vendor.invoice.approved"
-  | "vendor.invoice.payment_approved";
+  | "vendor.invoice.payment_approved"
+  | "payroll.run_posted";
 export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
 export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";
@@ -622,6 +623,19 @@ export interface CreateScmLandedCostAllocationInput {
 export interface ApplyScmLandedCostInput {
   landedCostId: string;
   appliedAt?: Date;
+  /** Resolved by the service before the repository transaction; the tx fails closed on mismatch. */
+  legalEntityId: string;
+  /** Open accounting period containing `appliedAt`, resolved by the service. */
+  periodId: string | null;
+}
+
+/** Result of an inspection posting: the document plus its ledger evidence. */
+export interface CreateScmInspectionResult {
+  inspection: ScmInspection;
+  /** hold_out for the inspected total, then one release_in per nonzero disposition. */
+  movements: ScmAdvancedStockMovement[];
+  /** FIFO layer created for the accepted quantity, when any was accepted. */
+  valuationLayerId: string | null;
 }
 
 // === 4. RFQ, Tender & Bid Comparison ========================================
@@ -2239,7 +2253,7 @@ export interface SupplyChainAdvancedRepository {
     idempotencyKey: string,
   ): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] } | null>;
   listReceivingRecords(tenantId: string, filter?: ScmReceivingRecordFilter): Promise<ScmReceivingRecord[]>;
-  createInspection(tenantId: string, input: CreateScmInspectionInput): Promise<ScmInspection>;
+  createInspection(tenantId: string, input: CreateScmInspectionInput): Promise<CreateScmInspectionResult>;
   findInspectionByReceivingLineId(tenantId: string, receivingLineId: string): Promise<ScmInspection | null>;
   findInspectionByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<ScmInspection | null>;
   createDiscrepancyRecord(tenantId: string, input: CreateScmDiscrepancyRecordInput): Promise<ScmDiscrepancyRecord>;
@@ -2466,6 +2480,7 @@ export interface SupplyChainAdvancedRepository {
     tenantId: string,
     legalEntityId: string,
   ): Promise<Array<{ id: string; dateFrom: Date; dateTo: Date }>>;
+  findLandedCostLegalEntityId(tenantId: string, landedCostId: string): Promise<string | null>;
 
   // Stage 2: Consignment settlements
   createConsignmentSettlement(

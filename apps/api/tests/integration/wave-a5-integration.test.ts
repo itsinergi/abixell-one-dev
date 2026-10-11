@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { pool } from "../../src/infrastructure/persistence/db.js";
 
 /**
  * Wave A5 — Supply Chain Advanced Integration Test Suite (SCM-ADV-001…008).
@@ -767,6 +768,103 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
     });
 
     it("creates landed cost voucher and allocates additional freight/customs to items", async () => {
+      // === FIXTURE SETUP ===
+      // WP-WMS-02: Seed GL prerequisites (accounts, period, rule) for tenant created at test runtime.
+      // The migration only seeds tenants existing at migration time; test-created tenants need manual seeding.
+
+      // Create open accounting period covering today (2026-10-11)
+      const periodResult = await pool.query(
+        `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status, created_by)
+         VALUES ($1, $2, 'FY2026', 'P-10', 'October 2026', 'monthly', '2026-10-01', '2026-10-31', 'open', $3) RETURNING id`,
+        [tenantId, legalEntityId, adminUserId],
+      );
+      const periodId = periodResult.rows[0].id;
+
+      // Create chart of accounts
+      const coaResult = await pool.query(
+        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
+         VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3) RETURNING id`,
+        [tenantId, legalEntityId, adminUserId],
+      );
+      const coaId = coaResult.rows[0].id;
+
+      // Seed accounts 1301 (ASSET/debit) and 2401 (LIABILITY/credit) per RULE_LANDED_COST_APPLIED formula
+      await pool.query(
+        `INSERT INTO accounting_accounts (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance, is_active, created_by)
+         VALUES
+         ($1, $2, $3, '1301', 'Inventory', 'ASSET', 'debit', true, $4),
+         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)`,
+        [tenantId, legalEntityId, coaId, adminUserId],
+      );
+
+      // Seed RULE_LANDED_COST_APPLIED posting rule (migration covers only pre-existing tenants)
+      await pool.query(
+        `INSERT INTO posting_rules (tenant_id, rule_code, rule_name, rule_version, trigger_event_type, accounting_formula, requires_approval, effective_date, is_active, created_by, updated_by)
+         VALUES ($1, 'RULE_LANDED_COST_APPLIED', 'Inventory Landed Cost Applied', 'v1', 'inventory.landed_cost_applied',
+           '[{"accountCode":"1301","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"2401","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+           false, '2026-01-01'::date, true, $2, $2)
+         ON CONFLICT (tenant_id, rule_code, rule_version) DO NOTHING`,
+        [tenantId, adminUserId],
+      );
+
+      // Create a receiving record + line under secondaryWarehouseId (resolves to legalEntityId, avoids mainWarehouse balance sensitivity).
+      // Use itemAlphaId to match the landed-cost allocations.
+      const poRes2 = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 10, unitPrice: 25000000 }],
+      });
+      const poId2 = poRes2.json().order.id;
+      const poLineId2 = poRes2.json().lines[0].id;
+
+      const recRes = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `rec-key-lc-fixture-${Date.now()}`,
+        purchaseOrderId: poId2,
+        supplierId: supplierAcmeId,
+        warehouseId: secondaryWarehouseId,
+        locationId: null,
+        notes: "Fixture for landed cost allocation test",
+        lines: [
+          {
+            purchaseOrderLineId: poLineId2,
+            itemId: itemAlphaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 10,
+            unitCost: 25000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: { costCenter: "CC-WH-02" },
+            inspectionRequired: true,
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recRes.statusCode).toBe(201);
+      const fixRecId = recRes.json().receiving.id;
+      const fixLineId = recRes.json().lines[0].id;
+
+      // Inspect the line: 8 accepted, 2 rejected → mints valuation layer with receiving_line_id
+      const inspRes = await post("/supply-chain/advanced/inspections", adminToken, {
+        receivingLineId: fixLineId,
+        idempotencyKey: `insp-key-lc-fixture-${Date.now()}`,
+        quantityAccepted: 8,
+        quantityRejected: 2,
+        quantityQuarantined: 0,
+        result: "mixed",
+        reason: "Fixture inspection for landed cost test",
+      });
+      expect(inspRes.statusCode).toBe(201);
+
+      // Read back receiving record to get the valuation layer id from the line
+      const getRecRes = await get(`/supply-chain/advanced/receiving-records/${fixRecId}`, adminToken);
+      expect(getRecRes.statusCode).toBe(200);
+      const fixLayerId = getRecRes.json().lines[0].valuationLayerId;
+      expect(fixLayerId).toBeTruthy();
+
+      // === TEST: Landed Cost with Allocations ===
       const lcRes = await post("/supply-chain/advanced/landed-costs", adminToken, {
         purchaseOrderId,
         costType: "Customs Clearance & Freight",
@@ -774,7 +872,7 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         allocationMethod: "by_value",
         notes: "Import logistics surcharge",
         allocations: [
-          { itemId: itemAlphaId, allocatedAmount: 3000000, costPerUnitAdded: 300000 },
+          { itemId: itemAlphaId, valuationLayerId: fixLayerId, allocatedAmount: 3000000, costPerUnitAdded: 300000 },
           { itemId: itemBetaId, allocatedAmount: 2000000, costPerUnitAdded: 40000 },
         ],
       });
@@ -784,7 +882,7 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       expect(lcRes.json().landedCost.voucherNumber).toMatch(/^LCV-/);
       expect(lcRes.json().landedCost.status).toBe("draft");
 
-      // Apply landed cost voucher to valuation layers
+      // Apply landed cost voucher — now resolves to legalEntityId via fixture layer → receiving_line → warehouse → org_unit
       const applyRes = await post(`/supply-chain/advanced/landed-costs/${landedCostId}/apply`, adminToken);
       expect(applyRes.statusCode).toBe(200);
       expect(applyRes.json().landedCost.status).toBe("applied");
@@ -794,6 +892,406 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       expect(dtRes.statusCode).toBe(200);
       expect(dtRes.json().allocations).toHaveLength(2);
       expect(dtRes.json().allocations[0].allocatedAmount).toBe(3000000);
+    });
+
+    it("WP-WMS-01: partial inspection — hold decreases by accepted, rejected, rest in pending", async () => {
+      // Create PO + receiving for partial inspection test
+      const poPartialRes = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 20, unitPrice: 10000000 }],
+      });
+      const poPartialId = poPartialRes.json().order.id;
+      const poPartialLineId = poPartialRes.json().lines[0].id;
+
+      const recPartialRes = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `rec-partial-${Date.now()}`,
+        purchaseOrderId: poPartialId,
+        supplierId: supplierAcmeId,
+        warehouseId: secondaryWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poPartialLineId,
+            itemId: itemAlphaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 20,
+            unitCost: 10000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: { costCenter: "CC-WH-02" },
+            inspectionRequired: true,
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recPartialRes.statusCode).toBe(201);
+      const recPartialLineId = recPartialRes.json().lines[0].id;
+
+      // Partial inspection: accept 10, reject 5, quarantine 3 (total 18 of 20)
+      const inspPartialRes = await post("/supply-chain/advanced/inspections", adminToken, {
+        receivingLineId: recPartialLineId,
+        idempotencyKey: `insp-partial-${Date.now()}`,
+        quantityAccepted: 10,
+        quantityRejected: 5,
+        quantityQuarantined: 3,
+        result: "mixed",
+        reason: "Partial disposition test: 10 ok, 5 scrap, 3 hold for further review",
+      });
+      expect(inspPartialRes.statusCode).toBe(201);
+      const inspPartialId = inspPartialRes.json().id;
+
+      // Verify line projection: 10 accepted, 5 rejected, 3 quarantined, 2 still uninspected
+      const lineCheckRes = await get(
+        `/supply-chain/advanced/receiving-records/${recPartialRes.json().receiving.id}`,
+        adminToken,
+      );
+      expect(lineCheckRes.statusCode).toBe(200);
+      const lineData = lineCheckRes.json().lines[0];
+      expect(lineData.quantityAccepted).toBe(10);
+      expect(lineData.quantityRejected).toBe(5);
+      expect(lineData.quantityQuarantined).toBe(3);
+      // Remaining uninspected = 20 - (10+5+3) = 2
+      expect(lineData.quantityReceived - (lineData.quantityAccepted + lineData.quantityRejected + lineData.quantityQuarantined)).toBe(2);
+    });
+
+    it("WP-WMS-01: over-disposition rejection — quantity_rejected > quantity_received", async () => {
+      // Create PO + receiving for over-disposition test
+      const poOverRes = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 5, unitPrice: 10000000 }],
+      });
+      const poOverId = poOverRes.json().order.id;
+      const poOverLineId = poOverRes.json().lines[0].id;
+
+      const recOverRes = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `rec-over-${Date.now()}`,
+        purchaseOrderId: poOverId,
+        supplierId: supplierAcmeId,
+        warehouseId: secondaryWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poOverLineId,
+            itemId: itemBetaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 5,
+            unitCost: 10000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: {},
+            inspectionRequired: true,
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recOverRes.statusCode).toBe(201);
+      const recOverLineId = recOverRes.json().lines[0].id;
+
+      // Try to reject 10 items when only 5 were received → should fail
+      const inspOverRes = await post("/supply-chain/advanced/inspections", adminToken, {
+        receivingLineId: recOverLineId,
+        idempotencyKey: `insp-over-${Date.now()}`,
+        quantityAccepted: 0,
+        quantityRejected: 10,
+        quantityQuarantined: 0,
+        result: "rejected",
+        reason: "All rejected (more than received)",
+      });
+      expect(inspOverRes.statusCode).toBe(409);
+      expect(inspOverRes.json().error).toMatch(/Inspection disposes|remain uninspected/i);
+    });
+
+    it("WP-WMS-01: idempotency — replay inspection returns original, no duplicate", async () => {
+      // Create PO + receiving for idempotency test
+      const poIdempRes = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 15, unitPrice: 10000000 }],
+      });
+      const poIdempId = poIdempRes.json().order.id;
+      const poIdempLineId = poIdempRes.json().lines[0].id;
+
+      const recIdempRes = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `rec-idemp-${Date.now()}`,
+        purchaseOrderId: poIdempId,
+        supplierId: supplierAcmeId,
+        warehouseId: secondaryWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poIdempLineId,
+            itemId: itemAlphaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 15,
+            unitCost: 10000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: {},
+            inspectionRequired: true,
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recIdempRes.statusCode).toBe(201);
+      const recIdempLineId = recIdempRes.json().lines[0].id;
+
+      const idempKey = `insp-idemp-replay-${Date.now()}`;
+
+      // First inspection
+      const insp1Res = await post("/supply-chain/advanced/inspections", adminToken, {
+        receivingLineId: recIdempLineId,
+        idempotencyKey: idempKey,
+        quantityAccepted: 12,
+        quantityRejected: 3,
+        quantityQuarantined: 0,
+        result: "mixed",
+        reason: "First pass",
+      });
+      expect(insp1Res.statusCode).toBe(201);
+      const insp1Id = insp1Res.json().id;
+
+      // Replay the exact same request
+      const insp2Res = await post("/supply-chain/advanced/inspections", adminToken, {
+        receivingLineId: recIdempLineId,
+        idempotencyKey: idempKey,
+        quantityAccepted: 12,
+        quantityRejected: 3,
+        quantityQuarantined: 0,
+        result: "mixed",
+        reason: "First pass",
+      });
+      expect(insp2Res.statusCode).toBe(201); // Idempotent replay returns the original document
+      expect(insp2Res.json().id).toBe(insp1Id); // Same inspection returned, no duplicate
+
+      // The replay must not have written a second inspection for the line.
+      const dupCount = await pool.query(
+        `SELECT count(*)::int AS n FROM scm_inspections WHERE tenant_id = $1 AND receiving_line_id = $2`,
+        [tenantId, recIdempLineId],
+      );
+      expect(dupCount.rows[0].n).toBe(1);
+    });
+  });
+
+  // =========================================================================
+  // WP-WMS-02: Landed Cost → Accounting Kernel GL Reconciliation
+  // SCM operational fact (landed-cost apply) emits an accounting-ready event;
+  // the Accounting Kernel consumer claims it and posts the journal. Verifies
+  // the ledger (journal_headers/journal_lines) reconciles against the SCM
+  // voucher amount, not just that the HTTP apply call returned 200.
+  // =========================================================================
+  describe("WP-WMS-02: Landed Cost → GL Reconciliation", () => {
+    it("consumer posts journal from landed-cost apply event; idempotent re-apply rejected", async () => {
+      const { PgAccountingKernelRepository } = await import(
+        "../../src/modules/accounting/kernel/infrastructure/accounting-kernel.repository.pg.js"
+      );
+      const { AccountingKernelService } = await import(
+        "../../src/modules/accounting/kernel/application/accounting-kernel.service.js"
+      );
+      const { AccountingEventConsumerService } = await import(
+        "../../src/modules/accounting/consumer/accounting-event-consumer.service.js"
+      );
+      const { PgAccountingEventWritePort } = await import("../../src/modules/supply-chain/ports/accounting-event.port.pg.js");
+      const { PgRbacRepository } = await import("../../src/infrastructure/persistence/repositories/rbac.repository.pg.js");
+      const { PgAuditLogRepository } = await import("../../src/infrastructure/persistence/repositories/audit-log.repository.pg.js");
+      const { PgOrganizationUnitRepository } = await import(
+        "../../src/infrastructure/persistence/repositories/organization-unit.repository.pg.js"
+      );
+      const { PgLegalEntityRepository } = await import("../../src/infrastructure/persistence/repositories/legal-entity.repository.pg.js");
+      const { PgDomainEventRepository } = await import("../../src/infrastructure/persistence/repositories/domain-event.repository.pg.js");
+      const { RbacService } = await import("../../src/application/rbac/rbac.service.js");
+      const { AuditService } = await import("../../src/application/audit/audit.service.js");
+      const { EventBus } = await import("../../src/application/event/event-bus.js");
+
+      // === GL prerequisites: seed if not already present (Group 3 may have seeded; isolated run needs seeding) ===
+      const periodResult = await pool.query(
+        `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status, created_by)
+         VALUES ($1, $2, 'FY2026', 'P-10', 'October 2026', 'monthly', '2026-10-01', '2026-10-31', 'open', $3)
+         ON CONFLICT (tenant_id, legal_entity_id, fiscal_year_code, period_code) DO NOTHING
+         RETURNING id`,
+        [tenantId, legalEntityId, adminUserId],
+      );
+      let periodId = periodResult.rows[0]?.id;
+      if (!periodId) {
+        const existingPeriod = await pool.query(
+          `SELECT id FROM accounting_periods WHERE tenant_id = $1 AND legal_entity_id = $2 AND fiscal_year_code = 'FY2026' AND period_code = 'P-10'`,
+          [tenantId, legalEntityId],
+        );
+        periodId = existingPeriod.rows[0].id;
+      }
+
+      const coaResult = await pool.query(
+        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
+         VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3)
+         ON CONFLICT (tenant_id, legal_entity_id, coa_version_code) DO NOTHING
+         RETURNING id`,
+        [tenantId, legalEntityId, adminUserId],
+      );
+      let coaId = coaResult.rows[0]?.id;
+      if (!coaId) {
+        const existingCoa = await pool.query(
+          `SELECT id FROM chart_of_accounts WHERE tenant_id = $1 AND legal_entity_id = $2 AND coa_version_code = 'FY2026'`,
+          [tenantId, legalEntityId],
+        );
+        coaId = existingCoa.rows[0].id;
+      }
+
+      await pool.query(
+        `INSERT INTO accounting_accounts (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance, is_active, created_by)
+         VALUES
+         ($1, $2, $3, '1301', 'Inventory', 'ASSET', 'debit', true, $4),
+         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)
+         ON CONFLICT (tenant_id, legal_entity_id, coa_id, account_code) DO NOTHING`,
+        [tenantId, legalEntityId, coaId, adminUserId],
+      );
+
+      await pool.query(
+        `INSERT INTO posting_rules (tenant_id, rule_code, rule_name, rule_version, trigger_event_type, accounting_formula, requires_approval, effective_date, is_active, created_by, updated_by)
+         VALUES ($1, 'RULE_LANDED_COST_APPLIED', 'Inventory Landed Cost Applied', 'v1', 'inventory.landed_cost_applied',
+           '[{"accountCode":"1301","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"2401","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+           false, '2026-01-01'::date, true, $2, $2)
+         ON CONFLICT (tenant_id, rule_code, rule_version) DO NOTHING`,
+        [tenantId, adminUserId],
+      );
+
+      // === FIXTURE: PO → receiving → inspection → valuation layer (secondaryWarehouseId resolves legalEntityId) ===
+      const poRes = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 6, unitPrice: 15000000 }],
+      });
+      const poId = poRes.json().order.id;
+      const poLineId = poRes.json().lines[0].id;
+
+      const recRes = await post("/supply-chain/advanced/receiving-records", adminToken, {
+        idempotencyKey: `rec-gl-recon-${Date.now()}`,
+        purchaseOrderId: poId,
+        supplierId: supplierAcmeId,
+        warehouseId: secondaryWarehouseId,
+        lines: [
+          {
+            purchaseOrderLineId: poLineId,
+            itemId: itemAlphaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived: 6,
+            unitCost: 15000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: { costCenter: "CC-WH-02" },
+            inspectionRequired: true,
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(recRes.statusCode).toBe(201);
+      const recLineId = recRes.json().lines[0].id;
+
+      const inspRes = await post("/supply-chain/advanced/inspections", adminToken, {
+        receivingLineId: recLineId,
+        idempotencyKey: `insp-gl-recon-${Date.now()}`,
+        quantityAccepted: 6,
+        quantityRejected: 0,
+        quantityQuarantined: 0,
+        result: "accepted",
+      });
+      expect(inspRes.statusCode).toBe(201);
+
+      const getRecRes = await get(`/supply-chain/advanced/receiving-records/${recRes.json().receiving.id}`, adminToken);
+      const layerId = getRecRes.json().lines[0].valuationLayerId;
+      expect(layerId).toBeTruthy();
+
+      // GL prerequisites already seeded at test start (above) with ON CONFLICT DO NOTHING;
+
+      const lcRes = await post("/supply-chain/advanced/landed-costs", adminToken, {
+        purchaseOrderId: poId,
+        costType: "Handling & Insurance",
+        amount: 1200000,
+        allocationMethod: "by_value",
+        notes: "WP-WMS-02 GL reconciliation fixture",
+        allocations: [{ itemId: itemAlphaId, valuationLayerId: layerId, allocatedAmount: 1200000, costPerUnitAdded: 200000 }],
+      });
+      expect(lcRes.statusCode).toBe(201);
+      const glLandedCostId = lcRes.json().landedCost.id;
+
+      const applyRes = await post(`/supply-chain/advanced/landed-costs/${glLandedCostId}/apply`, adminToken);
+      expect(applyRes.statusCode).toBe(200);
+
+      // === Event emitted pending ===
+      const idempKey = `landed-cost:${glLandedCostId}:apply`;
+      const eventRow = await pool.query(
+        `SELECT id, outbox_state, reconciliation_state, event_type, payload, amount
+           FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND idempotency_key = $2`,
+        [tenantId, idempKey],
+      );
+      expect(eventRow.rows).toHaveLength(1);
+      const eventId = eventRow.rows[0].id;
+      expect(eventRow.rows[0].outbox_state).toBe("pending");
+      expect(eventRow.rows[0].event_type).toBe("inventory.landed_cost_applied");
+      expect(eventRow.rows[0].payload.legalEntityId).toBe(legalEntityId);
+      expect(Number(eventRow.rows[0].amount)).toBe(1200000);
+
+      // === Consumer claims + posts journal ===
+      const repo = new PgAccountingKernelRepository(pool);
+      const eventPort = new PgAccountingEventWritePort(pool);
+      const kernel = new AccountingKernelService(
+        repo,
+        {} as never,
+        new AuditService(new PgAuditLogRepository(pool)),
+        new RbacService(new PgRbacRepository(pool), new PgOrganizationUnitRepository(pool), new PgLegalEntityRepository(pool)),
+        new EventBus(new PgDomainEventRepository(pool), () => {}),
+      );
+      const consumer = new AccountingEventConsumerService(kernel, eventPort, repo);
+      await consumer.processTenant(tenantId);
+
+      // Verify event marked published/matched
+      const eventAfter = await pool.query(
+        `SELECT outbox_state, reconciliation_state FROM scm_accounting_ready_events WHERE id = $1`,
+        [eventId],
+      );
+      expect(eventAfter.rows[0].outbox_state).toBe("published");
+      expect(eventAfter.rows[0].reconciliation_state).toBe("matched");
+
+      // === Journal reconciles: header idempotency key + 2 lines (1301 debit / 2401 credit) ===
+      const headerRow = await pool.query(
+        `SELECT id, status FROM journal_headers WHERE tenant_id = $1 AND idempotency_key = $2`,
+        [tenantId, idempKey],
+      );
+      expect(headerRow.rows).toHaveLength(1);
+      expect(headerRow.rows[0].status).toBe("posted");
+      const journalHeaderId = headerRow.rows[0].id;
+
+      const lineRows = await pool.query(
+        `SELECT aa.account_code, jl.debit, jl.credit
+           FROM journal_lines jl
+           JOIN accounting_accounts aa ON aa.id = jl.account_id
+          WHERE jl.journal_header_id = $1
+          ORDER BY aa.account_code`,
+        [journalHeaderId],
+      );
+      expect(lineRows.rows).toHaveLength(2);
+      // Line 1: 1301 debit 1200000
+      expect(lineRows.rows[0].account_code).toBe("1301");
+      expect(Number(lineRows.rows[0].debit)).toBe(1200000);
+      expect(Number(lineRows.rows[0].credit)).toBe(0);
+      // Line 2: 2401 credit 1200000
+      expect(lineRows.rows[1].account_code).toBe("2401");
+      expect(Number(lineRows.rows[1].debit)).toBe(0);
+      expect(Number(lineRows.rows[1].credit)).toBe(1200000);
+
+      // === Idempotency: repeat apply on an already-applied voucher is rejected ===
+      const reapplyRes = await post(`/supply-chain/advanced/landed-costs/${glLandedCostId}/apply`, adminToken);
+      expect(reapplyRes.statusCode).toBe(409);
     });
   });
 
@@ -1285,9 +1783,13 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
     }
 
     // Reads the current balance row for a given receiving-line position.
+    // The location is part of the ledger position key: without it, a receipt
+    // booked into a bin and an earlier bin-less receipt for the same
+    // item+warehouse+condition would collide and the wrong row would win.
     async function balanceForLine(line: {
       itemId: string;
       warehouseId: string;
+      locationId?: string | null;
       stockCondition: string;
     }): Promise<Record<string, any> | undefined> {
       const balRes = await get(
@@ -1297,9 +1799,10 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
       return balRes
         .json()
         .find(
-          (b: { itemId: string; warehouseId: string; stockCondition: string }) =>
+          (b: { itemId: string; warehouseId: string; locationId: string | null; stockCondition: string }) =>
             b.itemId === line.itemId &&
             b.warehouseId === line.warehouseId &&
+            (b.locationId ?? null) === (line.locationId ?? null) &&
             b.stockCondition === line.stockCondition,
         );
     }

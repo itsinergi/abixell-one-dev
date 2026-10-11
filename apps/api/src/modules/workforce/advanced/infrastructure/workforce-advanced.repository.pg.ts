@@ -172,6 +172,40 @@ export class PgWorkforceAdvancedRepository implements WorkforceAdvancedRepositor
     return (res.rowCount ?? 0) > 0;
   }
 
+  async findLegalEntityIdForOrganizationUnit(
+    tenantId: string,
+    organizationUnitId: string,
+  ): Promise<string | null> {
+    const res = await this.pool.query(
+      `SELECT legal_entity_id
+         FROM organization_units
+        WHERE tenant_id = $1
+          AND id = $2
+          AND legal_entity_id IS NOT NULL`,
+      [tenantId, organizationUnitId],
+    );
+    return res.rows[0]?.legal_entity_id ?? null;
+  }
+
+  async listOpenAccountingPeriods(
+    tenantId: string,
+    legalEntityId: string,
+  ): Promise<Array<{ id: string; dateFrom: Date; dateTo: Date }>> {
+    const res = await this.pool.query(
+      `SELECT id, date_from, date_to
+         FROM accounting_periods
+        WHERE tenant_id = $1
+          AND legal_entity_id = $2
+          AND status = 'open'`,
+      [tenantId, legalEntityId],
+    );
+    return res.rows.map((row) => ({
+      id: row.id,
+      dateFrom: toDate(row.date_from),
+      dateTo: toDate(row.date_to),
+    }));
+  }
+
   async listOrganizationUnitDescendantIds(tenantId: string, rootIds: string[]): Promise<string[]> {
     if (rootIds.length === 0) return [];
     const res = await this.pool.query(

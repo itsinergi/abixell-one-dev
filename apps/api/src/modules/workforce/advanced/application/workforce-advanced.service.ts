@@ -78,6 +78,23 @@ import {
   toCents,
 } from "../domain/payroll-policy.js";
 
+interface PayrollAccountingReadyEventInput {
+  eventType: "payroll.run_posted";
+  sourceDocumentType: string;
+  sourceDocumentId: string;
+  effectiveAt?: Date;
+  currency?: string;
+  amount?: number;
+  idempotencyKey: string;
+  payload?: Record<string, unknown>;
+  createdBy?: string | null;
+}
+
+export interface PayrollAccountingEventPort {
+  createEvent(tenantId: string, input: PayrollAccountingReadyEventInput): Promise<unknown>;
+  getEventByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<unknown | null>;
+}
+
 /** Configuration numbering codes for Workforce Advanced. */
 export const WORKFORCE_LEAVE_REQUEST_NUMBERING_CODE = "workforce_leave_request";
 export const WORKFORCE_OVERTIME_REQUEST_NUMBERING_CODE = "workforce_overtime_request";
@@ -133,6 +150,7 @@ export class WorkforceAdvancedService {
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
     private readonly eventBus: EventBus,
+    private readonly accountingEvents: PayrollAccountingEventPort,
   ) {}
 
   // =========================================================================
@@ -1152,13 +1170,56 @@ export class WorkforceAdvancedService {
     const pending = assignments.find((a) => a.status === "pending");
     if (!pending) throw new ConflictError("No pending action exists on this payroll run");
 
+    let payrollPostingContext: { decisionAt: Date; legalEntityId: string; periodId: string } | null = null;
+    if (actionCode === "approve" || actionCode === "close") {
+      const decisionAt = new Date();
+      const legalEntityId = await this.resolvePayrollLegalEntityId(actor.tenantId, payrollRun);
+      const periodId = await this.resolveOpenPayrollPeriod(actor.tenantId, legalEntityId, decisionAt);
+      if (!periodId) {
+        throw new ConflictError(
+          `No open accounting period for date ${decisionAt.toISOString().split("T")[0]} in legal entity ${legalEntityId}`,
+        );
+      }
+      payrollPostingContext = { decisionAt, legalEntityId, periodId };
+    }
+
     const result = await this.workflow.actOnAssignment(actor, pending.id, actionCode, comment);
 
     let projected = payrollRun;
-    if (actionCode === "approve") {
-      projected = await this.repo.projectPayrollRunDecision(actor.tenantId, id, "approved", new Date());
-    } else if (actionCode === "close") {
-      projected = await this.repo.projectPayrollRunDecision(actor.tenantId, id, "closed", new Date());
+    if (payrollPostingContext) {
+      projected = await this.repo.projectPayrollRunDecision(
+        actor.tenantId,
+        id,
+        actionCode === "approve" ? "approved" : "closed",
+        payrollPostingContext.decisionAt,
+      );
+
+      const idempotencyKey = `payroll-run:${id}:${actionCode}`;
+      const existingEvent = await this.accountingEvents.getEventByIdempotencyKey(
+        actor.tenantId,
+        idempotencyKey,
+      );
+      if (!existingEvent) {
+        await this.accountingEvents.createEvent(actor.tenantId, {
+          eventType: "payroll.run_posted",
+          sourceDocumentType: "workforce_payroll_run",
+          sourceDocumentId: id,
+          effectiveAt: payrollPostingContext.decisionAt,
+          currency: "IDR",
+          amount: projected.totalGross + projected.totalEmployerContributions,
+          idempotencyKey,
+          payload: {
+            legalEntityId: payrollPostingContext.legalEntityId,
+            periodId: payrollPostingContext.periodId,
+            totalGross: projected.totalGross,
+            totalDeductions: projected.totalDeductions,
+            totalNet: projected.totalNet,
+            totalEmployerContributions: projected.totalEmployerContributions,
+            runNumber: projected.runNumber,
+          },
+          createdBy: actor.userId,
+        });
+      }
     }
 
     await this.audit.record({
@@ -2051,6 +2112,39 @@ export class WorkforceAdvancedService {
   // =========================================================================
   // Internals
   // =========================================================================
+
+  private async resolvePayrollLegalEntityId(
+    tenantId: string,
+    payrollRun: WorkforcePayrollRun,
+  ): Promise<string> {
+    if (!payrollRun.organizationUnitId) {
+      throw new ConflictError("Payroll run must have an organization unit before posting");
+    }
+
+    const legalEntityId = await this.repo.findLegalEntityIdForOrganizationUnit(
+      tenantId,
+      payrollRun.organizationUnitId,
+    );
+    if (!legalEntityId) {
+      throw new ConflictError("Payroll run organization unit has no legal entity");
+    }
+    return legalEntityId;
+  }
+
+  private async resolveOpenPayrollPeriod(
+    tenantId: string,
+    legalEntityId: string,
+    at: Date,
+  ): Promise<string | null> {
+    const decisionDate = at.toISOString().split("T")[0];
+    const periods = await this.repo.listOpenAccountingPeriods(tenantId, legalEntityId);
+    const matching = periods.find((period) => {
+      const dateFrom = period.dateFrom.toISOString().split("T")[0];
+      const dateTo = period.dateTo.toISOString().split("T")[0];
+      return dateFrom <= decisionDate && decisionDate <= dateTo;
+    });
+    return matching?.id ?? null;
+  }
 
   private async assertEmployeeExists(tenantId: string, employeeId: string): Promise<EmployeeReference> {
     const employee = await this.repo.findEmployeeReference(tenantId, employeeId);

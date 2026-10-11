@@ -173,7 +173,7 @@ export interface WmsRepository {
   findReceivingRecordById(tenantId: string, receivingRecordId: string): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] } | null>;
   findReceivingRecordByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<{ receiving: ScmReceivingRecord; lines: ScmReceivingLine[] } | null>;
   listReceivingRecords(tenantId: string, filter?: ScmReceivingRecordFilter): Promise<ScmReceivingRecord[]>;
-  createInspection(tenantId: string, input: CreateScmInspectionInput): Promise<ScmInspection>;
+  createInspection(tenantId: string, input: CreateScmInspectionInput): Promise<import("../../advanced/domain/supply-chain-advanced.entity.js").CreateScmInspectionResult>;
   findInspectionByReceivingLineId(tenantId: string, receivingLineId: string): Promise<ScmInspection | null>;
   findInspectionByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<ScmInspection | null>;
   createDiscrepancyRecord(tenantId: string, input: CreateScmDiscrepancyRecordInput): Promise<ScmDiscrepancyRecord>;
