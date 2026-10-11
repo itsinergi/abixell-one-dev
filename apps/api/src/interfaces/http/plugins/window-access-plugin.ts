@@ -55,8 +55,9 @@ async function enforceWindowWriteAccess(
   if (!routeUrl) return;
 
   // Unauthenticated callers hold no Role, so no Window lock can apply to them.
-  // The two token-validated public writes (`/public/surveys/:token/submit` and
-  // the inbound webhook receiver) are bounded by the token itself.
+  // The token-validated public writes (`/public/surveys/:token/submit`, the
+  // public work-order acceptance link, and the inbound webhook receiver) are
+  // bounded by the token itself.
   const actor = request.actor;
   if (!actor) return;
 
