@@ -2,8 +2,8 @@
  * Finance Master (WP-MD-01) — cost centers + payment terms.
  *
  * Master data, not transactions: nothing here posts, moves money, or
- * participates in a workflow. Effective dating (DEC-001) is validated by
- * the service (overlap check) and by the DB CHECK on the window.
+ * participates in a workflow. Effective windows (DEC-001) are validated by
+ * the service and by the DB CHECK; each tenant/code holds one master row.
  */
 
 export type CostCenterType = "cost" | "profit";

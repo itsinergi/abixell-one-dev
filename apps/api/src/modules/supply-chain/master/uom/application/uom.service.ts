@@ -83,6 +83,7 @@ export class UomService {
     await this.rbac.requirePermission(actor, "supply_chain.configure");
     const unit = await this.getUnit(actor, code);
     const updated = await this.repo.updateUnit(unit.id, { isActive: false }, actor.userId);
+    if (!updated) throw new NotFoundError("UnitOfMeasure", code);
     await this.audit.record({
       tenantId: actor.tenantId,
       actorUserId: actor.userId,
@@ -91,7 +92,7 @@ export class UomService {
       entityId: unit.id,
       metadata: { code: unit.code },
     });
-    return updated!;
+    return updated;
   }
 
   // ===================================================================

@@ -19,9 +19,9 @@ const PERCENT_PATTERN = /^\d{1,3}(\.\d{1,2})?$/;
  * Finance Master (WP-MD-01).
  *
  * CRUD for cost centers and payment terms with effective-dating enforcement.
- * The overlap check is a service invariant: two active versions of the same
- * code may not have effective windows that intersect, because the dimension
- * consumer must always resolve exactly one active row per code.
+ * One master row per tenant/code: the unique constraint on (tenant, code) is
+ * the version contract, so a code carries a single validity window, not a
+ * history of versions. New validity means updating the row.
  */
 export class FinanceMasterService {
   constructor(
@@ -114,6 +114,7 @@ export class FinanceMasterService {
       this.validateWindow(cc.effectiveFrom, input.effectiveTo);
     }
     const updated = await this.repo.updateCostCenter(cc.id, input, actor.userId);
+    if (!updated) throw new NotFoundError("FinanceCostCenter", code);
     await this.audit.record({
       tenantId: actor.tenantId,
       actorUserId: actor.userId,
@@ -122,7 +123,7 @@ export class FinanceMasterService {
       entityId: cc.id,
       metadata: { code: cc.code, fields: Object.keys(input) },
     });
-    return updated!;
+    return updated;
   }
 
   // ===================================================================
@@ -208,6 +209,7 @@ export class FinanceMasterService {
       this.validateWindow(pt.effectiveFrom, input.effectiveTo);
     }
     const updated = await this.repo.updatePaymentTerm(pt.id, input, actor.userId);
+    if (!updated) throw new NotFoundError("FinancePaymentTerm", code);
     await this.audit.record({
       tenantId: actor.tenantId,
       actorUserId: actor.userId,
@@ -216,7 +218,7 @@ export class FinanceMasterService {
       entityId: pt.id,
       metadata: { code: pt.code, fields: Object.keys(input) },
     });
-    return updated!;
+    return updated;
   }
 
   // ===================================================================
