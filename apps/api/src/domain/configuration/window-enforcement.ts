@@ -136,6 +136,9 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/service-definitions", windowCode: "route:/service-types" },
   { method: "*", apiPath: "/service-operations/packs", windowCode: "route:/service-packs" },
   { method: "*", apiPath: "/service-operations/optimization", windowCode: "route:/service-optimization" },
+  // WP-MD-03 Catering vertical master: configuration + operational planning
+  // raised from the Work Orders family until a dedicated catering Window exists.
+  { method: "*", apiPath: "/catering", windowCode: "route:/work-orders" },
 
   // --- customer_commercial -------------------------------------------------
   // `/projects` (customer_commercial) and `/project-delivery/projects` are

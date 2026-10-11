@@ -117,6 +117,8 @@ import { UomService } from "./modules/supply-chain/master/uom/application/uom.se
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
 import { PgServiceOperationsAdvancedRepository } from "./modules/service-operations/advanced/infrastructure/service-operations-advanced.repository.pg.js";
 import { ServiceOperationsAdvancedService } from "./modules/service-operations/advanced/application/service-operations-advanced.service.js";
+import { PgCateringRepository } from "./modules/service-operations/vertical/catering/infrastructure/catering.repository.pg.js";
+import { CateringService } from "./modules/service-operations/vertical/catering/application/catering.service.js";
 import { PgAssetAdvancedRepository } from "./modules/asset/advanced/infrastructure/asset-advanced.repository.pg.js";
 import { AssetAdvancedService } from "./modules/asset/advanced/application/asset-advanced.service.js";
 import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finance.repository.pg.js";
@@ -450,7 +452,17 @@ export function buildContainer() {
     audit,
     rbac,
   );
-  const uom = new UomService(new PgUomRepository(pool), audit, rbac);
+  const uomRepo = new PgUomRepository(pool);
+  const uom = new UomService(uomRepo, audit, rbac);
+
+  // Phase 5 (WP-MD-03) — Catering vertical master. Structure + simple K5
+  // costing only; ingredient UoM reuses UoM Central (K6). The service resolves
+  // unit codes through the UoM repository port directly — not the UomService
+  // application surface — so a catering configurator does not also need
+  // supply_chain.read to write a recipe (catering is a service_operations
+  // vertical). The conversion engine itself is still UoM Central; costing
+  // resolves conversions in SQL against unit_conversions.
+  const catering = new CateringService(new PgCateringRepository(pool), uomRepo, audit, rbac);
 
   // Phase 1B — Accounting Kernel. Sole writer of the General Ledger
   // (ADR-0023 ACCEPTED). Period reopen is a maker-checker flow enforced in
@@ -833,6 +845,7 @@ export function buildContainer() {
     finance,
     financeMaster,
     uom,
+    catering,
     accountingKernel,
     accountingEventConsumer,
     hse,
