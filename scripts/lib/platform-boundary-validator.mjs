@@ -163,6 +163,16 @@ export const DEFAULT_API_EXCEPTIONS = [
     typeOnly: true,
   },
   {
+    // Phase 5 (WP-MD-03) — the catering vertical sits under
+    // `service-operations/vertical/catering` and does not match the core
+    // route shape either.
+    id: "route-container:catering",
+    source: "apps/api/src/modules/service-operations/vertical/catering/api/catering.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     id: "transition:service-operations-customer-service",
     source: "apps/api/src/modules/service-operations/core/application/service-operations.service.ts",
     target: "apps/api/src/application/customer/customer.service.ts",
