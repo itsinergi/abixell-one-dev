@@ -417,8 +417,9 @@ export function buildContainer() {
 
   // Wave A3 / PACK-001…004 & SO-ADV-002…005 — Vertical Service Packs and
   // route/roster/capacity/workload optimization over Service Operations Core.
+  const serviceOperationsAdvancedRepo = new PgServiceOperationsAdvancedRepository(pool);
   const serviceOperationsAdvanced = new ServiceOperationsAdvancedService(
-    new PgServiceOperationsAdvancedRepository(pool),
+    serviceOperationsAdvancedRepo,
     serviceOperations,
     configuration,
     audit,
@@ -462,7 +463,17 @@ export function buildContainer() {
   // supply_chain.read to write a recipe (catering is a service_operations
   // vertical). The conversion engine itself is still UoM Central; costing
   // resolves conversions in SQL against unit_conversions.
-  const catering = new CateringService(new PgCateringRepository(pool), uomRepo, audit, rbac);
+  // WP-OPS-01 — catering writes are gated on the catering Service Pack being
+  // active for the tenant. The advanced repo structurally satisfies the
+  // vertical's `PackActivationPort` (duck typing), so the vertical keeps its
+  // boundary: it never imports advanced-module internals.
+  const catering = new CateringService(
+    new PgCateringRepository(pool),
+    uomRepo,
+    audit,
+    rbac,
+    serviceOperationsAdvancedRepo,
+  );
 
   // Phase 1B — Accounting Kernel. Sole writer of the General Ledger
   // (ADR-0023 ACCEPTED). Period reopen is a maker-checker flow enforced in

@@ -4708,7 +4708,7 @@ Sumber daftar: katalog modul nyata `MODULE_METADATA` (`apps/web/src/lib/capabili
 |---|---|---|---|---|
 | 1 | `customer_complaint` | Customer Complaints | Kategori, SLA, eskalasi | Existing — ComplaintConfigPage |
 | 2 | `survey_assessment` | Surveys & Assessments | Survey content (CFG-011), outcome policy (CFG-012) | API delivered, UI belum |
-| 3 | `service_operations` | Service Operations | Vertical service packs, route/roster/workload policy | Wave A3 delivered |
+| 3 | `service_operations` | Service Operations | Vertical service packs, route/roster/workload policy | Wave A3 delivered; WP-OPS-01 (2026-10-11) menutup gerbang aktivasi: tulisan vertikal catering (`/catering/*`) wajib `service_pack_activations.is_active = true` untuk `pack_code = 'catering'`; bacaan tetap bebas supaya admin bisa inspeksi sebelum reaktivasi; pola yang sama berlaku untuk vertikal paket berikutnya |
 | 4 | `customer_commercial` | Customers & Commercial | Sales pipeline, quotation & pricing policy, portal | Wave A1 delivered |
 | 5 | `workforce` | HRIS | Payroll policy, BPJS, PPh21, shift, leave, overtime | Wave A4 delivered |
 | 6 | `supply_chain` | Supply Chain | Valuation policy (FIFO/landed cost), reorder, supplier evaluation | Wave A5 delivered |

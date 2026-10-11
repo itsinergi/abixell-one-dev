@@ -15,6 +15,7 @@ import type {
   CateringRepository,
   MealBatchStatus,
   MealType,
+  PackActivationPort,
   RecipeCostResult,
   UomPort,
 } from "../domain/catering.entity.js";
@@ -49,6 +50,7 @@ export class CateringService {
     private readonly uom: UomPort,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly packs: PackActivationPort,
   ) {}
 
   // ===================================================================
@@ -66,6 +68,7 @@ export class CateringService {
     },
   ): Promise<CateringMenu> {
     await this.rbac.requirePermission(actor, "service_operations.configure");
+    await this.assertCateringPackActive(actor);
     this.validateWindow(input.effectiveFrom, input.effectiveTo);
 
     if (await this.repo.findMenuByCode(actor.tenantId, input.code)) {
@@ -115,6 +118,7 @@ export class CateringService {
     },
   ): Promise<CateringRecipe> {
     await this.rbac.requirePermission(actor, "service_operations.configure");
+    await this.assertCateringPackActive(actor);
     this.validateWindow(input.effectiveFrom, input.effectiveTo);
     if (!DECIMAL_PATTERN.test(input.outputQuantity) || !(Number(input.outputQuantity) > 0)) {
       throw new ValidationError("outputQuantity must be a positive number with up to 6 decimals");
@@ -168,6 +172,7 @@ export class CateringService {
     ingredients: { itemId: string; quantity: string; unitCode: string; sortOrder?: number }[],
   ): Promise<CateringRecipeIngredient[]> {
     await this.rbac.requirePermission(actor, "service_operations.configure");
+    await this.assertCateringPackActive(actor);
     const recipe = await this.getRecipeOrThrow(actor.tenantId, recipeCode);
     if (ingredients.length === 0) {
       throw new ValidationError("A recipe must have at least one ingredient");
@@ -264,6 +269,7 @@ export class CateringService {
     },
   ): Promise<CateringMealPlan> {
     await this.rbac.requirePermission(actor, "service_operations.manage");
+    await this.assertCateringPackActive(actor);
     if (!DATE_PATTERN.test(input.mealDate)) {
       throw new ValidationError("mealDate must be YYYY-MM-DD");
     }
@@ -330,6 +336,7 @@ export class CateringService {
     },
   ): Promise<CateringMealBatch> {
     await this.rbac.requirePermission(actor, "service_operations.manage");
+    await this.assertCateringPackActive(actor);
     if (await this.repo.findMealBatchByNumber(actor.tenantId, input.batchNumber)) {
       throw new ConflictError("Batch number already exists: " + input.batchNumber);
     }
@@ -380,6 +387,7 @@ export class CateringService {
     status: MealBatchStatus,
   ): Promise<CateringMealBatch> {
     await this.rbac.requirePermission(actor, "service_operations.manage");
+    await this.assertCateringPackActive(actor);
     const batch = await this.repo.findMealBatchByNumber(actor.tenantId, batchNumber);
     if (!batch) throw new NotFoundError("CateringMealBatch", batchNumber);
     const order: MealBatchStatus[] = ["draft", "confirmed", "consumed"];
@@ -422,6 +430,15 @@ export class CateringService {
   private async assertItemExists(tenantId: string, itemId: string): Promise<void> {
     if (!(await this.repo.itemExists(tenantId, itemId))) {
       throw new NotFoundError("Item", itemId);
+    }
+  }
+
+  private async assertCateringPackActive(actor: ActorContext): Promise<void> {
+    const activation = await this.packs.getPackActivation(actor.tenantId, "catering");
+    if (!activation?.isActive) {
+      throw new ConflictError(
+        "Catering pack is not active for this tenant. Activate it under Service Operations → Packs.",
+      );
     }
   }
 
