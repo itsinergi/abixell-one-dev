@@ -401,6 +401,11 @@ export const API_PATH_MODULE_OVERRIDES: ReadonlyArray<readonly [string, ModuleCo
   // on the SCM core (the same split `PERMISSION_MODULE_PREFIXES` makes for
   // `supply_chain.account_assignment.`).
   ["/supply-chain/advanced/account-assignment-configs", "supply_chain"],
+
+  // WP-OPS-01 Phase 6 — the public acceptance link lives under `/public`, but
+  // it is a Work Order write, not a survey response. Without this override the
+  // first-segment table's `public: "survey_assessment"` row would claim it.
+  ["/public/work-orders", "service_operations"],
 ];
 
 /** Longest first, so a more specific subtree beats a shorter one that is also
