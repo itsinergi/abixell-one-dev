@@ -405,6 +405,12 @@ export const WINDOW_ENFORCEMENT_EXEMPTIONS: WindowEnforcementExemption[] = [
     reason:
       "The inbound webhook receiver is called by an external system with no Abixell One session; the HMAC signature over the raw body is its authentication. There is no actor, so no Role and no Window lock.",
   },
+  {
+    apiPath: "/public/work-orders/acceptance/:token",
+    property: "unauthenticated",
+    reason:
+      "Public work order acceptance link (WP-OPS-01 Phase 6). Reached by a raw token, not a bearer session. The token itself bounds the write; no actor is present, so no Window lock can apply.",
+  },
 ];
 
 /**

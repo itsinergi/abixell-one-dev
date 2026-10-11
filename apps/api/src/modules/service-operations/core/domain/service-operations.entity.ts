@@ -103,11 +103,36 @@ export interface WorkOrder {
   verificationNotes: string | null;
   verifiedAt: Date | null;
   verifiedByUserId: string | null;
+  /** Customer acceptance facts (WP-OPS-01 Phase 6) — evidence columns, not a
+   * lifecycle state. `via` is 'token' (public link) or 'internal' (manual). */
+  customerAcceptedAt: Date | null;
+  customerAcceptedVia: string | null;
+  customerAcceptanceComment: string | null;
+  customerRejectedAt: Date | null;
+  customerRejectionReason: string | null;
   /** The ONE link to the generic Workflow Engine — lifecycle STATE lives
    * there, never as a status column here (SO-CORE-004). */
   workflowInstanceId: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ---------------------------------------------------------------------------
+// Work Order acceptance token (WP-OPS-01 Phase 6) — public sign-off link
+// ---------------------------------------------------------------------------
+
+/** Row shape of `work_order_acceptance_tokens`. The raw token is never
+ * stored — only its SHA256 hash — and is returned once at issue time. */
+export interface WorkOrderAcceptanceToken {
+  id: string;
+  tenantId: string;
+  workOrderId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+  revokedAt: Date | null;
+  createdBy: string | null;
+  createdAt: Date;
 }
 
 /** Snapshot of the Service Definition's checklist taken when the Work Order
@@ -178,6 +203,23 @@ export interface ScheduleWorkOrderInput {
   dueAt: Date | null;
 }
 
+export interface IssueAcceptanceTokenInput {
+  /** Number of days until the token expires (default 30). */
+  expiresInDays?: number;
+  createdBy: string | null;
+}
+
+export interface MarkCustomerAcceptedInput {
+  via: "token" | "internal";
+  comment: string | null;
+  acceptedBy: string | null;
+}
+
+export interface MarkCustomerRejectedInput {
+  reason: string | null;
+  rejectedBy: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Repository port
 // ---------------------------------------------------------------------------
@@ -227,6 +269,27 @@ export interface ServiceOperationsRepository {
   markWorkOrderCompleted(id: string, notes: string | null, userId: string): Promise<WorkOrder | null>;
   /** Guarded verification: only records verification when not already verified. */
   markWorkOrderVerified(id: string, notes: string | null, userId: string): Promise<WorkOrder | null>;
+  /** Guarded acceptance: only when verified and not already accepted —
+   * returns null when the guard fails (already accepted / not verified). */
+  markCustomerAccepted(id: string, input: MarkCustomerAcceptedInput): Promise<WorkOrder | null>;
+  /** Guarded rejection: only when verified and not accepted. Rejection is not
+   * terminal — the WO can be reworked and a fresh token issued. */
+  markCustomerRejected(id: string, input: MarkCustomerRejectedInput): Promise<WorkOrder | null>;
+
+  // Work Order acceptance tokens (WP-OPS-01 Phase 6)
+  /** Revokes every live (unused, unrevoked) token of the WO, then inserts a
+   * new one — at most one live link per WO at any time. */
+  replaceAcceptanceToken(
+    tenantId: string,
+    workOrderId: string,
+    tokenHash: string,
+    expiresAt: Date,
+    createdBy: string | null,
+  ): Promise<WorkOrderAcceptanceToken>;
+  /** Global lookup by hash — the public route has no tenant context. */
+  findAcceptanceTokenByHash(tokenHash: string): Promise<WorkOrderAcceptanceToken | null>;
+  /** Atomic single-use claim: false when already used/revoked/expired. */
+  claimAcceptanceToken(id: string): Promise<boolean>;
 
   // Work Order checklist
   createWorkOrderChecklistItems(

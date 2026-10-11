@@ -62,6 +62,10 @@ const checklistResultSchema = z.object({
   isCompleted: z.boolean(),
   note: z.string().nullable().optional(),
 });
+const acceptanceTokenSchema = z.object({
+  expiresInDays: z.number().int().positive().max(365).optional(),
+});
+const rejectReasonSchema = z.object({ reason: z.string().min(1).max(2000) });
 
 export function registerServiceOperationsRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.serviceOperations;
@@ -196,5 +200,31 @@ export function registerServiceOperationsRoutes(app: FastifyInstance, container:
     const { id } = request.params as { id: string };
     const { notes } = notesSchema.parse(request.body ?? {});
     return reply.send(await svc().verifyWork(request.actor!, id, notes ?? null));
+  });
+
+  // --- Customer Acceptance Gate (WP-OPS-01 Phase 6) ---------------------
+  // The public, authless counterpart lives in
+  // `interfaces/http/routes/public-work-order-acceptance.ts`.
+
+  app.post("/work-orders/:id/acceptance-token", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = acceptanceTokenSchema.parse(request.body ?? {});
+    const issued = await svc().issueAcceptanceToken(request.actor!, id, {
+      expiresInDays: body.expiresInDays,
+      createdBy: request.actor!.userId,
+    });
+    return reply.status(201).send(issued);
+  });
+
+  app.post("/work-orders/:id/customer-accept", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { comment } = commentSchema.parse(request.body ?? {});
+    return reply.send(await svc().acceptWorkInternally(request.actor!, id, comment ?? null));
+  });
+
+  app.post("/work-orders/:id/customer-reject", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { reason } = rejectReasonSchema.parse(request.body ?? {});
+    return reply.send(await svc().rejectWorkInternally(request.actor!, id, reason));
   });
 }

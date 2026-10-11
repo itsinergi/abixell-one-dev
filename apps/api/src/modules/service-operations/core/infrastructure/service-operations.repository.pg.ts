@@ -3,11 +3,14 @@ import type {
   CreateServiceDefinitionInput,
   CreateWorkOrderInput,
   CreateWorkRequestInput,
+  MarkCustomerAcceptedInput,
+  MarkCustomerRejectedInput,
   ScheduleWorkOrderInput,
   ServiceDefinition,
   ServiceDefinitionChecklistItem,
   ServiceOperationsRepository,
   WorkOrder,
+  WorkOrderAcceptanceToken,
   WorkOrderChecklistItem,
   WorkRequest,
 } from "../domain/service-operations.entity.js";
@@ -291,6 +294,103 @@ export class PgServiceOperationsRepository implements ServiceOperationsRepositor
     return r.rows[0] ? toWorkOrder(r.rows[0]) : null;
   }
 
+  // --- Work Order acceptance (WP-OPS-01 Phase 6) ----------------------
+
+  async markCustomerAccepted(id: string, input: MarkCustomerAcceptedInput): Promise<WorkOrder | null> {
+    const r = await this.pool.query(
+      `UPDATE work_orders
+          SET customer_accepted_at = now(),
+              customer_accepted_via = $2,
+              customer_acceptance_comment = $3,
+              customer_rejected_at = NULL,
+              customer_rejection_reason = NULL,
+              updated_by = $4,
+              updated_at = now()
+        WHERE id = $1
+          AND verified_at IS NOT NULL
+          AND customer_accepted_at IS NULL
+          AND deleted_at IS NULL
+        RETURNING *`,
+      [id, input.via, input.comment, input.acceptedBy],
+    );
+    return r.rows[0] ? toWorkOrder(r.rows[0]) : null;
+  }
+
+  async markCustomerRejected(id: string, input: MarkCustomerRejectedInput): Promise<WorkOrder | null> {
+    const r = await this.pool.query(
+      `UPDATE work_orders
+          SET customer_rejected_at = now(),
+              customer_rejection_reason = $2,
+              updated_by = $3,
+              updated_at = now()
+        WHERE id = $1
+          AND verified_at IS NOT NULL
+          AND customer_accepted_at IS NULL
+          AND deleted_at IS NULL
+        RETURNING *`,
+      [id, input.reason, input.rejectedBy],
+    );
+    return r.rows[0] ? toWorkOrder(r.rows[0]) : null;
+  }
+
+  async replaceAcceptanceToken(
+    tenantId: string,
+    workOrderId: string,
+    tokenHash: string,
+    expiresAt: Date,
+    createdBy: string | null,
+  ): Promise<WorkOrderAcceptanceToken> {
+    // One live link per WO: revoke whatever is still usable, then insert.
+    // Both statements run in one transaction so a reader can never observe
+    // two live tokens for the same work order.
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `UPDATE work_order_acceptance_tokens
+            SET revoked_at = now()
+          WHERE tenant_id = $1 AND work_order_id = $2
+            AND used_at IS NULL AND revoked_at IS NULL`,
+        [tenantId, workOrderId],
+      );
+      const r = await client.query(
+        `INSERT INTO work_order_acceptance_tokens
+           (tenant_id, work_order_id, token_hash, expires_at, created_by)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [tenantId, workOrderId, tokenHash, expiresAt, createdBy],
+      );
+      await client.query("COMMIT");
+      return toAcceptanceToken(r.rows[0]);
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findAcceptanceTokenByHash(tokenHash: string): Promise<WorkOrderAcceptanceToken | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM work_order_acceptance_tokens WHERE token_hash = $1`,
+      [tokenHash],
+    );
+    return r.rows[0] ? toAcceptanceToken(r.rows[0]) : null;
+  }
+
+  async claimAcceptanceToken(id: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `UPDATE work_order_acceptance_tokens
+          SET used_at = now()
+        WHERE id = $1
+          AND used_at IS NULL
+          AND revoked_at IS NULL
+          AND expires_at > now()
+        RETURNING id`,
+      [id],
+    );
+    return r.rowCount === 1;
+  }
+
   // --- Work Order checklist -------------------------------------------
 
   async createWorkOrderChecklistItems(
@@ -424,9 +524,28 @@ function toWorkOrder(r: QueryResultRow): WorkOrder {
     verificationNotes: r.verification_notes,
     verifiedAt: r.verified_at,
     verifiedByUserId: r.verified_by_user_id,
+    customerAcceptedAt: r.customer_accepted_at,
+    customerAcceptedVia: r.customer_accepted_via,
+    customerAcceptanceComment: r.customer_acceptance_comment,
+    customerRejectedAt: r.customer_rejected_at,
+    customerRejectionReason: r.customer_rejection_reason,
     workflowInstanceId: r.workflow_instance_id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+  };
+}
+
+function toAcceptanceToken(r: QueryResultRow): WorkOrderAcceptanceToken {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    workOrderId: r.work_order_id,
+    tokenHash: r.token_hash,
+    expiresAt: r.expires_at,
+    usedAt: r.used_at,
+    revokedAt: r.revoked_at,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
   };
 }
 
