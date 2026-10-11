@@ -320,6 +320,8 @@ export function buildContainer() {
     eventBus,
   );
 
+  const accountingEventPort = new PgAccountingEventWritePort(pool);
+
   // Wave A4 / HR-ADV-001…009 — Workforce Advanced owns operational HR
   // extensions (attendance, leave, payroll, recruitment, performance, and
   // manpower planning) while Core remains the identity/placement source.
@@ -330,6 +332,7 @@ export function buildContainer() {
     audit,
     rbac,
     eventBus,
+    accountingEventPort,
   );
 
   // Phase 4 — Supply Chain Core. Built before DocumentService so its
@@ -443,7 +446,6 @@ export function buildContainer() {
   // dependency. workflow_instance_id on accounting_periods stays nullable for
   // a future Epic 9 integration that can add it without a re-migration.
   const accountingKernelRepo = new PgAccountingKernelRepository(pool);
-  const accountingEventPort = new PgAccountingEventWritePort(pool);
   // WP-APR-02 — central rule registry repository; the kernel consults it
   // before the posting-rules table (DEC-008/BR-013 single source of truth).
   const ruleRegistryRepo = new PgRuleRegistryRepository(pool);

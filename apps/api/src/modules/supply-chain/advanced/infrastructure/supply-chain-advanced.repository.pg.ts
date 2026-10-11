@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { Pool, PoolClient, QueryResultRow } from "pg";
-import { ConflictError, ValidationError } from "../../../../domain/shared-kernel/errors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../../domain/shared-kernel/errors.js";
 import { fromExactUnits, multiplyQuantityCost, toExactUnits } from "../domain/valuation-policy.js";
 import type {
   ApplyScmLandedCostInput,
@@ -10,6 +10,7 @@ import type {
   CreateScmConsignmentSettlementInput,
   CreateScmDiscrepancyRecordInput,
   CreateScmInspectionInput,
+  CreateScmInspectionResult,
   CreateScmInventoryDisposalInput,
   CreateScmItemBatchInput,
   CreateScmItemSerialInput,
@@ -1680,12 +1681,42 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         [tenantId, input.landedCostId, input.appliedAt ?? null],
       );
       if (!r.rows[0]) return null;
+      const landedCost = toLandedCost(r.rows[0]);
 
-      // Update valuation layers referenced in allocations
+      // Update valuation layers referenced in allocations.
       const allocs = await client.query(
         `SELECT * FROM scm_landed_cost_allocations WHERE tenant_id = $1 AND landed_cost_id = $2`,
         [tenantId, input.landedCostId],
       );
+
+      const layerIds = allocs.rows
+        .map((a) => a.valuation_layer_id as string | null)
+        .filter((id): id is string => id !== null);
+      if (layerIds.length === 0) {
+        throw new ConflictError(`Landed cost ${input.landedCostId} has no valuation-layer allocation`);
+      }
+
+      const legalEntityRes = await client.query(
+        `SELECT ou.legal_entity_id
+           FROM scm_landed_cost_allocations lca
+           JOIN scm_valuation_layers vl
+             ON vl.tenant_id = lca.tenant_id AND vl.id = lca.valuation_layer_id
+           JOIN scm_receiving_lines rl
+             ON rl.tenant_id = vl.tenant_id AND rl.id = vl.receiving_line_id
+           JOIN scm_warehouses w
+             ON w.tenant_id = rl.tenant_id AND w.id = rl.warehouse_id
+           JOIN organization_units ou
+             ON ou.tenant_id = w.tenant_id AND ou.id = w.organization_unit_id
+          WHERE lca.tenant_id = $1 AND lca.landed_cost_id = $2
+          GROUP BY ou.legal_entity_id`,
+        [tenantId, input.landedCostId],
+      );
+      const resolvedLegalEntities = legalEntityRes.rows
+        .map((row) => row.legal_entity_id as string | null)
+        .filter((id): id is string => id !== null);
+      if (resolvedLegalEntities.length !== 1 || resolvedLegalEntities[0] !== input.legalEntityId) {
+        throw new ConflictError(`Landed cost ${input.landedCostId} does not resolve to the supplied legal entity`);
+      }
 
       for (const a of allocs.rows) {
         if (a.valuation_layer_id) {
@@ -1700,7 +1731,29 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         }
       }
 
-      return toLandedCost(r.rows[0]);
+      const appliedAt = landedCost.appliedAt ?? input.appliedAt ?? new Date();
+      await this.createAccountingReadyEventTx(client, tenantId, {
+        eventType: "inventory.landed_cost_applied",
+        sourceDocumentType: "scm_landed_cost",
+        sourceDocumentId: landedCost.id,
+        effectiveAt: appliedAt,
+        currency: landedCost.currency,
+        amount: landedCost.amount,
+        accountAssignmentType: "stock",
+        accountAssignmentDimensions: { legalEntityId: input.legalEntityId },
+        idempotencyKey: `landed-cost:${landedCost.id}:apply`,
+        payload: {
+          legalEntityId: input.legalEntityId,
+          periodId: input.periodId,
+          voucherNumber: landedCost.voucherNumber,
+          purchaseOrderId: landedCost.purchaseOrderId,
+          costType: landedCost.costType,
+          allocationMethod: landedCost.allocationMethod,
+        },
+        createdBy: null,
+      });
+
+      return landedCost;
     });
   }
 
@@ -2770,30 +2823,243 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     return r.rows.map(toReceivingRecord);
   }
 
-  async createInspection(tenantId: string, input: CreateScmInspectionInput): Promise<ScmInspection> {
-    const r = await this.pool.query(
-      `INSERT INTO scm_inspections (
-         tenant_id, receiving_line_id, inspection_number, idempotency_key,
-         inspected_at, inspected_by, quantity_accepted, quantity_rejected,
-         quantity_quarantined, result, reason, created_by
-       ) VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6, $7, $8, $9, $10, $11, $12)
-       RETURNING *`,
-      [
-        tenantId,
-        input.receivingLineId,
-        input.inspectionNumber,
-        input.idempotencyKey,
-        input.inspectedAt ?? null,
-        input.inspectedBy ?? null,
-        input.quantityAccepted ?? 0,
-        input.quantityRejected ?? 0,
-        input.quantityQuarantined ?? 0,
-        input.result,
-        input.reason ?? null,
-        input.createdBy ?? null,
-      ],
+  /**
+   * WP-WMS-01 — an inspection is a ledger event, not a form submission.
+   *
+   * Receiving parks the whole received quantity in `quality_hold`. The
+   * inspection is what releases it, so the inspection document, the release
+   * movements, the receiving-line projection, the receiving status and the
+   * accepted FIFO layer are all written in ONE transaction. Any failure rolls
+   * every one of them back together — a released balance with no movement row
+   * (or the reverse) can never be observed.
+   */
+  async createInspection(
+    tenantId: string,
+    input: CreateScmInspectionInput,
+  ): Promise<CreateScmInspectionResult> {
+    return this.inTransaction(async (client) => {
+      const lineRes = await client.query(
+        `SELECT * FROM scm_receiving_lines
+          WHERE tenant_id = $1 AND id = $2
+          FOR UPDATE`,
+        [tenantId, input.receivingLineId],
+      );
+      const lineRow = lineRes.rows[0];
+      if (!lineRow) {
+        throw new NotFoundError("ScmReceivingLine", input.receivingLineId);
+      }
+
+      const accepted = input.quantityAccepted ?? 0;
+      const rejected = input.quantityRejected ?? 0;
+      const quarantined = input.quantityQuarantined ?? 0;
+      const inspectedTotal = accepted + rejected + quarantined;
+      const received = num(lineRow.quantity_received);
+      const alreadyInspected =
+        num(lineRow.quantity_accepted) +
+        num(lineRow.quantity_rejected) +
+        num(lineRow.quantity_quarantined);
+
+      if (inspectedTotal <= 0) {
+        throw new ValidationError("Inspection must dispose of a positive quantity");
+      }
+      if (alreadyInspected + inspectedTotal > received) {
+        throw new ConflictError(
+          `Inspection disposes ${inspectedTotal} but only ${received - alreadyInspected} of ${received} received units remain uninspected`,
+        );
+      }
+
+      // `UNIQUE (tenant_id, receiving_line_id)` makes the inspection the line's
+      // single disposition event; a replay returns the recorded document and
+      // writes no second set of movements.
+      const existing = await client.query(
+        `SELECT * FROM scm_inspections WHERE tenant_id = $1 AND receiving_line_id = $2`,
+        [tenantId, input.receivingLineId],
+      );
+      if (existing.rows[0]) {
+        const layerRes = await client.query(
+          `SELECT id FROM scm_valuation_layers
+            WHERE tenant_id = $1 AND source_inspection_id = $2`,
+          [tenantId, existing.rows[0].id],
+        );
+        return {
+          inspection: toInspection(existing.rows[0]),
+          movements: [],
+          valuationLayerId: layerRes.rows[0]?.id ?? null,
+        };
+      }
+
+      const inspectionRes = await client.query(
+        `INSERT INTO scm_inspections (
+           tenant_id, receiving_line_id, inspection_number, idempotency_key,
+           inspected_at, inspected_by, quantity_accepted, quantity_rejected,
+           quantity_quarantined, result, reason, created_by
+         ) VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6, $7, $8, $9, $10, $11, $12)
+         RETURNING *`,
+        [
+          tenantId,
+          input.receivingLineId,
+          input.inspectionNumber,
+          input.idempotencyKey,
+          input.inspectedAt ?? null,
+          input.inspectedBy ?? null,
+          accepted,
+          rejected,
+          quarantined,
+          input.result,
+          input.reason ?? null,
+          input.createdBy ?? null,
+        ],
+      );
+      const inspection = toInspection(inspectionRes.rows[0]!);
+
+      const itemId = lineRow.item_id as string;
+      const warehouseId = lineRow.warehouse_id as string;
+      const locationId = (lineRow.location_id as string | null) ?? null;
+      const batchId = (lineRow.batch_id as string | null) ?? null;
+      const ownerType = lineRow.owner_type as ScmStockOwnerType;
+      const ownerPartyId = (lineRow.owner_party_id as string | null) ?? null;
+      const holdCondition = lineRow.stock_condition as ScmStockCondition;
+      const unitCost = lineRow.unit_cost === null ? null : num(lineRow.unit_cost);
+      const occurredAt = inspection.inspectedAt;
+
+      const reference = {
+        referenceType: "scm_inspection",
+        referenceId: inspection.id,
+        referenceNumber: inspection.inspectionNumber,
+        occurredAt,
+        createdBy: input.createdBy ?? null,
+      };
+
+      const movements: ScmAdvancedStockMovement[] = [];
+
+      const holdOut = await this.recordMovementTx(client, tenantId, {
+        itemId,
+        warehouseId,
+        locationId,
+        batchId,
+        stockCondition: holdCondition,
+        ownerType,
+        ownerPartyId,
+        movementType: "inspection_hold_out",
+        quantity: inspectedTotal,
+        unitCost,
+        totalCost: unitCost === null ? null : inspectedTotal * unitCost,
+        notes: `Inspection ${inspection.inspectionNumber} released ${inspectedTotal} from ${holdCondition}`,
+        ...reference,
+      });
+      movements.push(holdOut.movement);
+
+      const dispositions: Array<{ quantity: number; condition: ScmStockCondition; label: string }> = [
+        { quantity: accepted, condition: "unrestricted", label: "accepted" },
+        { quantity: rejected, condition: "rejected", label: "rejected" },
+        { quantity: quarantined, condition: "quarantined", label: "quarantined" },
+      ];
+
+      let acceptanceMovementId: string | null = null;
+      let valuationLayerId: string | null = null;
+
+      for (const disposition of dispositions) {
+        if (disposition.quantity <= 0) continue;
+
+        const release = await this.recordMovementTx(client, tenantId, {
+          itemId,
+          warehouseId,
+          locationId,
+          batchId,
+          stockCondition: disposition.condition,
+          ownerType,
+          ownerPartyId,
+          movementType: "inspection_release_in",
+          quantity: disposition.quantity,
+          unitCost,
+          totalCost: unitCost === null ? null : disposition.quantity * unitCost,
+          notes: `Inspection ${inspection.inspectionNumber} released ${disposition.quantity} as ${disposition.label}`,
+          ...reference,
+        });
+        movements.push(release.movement);
+
+        if (disposition.condition === "unrestricted") {
+          acceptanceMovementId = release.movement.id;
+          const layer = await this.createValuationLayerTx(client, tenantId, {
+            itemId,
+            warehouseId,
+            receiptMovementId: release.movement.id,
+            receivingLineId: input.receivingLineId,
+            sourceInspectionId: inspection.id,
+            stockCondition: "unrestricted",
+            ownerType,
+            ownerPartyId,
+            receivedDate: occurredAt.toISOString().slice(0, 10),
+            originalQuantity: disposition.quantity,
+            unitCost: unitCost ?? 0,
+          });
+          valuationLayerId = layer.id;
+        }
+      }
+
+      await client.query(
+        `UPDATE scm_receiving_lines
+            SET quantity_accepted = quantity_accepted + $3,
+                quantity_rejected = quantity_rejected + $4,
+                quantity_quarantined = quantity_quarantined + $5,
+                acceptance_movement_id = COALESCE($6, acceptance_movement_id),
+                valuation_layer_id = COALESCE($7, valuation_layer_id)
+          WHERE tenant_id = $1 AND id = $2`,
+        [
+          tenantId,
+          input.receivingLineId,
+          accepted,
+          rejected,
+          quarantined,
+          acceptanceMovementId,
+          valuationLayerId,
+        ],
+      );
+
+      await this.refreshReceivingStatusTx(client, tenantId, lineRow.receiving_record_id as string, input.createdBy ?? null);
+
+      return { inspection, movements, valuationLayerId };
+    });
+  }
+
+  /**
+   * Derives the receiving record's status from its lines: a record whose every
+   * line is fully disposed is `accepted` (or `rejected` when nothing was
+   * accepted), anything still holding uninspected stock is
+   * `partially_inspected`.
+   */
+  private async refreshReceivingStatusTx(
+    client: PoolClient,
+    tenantId: string,
+    receivingRecordId: string,
+    updatedBy: string | null,
+  ): Promise<void> {
+    const linesRes = await client.query(
+      `SELECT quantity_received, quantity_accepted, quantity_rejected, quantity_quarantined
+         FROM scm_receiving_lines
+        WHERE tenant_id = $1 AND receiving_record_id = $2`,
+      [tenantId, receivingRecordId],
     );
-    return toInspection(r.rows[0]!);
+
+    const lines = linesRes.rows;
+    if (lines.length === 0) return;
+
+    let anyRemaining = false;
+    let anyAccepted = false;
+    for (const line of lines) {
+      const disposed = num(line.quantity_accepted) + num(line.quantity_rejected) + num(line.quantity_quarantined);
+      if (disposed < num(line.quantity_received)) anyRemaining = true;
+      if (num(line.quantity_accepted) > 0) anyAccepted = true;
+    }
+
+    const status = anyRemaining ? "partially_inspected" : anyAccepted ? "accepted" : "rejected";
+
+    await client.query(
+      `UPDATE scm_receiving_records
+          SET status = $3, updated_by = $4, updated_at = now()
+        WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, receivingRecordId, status, updatedBy],
+    );
   }
 
   async findInspectionByReceivingLineId(tenantId: string, receivingLineId: string): Promise<ScmInspection | null> {
@@ -4671,6 +4937,26 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       roleCode: row.role_code,
       nominalLimit: row.nominal_limit ? num(row.nominal_limit) : null,
     }));
+  }
+
+  async findLandedCostLegalEntityId(tenantId: string, landedCostId: string): Promise<string | null> {
+    const r = await this.pool.query(
+      `SELECT ou.legal_entity_id
+         FROM scm_landed_cost_allocations lca
+         JOIN scm_valuation_layers vl
+           ON vl.tenant_id = lca.tenant_id AND vl.id = lca.valuation_layer_id
+         JOIN scm_receiving_lines rl
+           ON rl.tenant_id = vl.tenant_id AND rl.id = vl.receiving_line_id
+         JOIN scm_warehouses w
+           ON w.tenant_id = rl.tenant_id AND w.id = rl.warehouse_id
+         JOIN organization_units ou
+           ON ou.tenant_id = w.tenant_id AND ou.id = w.organization_unit_id
+        WHERE lca.tenant_id = $1 AND lca.landed_cost_id = $2
+          AND ou.legal_entity_id IS NOT NULL
+        GROUP BY ou.legal_entity_id`,
+      [tenantId, landedCostId],
+    );
+    return r.rows.length === 1 ? (r.rows[0].legal_entity_id as string) : null;
   }
 
   /** WP-PRO-03 period-ID resolution: read-only lookup into the Accounting Kernel's periods table. */

@@ -1424,10 +1424,29 @@ export class SupplyChainAdvancedService {
       throw new NotFoundError("ScmLandedCost", landedCostId);
     }
 
-    await this.repo.applyLandedCost(actor.tenantId, {
+    const appliedAt = new Date();
+    const legalEntityId = await this.repo.findLandedCostLegalEntityId(actor.tenantId, landedCostId);
+    if (!legalEntityId) {
+      throw new ConflictError(`Landed cost ${landedCostId} has no resolvable legal entity`);
+    }
+    const period = (await this.repo.listOpenPeriods(actor.tenantId, legalEntityId)).find(
+      (candidate) => appliedAt >= candidate.dateFrom && appliedAt <= candidate.dateTo,
+    );
+    if (!period) {
+      throw new ConflictError(`No open accounting period contains landed cost application date ${appliedAt.toISOString()}`);
+    }
+
+    const applied = await this.repo.applyLandedCost(actor.tenantId, {
       landedCostId,
-      appliedAt: new Date(),
+      appliedAt,
+      legalEntityId,
+      periodId: period.id,
     });
+    if (!applied) {
+      throw new ConflictError(
+        `Landed cost ${landedCostId} is not in draft status (already applied or cancelled)`,
+      );
+    }
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -2448,7 +2467,7 @@ export class SupplyChainAdvancedService {
         )
       ).number;
 
-    const inspection = await this.runIdempotent(
+    const result = await this.runIdempotent(
       () =>
         this.repo.createInspection(actor.tenantId, {
           ...input,
@@ -2456,9 +2475,13 @@ export class SupplyChainAdvancedService {
           inspectedBy: input.inspectedBy ?? actor.userId,
           createdBy: actor.userId,
         }),
-      () => this.repo.findInspectionByIdempotencyKey(actor.tenantId, input.idempotencyKey),
+      async () => {
+        const inspection = await this.repo.findInspectionByIdempotencyKey(actor.tenantId, input.idempotencyKey);
+        return inspection ? { inspection, movements: [], valuationLayerId: null } : null;
+      },
       `Inspection with idempotency key ${input.idempotencyKey} already exists`,
     );
+    const inspection = result.inspection;
 
     await this.audit.record({
       tenantId: actor.tenantId,
