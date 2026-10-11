@@ -45,6 +45,20 @@ describe.sequential("Wave MD-03 — Catering vertical master (WP-MD-03)", () => 
     await provisionFirstAdmin({ tenantId: otherTenantId, email: otherEmail, password: ADMIN_PASSWORD });
     otherToken = (await login(app, OTHER_TENANT_CODE, otherEmail, ADMIN_PASSWORD)).body.accessToken;
 
+    // WP-OPS-01 — catering writes require the catering Service Pack to be
+    // active for the tenant. Both tenants here exercise catering writes, so
+    // both activate the pack. Direct-SQL insert mirrors what
+    // `/service-operations/packs/catering/activate` does for the activation
+    // row (preset seeding is a separate concern tested elsewhere).
+    for (const tid of [tenantId, otherTenantId]) {
+      await pool.query(
+        `INSERT INTO service_pack_activations (tenant_id, pack_code, is_active)
+         VALUES ($1, 'catering', true)
+         ON CONFLICT (tenant_id, pack_code) DO UPDATE SET is_active = true`,
+        [tid],
+      );
+    }
+
     // Units: KG and G (mass category, direct conversion KG->G factor 1000).
     const kg = await pool.query(
       `INSERT INTO units_of_measure (tenant_id, code, name, base_unit_code, category)

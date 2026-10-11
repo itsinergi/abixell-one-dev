@@ -114,6 +114,17 @@ export interface UomPort {
   findUnitByCode(tenantId: string, code: string): Promise<{ id: string; code: string } | null>;
 }
 
+/** Pack activation read consumed by the catering vertical (WP-OPS-01). The
+ * composition root wires `PgServiceOperationsAdvancedRepository`, which
+ * structurally satisfies this. `packCode` is narrowed to `"catering"`: this
+ * vertical may only ever ask about its own pack. */
+export interface PackActivationPort {
+  getPackActivation(
+    tenantId: string,
+    packCode: "catering",
+  ): Promise<{ isActive: boolean } | null>;
+}
+
 // ---------------------------------------------------------------------------
 // Inputs
 // ---------------------------------------------------------------------------
