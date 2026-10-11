@@ -179,6 +179,10 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/purchase-orders", windowCode: "route:/purchasing" },
   { method: "*", apiPath: "/purchase-requests", windowCode: "route:/purchasing" },
   { method: "*", apiPath: "/stock", windowCode: "route:/purchasing" },
+  // WP-MD-02 UoM Central — unit-of-measure and conversion master data live
+  // behind the same Items & Stock Window as the item master they serve.
+  { method: "*", apiPath: "/unit-conversions", windowCode: "route:/items" },
+  { method: "*", apiPath: "/units-of-measure", windowCode: "route:/items" },
 
   // --- warehouse_management ------------------------------------------------
   // Both prefixes are listed because the application serves both the canonical
@@ -235,6 +239,10 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/finance/accounts", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/finance/transactions/:id", windowCode: "route:/finance/transactions/:transactionId" },
   { method: "*", apiPath: "/finance/transactions", windowCode: "route:/finance/transactions" },
+  // WP-MD-01 master data — tenant-admin configuration, same family as the
+  // accounts Window above.
+  { method: "*", apiPath: "/finance/cost-centers", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/finance/payment-terms", windowCode: "route:/finance/accounts" },
 
   // --- accounting (Phase 1B) -----------------------------------------------
   // Period and account configuration map to the accounts Window.

@@ -112,6 +112,8 @@ import {
   PaymentService,
 } from "./modules/supply-chain/procurement/index.js";
 import { PgAssetRepository } from "./modules/asset/core/infrastructure/asset.repository.pg.js";
+import { PgUomRepository } from "./modules/supply-chain/master/uom/infrastructure/uom.repository.pg.js";
+import { UomService } from "./modules/supply-chain/master/uom/application/uom.service.js";
 import { AssetService } from "./modules/asset/core/application/asset.service.js";
 import { PgServiceOperationsAdvancedRepository } from "./modules/service-operations/advanced/infrastructure/service-operations-advanced.repository.pg.js";
 import { ServiceOperationsAdvancedService } from "./modules/service-operations/advanced/application/service-operations-advanced.service.js";
@@ -119,6 +121,8 @@ import { PgAssetAdvancedRepository } from "./modules/asset/advanced/infrastructu
 import { AssetAdvancedService } from "./modules/asset/advanced/application/asset-advanced.service.js";
 import { PgFinanceRepository } from "./modules/finance/core/infrastructure/finance.repository.pg.js";
 import { FinanceService } from "./modules/finance/core/application/finance.service.js";
+import { PgFinanceMasterRepository } from "./modules/finance/master/infrastructure/finance-master.repository.pg.js";
+import { FinanceMasterService } from "./modules/finance/master/application/finance-master.service.js";
 import { PgAccountingKernelRepository } from "./modules/accounting/kernel/infrastructure/accounting-kernel.repository.pg.js";
 import { AccountingKernelService } from "./modules/accounting/kernel/application/accounting-kernel.service.js";
 import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
@@ -438,6 +442,15 @@ export function buildContainer() {
   // DocumentService, and so WP-PRO-03 payment approval can record cash
   // movement. Financial evidence is gated by a dedicated capability AND the
   // transaction's Data Scope.
+
+  // Phase 5 — Finance Master (WP-MD-01) and UoM Central (WP-MD-02). Master
+  // data surfaces; no workflow or posting involvement.
+  const financeMaster = new FinanceMasterService(
+    new PgFinanceMasterRepository(pool),
+    audit,
+    rbac,
+  );
+  const uom = new UomService(new PgUomRepository(pool), audit, rbac);
 
   // Phase 1B — Accounting Kernel. Sole writer of the General Ledger
   // (ADR-0023 ACCEPTED). Period reopen is a maker-checker flow enforced in
@@ -818,6 +831,8 @@ export function buildContainer() {
     asset,
     assetAdvanced,
     finance,
+    financeMaster,
+    uom,
     accountingKernel,
     accountingEventConsumer,
     hse,

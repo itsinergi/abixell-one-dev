@@ -306,6 +306,9 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
   stock: "supply_chain",
   suppliers: "supply_chain",
   "supply-chain": "supply_chain",
+  // WP-MD-02 UoM Central.
+  "unit-conversions": "supply_chain",
+  "units-of-measure": "supply_chain",
 
   // Procurement Management.
   procurement: "procurement_management",

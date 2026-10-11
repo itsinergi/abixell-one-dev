@@ -144,6 +144,25 @@ export const DEFAULT_API_EXCEPTIONS = [
     typeOnly: true,
   },
   {
+    // Phase 5 (WP-MD-01) — Finance master data uses the Addendum layout
+    // (`modules/finance/master/{domain,application,infrastructure,api}`),
+    // so its route file does not match the core route shape either.
+    id: "route-container:finance-master",
+    source: "apps/api/src/modules/finance/master/api/finance-master.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
+    // Phase 5 (WP-MD-02) — UoM Central sits under supply-chain/master/uom and
+    // does not match the core supply-chain route shape.
+    id: "route-container:uom",
+    source: "apps/api/src/modules/supply-chain/master/uom/api/uom.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     id: "transition:service-operations-customer-service",
     source: "apps/api/src/modules/service-operations/core/application/service-operations.service.ts",
     target: "apps/api/src/application/customer/customer.service.ts",
@@ -506,7 +525,7 @@ export function validateImportBoundaries(files, options = {}) {
         }
 
         if (!sourceModule && targetModule) {
-          const isAppRoute = sourcePath === "apps/api/src/app.ts" && /^apps\/api\/src\/modules\/(?:[^/]+\/){1,2}api\/[^/]+\.routes\.ts$/.test(target);
+          const isAppRoute = sourcePath === "apps/api/src/app.ts" && /^apps\/api\/src\/modules\/(?:[^/]+\/){1,3}api\/[^/]+\.routes\.ts$/.test(target);
           const isComposition = sourcePath === "apps/api/src/composition-root.ts";
           if (!isAppRoute && !isComposition) {
             apiFindings.push(finding(
