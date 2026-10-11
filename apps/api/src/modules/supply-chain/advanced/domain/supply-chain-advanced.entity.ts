@@ -79,7 +79,8 @@ export type ScmAccountingReadyEventType =
   | "inventory.disposed"
   | "vendor.invoice.approved"
   | "vendor.invoice.payment_approved"
-  | "payroll.run_posted";
+  | "payroll.run_posted"
+  | "work_order.accepted";
 export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
 export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";

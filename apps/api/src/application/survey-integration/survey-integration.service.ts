@@ -19,6 +19,16 @@ import type {
 } from "../../domain/survey-integration/survey-integration.entity.js";
 
 /**
+ * WP-OPS-01 Phase 6 — narrow read port for the `work_order` source entity.
+ * Structurally satisfied by the Service Operations repository; declared here
+ * so this application component never imports a module's own types (same
+ * one-way rule as the Complaint dependency above).
+ */
+export interface WorkOrderCustomerLookupPort {
+  findWorkOrderById(id: string): Promise<{ tenantId: string; customerId: string } | null>;
+}
+
+/**
  * Survey Integration orchestrator (Checkpoint 1E.1).
  *
  * Wired in the composition root as an EventBus subscriber to
@@ -51,6 +61,7 @@ export class SurveyIntegrationService {
     private readonly rbacRepo: RbacRepository,
     private readonly eventBus: EventBus,
     private readonly onError: (policyCode: string, error: unknown) => void = () => {},
+    private readonly workOrders: WorkOrderCustomerLookupPort | null = null,
   ) {}
 
   /** Config seam (seed / test / future admin). No human-permission gate is
@@ -275,25 +286,46 @@ export class SurveyIntegrationService {
     sourceEntityId: string,
   ): Promise<string | null> {
     if (policy.respondentResolution !== "source_event_actor") return null;
-    // Only 'complaint' is a supported source in 1E.1.
-    if (sourceEntityType !== "complaint") return null;
 
+    // Public-token acceptance (WP-OPS-01 Phase 6) carries no actor → the
+    // execution is recorded as skipped_recipient_unresolvable, never failed.
     const actorUserId = event.createdBy;
     if (!actorUserId) return null;
 
     const user = await this.userRepo.findById(actorUserId);
     if (!user || user.tenantId !== event.tenantId) return null;
 
-    const complaint = await this.complaintRepo.findById(sourceEntityId);
-    if (!complaint || complaint.tenantId !== event.tenantId) return null;
+    const customerId = await this.resolveSourceCustomerId(event, sourceEntityType, sourceEntityId);
+    if (!customerId) return null;
 
     const assignments = await this.rbac.getAssignments(actorUserId);
     const isCustomerActor = assignments.some(
-      (a) => a.scopeType === "customer" && a.scopeCustomerId === complaint.customerId,
+      (a) => a.scopeType === "customer" && a.scopeCustomerId === customerId,
     );
     if (!isCustomerActor) return null;
 
     return actorUserId;
+  }
+
+  /** Supported sources: `complaint` (1E.1) and `work_order` (WP-OPS-01
+   * Phase 6). Returns the owning Customer id, or null when the source is
+   * unsupported, missing, or belongs to another tenant. */
+  private async resolveSourceCustomerId(
+    event: DomainEvent,
+    sourceEntityType: string,
+    sourceEntityId: string,
+  ): Promise<string | null> {
+    if (sourceEntityType === "complaint") {
+      const complaint = await this.complaintRepo.findById(sourceEntityId);
+      if (!complaint || complaint.tenantId !== event.tenantId) return null;
+      return complaint.customerId;
+    }
+    if (sourceEntityType === "work_order" && this.workOrders) {
+      const workOrder = await this.workOrders.findWorkOrderById(sourceEntityId);
+      if (!workOrder || workOrder.tenantId !== event.tenantId) return null;
+      return workOrder.customerId;
+    }
+    return null;
   }
 
   // =====================================================================

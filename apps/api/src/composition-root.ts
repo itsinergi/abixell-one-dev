@@ -303,15 +303,21 @@ export function buildContainer() {
   // (`modules/service-operations/core/...`, blueprint §11A). Constructed
   // before DocumentService so its `work_order` Entity Authorization Resolver
   // can close over `serviceOperations.canAccessForDocument`, exactly as
-  // `customer` and `complaint` do (ADR-0012).
+  // `customer` and `complaint` do (ADR-0012). `accountingEventPort` is built
+  // early (moved up from its former Phase 3 spot) so Phase 2's acceptance
+  // gate (WP-OPS-01 Phase 6) can also depend on it.
+  const accountingEventPort = new PgAccountingEventWritePort(pool);
+
+  const serviceOperationsRepo = new PgServiceOperationsRepository(pool);
   const serviceOperations = new ServiceOperationsService(
-    new PgServiceOperationsRepository(pool),
+    serviceOperationsRepo,
     customer,
     workflow,
     configuration,
     audit,
     rbac,
     eventBus,
+    accountingEventPort,
   );
 
   // Phase 3 — Workforce / HR Core. Built before DocumentService so its
@@ -325,8 +331,6 @@ export function buildContainer() {
     rbac,
     eventBus,
   );
-
-  const accountingEventPort = new PgAccountingEventWritePort(pool);
 
   // Wave A4 / HR-ADV-001…009 — Workforce Advanced owns operational HR
   // extensions (attendance, leave, payroll, recruitment, performance, and
@@ -714,6 +718,7 @@ export function buildContainer() {
     rbacRepo,
     eventBus,
     (policyCode, error) => console.error(`[SurveyIntegration] policy '${policyCode}' failed:`, error),
+    serviceOperationsRepo,
   );
 
   // Any Domain Event, regardless of publisher, reaches both — this is
@@ -748,6 +753,14 @@ export function buildContainer() {
   // resolution, idempotency) lives in SurveyIntegrationService, which never
   // throws (a failed integration must not roll back the confirmation).
   eventBus.subscribe("complaint.customer_confirmed", (event) =>
+    surveyIntegration.handleTriggerEvent(event),
+  );
+
+  // WP-OPS-01 Phase 6: a Customer acceptance of a Work Order triggers the
+  // post-acceptance CSAT survey through the SAME orchestrator. Policies are
+  // matched on ('work_order', 'work_order.accepted'); a token-path acceptance
+  // (no actor) yields a durable `skipped` execution, never an error.
+  eventBus.subscribe("work_order.accepted", (event) =>
     surveyIntegration.handleTriggerEvent(event),
   );
 

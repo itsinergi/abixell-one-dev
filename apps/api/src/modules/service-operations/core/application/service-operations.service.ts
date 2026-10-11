@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "crypto";
 import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../../../../application/audit/audit.service.js";
@@ -11,14 +12,48 @@ import type {
 import type { ConfigurationService } from "../../../../application/configuration/configuration.service.js";
 import type { CustomerService } from "../../../../application/customer/customer.service.js";
 import type {
+  IssueAcceptanceTokenInput,
+  MarkCustomerAcceptedInput,
+  MarkCustomerRejectedInput,
   ServiceDefinition,
   ServiceDefinitionChecklistItem,
   ServiceOperationsRepository,
   WorkOrder,
+  WorkOrderAcceptanceToken,
   WorkOrderChecklistItem,
   WorkRequest,
 } from "../domain/service-operations.entity.js";
 import { workRequestState } from "../domain/service-operations.entity.js";
+
+/** Narrow outbox port used by WP-OPS-01 Phase 6 to publish
+ * `work_order.accepted` into `scm_accounting_ready_events` without pulling
+ * the Supply-Chain module's internals into Service Operations. The structural
+ * shape matches `AccountingEventWritePort.createEvent` + `.getEventByIdempotencyKey`
+ * so composition root wires the same `PgAccountingEventWritePort` here that
+ * Workforce Advanced already uses (same pattern as `PayrollAccountingEventPort`). */
+export interface WorkOrderAccountingEventPort {
+  createEvent(
+    tenantId: string,
+    input: WorkOrderAcceptanceAccountingEventInput,
+  ): Promise<unknown>;
+  getEventByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<unknown | null>;
+}
+
+export interface WorkOrderAcceptanceAccountingEventInput {
+  eventType: "work_order.accepted";
+  sourceDocumentType: string;
+  sourceDocumentId: string;
+  effectiveAt?: Date;
+  currency?: string;
+  amount?: number;
+  quantity?: number | null;
+  idempotencyKey: string;
+  payload?: Record<string, unknown>;
+  createdBy?: string | null;
+}
 
 /** Tenant Configuration codes this module expects to exist. All three are
  * Client Configuration, never Product Core content. */
@@ -75,6 +110,7 @@ export class ServiceOperationsService {
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
     private readonly eventBus: EventBus,
+    private readonly accountingEvents: WorkOrderAccountingEventPort,
   ) {}
 
   // ===================================================================
@@ -566,6 +602,247 @@ export class ServiceOperationsService {
       createdBy: actor.userId,
     });
     return verified;
+  }
+
+  // ===================================================================
+  // Customer Acceptance Gate (WP-OPS-01 Phase 6 — FR-OPS-001, E2EGAP-014)
+  // ===================================================================
+
+  /** Issue a single-use public sign-off link for a verified Work Order.
+   * Revokes any still-live token for the same WO (atomic, one live link max),
+   * stores only the SHA256 hash, and returns the raw token exactly once —
+   * the same delivery contract as `SurveyPublicService`. */
+  async issueAcceptanceToken(
+    actor: ActorContext,
+    workOrderId: string,
+    input: IssueAcceptanceTokenInput,
+  ): Promise<{ token: string; expiresAt: Date }> {
+    await this.rbac.requirePermission(actor, "service_operations.verify");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    if (!workOrder.verifiedAt) {
+      throw new ConflictError("Cannot issue an acceptance token before the Work Order is verified");
+    }
+    if (workOrder.customerAcceptedAt) {
+      throw new ConflictError("This Work Order has already been accepted by the customer");
+    }
+
+    const expiresInDays = input.expiresInDays ?? 30;
+    if (expiresInDays <= 0 || !Number.isFinite(expiresInDays)) {
+      throw new ValidationError("expiresInDays must be a positive number");
+    }
+    const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+
+    const stored: WorkOrderAcceptanceToken = await this.repo.replaceAcceptanceToken(
+      actor.tenantId,
+      workOrder.id,
+      tokenHash,
+      expiresAt,
+      actor.userId,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "work_order.acceptance_token_issued",
+      entityType: "work_order",
+      entityId: workOrder.id,
+      metadata: { tokenId: stored.id, expiresAt: stored.expiresAt.toISOString() },
+    });
+
+    return { token: rawToken, expiresAt: stored.expiresAt };
+  }
+
+  /** Mark a Work Order accepted by the customer. Idempotent: a guarded UPDATE
+   * returns null when already accepted. Emits the outbox event
+   * `work_order.accepted` (amount 0 — real cost arrives in WP-OPS-02) and the
+   * in-process `work_order.accepted` bus event that drives CSAT assignment. */
+  async customerAcceptWork(
+    tenantId: string,
+    workOrderId: string,
+    via: "token" | "internal",
+    comment: string | null,
+    actorUserId: string | null,
+  ): Promise<WorkOrder> {
+    const workOrder = await this.repo.findWorkOrderById(workOrderId);
+    if (!workOrder || workOrder.tenantId !== tenantId) {
+      throw new NotFoundError("Work Order", workOrderId);
+    }
+
+    const accepted = await this.repo.markCustomerAccepted(workOrder.id, {
+      via,
+      comment,
+      acceptedBy: actorUserId,
+    } satisfies MarkCustomerAcceptedInput);
+    if (!accepted) {
+      throw new ConflictError("This Work Order cannot be accepted (not verified or already accepted)");
+    }
+
+    await this.audit.record({
+      tenantId,
+      actorUserId,
+      action: "work_order.customer_accepted",
+      entityType: "work_order",
+      entityId: workOrder.id,
+      metadata: { via, comment, workOrderNumber: workOrder.workOrderNumber },
+    });
+
+    // Outbox: idempotent on `wo-accept:{workOrderId}`. A repeated accept (which
+    // the guard above already prevents at the WO level) or a retry of the
+    // consumer cannot duplicate the event.
+    const idempotencyKey = `wo-accept:${workOrder.id}`;
+    const existing = await this.accountingEvents.getEventByIdempotencyKey(tenantId, idempotencyKey);
+    if (!existing) {
+      await this.accountingEvents.createEvent(tenantId, {
+        eventType: "work_order.accepted",
+        sourceDocumentType: "work_order",
+        sourceDocumentId: workOrder.id,
+        quantity: 1,
+        amount: 0,
+        idempotencyKey,
+        payload: {
+          workOrderNumber: workOrder.workOrderNumber,
+          customerId: workOrder.customerId,
+          serviceDefinitionId: workOrder.serviceDefinitionId,
+          acceptedVia: via,
+        },
+        createdBy: actorUserId,
+      });
+    }
+
+    await this.eventBus.publish({
+      tenantId,
+      eventType: "work_order.accepted",
+      entityType: "work_order",
+      entityId: workOrder.id,
+      payload: {
+        workOrderNumber: workOrder.workOrderNumber,
+        customerId: workOrder.customerId,
+        acceptedVia: via,
+        actorUserId,
+      },
+      createdBy: actorUserId,
+    });
+
+    return accepted;
+  }
+
+  /** Customer rejection — not terminal. The WO can be reworked and a fresh
+   * token issued; a later accept clears the rejection facts. */
+  async customerRejectWork(
+    tenantId: string,
+    workOrderId: string,
+    reason: string | null,
+    actorUserId: string | null,
+  ): Promise<WorkOrder> {
+    const workOrder = await this.repo.findWorkOrderById(workOrderId);
+    if (!workOrder || workOrder.tenantId !== tenantId) {
+      throw new NotFoundError("Work Order", workOrderId);
+    }
+
+    const rejected = await this.repo.markCustomerRejected(workOrder.id, {
+      reason,
+      rejectedBy: actorUserId,
+    } satisfies MarkCustomerRejectedInput);
+    if (!rejected) {
+      throw new ConflictError("This Work Order cannot be rejected (not verified or already accepted)");
+    }
+
+    await this.audit.record({
+      tenantId,
+      actorUserId,
+      action: "work_order.customer_rejected",
+      entityType: "work_order",
+      entityId: workOrder.id,
+      metadata: { reason, workOrderNumber: workOrder.workOrderNumber },
+    });
+
+    await this.eventBus.publish({
+      tenantId,
+      eventType: "work_order.customer_rejected",
+      entityType: "work_order",
+      entityId: workOrder.id,
+      payload: {
+        workOrderNumber: workOrder.workOrderNumber,
+        customerId: workOrder.customerId,
+        reason,
+        actorUserId,
+      },
+      createdBy: actorUserId,
+    });
+
+    return rejected;
+  }
+
+  /** Authenticated manual acceptance (`via = 'internal'`), e.g. a customer
+   * representative signing on paper and a supervisor recording it. */
+  async acceptWorkInternally(actor: ActorContext, id: string, comment: string | null): Promise<WorkOrder> {
+    await this.rbac.requirePermission(actor, "service_operations.verify");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, id);
+    return this.customerAcceptWork(actor.tenantId, workOrder.id, "internal", comment, actor.userId);
+  }
+
+  async rejectWorkInternally(actor: ActorContext, id: string, reason: string | null): Promise<WorkOrder> {
+    await this.rbac.requirePermission(actor, "service_operations.verify");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, id);
+    return this.customerRejectWork(actor.tenantId, workOrder.id, reason, actor.userId);
+  }
+
+  // --- Public (authless) token surface -------------------------------
+
+  /** Minimal summary for the public sign-off page. Reveals nothing beyond
+   * what the link holder needs to recognise the job. */
+  async getAcceptanceSummary(
+    rawToken: string,
+  ): Promise<{ workOrderNumber: string; title: string; accepted: boolean; expiresAt: Date }> {
+    const { token, workOrder } = await this.resolveLiveAcceptanceToken(rawToken);
+    return {
+      workOrderNumber: workOrder.workOrderNumber,
+      title: workOrder.title,
+      accepted: workOrder.customerAcceptedAt !== null,
+      expiresAt: token.expiresAt,
+    };
+  }
+
+  async acceptViaToken(rawToken: string, comment: string | null): Promise<{ workOrderNumber: string }> {
+    const { token, workOrder } = await this.resolveLiveAcceptanceToken(rawToken);
+    // Single-use: claim before acting so a concurrent double-submit loses.
+    if (!(await this.repo.claimAcceptanceToken(token.id))) {
+      throw new ConflictError("This acceptance link is no longer valid");
+    }
+    await this.customerAcceptWork(token.tenantId, workOrder.id, "token", comment, null);
+    return { workOrderNumber: workOrder.workOrderNumber };
+  }
+
+  async rejectViaToken(rawToken: string, reason: string): Promise<{ workOrderNumber: string }> {
+    const { token, workOrder } = await this.resolveLiveAcceptanceToken(rawToken);
+    if (!(await this.repo.claimAcceptanceToken(token.id))) {
+      throw new ConflictError("This acceptance link is no longer valid");
+    }
+    await this.customerRejectWork(token.tenantId, workOrder.id, reason, null);
+    return { workOrderNumber: workOrder.workOrderNumber };
+  }
+
+  /** Hash lookup + liveness check. Unknown → 404; revoked/used/expired → 409
+   * with a specific message (the link holder is not an attacker-oracle: the
+   * token is 256 bits of entropy). */
+  private async resolveLiveAcceptanceToken(
+    rawToken: string,
+  ): Promise<{ token: WorkOrderAcceptanceToken; workOrder: WorkOrder }> {
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    const token = await this.repo.findAcceptanceTokenByHash(tokenHash);
+    if (!token) throw new NotFoundError("Acceptance link", "token");
+    if (token.revokedAt) throw new ConflictError("This acceptance link has been revoked");
+    if (token.usedAt) throw new ConflictError("This acceptance link has already been used");
+    if (token.expiresAt.getTime() <= Date.now()) throw new ConflictError("This acceptance link has expired");
+
+    const workOrder = await this.repo.findWorkOrderById(token.workOrderId);
+    if (!workOrder || workOrder.tenantId !== token.tenantId) {
+      throw new NotFoundError("Acceptance link", "token");
+    }
+    return { token, workOrder };
   }
 
   // ===================================================================

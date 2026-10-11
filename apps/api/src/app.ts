@@ -40,6 +40,7 @@ import { registerComplaintRoutes } from "./interfaces/http/routes/complaints.js"
 import { registerSurveyRoutes } from "./interfaces/http/routes/surveys.js";
 import { registerSurveyAdvancedRoutes } from "./interfaces/http/routes/surveys-advanced.js";
 import { registerPublicSurveyRoutes } from "./interfaces/http/routes/public-surveys.js";
+import { registerPublicWorkOrderAcceptanceRoutes } from "./interfaces/http/routes/public-work-order-acceptance.js";
 import { registerAdminConsoleRoutes } from "./interfaces/http/routes/admin-console.js";
 import { registerSalesRoutes } from "./interfaces/http/routes/sales.js";
 import { registerServiceQualityRoutes } from "./interfaces/http/routes/service-quality.js";
@@ -201,6 +202,7 @@ export function buildApp(): FastifyInstance {
     registerSurveyRoutes(scoped, container);
     registerSurveyAdvancedRoutes(scoped, container);
     registerPublicSurveyRoutes(scoped, container);
+    registerPublicWorkOrderAcceptanceRoutes(scoped, container);
     registerServiceOperationsRoutes(scoped, container);
     registerServiceOperationsAdvancedRoutes(scoped, container);
     registerWorkforceRoutes(scoped, container);
