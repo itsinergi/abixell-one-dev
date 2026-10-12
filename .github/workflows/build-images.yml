@@ -1,0 +1,129 @@
+name: Build and Push Images
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_USERNAME: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      api-digest: ${{ steps.build-api.outputs.digest }}
+      api-operations-digest: ${{ steps.build-api-operations.outputs.digest }}
+      web-digest: ${{ steps.build-web.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag (if tag-triggered)
+        id: meta
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="staging-$(date -u +%Y%m%d)-${GITHUB_SHA:0:7}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and push API runtime image
+        id: build-api
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          target: runtime
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api:staging
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api:${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push API operations image
+        id: build-api-operations
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          target: operations
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations:staging
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations:${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Web image
+        id: build-web
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          target: runtime
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web:staging
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web:${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create digests artifact
+        run: |
+          cat > digests.txt << 'EOF'
+          API_DIGEST=${{ steps.build-api.outputs.digest }}
+          API_OPERATIONS_DIGEST=${{ steps.build-api-operations.outputs.digest }}
+          WEB_DIGEST=${{ steps.build-web.outputs.digest }}
+          VERSION=${{ steps.meta.outputs.version }}
+          EOF
+          cat digests.txt
+
+      - name: Upload digests artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digests
+          path: digests.txt
+          retention-days: 90
+
+      - name: Job Summary
+        run: |
+          echo "## Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.meta.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pushed Images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Runtime**" >> $GITHUB_STEP_SUMMARY
+          echo "  - Tags: \`staging\`, \`${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - Digest: \`${{ steps.build-api.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Operations**" >> $GITHUB_STEP_SUMMARY
+          echo "  - Tags: \`staging\`, \`${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - Digest: \`${{ steps.build-api-operations.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Web**" >> $GITHUB_STEP_SUMMARY
+          echo "  - Tags: \`staging\`, \`${{ steps.meta.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - Digest: \`${{ steps.build-web.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Registry: \`${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}\`" >> $GITHUB_STEP_SUMMARY
