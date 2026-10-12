@@ -248,6 +248,15 @@ export interface SurveyRepository {
     },
   ): Promise<SurveyAssignment | null>;
   markInProgress(id: string): Promise<void>;
+  /** Atomically expire assignments whose due_at has passed and are still
+   * open (pending / in_progress). Uses FOR UPDATE SKIP LOCKED so concurrent
+   * scheduler replicas never double-process the same row. Returns the
+   * expired assignments (capped at `limit` per call). */
+  expireDueAssignments(
+    tenantId: string,
+    now: Date,
+    limit: number,
+  ): Promise<SurveyAssignment[]>;
 
   // --- Answers -------------------------------------------------------------
   upsertAnswer(input: {

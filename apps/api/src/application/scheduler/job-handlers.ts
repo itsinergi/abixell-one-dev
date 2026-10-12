@@ -1,6 +1,7 @@
 import type { TenantRepository } from "../../domain/tenant/tenant.entity.js";
 import type { IntegrationService } from "../integration/integration.service.js";
 import type { ServiceQualityService } from "../service-quality/service-quality.service.js";
+import type { SurveyService } from "../survey/survey.service.js";
 import type { WorkflowService } from "../workflow/workflow.service.js";
 import type { SchedulerService } from "./scheduler.service.js";
 
@@ -35,6 +36,7 @@ export function registerJobHandlers(
     integration: IntegrationService;
     serviceQuality: ServiceQualityService;
     accountingEventConsumer: AccountingEventConsumerJob;
+    survey: SurveyService;
   },
 ): void {
   scheduler.registerHandler("workflow-escalation-sweep", async ({ actor }) => {
@@ -153,6 +155,28 @@ export function registerJobHandlers(
     return {
       tenantsSwept: tenants.length,
       ...totals,
+      ...(actor ? {} : { perTenant }),
+    };
+  });
+
+  // WP-SAT-01 — closes E2EGAP-015. A Survey Assignment with a passed due_at
+  // is never flipped to 'expired' on its own; this sweep is the only writer
+  // of that transition. Per-tenant FOR UPDATE SKIP LOCKED (survey.repository.pg.ts)
+  // makes concurrent scheduler replicas safe without extra fencing here.
+  scheduler.registerHandler("survey-due-at-expiry-sweep", async ({ actor }) => {
+    const tenants = actor
+      ? [await deps.tenantRepo.findById(actor.tenantId)].filter((tenant) => tenant !== null)
+      : await deps.tenantRepo.list();
+    let totalExpired = 0;
+    const perTenant: Record<string, number> = {};
+    for (const tenant of tenants) {
+      const result = await deps.survey.expireDueAssignmentsForTenant(tenant.id);
+      if (!actor) perTenant[tenant.code] = result.expired;
+      totalExpired += result.expired;
+    }
+    return {
+      tenantsSwept: tenants.length,
+      totalExpired,
       ...(actor ? {} : { perTenant }),
     };
   });

@@ -379,6 +379,35 @@ export class PgSurveyRepository implements SurveyRepository {
     );
   }
 
+  /** Atomically expire due assignments. The CTE locks candidate rows with
+   * SKIP LOCKED so two scheduler replicas never expire the same assignment
+   * twice, then flips them to 'expired' in one statement. */
+  async expireDueAssignments(
+    tenantId: string,
+    now: Date,
+    limit: number,
+  ): Promise<SurveyAssignment[]> {
+    const r = await this.pool.query(
+      `WITH due AS (
+         SELECT id FROM survey_assignments
+          WHERE tenant_id = $1
+            AND status IN ('pending', 'in_progress')
+            AND due_at IS NOT NULL
+            AND due_at <= $2
+          ORDER BY due_at
+          LIMIT $3
+          FOR UPDATE SKIP LOCKED
+       )
+       UPDATE survey_assignments a
+          SET status = 'expired'
+         FROM due
+        WHERE a.id = due.id
+       RETURNING a.*`,
+      [tenantId, now, limit],
+    );
+    return r.rows.map(toAssignment);
+  }
+
   // --- Answers -------------------------------------------------------------
   async upsertAnswer(input: {
     surveyAssignmentId: string;
