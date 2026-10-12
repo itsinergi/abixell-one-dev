@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "crypto";
+import type { PoolClient } from "pg";
 import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../../../../application/audit/audit.service.js";
@@ -12,6 +13,7 @@ import type {
 import type { ConfigurationService } from "../../../../application/configuration/configuration.service.js";
 import type { CustomerService } from "../../../../application/customer/customer.service.js";
 import type {
+  FinalizeCostsResult,
   IssueAcceptanceTokenInput,
   MarkCustomerAcceptedInput,
   MarkCustomerRejectedInput,
@@ -21,6 +23,7 @@ import type {
   WorkOrder,
   WorkOrderAcceptanceToken,
   WorkOrderChecklistItem,
+  WorkOrderCostItem,
   WorkRequest,
 } from "../domain/service-operations.entity.js";
 import { workRequestState } from "../domain/service-operations.entity.js";
@@ -34,21 +37,25 @@ import { workRequestState } from "../domain/service-operations.entity.js";
 export interface WorkOrderAccountingEventPort {
   createEvent(
     tenantId: string,
-    input: WorkOrderAcceptanceAccountingEventInput,
+    input: WorkOrderAccountingEventInput,
+    client?: PoolClient,
   ): Promise<unknown>;
   getEventByIdempotencyKey(
     tenantId: string,
     idempotencyKey: string,
+    client?: PoolClient,
   ): Promise<unknown | null>;
 }
 
-export interface WorkOrderAcceptanceAccountingEventInput {
-  eventType: "work_order.accepted";
+export interface WorkOrderAccountingEventInput {
+  eventType: "work_order.accepted" | "work_order.cost_accumulated";
   sourceDocumentType: string;
   sourceDocumentId: string;
   effectiveAt?: Date;
   currency?: string;
-  amount?: number;
+  /** Numeric string allowed so a NUMERIC(18,4) sum reaches the outbox row
+   * without a float round-trip. */
+  amount?: number | string;
   quantity?: number | null;
   idempotencyKey: string;
   payload?: Record<string, unknown>;
@@ -788,6 +795,166 @@ export class ServiceOperationsService {
     await this.rbac.requirePermission(actor, "service_operations.verify");
     const workOrder = await this.getAuthorizedWorkOrder(actor, id);
     return this.customerRejectWork(actor.tenantId, workOrder.id, reason, actor.userId);
+  }
+
+  // ===================================================================
+  // Cost Accumulator (WP-OPS-02 Phase 6 — FR-OPS-002, E2E-010)
+  // ===================================================================
+
+  /** Record one cost item on an accepted Work Order. Guarded: the WO must
+   * be customer-accepted first (DEC-009 sequence acceptance → cost) and not
+   * yet finalized (a non-null costs_finalized_at locks further adds). */
+  async addCostItem(
+    actor: ActorContext,
+    workOrderId: string,
+    input: { costType: WorkOrderCostItem["costType"]; description?: string | null; quantity: string; unitCost: string; costCenterId?: string | null },
+  ): Promise<WorkOrderCostItem> {
+    await this.rbac.requirePermission(actor, "service_operations.manage");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    if (!workOrder.customerAcceptedAt) {
+      throw new ConflictError("Costs can only be recorded on a customer-accepted Work Order");
+    }
+    if (workOrder.costsFinalizedAt) {
+      throw new ConflictError("Costs on this Work Order are already finalized");
+    }
+    if (!(Number(input.quantity) > 0)) {
+      throw new ValidationError("quantity must be greater than 0");
+    }
+    if (!(Number(input.unitCost) > 0)) {
+      throw new ValidationError("unitCost must be greater than 0");
+    }
+    if (input.costCenterId && !(await this.repo.costCenterBelongsToTenant(actor.tenantId, input.costCenterId))) {
+      throw new NotFoundError("Cost center", input.costCenterId);
+    }
+
+    const item = await this.repo.insertCostItem(actor.tenantId, workOrder.id, {
+      costType: input.costType,
+      description: input.description ?? null,
+      quantity: input.quantity,
+      unitCost: input.unitCost,
+      costCenterId: input.costCenterId ?? null,
+      recordedBy: actor.userId,
+    });
+    if (!item) {
+      // DB fence lost a race against a concurrent finalize.
+      throw new ConflictError("Costs on this Work Order are already finalized");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "work_order.cost_item.recorded",
+      entityType: "work_order",
+      entityId: workOrder.id,
+      metadata: { costItemId: item.id, costType: item.costType, totalCost: item.totalCost },
+    });
+    return item;
+  }
+
+  /** List cost items for a Work Order (read tier). */
+  async listCostItems(actor: ActorContext, workOrderId: string): Promise<WorkOrderCostItem[]> {
+    await this.rbac.requirePermission(actor, "service_operations.read");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    return this.repo.listCostItems(actor.tenantId, workOrder.id);
+  }
+
+  /**
+   * Finalize cost accumulation: compute the sum, resolve the open accounting
+   * period for the caller-provided legal entity, then emit the outbox event
+   * `work_order.cost_accumulated` (amount = real cost, payload carries
+   * legalEntityId + periodId so the consumer can post to GL). Race-safe via
+   * a guarded UPDATE (costs_finalized_at IS NULL) that claims the finalize.
+   */
+  async finalizeCosts(
+    actor: ActorContext,
+    workOrderId: string,
+    input: { legalEntityId: string },
+  ): Promise<FinalizeCostsResult> {
+    await this.rbac.requirePermission(actor, "service_operations.verify");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    // Reference check first: a foreign/unknown legal entity is a 404
+    // regardless of the WO's acceptance state.
+    if (!(await this.repo.legalEntityBelongsToTenant(actor.tenantId, input.legalEntityId))) {
+      throw new NotFoundError("Legal entity", input.legalEntityId);
+    }
+    if (!workOrder.customerAcceptedAt) {
+      throw new ConflictError("Costs can only be finalized on a customer-accepted Work Order");
+    }
+    if (workOrder.costsFinalizedAt) {
+      throw new ConflictError("Costs on this Work Order are already finalized");
+    }
+
+    const periodId = await this.repo.findOpenAccountingPeriodIdForToday(actor.tenantId, input.legalEntityId);
+    if (!periodId) {
+      throw new ConflictError("No open accounting period for the legal entity");
+    }
+
+    const idempotencyKey = `wo-cost:${workOrder.id}`;
+    const tenantId = actor.tenantId;
+    // One transaction: row lock → sum → guarded claim → outbox. The lock
+    // serialises against concurrent finalizes and against `insertCostItem`'s
+    // FOR SHARE fence, so the sum written to costs_total is exactly the sum
+    // the outbox event carries, and neither exists without the other.
+    const { finalized, costsTotal, outboxEventEmitted } = await this.repo.withTransaction(async (client) => {
+      const locked = await this.repo.lockWorkOrderForCostFinalize(workOrder.id, client);
+      if (!locked) {
+        throw new ConflictError("Costs on this Work Order are already finalized");
+      }
+      const costsTotal = await this.repo.sumCostItems(tenantId, workOrder.id, client);
+      if (Number(costsTotal) <= 0) {
+        throw new ValidationError("Cannot finalize costs: no cost items recorded");
+      }
+      const finalized = await this.repo.finalizeWorkOrderCosts(workOrder.id, costsTotal, actor.userId, client);
+      if (!finalized) {
+        throw new ConflictError("Costs on this Work Order are already finalized");
+      }
+
+      // Outbox: idempotent on `wo-cost:{workOrderId}`.
+      let outboxEventEmitted = false;
+      const existing = await this.accountingEvents.getEventByIdempotencyKey(tenantId, idempotencyKey, client);
+      if (!existing) {
+        await this.accountingEvents.createEvent(
+          tenantId,
+          {
+            eventType: "work_order.cost_accumulated",
+            sourceDocumentType: "work_order",
+            sourceDocumentId: workOrder.id,
+            quantity: 1,
+            // Passed as the numeric string so no float rounding occurs
+            // between the SUM and the outbox row.
+            amount: costsTotal,
+            idempotencyKey,
+            payload: {
+              legalEntityId: input.legalEntityId,
+              periodId,
+              workOrderNumber: workOrder.workOrderNumber,
+              costsTotal,
+            },
+            createdBy: actor.userId,
+          },
+          client,
+        );
+        outboxEventEmitted = true;
+      }
+      return { finalized, costsTotal, outboxEventEmitted };
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "work_order.costs_finalized",
+      entityType: "work_order",
+      entityId: workOrder.id,
+      metadata: { costsTotal, legalEntityId: input.legalEntityId, periodId },
+    });
+
+    return {
+      workOrder: finalized,
+      costsTotal,
+      legalEntityId: input.legalEntityId,
+      periodId,
+      outboxEventEmitted,
+    };
   }
 
   // --- Public (authless) token surface -------------------------------

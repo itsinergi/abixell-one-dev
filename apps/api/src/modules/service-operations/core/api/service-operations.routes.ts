@@ -66,6 +66,15 @@ const acceptanceTokenSchema = z.object({
   expiresInDays: z.number().int().positive().max(365).optional(),
 });
 const rejectReasonSchema = z.object({ reason: z.string().min(1).max(2000) });
+const costAmountSchema = z.string().regex(/^\d{1,14}(\.\d{1,4})?$/);
+const costItemSchema = z.object({
+  costType: z.enum(["material", "labor", "overhead"]),
+  description: z.string().nullable().optional(),
+  quantity: costAmountSchema,
+  unitCost: costAmountSchema,
+  costCenterId: z.string().uuid().nullable().optional(),
+});
+const finalizeCostsSchema = z.object({ legalEntityId: z.string().uuid() });
 
 export function registerServiceOperationsRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.serviceOperations;
@@ -226,5 +235,24 @@ export function registerServiceOperationsRoutes(app: FastifyInstance, container:
     const { id } = request.params as { id: string };
     const { reason } = rejectReasonSchema.parse(request.body ?? {});
     return reply.send(await svc().rejectWorkInternally(request.actor!, id, reason));
+  });
+
+  // --- Cost Accumulator (WP-OPS-02 Phase 6) ----------------------------
+
+  app.post("/work-orders/:id/cost-items", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = costItemSchema.parse(request.body);
+    return reply.status(201).send(await svc().addCostItem(request.actor!, id, body));
+  });
+
+  app.get("/work-orders/:id/cost-items", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    return reply.send(await svc().listCostItems(request.actor!, id));
+  });
+
+  app.post("/work-orders/:id/finalize-costs", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = finalizeCostsSchema.parse(request.body);
+    return reply.send(await svc().finalizeCosts(request.actor!, id, body));
   });
 }
