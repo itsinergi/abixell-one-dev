@@ -8,7 +8,10 @@ RUN npm ci
 COPY apps/web apps/web
 RUN npm run build -w apps/web
 
-FROM nginxinc/nginx-unprivileged:1.27.3-alpine3.20 AS runtime
+FROM nginxinc/nginx-unprivileged:1.27.5-alpine3.21 AS runtime
+USER root
+RUN apk update && apk upgrade --no-cache
+USER 101
 COPY infra/deployment/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 8080
