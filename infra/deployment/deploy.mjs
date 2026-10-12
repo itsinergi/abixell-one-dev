@@ -44,6 +44,7 @@ try {
     "infra/deployment/validate-env.mjs",
     envFile,
   ]);
+  await verifyCosignSignatures();
   await compose([
     "--profile",
     "operations",
@@ -55,6 +56,7 @@ try {
     "api",
     "web",
   ]);
+  await scanImagesTrivy();
   await compose(["up", "-d", "postgres"]);
   await waitForService("postgres", 120_000);
 
@@ -183,6 +185,64 @@ async function quiesceApi() {
   if (apiId) {
     await compose(["stop", "api"]);
   }
+}
+
+async function verifyCosignSignatures() {
+  const images = supplyChainImages();
+  const identityRegex =
+    process.env.DEPLOY_COSIGN_IDENTITY_REGEX ??
+    "^https://github\\.com/itsinergi/abixell-one-dev/\\.github/workflows/build-images\\.yml@refs/";
+  const issuer =
+    process.env.DEPLOY_COSIGN_OIDC_ISSUER ??
+    "https://token.actions.githubusercontent.com";
+  process.stdout.write(
+    `Verifying ${images.length} image signatures via cosign...\n`,
+  );
+  for (const image of images) {
+    await run("cosign", [
+      "verify",
+      "--certificate-identity-regexp",
+      identityRegex,
+      "--certificate-oidc-issuer",
+      issuer,
+      image,
+    ]);
+  }
+}
+
+async function scanImagesTrivy() {
+  const images = supplyChainImages();
+  process.stdout.write(
+    `Scanning ${images.length} images via trivy (HIGH,CRITICAL, fixed-only)...\n`,
+  );
+  for (const image of images) {
+    await run("trivy", [
+      "image",
+      "--severity",
+      "HIGH,CRITICAL",
+      "--ignore-unfixed",
+      "--exit-code",
+      "1",
+      "--no-progress",
+      image,
+    ]);
+  }
+}
+
+function supplyChainImages() {
+  const images = [
+    env.API_IMAGE,
+    env.API_OPERATIONS_IMAGE,
+    env.WEB_IMAGE,
+  ];
+  for (const image of images) {
+    if (!image || !image.includes("@sha256:")) {
+      fail(
+        `Supply chain verification requires immutable digests; got "${image}"`,
+      );
+    }
+  }
+  return images;
 }
 
 async function acquireLock(path) {
