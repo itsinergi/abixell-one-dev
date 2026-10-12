@@ -24,8 +24,8 @@ services:
     pull_policy: always
     restart: "no"
     working_dir: /app
-    entrypoint: ["npm"]
-    command: ["run", "migrate:production", "-w", "apps/api"]
+    entrypoint: ["node"]
+    command: ["node_modules/node-pg-migrate/bin/node-pg-migrate.js", "up", "-m", "apps/api/migrations", "--envPath", "/dev/null"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
     depends_on:
@@ -39,8 +39,8 @@ services:
     pull_policy: always
     restart: "no"
     working_dir: /app
-    entrypoint: ["npm"]
-    command: ["run", "sync-permissions", "-w", "apps/api"]
+    entrypoint: ["node"]
+    command: ["apps/api/scripts/sync-role-permissions.mjs"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
     depends_on:
