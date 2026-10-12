@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     outputs:
       api-digest: ${{ steps.build-api.outputs.digest }}
@@ -25,13 +26,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ env.REGISTRY_USERNAME }}
@@ -47,9 +48,83 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Build API runtime image (local, for scan)
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: scan/abixell-one-api:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build API operations image (local, for scan)
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          target: operations
+          push: false
+          load: true
+          tags: scan/abixell-one-api-operations:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Web image (local, for scan)
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: scan/abixell-one-web:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan API runtime (gate before push)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: scan/abixell-one-api:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: json
+          output: trivy-api.json
+
+      - name: Trivy scan API operations (gate before push)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: scan/abixell-one-api-operations:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: json
+          output: trivy-api-operations.json
+
+      - name: Trivy scan Web (gate before push)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: scan/abixell-one-web:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: json
+          output: trivy-web.json
+
+      - name: Upload Trivy reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: trivy-reports
+          path: trivy-*.json
+          retention-days: 90
+
       - name: Build and push API runtime image
         id: build-api
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./apps/api/Dockerfile
@@ -58,12 +133,14 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api:staging
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api:${{ steps.meta.outputs.version }}
+          sbom: true
+          provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build and push API operations image
         id: build-api-operations
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./apps/api/Dockerfile
@@ -72,12 +149,14 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations:staging
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations:${{ steps.meta.outputs.version }}
+          sbom: true
+          provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build and push Web image
         id: build-web
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./apps/web/Dockerfile
@@ -86,8 +165,19 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web:staging
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web:${{ steps.meta.outputs.version }}
+          sbom: true
+          provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign images (keyless OIDC)
+        run: |
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api@${{ steps.build-api.outputs.digest }}
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations@${{ steps.build-api-operations.outputs.digest }}
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web@${{ steps.build-web.outputs.digest }}
 
       - name: Create digests artifact
         run: |
@@ -100,7 +190,7 @@ jobs:
           cat digests.txt
 
       - name: Upload digests artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: image-digests
           path: digests.txt
