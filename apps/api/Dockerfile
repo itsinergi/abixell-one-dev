@@ -11,7 +11,7 @@ RUN npm run build -w apps/api
 
 FROM build AS operations
 ENV NODE_ENV=production
-RUN apk add --no-cache postgresql16-client tar && npm install -g npm@latest
+RUN apk add --no-cache postgresql16-client tar && npm install -g npm@^11
 COPY scripts scripts
 ENTRYPOINT ["npm"]
 
