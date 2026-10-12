@@ -806,6 +806,7 @@ export function buildContainer() {
     integration,
     serviceQuality,
     accountingEventConsumer,
+    survey,
   });
 
   return {

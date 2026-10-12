@@ -611,6 +611,49 @@ export class SurveyService {
   // Results (survey.results.read)
   // ===================================================================
 
+  /** System-principal sweep used by the scheduler. No human permission check:
+   * the scheduler already owns execution authorization. Tenant scope remains
+   * explicit, and each expired assignment emits one durable domain event. */
+  async expireDueAssignmentsForTenant(
+    tenantId: string,
+    now: Date = new Date(),
+    limit = 500,
+  ): Promise<{ expired: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5000) {
+      throw new ValidationError("Survey expiry batch limit must be an integer between 1 and 5000");
+    }
+    const assignments = await this.repo.expireDueAssignments(tenantId, now, limit);
+    for (const assignment of assignments) {
+      await this.audit.record({
+        tenantId,
+        actorUserId: null,
+        action: "survey.assignment.expired",
+        entityType: "survey_assignment",
+        entityId: assignment.id,
+        metadata: {
+          surveyVersionId: assignment.surveyVersionId,
+          dueAt: assignment.dueAt?.toISOString() ?? null,
+          respondentUserId: assignment.respondentUserId,
+        },
+      });
+      await this.eventBus.publish({
+        tenantId,
+        eventType: "survey.assignment.expired",
+        entityType: "survey_assignment",
+        entityId: assignment.id,
+        payload: {
+          surveyVersionId: assignment.surveyVersionId,
+          contextEntityType: assignment.contextEntityType,
+          contextEntityId: assignment.contextEntityId,
+          targetUserId: assignment.respondentUserId,
+          dueAt: assignment.dueAt?.toISOString() ?? null,
+        },
+        createdBy: null,
+      });
+    }
+    return { expired: assignments.length };
+  }
+
   async getResult(actor: ActorContext, assignmentId: string) {
     await this.rbac.requirePermission(actor, "survey.results.read");
     const assignment = await this.repo.findAssignmentById(assignmentId);
