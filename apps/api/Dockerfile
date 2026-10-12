@@ -9,10 +9,18 @@ RUN npm ci
 COPY apps/api apps/api
 RUN npm run build -w apps/api
 
-FROM build AS operations
+FROM node:20.18.3-alpine3.21 AS operations
+RUN apk update && apk upgrade --no-cache \
+    && apk add --no-cache postgresql16-client tar && npm install -g npm@^11
 ENV NODE_ENV=production
-RUN apk add --no-cache postgresql16-client tar && npm install -g npm@^11
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY scripts scripts
+COPY apps/api/migrations apps/api/migrations
+COPY apps/api/scripts apps/api/scripts
 ENTRYPOINT ["npm"]
 
 FROM node:20.18.3-alpine3.21 AS runtime
