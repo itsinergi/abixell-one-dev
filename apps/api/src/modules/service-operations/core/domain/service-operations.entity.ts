@@ -11,6 +11,8 @@
  * Configuration + Vertical Service Packs over these same entities.
  */
 
+import type { PoolClient } from "pg";
+
 // ---------------------------------------------------------------------------
 // Service Definition (template) — SO-CORE-001 / SO-CORE-007
 // ---------------------------------------------------------------------------
@@ -113,8 +115,51 @@ export interface WorkOrder {
   /** The ONE link to the generic Workflow Engine — lifecycle STATE lives
    * there, never as a status column here (SO-CORE-004). */
   workflowInstanceId: string | null;
+  /** Cost accumulation (WP-OPS-02) — set once by finalizeCosts; a non-null
+   * costs_finalized_at locks further cost-item adds on this WO. */
+  costsFinalizedAt: Date | null;
+  costsTotal: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ---------------------------------------------------------------------------
+// Work Order cost item (WP-OPS-02 Phase 6) — manual cost entry
+// ---------------------------------------------------------------------------
+
+export type WorkOrderCostType = "material" | "labor" | "overhead";
+
+export interface WorkOrderCostItem {
+  id: string;
+  tenantId: string;
+  workOrderId: string;
+  costType: WorkOrderCostType;
+  description: string | null;
+  quantity: string;
+  unitCost: string;
+  totalCost: string;
+  costCenterId: string | null;
+  recordedBy: string;
+  recordedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AddCostItemInput {
+  costType: WorkOrderCostType;
+  description: string | null;
+  quantity: string;
+  unitCost: string;
+  costCenterId: string | null;
+  recordedBy: string;
+}
+
+export interface FinalizeCostsResult {
+  workOrder: WorkOrder;
+  costsTotal: string;
+  legalEntityId: string;
+  periodId: string | null;
+  outboxEventEmitted: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -308,4 +353,37 @@ export interface ServiceOperationsRepository {
     id: string,
     input: { isCompleted: boolean; note: string | null; userId: string },
   ): Promise<WorkOrderChecklistItem | null>;
+
+  // Work Order cost items (WP-OPS-02 Phase 6)
+  /** DB-guarded insert: returns null when the Work Order is already
+   * finalized (the row-locked EXISTS fence loses the race → 409 in caller). */
+  insertCostItem(
+    tenantId: string,
+    workOrderId: string,
+    input: AddCostItemInput,
+  ): Promise<WorkOrderCostItem | null>;
+  listCostItems(tenantId: string, workOrderId: string): Promise<WorkOrderCostItem[]>;
+  sumCostItems(tenantId: string, workOrderId: string, client?: PoolClient): Promise<string>;
+  /** Row lock for the finalize critical section: SELECT … FOR UPDATE on the
+   * WO row while it is still unfinalized — null when already finalized. */
+  lockWorkOrderForCostFinalize(id: string, client: PoolClient): Promise<WorkOrder | null>;
+  /** Guarded finalize: UPDATE WHERE costs_finalized_at IS NULL — returns null
+   * when a concurrent finalize already won (→ 409 in caller). Sets
+   * costs_finalized_at = now() and costs_total = computed sum. */
+  finalizeWorkOrderCosts(
+    id: string,
+    costsTotal: string,
+    updatedBy: string | null,
+    client?: PoolClient,
+  ): Promise<WorkOrder | null>;
+  /** Tenant-existence checks so a caller cannot attach another tenant's
+   * cost center / legal entity to this tenant's WO. */
+  costCenterBelongsToTenant(tenantId: string, costCenterId: string): Promise<boolean>;
+  legalEntityBelongsToTenant(tenantId: string, legalEntityId: string): Promise<boolean>;
+  /** Transaction wrapper — lets the service coordinate finalize + outbox
+   * atomically without importing pg directly into the application layer. */
+  withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T>;
+  /** Open accounting period covering the DB's CURRENT_DATE — compared in
+   * SQL so the server's timezone cannot shift the decision date. */
+  findOpenAccountingPeriodIdForToday(tenantId: string, legalEntityId: string): Promise<string | null>;
 }

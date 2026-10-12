@@ -1,5 +1,6 @@
-import type { Pool, QueryResultRow } from "pg";
+import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type {
+  AddCostItemInput,
   CreateServiceDefinitionInput,
   CreateWorkOrderInput,
   CreateWorkRequestInput,
@@ -12,6 +13,8 @@ import type {
   WorkOrder,
   WorkOrderAcceptanceToken,
   WorkOrderChecklistItem,
+  WorkOrderCostItem,
+  WorkOrderCostType,
   WorkRequest,
 } from "../domain/service-operations.entity.js";
 
@@ -444,6 +447,119 @@ export class PgServiceOperationsRepository implements ServiceOperationsRepositor
     );
     return r.rows[0] ? toChecklistItem(r.rows[0]) : null;
   }
+
+  // --- Work Order cost items (WP-OPS-02 Phase 6) -----------------------
+
+  async insertCostItem(
+    tenantId: string,
+    workOrderId: string,
+    input: AddCostItemInput,
+  ): Promise<WorkOrderCostItem | null> {
+    // DB-level finalize fence. FOR SHARE conflicts with the FOR UPDATE taken
+    // by finalize: an insert racing a finalize either commits first (and is
+    // counted in the sum) or waits, re-checks the committed row, and inserts
+    // nothing (null → 409 in caller).
+    const r = await this.pool.query(
+      `INSERT INTO work_order_cost_items
+         (tenant_id, work_order_id, cost_type, description, quantity, unit_cost, cost_center_id, recorded_by)
+       SELECT $1,$2,$3,$4,$5,$6,$7,$8
+        WHERE EXISTS (
+          SELECT 1 FROM work_orders
+           WHERE id = $2 AND tenant_id = $1
+             AND costs_finalized_at IS NULL AND deleted_at IS NULL
+           FOR SHARE
+        )
+       RETURNING *`,
+      [tenantId, workOrderId, input.costType, input.description, input.quantity, input.unitCost, input.costCenterId, input.recordedBy],
+    );
+    return r.rows[0] ? toCostItem(r.rows[0]) : null;
+  }
+
+  async listCostItems(tenantId: string, workOrderId: string): Promise<WorkOrderCostItem[]> {
+    const r = await this.pool.query(
+      `SELECT * FROM work_order_cost_items WHERE tenant_id = $1 AND work_order_id = $2 ORDER BY recorded_at, id`,
+      [tenantId, workOrderId],
+    );
+    return r.rows.map(toCostItem);
+  }
+
+  async sumCostItems(tenantId: string, workOrderId: string, client?: PoolClient): Promise<string> {
+    const r = await (client ?? this.pool).query(
+      `SELECT COALESCE(SUM(total_cost), 0) AS total FROM work_order_cost_items
+        WHERE tenant_id = $1 AND work_order_id = $2`,
+      [tenantId, workOrderId],
+    );
+    return String(r.rows[0]?.total ?? "0");
+  }
+
+  async lockWorkOrderForCostFinalize(id: string, client: PoolClient): Promise<WorkOrder | null> {
+    const r = await client.query(
+      `SELECT * FROM work_orders
+        WHERE id = $1 AND costs_finalized_at IS NULL AND deleted_at IS NULL
+        FOR UPDATE`,
+      [id],
+    );
+    return r.rows[0] ? toWorkOrder(r.rows[0]) : null;
+  }
+
+  async finalizeWorkOrderCosts(
+    id: string,
+    costsTotal: string,
+    updatedBy: string | null,
+    client?: PoolClient,
+  ): Promise<WorkOrder | null> {
+    const r = await (client ?? this.pool).query(
+      `UPDATE work_orders
+          SET costs_finalized_at = now(), costs_total = $2, updated_by = $3, updated_at = now()
+        WHERE id = $1 AND costs_finalized_at IS NULL AND deleted_at IS NULL
+        RETURNING *`,
+      [id, costsTotal, updatedBy],
+    );
+    return r.rows[0] ? toWorkOrder(r.rows[0]) : null;
+  }
+
+  async costCenterBelongsToTenant(tenantId: string, costCenterId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `SELECT 1 FROM finance_cost_centers WHERE id = $1 AND tenant_id = $2`,
+      [costCenterId, tenantId],
+    );
+    return r.rowCount === 1;
+  }
+
+  async legalEntityBelongsToTenant(tenantId: string, legalEntityId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `SELECT 1 FROM legal_entities WHERE id = $1 AND tenant_id = $2`,
+      [legalEntityId, tenantId],
+    );
+    return r.rowCount === 1;
+  }
+
+  async withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await fn(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findOpenAccountingPeriodIdForToday(tenantId: string, legalEntityId: string): Promise<string | null> {
+    const r = await this.pool.query(
+      `SELECT id
+         FROM accounting_periods
+        WHERE tenant_id = $1 AND legal_entity_id = $2 AND status = 'open'
+          AND date_from <= CURRENT_DATE AND date_to >= CURRENT_DATE
+        LIMIT 1`,
+      [tenantId, legalEntityId],
+    );
+    return r.rows[0]?.id ?? null;
+  }
 }
 
 // --- Row mappers (snake_case → camelCase) -----------------------------
@@ -530,6 +646,26 @@ function toWorkOrder(r: QueryResultRow): WorkOrder {
     customerRejectedAt: r.customer_rejected_at,
     customerRejectionReason: r.customer_rejection_reason,
     workflowInstanceId: r.workflow_instance_id,
+    costsFinalizedAt: r.costs_finalized_at,
+    costsTotal: r.costs_total,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function toCostItem(r: QueryResultRow): WorkOrderCostItem {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    workOrderId: r.work_order_id,
+    costType: r.cost_type as WorkOrderCostType,
+    description: r.description,
+    quantity: r.quantity,
+    unitCost: r.unit_cost,
+    totalCost: r.total_cost,
+    costCenterId: r.cost_center_id,
+    recordedBy: r.recorded_by,
+    recordedAt: r.recorded_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

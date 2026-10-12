@@ -80,7 +80,8 @@ export type ScmAccountingReadyEventType =
   | "vendor.invoice.approved"
   | "vendor.invoice.payment_approved"
   | "payroll.run_posted"
-  | "work_order.accepted";
+  | "work_order.accepted"
+  | "work_order.cost_accumulated";
 export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
 export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";
@@ -1170,7 +1171,9 @@ export interface CreateScmAccountingReadyEventInput {
   sourceDocumentRevision?: number;
   effectiveAt?: Date;
   currency?: string;
-  amount?: number;
+  /** A numeric string is accepted (bound verbatim by pg) so NUMERIC sums
+   * computed in SQL never pass through a JS double. */
+  amount?: number | string;
   quantity?: number | null;
   unitCost?: number | null;
   accountAssignmentType?: ScmAccountAssignmentType | null;
