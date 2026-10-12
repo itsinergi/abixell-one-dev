@@ -81,7 +81,9 @@ export type ScmAccountingReadyEventType =
   | "vendor.invoice.payment_approved"
   | "payroll.run_posted"
   | "work_order.accepted"
-  | "work_order.cost_accumulated";
+  | "work_order.cost_accumulated"
+  | "work_order.invoiced"
+  | "work_order.invoice_tax";
 export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
 export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";

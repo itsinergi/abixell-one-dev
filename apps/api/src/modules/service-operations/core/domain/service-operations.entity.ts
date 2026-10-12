@@ -163,6 +163,49 @@ export interface FinalizeCostsResult {
 }
 
 // ---------------------------------------------------------------------------
+// Customer invoice (WP-OPS-03 Phase 6) — Billing / AR
+// ---------------------------------------------------------------------------
+
+/** Row shape of `customer_invoices`. One invoice per Work Order; value =
+ * cost × (1 + markup). Money columns are NUMERIC(18,4) strings. */
+export interface CustomerInvoice {
+  id: string;
+  tenantId: string;
+  workOrderId: string;
+  invoiceNumber: string;
+  customerId: string;
+  legalEntityId: string;
+  periodId: string;
+  costBasis: string;
+  markupRate: string;
+  baseAmount: string;
+  isTaxable: boolean;
+  taxRate: string | null;
+  taxAmount: string;
+  totalAmount: string;
+  currency: string;
+  arStatus: string;
+  issuedAt: Date;
+  issuedBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateInvoiceInput {
+  legalEntityId: string;
+  /** Optional per-invoice override of the tenant default markup rate. */
+  markupRate?: string;
+  isTaxable: boolean;
+  /** Required when isTaxable; defaults to 0.11 (PPN) in the service. */
+  taxRate?: string;
+}
+
+export interface CreateInvoiceResult {
+  invoice: CustomerInvoice;
+  outboxEventsEmitted: number;
+}
+
+// ---------------------------------------------------------------------------
 // Work Order acceptance token (WP-OPS-01 Phase 6) — public sign-off link
 // ---------------------------------------------------------------------------
 
@@ -386,4 +429,26 @@ export interface ServiceOperationsRepository {
   /** Open accounting period covering the DB's CURRENT_DATE — compared in
    * SQL so the server's timezone cannot shift the decision date. */
   findOpenAccountingPeriodIdForToday(tenantId: string, legalEntityId: string): Promise<string | null>;
+
+  // Customer invoice (WP-OPS-03 Phase 6)
+  /** Insert one invoice per Work Order. ON CONFLICT (tenant_id,
+   * work_order_id) DO NOTHING returns null on a concurrency duplicate (→
+   * 409 in caller). Money is computed in SQL NUMERIC, never JS float. */
+  insertCustomerInvoice(
+    input: {
+      tenantId: string;
+      workOrderId: string;
+      invoiceNumber: string;
+      customerId: string;
+      legalEntityId: string;
+      periodId: string;
+      costBasis: string;
+      markupRate: string;
+      isTaxable: boolean;
+      taxRate: string | null;
+      issuedBy: string;
+    },
+    client?: PoolClient,
+  ): Promise<CustomerInvoice | null>;
+  findInvoiceByWorkOrder(tenantId: string, workOrderId: string): Promise<CustomerInvoice | null>;
 }

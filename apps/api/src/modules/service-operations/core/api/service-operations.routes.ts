@@ -75,6 +75,13 @@ const costItemSchema = z.object({
   costCenterId: z.string().uuid().nullable().optional(),
 });
 const finalizeCostsSchema = z.object({ legalEntityId: z.string().uuid() });
+const rateSchema = z.string().regex(/^0(\.\d{1,6})?$|^1(\.0{1,6})?$/);
+const createInvoiceSchema = z.object({
+  legalEntityId: z.string().uuid(),
+  markupRate: rateSchema.optional(),
+  isTaxable: z.boolean(),
+  taxRate: rateSchema.optional(),
+});
 
 export function registerServiceOperationsRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.serviceOperations;
@@ -254,5 +261,18 @@ export function registerServiceOperationsRoutes(app: FastifyInstance, container:
     const { id } = request.params as { id: string };
     const body = finalizeCostsSchema.parse(request.body);
     return reply.send(await svc().finalizeCosts(request.actor!, id, body));
+  });
+
+  // --- Customer Invoice / Billing-AR (WP-OPS-03 Phase 6) ----------------
+
+  app.post("/work-orders/:id/create-invoice", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = createInvoiceSchema.parse(request.body);
+    return reply.status(201).send(await svc().createInvoice(request.actor!, id, body));
+  });
+
+  app.get("/work-orders/:id/invoice", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    return reply.send(await svc().getInvoice(request.actor!, id));
   });
 }

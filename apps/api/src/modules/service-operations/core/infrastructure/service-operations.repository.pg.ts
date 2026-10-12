@@ -1,6 +1,7 @@
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type {
   AddCostItemInput,
+  CustomerInvoice,
   CreateServiceDefinitionInput,
   CreateWorkOrderInput,
   CreateWorkRequestInput,
@@ -17,6 +18,7 @@ import type {
   WorkOrderCostType,
   WorkRequest,
 } from "../domain/service-operations.entity.js";
+import { ConflictError } from "../../../../domain/shared-kernel/errors.js";
 
 export class PgServiceOperationsRepository implements ServiceOperationsRepository {
   constructor(private readonly pool: Pool) {}
@@ -560,6 +562,77 @@ export class PgServiceOperationsRepository implements ServiceOperationsRepositor
     );
     return r.rows[0]?.id ?? null;
   }
+
+  // --- Customer invoice (WP-OPS-03 Phase 6) -----------------------------
+
+  async insertCustomerInvoice(
+    input: {
+      tenantId: string;
+      workOrderId: string;
+      invoiceNumber: string;
+      customerId: string;
+      legalEntityId: string;
+      periodId: string;
+      costBasis: string;
+      markupRate: string;
+      isTaxable: boolean;
+      taxRate: string | null;
+      issuedBy: string;
+    },
+    client?: PoolClient,
+  ): Promise<CustomerInvoice | null> {
+    // Money in SQL NUMERIC (no JS float round-trip). `total_amount` is the sum
+    // of the already-rounded parts so it always equals base + tax — the table
+    // CHECK enforces the same identity. Tenant scoping is enforced by the
+    // composite FK plus the WHERE EXISTS guard.
+    // 23505 on `customer_invoices_number_uq` means a concurrent request got the
+    // same invoice number; surface as ConflictError so the caller receives 409.
+    let r;
+    try {
+      r = await (client ?? this.pool).query(
+        `INSERT INTO customer_invoices
+           (tenant_id, work_order_id, invoice_number, customer_id, legal_entity_id, period_id,
+            cost_basis, markup_rate, base_amount, is_taxable, tax_rate, tax_amount, total_amount,
+            issued_by)
+         SELECT $1, $2, $3, $4, $5, $6,
+                $7, $8, base.base_amount, $9, $10, base.tax_amount, base.base_amount + base.tax_amount,
+                $11
+           FROM (SELECT round($7::numeric * (1 + $8::numeric), 4) AS base_amount,
+                        CASE WHEN $9 THEN round(round($7::numeric * (1 + $8::numeric), 4) * $10::numeric, 4)
+                             ELSE 0 END AS tax_amount) base
+          WHERE EXISTS (SELECT 1 FROM work_orders WHERE id = $2 AND tenant_id = $1 AND deleted_at IS NULL)
+         ON CONFLICT (tenant_id, work_order_id) DO NOTHING
+         RETURNING *`,
+        [
+          input.tenantId,
+          input.workOrderId,
+          input.invoiceNumber,
+          input.customerId,
+          input.legalEntityId,
+          input.periodId,
+          input.costBasis,
+          input.markupRate,
+          input.isTaxable,
+          input.taxRate,
+          input.issuedBy,
+        ],
+      );
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError("Invoice number already in use; retry the create");
+      }
+      throw error;
+    }
+    return r.rows[0] ? toCustomerInvoice(r.rows[0]) : null;
+  }
+
+  async findInvoiceByWorkOrder(tenantId: string, workOrderId: string): Promise<CustomerInvoice | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM customer_invoices WHERE tenant_id = $1 AND work_order_id = $2`,
+      [tenantId, workOrderId],
+    );
+    return r.rows[0] ? toCustomerInvoice(r.rows[0]) : null;
+  }
 }
 
 // --- Row mappers (snake_case → camelCase) -----------------------------
@@ -666,6 +739,31 @@ function toCostItem(r: QueryResultRow): WorkOrderCostItem {
     costCenterId: r.cost_center_id,
     recordedBy: r.recorded_by,
     recordedAt: r.recorded_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function toCustomerInvoice(r: QueryResultRow): CustomerInvoice {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    workOrderId: r.work_order_id,
+    invoiceNumber: r.invoice_number,
+    customerId: r.customer_id,
+    legalEntityId: r.legal_entity_id,
+    periodId: r.period_id,
+    costBasis: r.cost_basis,
+    markupRate: r.markup_rate,
+    baseAmount: r.base_amount,
+    isTaxable: r.is_taxable,
+    taxRate: r.tax_rate,
+    taxAmount: r.tax_amount,
+    totalAmount: r.total_amount,
+    currency: r.currency,
+    arStatus: r.ar_status,
+    issuedAt: r.issued_at,
+    issuedBy: r.issued_by,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

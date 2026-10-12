@@ -13,6 +13,8 @@ import type {
 import type { ConfigurationService } from "../../../../application/configuration/configuration.service.js";
 import type { CustomerService } from "../../../../application/customer/customer.service.js";
 import type {
+  CreateInvoiceInput,
+  CreateInvoiceResult,
   FinalizeCostsResult,
   IssueAcceptanceTokenInput,
   MarkCustomerAcceptedInput,
@@ -25,6 +27,7 @@ import type {
   WorkOrderChecklistItem,
   WorkOrderCostItem,
   WorkRequest,
+  CustomerInvoice,
 } from "../domain/service-operations.entity.js";
 import { workRequestState } from "../domain/service-operations.entity.js";
 
@@ -48,7 +51,11 @@ export interface WorkOrderAccountingEventPort {
 }
 
 export interface WorkOrderAccountingEventInput {
-  eventType: "work_order.accepted" | "work_order.cost_accumulated";
+  eventType:
+    | "work_order.accepted"
+    | "work_order.cost_accumulated"
+    | "work_order.invoiced"
+    | "work_order.invoice_tax";
   sourceDocumentType: string;
   sourceDocumentId: string;
   effectiveAt?: Date;
@@ -67,6 +74,9 @@ export interface WorkOrderAccountingEventInput {
 export const WORK_REQUEST_NUMBERING_CODE = "work_request";
 export const WORK_ORDER_NUMBERING_CODE = "work_order";
 export const WORK_ORDER_WORKFLOW_DEFINITION_CODE = "service_operations_work_order";
+export const CUSTOMER_INVOICE_NUMBERING_CODE = "customer_invoice";
+/** PPN default rate (Indonesia PPN 11%). Per-invoice override allowed. */
+const DEFAULT_PPN_RATE = "0.11";
 
 /** Workflow action code → domain event name (SO-CORE-015). The Step graph
  * itself is Tenant Configuration; this map only names the events a Tenant's
@@ -957,6 +967,179 @@ export class ServiceOperationsService {
     };
   }
 
+  // ===================================================================
+  // Customer Invoice / Billing-AR (WP-OPS-03 Phase 6 — FR-FIN-008, E2E-010)
+  // ===================================================================
+
+  /**
+   * Create the customer invoice for a cost-finalized Work Order (one invoice
+   * per WO, DEC-009 chain acceptance → cost → invoice). Value =
+   * costs_total × (1 + markup); markup defaults to the tenant parameter
+   * `service_operations.invoice.default_markup`, overridable per request.
+   * PPN is optional per invoice; the taxable leg posts as its own outbox
+   * event `work_order.invoice_tax` because a posting rule can only carry a
+   * single `AMOUNT` token. No-op when the invoice exists (409).
+   */
+  async createInvoice(actor: ActorContext, workOrderId: string, input: CreateInvoiceInput): Promise<CreateInvoiceResult> {
+    await this.rbac.requirePermission(actor, "service_operations.billing.manage");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    // Reference check first: a foreign/unknown legal entity is a 404
+    // regardless of the WO's cost state.
+    if (!(await this.repo.legalEntityBelongsToTenant(actor.tenantId, input.legalEntityId))) {
+      throw new NotFoundError("Legal entity", input.legalEntityId);
+    }
+    if (!workOrder.costsFinalizedAt) {
+      throw new ConflictError("Costs must be finalized before invoicing this Work Order");
+    }
+    const existing = await this.repo.findInvoiceByWorkOrder(actor.tenantId, workOrder.id);
+    if (existing) {
+      throw new ConflictError("An invoice already exists for this Work Order");
+    }
+
+    const markupRate = input.markupRate ?? (await this.resolveDefaultMarkupRate(actor.tenantId));
+    validateRate(markupRate, "markupRate");
+    let taxRate: string | null = null;
+    if (input.isTaxable) {
+      taxRate = input.taxRate ?? DEFAULT_PPN_RATE;
+      validateRate(taxRate, "taxRate");
+    }
+
+    const periodId = await this.repo.findOpenAccountingPeriodIdForToday(actor.tenantId, input.legalEntityId);
+    if (!periodId) {
+      throw new ConflictError("No open accounting period for the legal entity");
+    }
+
+    const { number: invoiceNumber } = await this.configuration.generateNumberForTenant(
+      actor.tenantId,
+      CUSTOMER_INVOICE_NUMBERING_CODE,
+      actor.userId,
+    );
+
+    const tenantId = actor.tenantId;
+    const result = await this.repo.withTransaction(async (client) => {
+      // ON CONFLICT DO NOTHING: null = a concurrent create already won.
+      const invoice = await this.repo.insertCustomerInvoice(
+        {
+          tenantId,
+          workOrderId: workOrder.id,
+          invoiceNumber,
+          customerId: workOrder.customerId,
+          legalEntityId: input.legalEntityId,
+          periodId,
+          costBasis: workOrder.costsTotal!,
+          markupRate,
+          isTaxable: input.isTaxable,
+          taxRate,
+          issuedBy: actor.userId,
+        },
+        client,
+      );
+      if (!invoice) {
+        throw new ConflictError("An invoice already exists for this Work Order");
+      }
+
+      let outboxEventsEmitted = 0;
+      const payload = {
+        legalEntityId: invoice.legalEntityId,
+        periodId: invoice.periodId,
+        workOrderNumber: workOrder.workOrderNumber,
+        invoiceNumber: invoice.invoiceNumber,
+        sourceDocumentType: "customer_invoice",
+        sourceDocumentId: invoice.id,
+        baseAmount: invoice.baseAmount,
+        taxAmount: invoice.taxAmount,
+        totalAmount: invoice.totalAmount,
+        markupRate: invoice.markupRate,
+        taxRate: invoice.taxRate,
+        isTaxable: invoice.isTaxable,
+      };
+      // Base leg: debit AR 1210 / credit revenue 4100. Idempotent on
+      // `wo-inv:{workOrderId}`.
+      const baseKey = `wo-inv:${workOrder.id}`;
+      if (!(await this.accountingEvents.getEventByIdempotencyKey(tenantId, baseKey, client))) {
+        await this.accountingEvents.createEvent(
+          tenantId,
+          {
+            eventType: "work_order.invoiced",
+            sourceDocumentType: "customer_invoice",
+            sourceDocumentId: invoice.id,
+            currency: invoice.currency,
+            amount: invoice.baseAmount,
+            quantity: 1,
+            idempotencyKey: baseKey,
+            payload,
+            createdBy: actor.userId,
+          },
+          client,
+        );
+        outboxEventsEmitted++;
+      }
+      // Tax leg (PPN Keluaran 2410) only when the amount is postable — the
+      // consumer requires amount > 0, so a 0-rate taxable invoice skips it.
+      if (Number(invoice.taxAmount) > 0) {
+        const taxKey = `wo-inv-tax:${workOrder.id}`;
+        if (!(await this.accountingEvents.getEventByIdempotencyKey(tenantId, taxKey, client))) {
+          await this.accountingEvents.createEvent(
+            tenantId,
+            {
+              eventType: "work_order.invoice_tax",
+              sourceDocumentType: "customer_invoice",
+              sourceDocumentId: invoice.id,
+              currency: invoice.currency,
+              amount: invoice.taxAmount,
+              quantity: 1,
+              idempotencyKey: taxKey,
+              payload,
+              createdBy: actor.userId,
+            },
+            client,
+          );
+          outboxEventsEmitted++;
+        }
+      }
+      return { invoice, outboxEventsEmitted };
+    });
+
+    await this.audit.record({
+      tenantId,
+      actorUserId: actor.userId,
+      action: "work_order.invoiced",
+      entityType: "customer_invoice",
+      entityId: result.invoice.id,
+      metadata: {
+        workOrderId: workOrder.id,
+        invoiceNumber: result.invoice.invoiceNumber,
+        baseAmount: result.invoice.baseAmount,
+        taxAmount: result.invoice.taxAmount,
+        totalAmount: result.invoice.totalAmount,
+      },
+    });
+    return result;
+  }
+
+  /** Read-tier invoice lookup for a Work Order (404 when not yet invoiced). */
+  async getInvoice(actor: ActorContext, workOrderId: string): Promise<CustomerInvoice> {
+    await this.rbac.requirePermission(actor, "service_operations.read");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    const invoice = await this.repo.findInvoiceByWorkOrder(actor.tenantId, workOrder.id);
+    if (!invoice) {
+      throw new NotFoundError("Invoice", workOrder.id);
+    }
+    return invoice;
+  }
+
+  /** Tenant default markup via the parameter bridge — trusted-caller read so
+   * a billing manager does not also need `config.read`. Missing parameter or
+   * value falls back to 0 (cost price). */
+  private async resolveDefaultMarkupRate(tenantId: string): Promise<string> {
+    const value = await this.configuration.getEffectiveParameterValueForTrustedCaller(
+      tenantId,
+      "service_operations.invoice.default_markup",
+    );
+    if (value === null || value === undefined || value === "") return "0";
+    return String(value);
+  }
+
   // --- Public (authless) token surface -------------------------------
 
   /** Minimal summary for the public sign-off page. Reveals nothing beyond
@@ -1253,4 +1436,13 @@ function parseDate(value: string | null | undefined, field: string): Date | null
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new ValidationError(`${field} is not a valid date`);
   return date;
+}
+
+/** Validate a markup/tax rate: decimal string, 0 ≤ rate ≤ 1, at most 6
+ * decimals (matches NUMERIC(8,6)). Rejects negatives, >1, and malformed
+ * strings before they reach SQL. */
+function validateRate(value: string, field: string): void {
+  if (!/^0(\.\d{1,6})?$|^1(\.0{1,6})?$/.test(value)) {
+    throw new ValidationError(`${field} must be a decimal between 0 and 1 with at most 6 decimals`);
+  }
 }
