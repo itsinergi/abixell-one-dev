@@ -412,6 +412,23 @@ export class ConfigurationService {
     return { code, value: parameter.defaultValue, sourceLevel: "product_default" };
   }
 
+  /** Trusted-caller effective parameter read (same posture as
+   * `getNumberingSequenceForTrustedCaller`): a business module needs one
+   * configured value without forcing its managers to hold `config.read`.
+   * Resolves C → S → product default; null when the parameter does not exist. */
+  async getEffectiveParameterValueForTrustedCaller(tenantId: string, code: string): Promise<unknown | null> {
+    const parameter = await this.repo.getAppParameterByCode(code);
+    if (!parameter) return null;
+    const values = await this.repo.listParameterValues(tenantId, parameter.id);
+    const clientValue = values.find(
+      (value) => value.level === "C" && value.clientScopeId === tenantId,
+    );
+    const systemValue = values.find((value) => value.level === "S");
+    if (clientValue) return clientValue.value;
+    if (systemValue) return systemValue.value;
+    return parameter.defaultValue;
+  }
+
   async setParameterValue(
     actor: ActorContext,
     code: string,
