@@ -1,0 +1,215 @@
+name: Deploy to Staging
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Images"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Build workflow run ID (from build-images.yml)"
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_USERNAME: ${{ github.repository_owner }}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+
+    environment:
+      name: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Determine build run ID
+        id: build-run
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            BUILD_RUN_ID=${{ github.event.workflow_run.id }}
+          else
+            BUILD_RUN_ID="${{ inputs.build_run_id }}"
+          fi
+          echo "build_run_id=$BUILD_RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Verify build run provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          RUN_JSON=$(gh api "repos/${{ github.repository }}/actions/runs/${{ steps.build-run.outputs.build_run_id }}")
+          CONCLUSION=$(echo "$RUN_JSON" | jq -r '.conclusion')
+          WORKFLOW_NAME=$(echo "$RUN_JSON" | jq -r '.name')
+          HEAD_BRANCH=$(echo "$RUN_JSON" | jq -r '.head_branch')
+
+          if [[ "$CONCLUSION" != "success" ]]; then
+            echo "ERROR: build run ${{ steps.build-run.outputs.build_run_id }} did not succeed (conclusion: $CONCLUSION)"
+            exit 1
+          fi
+          if [[ "$WORKFLOW_NAME" != "Build and Push Images" ]]; then
+            echo "ERROR: build run is not from the Build and Push Images workflow (got: $WORKFLOW_NAME)"
+            exit 1
+          fi
+          if [[ "$HEAD_BRANCH" != "master" ]] && [[ ! "$HEAD_BRANCH" =~ ^v[0-9] ]]; then
+            echo "ERROR: build run head branch is not master or a version tag (got: $HEAD_BRANCH)"
+            exit 1
+          fi
+          echo "Build run ${{ steps.build-run.outputs.build_run_id }} verified: success, Build and Push Images, $HEAD_BRANCH"
+
+      - name: Download image digests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: image-digests
+          path: digests
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.build-run.outputs.build_run_id }}
+
+      - name: Parse and validate digests
+        id: digests
+        run: |
+          set -eu
+          DIGESTS_FILE="digests/digests.txt"
+          if [[ ! -f "$DIGESTS_FILE" ]]; then
+            echo "ERROR: digests artifact not found"
+            exit 1
+          fi
+
+          # Parse strictly
+          API_DIGEST=$(grep "^API_DIGEST=" "$DIGESTS_FILE" | cut -d= -f2)
+          API_OPS_DIGEST=$(grep "^API_OPERATIONS_DIGEST=" "$DIGESTS_FILE" | cut -d= -f2)
+          WEB_DIGEST=$(grep "^WEB_DIGEST=" "$DIGESTS_FILE" | cut -d= -f2)
+          VERSION=$(grep "^VERSION=" "$DIGESTS_FILE" | cut -d= -f2)
+
+          # Validate format: sha256:<64 hex chars>
+          for name in API_DIGEST API_OPS_DIGEST WEB_DIGEST; do
+            digest=$(eval echo \$$name)
+            if ! [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "ERROR: $name is not a valid sha256 digest: $digest"
+              exit 1
+            fi
+          done
+
+          # Construct full image references
+          API_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api@${API_DIGEST}"
+          API_OPS_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations@${API_OPS_DIGEST}"
+          WEB_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web@${WEB_DIGEST}"
+
+          echo "api_image=$API_IMAGE" >> $GITHUB_OUTPUT
+          echo "api_operations_image=$API_OPS_IMAGE" >> $GITHUB_OUTPUT
+          echo "web_image=$WEB_IMAGE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          echo "Validated digests for release: $VERSION"
+
+      - name: Render staging environment
+        id: render
+        env:
+          STAGING_POSTGRES_PASSWORD: ${{ secrets.STAGING_POSTGRES_PASSWORD }}
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_JWT_ACCESS_SECRET: ${{ secrets.STAGING_JWT_ACCESS_SECRET }}
+          STAGING_PLATFORM_BOOTSTRAP_KEY: ${{ secrets.STAGING_PLATFORM_BOOTSTRAP_KEY }}
+          STAGING_CORS_ORIGINS: ${{ vars.STAGING_CORS_ORIGINS }}
+          STAGING_POSTGRES_USER: ${{ vars.STAGING_POSTGRES_USER }}
+          STAGING_POSTGRES_DB: ${{ vars.STAGING_POSTGRES_DB }}
+          STAGING_COMPOSE_PROJECT_NAME: ${{ vars.STAGING_COMPOSE_PROJECT_NAME }}
+          STAGING_BACKUP_ROOT: ${{ vars.STAGING_BACKUP_ROOT }}
+          STAGING_WEB_BIND_ADDRESS: ${{ vars.STAGING_WEB_BIND_ADDRESS }}
+          STAGING_WEB_PORT: ${{ vars.STAGING_WEB_PORT }}
+        run: |
+          set -eu
+          RENDER_OUTPUT="${{ runner.temp }}/staging.env.tmp"
+          POSTGRES_IMAGE="${{ vars.STAGING_POSTGRES_IMAGE }}"
+          if [[ -z "$POSTGRES_IMAGE" ]]; then
+            echo "ERROR: STAGING_POSTGRES_IMAGE Environment variable not set"
+            exit 1
+          fi
+          node infra/deployment/render-env.mjs \
+            --template infra/deployment/.env.example \
+            --output "$RENDER_OUTPUT" \
+            --release "${{ steps.digests.outputs.version }}" \
+            --api-image "${{ steps.digests.outputs.api_image }}" \
+            --api-operations-image "${{ steps.digests.outputs.api_operations_image }}" \
+            --web-image "${{ steps.digests.outputs.web_image }}" \
+            --postgres-image "$POSTGRES_IMAGE"
+
+          # Validate syntax
+          node infra/deployment/validate-env.mjs "$RENDER_OUTPUT"
+
+          echo "render_output=$RENDER_OUTPUT" >> $GITHUB_OUTPUT
+
+      - name: Configure SSH
+        run: |
+          set -eu
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/abixell-vps
+          chmod 600 ~/.ssh/abixell-vps
+          # Pinned known_hosts from VPS bootstrap (operator-provided during bootstrap)
+          # Record from: ssh-keyscan -H 202.10.46.8 at VPS bootstrap time
+          echo "${{ secrets.VPS_HOST_KEY }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy to staging via SSH
+        id: deploy
+        run: |
+          set -u
+          ENV_FILE="${{ steps.render.outputs.render_output }}"
+
+          # Pipe env file to VPS wrapper via SSH.
+          # The wrapper validates the stdin protocol, atomically replaces the
+          # protected env file, and runs the fixed deploy command. Its exit
+          # code is the deployment outcome.
+          set +e
+          ssh \
+            -i ~/.ssh/abixell-vps \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            -o BatchMode=yes \
+            deploy@202.10.46.8 < "$ENV_FILE"
+          EXIT_CODE=$?
+          set -e
+
+          if [[ $EXIT_CODE -eq 0 ]]; then
+            echo "Deployment succeeded on staging VPS"
+            echo "outcome=success" >> $GITHUB_OUTPUT
+          else
+            echo "Deployment failed (exit code: $EXIT_CODE)"
+            echo "outcome=failed" >> $GITHUB_OUTPUT
+          fi
+          exit $EXIT_CODE
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Shred temp env file
+          if [[ -n "${{ steps.render.outputs.render_output }}" && -f "${{ steps.render.outputs.render_output }}" ]]; then
+            shred -uvfz "${{ steps.render.outputs.render_output }}" 2>/dev/null || rm -f "${{ steps.render.outputs.render_output }}"
+          fi
+          # Remove SSH key
+          rm -f ~/.ssh/abixell-vps
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## Staging Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Run:** [${{ steps.build-run.outputs.build_run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.build-run.outputs.build_run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "**Release:** \`${{ steps.digests.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**API Digest:** \`${{ steps.digests.outputs.api_image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Web Digest:** \`${{ steps.digests.outputs.web_image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Outcome:** ${{ steps.deploy.outputs.outcome }}" >> $GITHUB_STEP_SUMMARY

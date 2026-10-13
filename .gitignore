@@ -34,3 +34,8 @@ backups/
 _*
 .worktrees/
 .pr_body.txt
+
+# Downloaded CI artifacts (image-digests, trivy reports, security scans)
+image-digests-*/
+trivy-reports*/
+security-audit.json

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+#
+# Reference source for the staging VPS forced-command wrapper.
+#
+# This is NOT deployed automatically. An operator installs it once during
+# VPS bootstrap (WP-ENV-02 Wave 6, DEC-ENV-02):
+#
+#   sudo install -o root -g root -m 0755 \
+#     infra/deployment/vps/abixell-staging-deploy-wrapper \
+#     /usr/local/sbin/abixell-staging-deploy-wrapper
+#
+# and the forced SSH command pairs with the deploy key in
+# ~/.ssh/authorized_keys, so arbitrary SSH commands are impossible with that
+# key:
+#
+#   restrict,no-pty,no-agent-forwarding,no-port-forwarding,no-X11-forwarding,\
+#   command="/usr/local/sbin/abixell-staging-deploy-wrapper" ssh-ed25519 AAAA...
+#
+# Protocol: the CD workflow pipes a rendered staging.env (plain bytes, no
+# wrapping) to stdin over SSH. This script never trusts SSH_ORIGINAL_COMMAND;
+# "restrict" plus the forced command already ignore it, but the wrapper
+# refuses defensively anyway.
+#
+# Fixed paths (do not parameterize — fixed paths are what make a forced
+# command safe):
+#   DEPLOY_ROOT      = the pinned deployment tooling checkout on this host
+#   PROTECTED_ENV    = /protected/staging.env
+#   MAX_INPUT_BYTES  = 10 KiB (matches validate-deploy-input.mjs)
+
+set -euo pipefail
+
+if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
+  echo "Arbitrary commands are not accepted on this key." >&2
+  exit 1
+fi
+
+DEPLOY_ROOT="/home/deploy/apps/abixell-one-dev"
+PROTECTED_ENV="/protected/staging.env"
+MAX_INPUT_BYTES=10240
+
+TMP_INPUT="$(mktemp /protected/.staging.env.XXXXXX)"
+trap 'rm -f "$TMP_INPUT"' EXIT
+
+# Read at most MAX_INPUT_BYTES+1 so an oversized payload is detectable
+# without buffering an unbounded amount of attacker-controlled input.
+head -c "$((MAX_INPUT_BYTES + 1))" > "$TMP_INPUT"
+chmod 600 "$TMP_INPUT"
+
+SIZE="$(wc -c < "$TMP_INPUT")"
+if (( SIZE == 0 )); then
+  echo "Deployment input is empty." >&2
+  exit 1
+fi
+if (( SIZE > MAX_INPUT_BYTES )); then
+  echo "Deployment input exceeds ${MAX_INPUT_BYTES} bytes." >&2
+  exit 1
+fi
+
+cd "$DEPLOY_ROOT"
+
+# Validates: no NUL bytes, known variable names only (against
+# .env.example), no duplicates, no leftover template values, every expected
+# variable present.
+node infra/deployment/validate-deploy-input.mjs "$TMP_INPUT"
+
+# Atomic replace: validate-env.mjs runs against the *candidate* file before
+# it becomes /protected/staging.env, so a bad render never touches the file
+# the previous successful deployment is using mid-flight.
+node infra/deployment/validate-env.mjs "$TMP_INPUT"
+
+install -o deploy -g deploy -m 0600 "$TMP_INPUT" "$PROTECTED_ENV"
+
+# `exec` replaces this process, so the EXIT trap above never runs; remove
+# the temp file explicitly now that its content has been copied in place.
+rm -f "$TMP_INPUT"
+trap - EXIT
+
+exec node infra/deployment/deploy.mjs "$PROTECTED_ENV"

@@ -4,6 +4,8 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
+import { parseEnv, isDigest, isTemplateValue } from "./env-utils.mjs";
+
 const envFile = resolve(
   process.argv[2] ??
     process.env.RESTORE_ENV_FILE ??
@@ -45,7 +47,7 @@ for (const name of [
   "RESTORE_WEB_IMAGE",
   "RESTORE_POSTGRES_IMAGE",
 ]) {
-  if (!/@sha256:[a-f0-9]{64}$/.test(values[name])) {
+  if (!isDigest(values[name])) {
     fail(`${name} must use an immutable sha256 digest`);
   }
 }
@@ -64,11 +66,7 @@ if (
   );
 }
 for (const [name, value] of Object.entries(values)) {
-  if (
-    /replace-|change-me|example\.invalid|dev-only|abixell_dev_password/i.test(
-      value,
-    )
-  ) {
+  if (isTemplateValue(value)) {
     fail(`${name} still contains a template/development value`);
   }
 }
@@ -249,28 +247,6 @@ assertRenderedValue(
   "RESTORE_APPLICATION_RELEASE",
 );
 process.stdout.write("Restore environment validation PASS\n");
-
-function parseEnv(text) {
-  const result = {};
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const index = line.indexOf("=");
-    if (index < 1) {
-      fail("Invalid environment line (expected NAME=value)");
-    }
-    const key = line.slice(0, index).trim();
-    let value = line.slice(index + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
-  }
-  return result;
-}
 
 function assertRenderedValue(actual, expected, name) {
   if (actual !== expected) {

@@ -18,6 +18,7 @@
     "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
     "test": "npm run test -w apps/api",
     "test:platform-boundaries": "node --test scripts/platform-boundary-validator.test.mjs",
+    "test:deploy": "node --test infra/deployment/deploy.test.mjs",
     "validate": "npm run validate:platform-boundaries && npm run lint && npm run typecheck && npm run test -w apps/api && npm run build && npm run validate:pwa && npm run validate:security",
     "validate:platform-boundaries": "node scripts/validate-platform-boundaries.mjs",
     "validate:pwa": "node scripts/validate-pwa.mjs",
