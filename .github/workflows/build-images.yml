@@ -175,9 +175,38 @@ jobs:
 
       - name: Sign images (keyless OIDC)
         run: |
-          cosign sign --yes ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api@${{ steps.build-api.outputs.digest }}
-          cosign sign --yes ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations@${{ steps.build-api-operations.outputs.digest }}
-          cosign sign --yes ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web@${{ steps.build-web.outputs.digest }}
+          set -euo pipefail
+
+          API_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api@${{ steps.build-api.outputs.digest }}"
+          API_OPERATIONS_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations@${{ steps.build-api-operations.outputs.digest }}"
+          WEB_IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web@${{ steps.build-web.outputs.digest }}"
+
+          echo "Signing API runtime image..."
+          cosign sign --yes "$API_IMAGE"
+          echo "Signing API operations image..."
+          cosign sign --yes "$API_OPERATIONS_IMAGE"
+          echo "Signing Web image..."
+          cosign sign --yes "$WEB_IMAGE"
+
+          echo "Verifying API runtime signature..."
+          cosign verify \
+            --certificate-identity-regexp '^https://github\.com/itsinergi/abixell-one-dev/\.github/workflows/build-images\.yml@refs/' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$API_IMAGE" > /dev/null
+
+          echo "Verifying API operations signature..."
+          cosign verify \
+            --certificate-identity-regexp '^https://github\.com/itsinergi/abixell-one-dev/\.github/workflows/build-images\.yml@refs/' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$API_OPERATIONS_IMAGE" > /dev/null
+
+          echo "Verifying Web signature..."
+          cosign verify \
+            --certificate-identity-regexp '^https://github\.com/itsinergi/abixell-one-dev/\.github/workflows/build-images\.yml@refs/' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$WEB_IMAGE" > /dev/null
+
+          echo "✓ All signatures verified successfully"
 
       - name: Create digests artifact
         run: |
