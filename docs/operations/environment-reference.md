@@ -39,6 +39,33 @@ This is the generic environment contract for one dedicated Abixell One deploymen
 
 The API container fixes `FILE_STORAGE_ROOT=/data/documents` and mounts a persistent deployment-local document volume there. The operations image contains PostgreSQL 16 clients, `tar`, and the PH-3 scripts. The Compose `backup` service mounts that same document volume read-only and writes complete sets to the protected host `BACKUP_ROOT`; the manifest records `APPLICATION_RELEASE` and the immutable API/operations/Web image identities. Existing deployments stop Web/API write traffic and take a verified-script pre-migration backup labelled with the prior successful release before migration. Restore uses the separate [`compose.restore.yml`](../../infra/deployment/compose.restore.yml) and [`.env.restore.example`](../../infra/deployment/.env.restore.example), its own isolated PostgreSQL named volume and document target, immutable `RESTORE_POSTGRES_IMAGE`/`RESTORE_OPERATIONS_IMAGE`/`RESTORE_API_IMAGE`/`RESTORE_WEB_IMAGE`, exact `RESTORE_APPLICATION_RELEASE`, and mandatory service-DNS health URLs; see the backup/restore runbook.
 
+## Continuous Deployment Environment Rendering (Staging)
+
+On staging, the environment file is **automatically rendered** by GitHub Actions ([`infra/deployment/render-env.mjs`](../../infra/deployment/render-env.mjs)) from:
+
+1. **Template defaults** (`infra/deployment/.env.example`) — safe fallback values for non-secrets (log level, rate limits, scheduler settings, port, etc.).
+2. **Image digests** — supplied by the CD workflow from a successful build artifact (immutable `@sha256:...` references, never tags).
+3. **Release identifier** — supplied by the CD workflow from the build artifact.
+4. **GitHub Environment Secrets** — provisioned by the operator in the `staging` GitHub Environment:
+   - `STAGING_POSTGRES_PASSWORD`
+   - `STAGING_DATABASE_URL`
+   - `STAGING_JWT_ACCESS_SECRET`
+   - `STAGING_PLATFORM_BOOTSTRAP_KEY`
+   - `STAGING_CORS_ORIGINS` (may be a variable instead of a secret if the approved origin is not confidential)
+5. **GitHub Environment Variables** — tunable non-secret config, overriding template defaults:
+   - `STAGING_POSTGRES_USER`
+   - `STAGING_POSTGRES_DB`
+   - `STAGING_COMPOSE_PROJECT_NAME`
+   - `STAGING_POSTGRES_IMAGE` (immutable PostgreSQL digest)
+   - `STAGING_WEB_BIND_ADDRESS`
+   - `STAGING_WEB_PORT`
+   - `STAGING_BACKUP_ROOT`
+   - Any other non-secret variable from the template (e.g., `STAGING_LOG_LEVEL`, `STAGING_RATE_LIMIT_*`, `STAGING_SCHEDULER_DISABLED`)
+
+The rendered environment file is validated locally (`deploy:validate`) before being piped to the VPS over SSH. No secret value is ever printed to workflow logs or artifacts; only the fact that rendering succeeded is reported.
+
+For **production** (manual deployment), copy the `.env.example` template and fill secrets from a secret manager, using the same variable names and format.
+
 ## Secret and file rules
 
 - Keep environment files mode `0600` or stricter on POSIX hosts.

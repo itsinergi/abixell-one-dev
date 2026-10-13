@@ -8,6 +8,16 @@
 | Secrets | Supplied through deployment environment or secret manager; never stored here |
 | Validation commands | `npm run backup`, `npm run restore`, `npm run verify:restore` |
 
+## 0. Deployment auto-recovery vs database restore (do not confuse these)
+
+The staging CD pipeline ([deployment-runbook §6/§9](deployment-runbook.md)) has an automatic **pre-migration recovery** path: if a deployment fails before its migration starts, the automation restarts the prior release's API/Web images against the *unchanged, unmigrated* database. This is image/container recovery, not database recovery — no restore script runs, no database rows change, and no backup set is consulted.
+
+The procedures in this runbook are a separate, always-operator-driven decision:
+
+- Deployment automation **never** invokes `migrate:down` and **never** triggers a restore from this runbook, at any phase, pre- or post-migration.
+- Once a migration has started, a deployment failure is fail-closed: the database has been mutated and only an operator — using the restore procedure below — can decide whether to repair forward or restore from a backup set.
+- A restore from this runbook is always a deliberate, reviewed incident action; it is never a side effect of a failed deployment.
+
 ## 1. Scope and ownership
 
 A recoverable Abixell One backup set includes both:

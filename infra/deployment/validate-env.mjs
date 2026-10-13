@@ -4,6 +4,8 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
+import { parseEnv, isDigest, isTemplateValue } from "./env-utils.mjs";
+
 const envFile = resolve(
   process.argv[2] ??
     process.env.DEPLOYMENT_ENV_FILE ??
@@ -44,11 +46,7 @@ if (
   fail("DEPLOYMENT_ENVIRONMENT must be staging or production");
 }
 for (const [name, value] of Object.entries(values)) {
-  if (
-    /replace-|change-me|example\.invalid|dev-only|abixell_dev_password/i.test(
-      value,
-    )
-  ) {
+  if (isTemplateValue(value)) {
     fail(`${name} still contains a template/development value`);
   }
 }
@@ -157,30 +155,8 @@ process.stdout.write(
   `Deployment environment validation PASS: ${values.DEPLOYMENT_ENVIRONMENT}\n`,
 );
 
-function parseEnv(text) {
-  const result = {};
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const index = line.indexOf("=");
-    if (index < 1) {
-      fail("Invalid environment line (expected NAME=value)");
-    }
-    const key = line.slice(0, index).trim();
-    let value = line.slice(index + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
-  }
-  return result;
-}
-
 function requireDigest(value, name) {
-  if (!/@sha256:[a-f0-9]{64}$/.test(value)) {
+  if (!isDigest(value)) {
     fail(`${name} must use an immutable sha256 digest`);
   }
 }

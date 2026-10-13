@@ -84,6 +84,8 @@ Use the same command as provisioning:
 npm run deploy -- /protected/path/deployment.env
 ```
 
+On staging this command is invoked by the CD pipeline over SSH (§9) rather than typed by an operator; the VPS wrapper runs exactly this invocation against the protected environment file. Manual execution remains the fallback for production or when CD is unavailable.
+
 Migration and permission sync are safe to rerun: `node-pg-migrate up` applies only pending files, and permission sync adds only missing grants. Running the same immutable release again should therefore be an operational no-op apart from health verification.
 
 ## 4. Build, migrate, and start order
@@ -121,26 +123,45 @@ npm run deploy:smoke -- /protected/path/deployment.env
 
 For a remote TLS ingress, set `DEPLOYMENT_SMOKE_ORIGIN=https://approved-host` without placing client-specific hostnames in source.
 
+The smoke command is release-aware. Pass `--expected-release=<APPLICATION_RELEASE>` (or set `APPLICATION_RELEASE` in the environment) and smoke asserts that `/api/health` reports the exact expected release string, not merely `status === "ok"`. This prevents a healthy prior release from satisfying a new deployment's smoke gate: the API exposes `process.env.APPLICATION_RELEASE` at `/api/health`, and a release mismatch fails the deployment even if the old service is otherwise healthy. The automated deploy pipeline always passes `--expected-release` during both initial smoke and pre-migration recovery smoke.
+
 Production acceptance also verifies authentication with a non-demo account, representative read paths, document upload/download, Scheduler job visibility, and no cross-Tenant access.
 
-## 6. Failure and rollback
+## 6. Failure and recovery boundary
+
+The deployment is divided by a **durable migration-started marker**. Before the marker is written, any failure triggers automatic recovery of the prior successful release. Once the marker is written, the deployment is fail-closed: operator decisions drive recovery, never automation.
 
 ### Validation or image pull failure
 
 No running service is changed. Correct the environment/reference and retry.
 
-### Migration failure
+### Pre-migration phase failure (before `migrationStarted` marker)
 
-Stop deployment. Web/API remain quiesced; preserve logs and the pre-migration backup. Do not start the new API and do not automatically run `migrate:down`. Determine whether the failed migration was transactional/no-op; if data changed, use an approved forward repair or PH-3 restore procedure. Reopening the old release is an explicit compatibility/recovery decision, not an automatic step.
+Failures in quiesce, backup, or image verification — before the durable marker is written — trigger automatic pre-migration recovery:
 
-### API/Web startup or smoke failure
+1. Stop the failed deployment.
+2. Read the prior successful deployment state from `last-success.json` (immutable images, release string, timestamps).
+3. Start the prior API/Web images against the existing (unchanged) database.
+4. Wait for services and run smoke expecting the **prior** `APPLICATION_RELEASE`.
+5. If recovery smoke passes, exit with code 1 (indicating recovery occurred, not new deployment success) and record `PRE_MIGRATION_RECOVERY` outcome in the audit log. The previous release remains running.
+6. If recovery fails or prior state is missing, exit fail-closed (operator must intervene).
 
-1. Keep public traffic on the previous healthy release where the ingress/runtime permits.
-2. Inspect service logs without publishing secrets.
-3. If schema compatibility is explicitly backward-compatible, restore the prior immutable API/Web image references and rerun deployment/smoke.
-4. If compatibility is not guaranteed, do not image-roll back blindly. Recover the matching database/documents via the backup/restore runbook or apply an approved forward fix.
+Pre-migration recovery is safe because:
+- The database has not been mutated (no migrations have run).
+- The prior release was recently proven healthy (recorded in `last-success.json`).
+- Web/API write traffic was already quiesced before the failure occurred.
 
-Application rollback and database rollback are different decisions. The automation never invokes `migrate:down`.
+### Migration, permission-sync, or post-migration smoke failure
+
+Once the durable `migrationStarted` marker is written, **no automatic recovery occurs**. Stop the deployment:
+
+1. Web/API are stopped; the database has been migrated and is not automatically rolled back.
+2. Preserve logs, the pre-migration backup, and post-migration state for investigation.
+3. Do not automatically run `migrate:down` (schema reversal is an explicit operator decision, not automation).
+4. Operator determines whether the schema change was transactional (safe to retry), requires a forward repair, or requires a complete restore from the pre-migration backup.
+5. Redeploy the same or a corrected release once fixed.
+
+**Rationale:** After a migration has run and committed, the database state is no longer guaranteed to match any previous release. Rolling back API images blindly against a forward-migrated schema causes data corruption. Schema reversal, if needed, is a separate reviewed decision outside the deployment automation.
 
 ### Scheduler ownership
 
@@ -153,13 +174,48 @@ Scheduler execution is fenced by a renewable PostgreSQL lease, and durable Integ
 - [ ] Environment class (`staging`/`production`) without client secret values.
 - [ ] `deploy:validate` PASS.
 - [ ] Migration head and permission-sync result.
-- [ ] PostgreSQL, API, Web health PASS.
+- [ ] PostgreSQL, API, Web health PASS, with `/api/health` release matching the expected `APPLICATION_RELEASE`.
 - [ ] Repeated same-release deployment PASS/idempotent.
 - [ ] Backup ID and restore-drill evidence.
-- [ ] Rollback/recovery compatibility decision recorded.
+- [ ] Audit log records every phase transition with a valid hash chain and no secret values.
+- [ ] Recovery boundary decision recorded (pre-migration recovery vs post-migration fail-closed) with the `migrationStarted` marker state at the point of any failure.
 - [ ] Operator/reviewer and timestamps.
 - [ ] No Advanced, client-extension, or client-specific deployment customization mixed into the release.
 
 ## 8. Scope and security boundaries
 
 This automation preserves dedicated deployment per client while keeping architecture multi-Tenant-ready. It does not choose a client host, cloud provider, ingress, certificate, data residency, or integration credential. Those values are deployment configuration outside source. SSO/MFA, business modules, Advanced waves, and client extensions are not part of PH-4.
+
+## 9. Continuous deployment over SSH (staging)
+
+Staging deployment is automated via GitHub Actions ([`.github/workflows/deploy-staging.yml`](../../.github/workflows/deploy-staging.yml)), triggered by a successful `Build and Push Images` run on `master` or by manual `workflow_dispatch` with an explicit build run ID. The VPS stays clean: GitHub Actions holds the deploy key and renders the environment; no CI credentials or build tooling live on the VPS.
+
+Protocol:
+
+1. The workflow resolves the triggering (or operator-supplied) build run ID and verifies its provenance via the GitHub API: conclusion `success`, workflow name `Build and Push Images`, and head branch `master` or a version tag. A `workflow_dispatch` input that points at a cancelled, failed, or unrelated run is rejected before any artifact is trusted.
+2. It downloads the `image-digests` artifact from that exact run (pinned `actions/download-artifact` SHA) and strictly parses required digest fields; tags and malformed digests are rejected.
+3. It renders a complete staging environment file ([`infra/deployment/render-env.mjs`](../../infra/deployment/render-env.mjs)) from the `.env.example` template, the parsed digests, and the `staging` GitHub Environment's secrets/variables, then validates it locally (`deploy:validate`) without ever printing its contents.
+4. It configures OpenSSH with a dedicated deploy key (`secrets.DEPLOY_SSH_KEY`) and a **pinned** `known_hosts` entry (`secrets.VPS_HOST_KEY`, captured by the operator during VPS bootstrap via `ssh-keyscan`) — not trust-on-first-use.
+5. It pipes the rendered environment over stdin to a static, forced-command SSH wrapper on the VPS (`/usr/local/sbin/abixell-staging-deploy-wrapper`). The wrapper is the only command the deploy key can execute (`restrict,no-pty,...,command="..."` in `authorized_keys`); arbitrary SSH commands are rejected by SSH itself before the wrapper runs. The wrapper validates the stdin protocol, atomically replaces the protected environment file, and runs the fixed `node infra/deployment/deploy.mjs /protected/staging.env` invocation. Its exit code is the deployment outcome.
+6. The workflow always shreds its local temp environment file and removes the deploy key from the runner, on every exit path.
+7. `concurrency: group: staging-deploy, cancel-in-progress: false` serializes staging deploys; a second trigger while one is running queues rather than racing it.
+
+No secret value is ever written to workflow logs, job summaries, artifacts, or the audit log (see §10); only non-secret release metadata (run ID, commit, release string, image digests, outcome) appears in the job summary.
+
+## 10. Deployment audit log
+
+Every deployment phase transition is appended to a JSON Lines audit log (`deploy-audit.log`, mode `0600`, append-only, never truncated/rotated/deleted by deployment tooling) in the deployment state root. Each record carries:
+
+```json
+{
+  "timestamp": "2026-10-13T12:00:00.000Z",
+  "deploymentId": "<uuid>",
+  "phase": "PRE_MIGRATION_BACKUP",
+  "outcome": "succeeded",
+  "applicationRelease": "...",
+  "previousRecordHash": "...",
+  "recordHash": "..."
+}
+```
+
+Records are hash-chained (`recordHash` depends on the record content and `previousRecordHash`) for tamper evidence, and values matching secret/credential patterns are redacted before a record is written. Key phases: `DEPLOYMENT_ACCEPTED`, `VALIDATING`, `IMAGE_VERIFICATION`, `PRE_FLIGHT_CHECKS_PASSED`, `PULLING_IMAGES`, `SCANNING_IMAGES`, `POSTGRES_READY`, `QUIESCING`, `PRE_MIGRATION_BACKUP`, `MIGRATION_STARTED`, `MIGRATING`, `PERMISSION_SYNC`, `RELEASE_STARTED`, `RELEASE_SMOKE`, `SUCCESS_RECORDED`, `DEPLOYMENT_SUCCEEDED`, `PRE_MIGRATION_RECOVERY`, `DEPLOYMENT_FAILED`. The `migrationStarted` field on failure records distinguishes recoverable pre-migration failures from fail-closed post-migration failures per §6.
