@@ -20,8 +20,12 @@ if (input.length > MAX_INPUT_BYTES) {
 if (input.includes(0)) fail("Deployment input contains a NUL byte");
 
 const template = await readFile(resolve(templatePath), "utf8");
-const expectedNames = parseNames(template, "template");
-const inputNames = parseNames(input.toString("utf8"), "deployment input");
+const expectedNames = parseNames(template, "template", {
+  rejectTemplateValues: false,
+});
+const inputNames = parseNames(input.toString("utf8"), "deployment input", {
+  rejectTemplateValues: true,
+});
 const expected = new Set(expectedNames);
 const received = new Set(inputNames);
 
@@ -37,7 +41,7 @@ if (missing.length) {
 
 process.stdout.write("Deployment input protocol validation PASS\n");
 
-function parseNames(text, source) {
+function parseNames(text, source, { rejectTemplateValues }) {
   const names = [];
   const seen = new Set();
 
@@ -65,7 +69,7 @@ function parseNames(text, source) {
     ) {
       value = value.slice(1, -1);
     }
-    if (isTemplateValue(value)) {
+    if (rejectTemplateValues && isTemplateValue(value)) {
       fail(`${name} still contains a template/development value`);
     }
 
