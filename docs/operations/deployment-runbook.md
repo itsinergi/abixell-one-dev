@@ -195,12 +195,41 @@ Protocol:
 1. The workflow resolves the triggering (or operator-supplied) build run ID and verifies its provenance via the GitHub API: conclusion `success`, workflow name `Build and Push Images`, and head branch `master` or a version tag. A `workflow_dispatch` input that points at a cancelled, failed, or unrelated run is rejected before any artifact is trusted.
 2. It downloads the `image-digests` artifact from that exact run (pinned `actions/download-artifact` SHA) and strictly parses required digest fields; tags and malformed digests are rejected.
 3. It renders a complete staging environment file ([`infra/deployment/render-env.mjs`](../../infra/deployment/render-env.mjs)) from the `.env.example` template, the parsed digests, and the `staging` GitHub Environment's secrets/variables, then validates it locally (`deploy:validate`) without ever printing its contents.
-4. It configures OpenSSH with a dedicated deploy key (`secrets.DEPLOY_SSH_KEY`) and a **pinned** `known_hosts` entry (`secrets.VPS_HOST_KEY`, captured by the operator during VPS bootstrap via `ssh-keyscan`) — not trust-on-first-use.
-5. It pipes the rendered environment over stdin to a static, forced-command SSH wrapper on the VPS (`/usr/local/sbin/abixell-staging-deploy-wrapper`). The wrapper is the only command the deploy key can execute (`restrict,no-pty,...,command="..."` in `authorized_keys`); arbitrary SSH commands are rejected by SSH itself before the wrapper runs. The wrapper validates the stdin protocol, atomically replaces the protected environment file, and runs the fixed `node infra/deployment/deploy.mjs /protected/staging.env` invocation. Its exit code is the deployment outcome.
-6. The workflow always shreds its local temp environment file and removes the deploy key from the runner, on every exit path.
-7. `concurrency: group: staging-deploy, cancel-in-progress: false` serializes staging deploys; a second trigger while one is running queues rather than racing it.
+4. It configures OpenSSH with a dedicated deploy key (`secrets.DEPLOY_SSH_KEY`), a dedicated checkout-sync key (`secrets.DEPLOY_SSH_KEY_SYNC`, step 5 below), and a **pinned** `known_hosts` entry (`secrets.VPS_HOST_KEY`, captured by the operator during VPS bootstrap via `ssh-keyscan`) — not trust-on-first-use. Both keys share that one pinned host entry.
+5. Before touching the deploy wrapper, it syncs the VPS checkout to the exact commit the verified build run was built from (`head_sha`, extracted and format-validated — 40 lowercase hex — from the same provenance check in step 1). It pipes that commit SHA over stdin to a second, separate forced-command script on the VPS (`/usr/local/sbin/abixell-staging-checkout-sync`, [ADR-0025](../adr/0025-vps-checkout-sync.md)), bound to the sync key on its own `authorized_keys` line. The sync script re-validates the SHA independently, confirms the checkout's remote origin is the expected repository, fetches (read-only), confirms the commit is reachable from `origin/master` or tagged by origin, then checks it out (`git checkout --detach`, no `--force`/`--hard`). If this step fails, the workflow fails immediately and the deploy step below never runs — this closes the gap where the deploy wrapper (step 6) would otherwise execute the fixed deploy command against whatever stale code happened to be checked out.
+6. It pipes the rendered environment over stdin to a static, forced-command SSH wrapper on the VPS (`/usr/local/sbin/abixell-staging-deploy-wrapper`). The wrapper is the only command the deploy key can execute (`restrict,no-pty,...,command="..."` in `authorized_keys`); arbitrary SSH commands are rejected by SSH itself before the wrapper runs. The wrapper validates the stdin protocol, atomically replaces the protected environment file, and runs the fixed `node infra/deployment/deploy.mjs /protected/staging.env` invocation against the checkout just synced in step 5. Its exit code is the deployment outcome.
+7. The workflow always shreds its local temp environment file and removes both SSH keys from the runner, on every exit path.
+8. `concurrency: group: staging-deploy, cancel-in-progress: false` serializes staging deploys; a second trigger while one is running queues rather than racing it.
 
-No secret value is ever written to workflow logs, job summaries, artifacts, or the audit log (see §10); only non-secret release metadata (run ID, commit, release string, image digests, outcome) appears in the job summary.
+No secret value is ever written to workflow logs, job summaries, artifacts, or the audit log (see §10); only non-secret release metadata (run ID, source commit, release string, image digests, outcome) appears in the job summary.
+
+### 9.1 VPS bootstrap: installing the checkout-sync script and key
+
+One-time, operator-performed, alongside the existing deploy-wrapper bootstrap. Skipping this step reproduces the gap ADR-0025 closes: the checkout will never update itself.
+
+1. Install the script (reference source: [`infra/deployment/vps/abixell-staging-checkout-sync`](../../infra/deployment/vps/abixell-staging-checkout-sync)):
+
+   ```bash
+   sudo install -o root -g root -m 0755 \
+     infra/deployment/vps/abixell-staging-checkout-sync \
+     /usr/local/sbin/abixell-staging-checkout-sync
+   ```
+
+2. Generate a dedicated key pair for the sync capability (do not reuse the deploy key — sshd binds one forced command per `authorized_keys` line):
+
+   ```bash
+   ssh-keygen -t ed25519 -f abixell-vps-sync -N "" -C "abixell-staging-checkout-sync"
+   ```
+
+3. Add the public half as its own line in the `deploy` user's `authorized_keys`, restricted to the sync script only:
+
+   ```text
+   restrict,no-pty,no-agent-forwarding,no-port-forwarding,no-X11-forwarding,command="/usr/local/sbin/abixell-staging-checkout-sync" ssh-ed25519 AAAA... abixell-staging-checkout-sync
+   ```
+
+4. Store the private half as the `DEPLOY_SSH_KEY_SYNC` secret in the `staging` GitHub Environment. The existing `VPS_HOST_KEY` pinned `known_hosts` secret is reused unchanged — both keys connect to the same host.
+
+5. Verify in isolation before the next scheduled deploy: pipe a known-good commit SHA from `master` over the sync key and confirm `Checkout sync to <sha> PASS`; then pipe a malformed value and a commit not reachable from `master`/tags, and confirm both are rejected without changing the checkout (see ADR-0025 evidence checklist).
 
 ## 10. Deployment audit log
 
