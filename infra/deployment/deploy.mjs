@@ -241,6 +241,7 @@ async function pullImages() {
 }
 
 async function scanImages() {
+  let trivyIgnorePath = null;
   try {
     const images = supplyChainImages();
     process.stdout.write(
@@ -260,16 +261,63 @@ async function scanImages() {
     }
     // Also scan Postgres image for supply-chain gates (excluded from cosign
     // because it's not signed by our org, but Trivy finds unfixed CVEs in
-    // public Postgres images). Scoped ignore file excludes ONLY the known
-    // gosu/Go-stdlib CVE set documented in .trivyignore-postgres-gosu — no
-    // other image uses an ignore file, and no other CVE is excluded here.
+    // public Postgres images). Scoped ignore list excludes ONLY the known
+    // gosu/Go-stdlib CVE set — no other image uses an ignore file, and no
+    // other CVE is excluded here.
+    //
+    // Known upstream issue: /usr/local/bin/gosu, the privilege-drop utility
+    // bundled by the official docker-library/postgres image, is built with an
+    // older Go toolchain (v1.24.6) whose stdlib carries these fixed-upstream
+    // HIGH/CRITICAL CVEs. gosu is a third-party tool packaged by the image
+    // maintainer — it is not PostgreSQL itself, not our application code, and
+    // not the base OS: both the Alpine and Debian package layers scan clean
+    // (0 vulnerabilities) in every tag tested.
+    //
+    // Tracked blocker: re-evaluate when docker-library/postgres ships a gosu
+    // rebuild, or replace gosu via a custom PostgreSQL image.
+    const postgresGosuCVEs = [
+      "CVE-2025-68121",
+      "CVE-2025-61726",
+      "CVE-2025-61729",
+      "CVE-2026-25679",
+      "CVE-2026-27145",
+      "CVE-2026-32280",
+      "CVE-2026-32281",
+      "CVE-2026-32283",
+      "CVE-2026-33811",
+      "CVE-2026-33814",
+      "CVE-2026-33818",
+      "CVE-2026-39820",
+      "CVE-2026-39821",
+      "CVE-2026-39822",
+      "CVE-2026-39836",
+      "CVE-2026-42499",
+      "CVE-2026-42504",
+      "CVE-2026-56853",
+      "CVE-2026-56858",
+      "CVE-2026-56859",
+      "CVE-2026-56860",
+      "CVE-2026-56862",
+      "CVE-2026-78667",
+      "CVE-2026-78669",
+      "CVE-2026-97031",
+    ];
+    trivyIgnorePath = resolve(
+      stateDir,
+      "trivy-postgres-gosu.ignore",
+    );
+    await writeFile(
+      trivyIgnorePath,
+      postgresGosuCVEs.join("\n") + "\n",
+      { mode: 0o600 },
+    );
     await run("trivy", [
       "image",
       "--severity",
       "HIGH,CRITICAL",
       "--ignore-unfixed",
       "--ignorefile",
-      resolve("infra/deployment/.trivyignore-postgres-gosu"),
+      trivyIgnorePath,
       "--exit-code",
       "1",
       "--no-progress",
@@ -283,6 +331,10 @@ async function scanImages() {
       reason: String(error?.message ?? error),
     });
     throw error;
+  } finally {
+    if (trivyIgnorePath) {
+      await rm(trivyIgnorePath, { force: true });
+    }
   }
 }
 
