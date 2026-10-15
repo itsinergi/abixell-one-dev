@@ -133,8 +133,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api:staging
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api:${{ steps.meta.outputs.version }}
-          sbom: true
-          provenance: mode=max
+          sbom: false
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -149,8 +149,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations:staging
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-api-operations:${{ steps.meta.outputs.version }}
-          sbom: true
-          provenance: mode=max
+          sbom: false
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -165,8 +165,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web:staging
             ${{ env.REGISTRY }}/${{ env.REGISTRY_USERNAME }}/abixell-one-web:${{ steps.meta.outputs.version }}
-          sbom: true
-          provenance: mode=max
+          sbom: false
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
