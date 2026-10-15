@@ -243,14 +243,10 @@ async function pullImages() {
 async function scanImages() {
   try {
     const images = supplyChainImages();
-    // Also scan Postgres image for supply-chain gates (excluded from cosign
-    // because it's not signed by our org, but Trivy finds unfixed CVEs in
-    // public Postgres images).
-    const allImages = [...images, env.POSTGRES_IMAGE];
     process.stdout.write(
-      `Scanning ${allImages.length} images via trivy (HIGH,CRITICAL, fixed-only)...\n`,
+      `Scanning ${images.length + 1} images via trivy (HIGH,CRITICAL, fixed-only)...\n`,
     );
-    for (const image of allImages) {
+    for (const image of images) {
       await run("trivy", [
         "image",
         "--severity",
@@ -262,6 +258,23 @@ async function scanImages() {
         image,
       ]);
     }
+    // Also scan Postgres image for supply-chain gates (excluded from cosign
+    // because it's not signed by our org, but Trivy finds unfixed CVEs in
+    // public Postgres images). Scoped ignore file excludes ONLY the known
+    // gosu/Go-stdlib CVE set documented in .trivyignore-postgres-gosu — no
+    // other image uses an ignore file, and no other CVE is excluded here.
+    await run("trivy", [
+      "image",
+      "--severity",
+      "HIGH,CRITICAL",
+      "--ignore-unfixed",
+      "--ignorefile",
+      resolve("infra/deployment/.trivyignore-postgres-gosu"),
+      "--exit-code",
+      "1",
+      "--no-progress",
+      env.POSTGRES_IMAGE,
+    ]);
   } catch (error) {
     await audit.record({
       deploymentId,
