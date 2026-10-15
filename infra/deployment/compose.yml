@@ -3,6 +3,7 @@ name: ${COMPOSE_PROJECT_NAME:?Set a unique dedicated deployment project name}
 services:
   postgres:
     image: ${POSTGRES_IMAGE:?Use an immutable PostgreSQL 16 image digest}
+    platform: linux/amd64
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -21,6 +22,7 @@ services:
 
   migrate:
     image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image digest}
+    platform: linux/amd64
     pull_policy: always
     restart: "no"
     working_dir: /app
@@ -36,6 +38,7 @@ services:
 
   sync-permissions:
     image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image digest}
+    platform: linux/amd64
     pull_policy: always
     restart: "no"
     working_dir: /app
@@ -51,6 +54,7 @@ services:
 
   backup:
     image: ${API_OPERATIONS_IMAGE:?Set immutable API operations image digest}
+    platform: linux/amd64
     pull_policy: always
     restart: "no"
     working_dir: /app
@@ -79,6 +83,7 @@ services:
 
   api:
     image: ${API_IMAGE:?Set immutable API image digest}
+    platform: linux/amd64
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -115,6 +120,7 @@ services:
 
   web:
     image: ${WEB_IMAGE:?Set immutable Web image digest}
+    platform: linux/amd64
     pull_policy: always
     restart: unless-stopped
     depends_on:
