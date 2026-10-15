@@ -48,7 +48,14 @@ if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
 fi
 
 DEPLOY_ROOT="/home/deploy/apps/abixell-one-dev"
-ALLOWED_ORIGIN="https://github.com/itsinergi/abixell-one-dev.git"
+# Exact-match allowlist of acceptable remote.origin.url values for the checkout.
+# The third entry is the ssh_config host alias this VPS uses to clone; see
+# ~deploy/.ssh/config (Host github-abixell-readonly -> HostName github.com).
+ALLOWED_ORIGINS=(
+  "https://github.com/itsinergi/abixell-one-dev.git"
+  "git@github.com:itsinergi/abixell-one-dev.git"
+  "git@github-abixell-readonly:itsinergi/abixell-one-dev.git"
+)
 FETCH_TIMEOUT_SECONDS=180
 
 # Bounded read: never buffer an unbounded amount of caller-controlled input.
@@ -72,10 +79,21 @@ fi
 cd "$DEPLOY_ROOT"
 
 # The remote must be the expected origin; otherwise a mis-cloned or tampered
-# checkout could pull from somewhere else.
+# checkout could pull from somewhere else. Accept only exact known-good forms:
+# the canonical HTTPS URL, the canonical SSH URL, and the host alias this VPS
+# checkout was cloned with (an ssh_config alias that resolves to github.com).
+# Matching is exact — no host is inferred — so a checkout repointed at another
+# host fails even if it carries the same owner/repo path.
 REMOTE_URL="$(git config --get remote.origin.url || true)"
-if [[ "$REMOTE_URL" != "$ALLOWED_ORIGIN" ]]; then
-  echo "Unexpected remote origin: '${REMOTE_URL}' (expected '${ALLOWED_ORIGIN}')." >&2
+ORIGIN_OK=false
+for allowed in "${ALLOWED_ORIGINS[@]}"; do
+  if [[ "$REMOTE_URL" == "$allowed" ]]; then
+    ORIGIN_OK=true
+    break
+  fi
+done
+if [[ "$ORIGIN_OK" != "true" ]]; then
+  echo "Unexpected remote origin: '${REMOTE_URL}' (not in the allowed origin list)." >&2
   exit 1
 fi
 
