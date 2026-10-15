@@ -48,6 +48,7 @@ jobs:
           echo "build_run_id=$BUILD_RUN_ID" >> $GITHUB_OUTPUT
 
       - name: Verify build run provenance
+        id: provenance
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -56,6 +57,7 @@ jobs:
           CONCLUSION=$(echo "$RUN_JSON" | jq -r '.conclusion')
           WORKFLOW_NAME=$(echo "$RUN_JSON" | jq -r '.name')
           HEAD_BRANCH=$(echo "$RUN_JSON" | jq -r '.head_branch')
+          HEAD_SHA=$(echo "$RUN_JSON" | jq -r '.head_sha')
 
           if [[ "$CONCLUSION" != "success" ]]; then
             echo "ERROR: build run ${{ steps.build-run.outputs.build_run_id }} did not succeed (conclusion: $CONCLUSION)"
@@ -69,7 +71,15 @@ jobs:
             echo "ERROR: build run head branch is not master or a version tag (got: $HEAD_BRANCH)"
             exit 1
           fi
-          echo "Build run ${{ steps.build-run.outputs.build_run_id }} verified: success, Build and Push Images, $HEAD_BRANCH"
+          # The commit the VPS checkout is synced to. Must be a full SHA; a
+          # short or malformed value is rejected here so it never reaches the
+          # VPS sync command.
+          if ! [[ "$HEAD_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "ERROR: build run head_sha is not a full commit SHA (got: $HEAD_SHA)"
+            exit 1
+          fi
+          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+          echo "Build run ${{ steps.build-run.outputs.build_run_id }} verified: success, Build and Push Images, $HEAD_BRANCH, $HEAD_SHA"
 
       - name: Download image digests
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -159,10 +169,42 @@ jobs:
           chmod 700 ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/abixell-vps
           chmod 600 ~/.ssh/abixell-vps
+          # Separate key for the checkout-sync forced command (its own
+          # authorized_keys line + command on the VPS, see ADR-0025). Reuses
+          # the same pinned known_hosts entry as the deploy key.
+          echo "${{ secrets.DEPLOY_SSH_KEY_SYNC }}" > ~/.ssh/abixell-vps-sync
+          chmod 600 ~/.ssh/abixell-vps-sync
           # Pinned known_hosts from VPS bootstrap (operator-provided during bootstrap)
           # Record from: ssh-keyscan -H 202.10.46.8 at VPS bootstrap time
           echo "${{ secrets.VPS_HOST_KEY }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+
+      - name: Sync VPS checkout to build commit
+        run: |
+          set -eu
+          BUILD_COMMIT="${{ steps.provenance.outputs.head_sha }}"
+          echo "Syncing VPS checkout to $BUILD_COMMIT..."
+
+          # Pipe the full commit SHA to the checkout-sync forced command on
+          # the VPS. The sync script validates the SHA, verifies it is
+          # reachable from origin/master or an origin tag, and detaches the
+          # checkout there before returning. If this fails, the deploy step
+          # below never runs — the VPS would otherwise execute stale code.
+          set +e
+          ssh \
+            -i ~/.ssh/abixell-vps-sync \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            -o BatchMode=yes \
+            deploy@202.10.46.8 <<< "$BUILD_COMMIT"
+          SYNC_EXIT=$?
+          set -e
+
+          if [[ $SYNC_EXIT -ne 0 ]]; then
+            echo "ERROR: VPS checkout sync failed (exit code: $SYNC_EXIT). Deployment aborted."
+            exit $SYNC_EXIT
+          fi
+          echo "VPS checkout sync PASS."
 
       - name: Deploy to staging via SSH
         id: deploy
@@ -200,8 +242,8 @@ jobs:
           if [[ -n "${{ steps.render.outputs.render_output }}" && -f "${{ steps.render.outputs.render_output }}" ]]; then
             shred -uvfz "${{ steps.render.outputs.render_output }}" 2>/dev/null || rm -f "${{ steps.render.outputs.render_output }}"
           fi
-          # Remove SSH key
-          rm -f ~/.ssh/abixell-vps
+          # Remove SSH keys
+          rm -f ~/.ssh/abixell-vps ~/.ssh/abixell-vps-sync
 
       - name: Job Summary
         if: always()
@@ -210,6 +252,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Build Run:** [${{ steps.build-run.outputs.build_run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.build-run.outputs.build_run_id }})" >> $GITHUB_STEP_SUMMARY
           echo "**Release:** \`${{ steps.digests.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Commit:** \`${{ steps.provenance.outputs.head_sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**API Digest:** \`${{ steps.digests.outputs.api_image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Web Digest:** \`${{ steps.digests.outputs.web_image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Outcome:** ${{ steps.deploy.outputs.outcome }}" >> $GITHUB_STEP_SUMMARY

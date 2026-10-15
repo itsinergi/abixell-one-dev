@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+#
+# Reference source for the staging VPS checkout-sync forced command.
+#
+# Companion to abixell-staging-deploy-wrapper. The deploy wrapper runs the
+# deployment tooling from a fixed checkout on this host; it never updates that
+# checkout (ADR-0024 D5: the wrapper is static and minimal). Without a sync
+# step, the checkout drifts and a deploy silently runs stale code.
+#
+# This script closes that gap with the smallest possible capability: it sets
+# the checkout to ONE pinned commit SHA supplied on stdin. It cannot run
+# arbitrary commands, cannot create refs, cannot push, and accepts no flags.
+#
+# This is NOT deployed automatically. An operator installs it once during VPS
+# bootstrap (same procedure as the deploy wrapper):
+#
+#   sudo install -o root -g root -m 0755 \
+#     infra/deployment/vps/abixell-staging-checkout-sync \
+#     /usr/local/sbin/abixell-staging-checkout-sync
+#
+# It pairs with its OWN SSH key (separate from the deploy key, because sshd
+# binds one forced command per authorized_keys line):
+#
+#   restrict,no-pty,no-agent-forwarding,no-port-forwarding,no-X11-forwarding,\
+#   command="/usr/local/sbin/abixell-staging-checkout-sync" ssh-ed25519 AAAA...
+#
+# Protocol: the CD workflow writes the build run's head_sha (40 lowercase hex
+# chars) to stdin, nothing else. Exit 0 = checkout now at that commit;
+# non-zero = checkout unchanged (or partially fetched, never checked out).
+#
+# Security notes:
+#   - Only commits reachable from origin/master, or pointed at by an origin
+#     tag, are accepted. This mirrors the CD workflow's own build-provenance
+#     rule (head branch is master or a version tag) and prevents syncing the
+#     checkout to an arbitrary side-branch commit.
+#   - Git is forced non-interactive (no credential prompt hang on the VPS).
+#   - Fixed paths; nothing here is parameterized.
+#
+# Residual risk (documented in ADR-0025): whoever holds the sync key can set
+# the checkout to any qualifying commit, and the checkout's code runs as the
+# `deploy` user. Protect this key exactly like the deploy key.
+
+set -euo pipefail
+
+if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
+  echo "Arbitrary commands are not accepted on this key." >&2
+  exit 1
+fi
+
+DEPLOY_ROOT="/home/deploy/apps/abixell-one-dev"
+ALLOWED_ORIGIN="https://github.com/itsinergi/abixell-one-dev.git"
+FETCH_TIMEOUT_SECONDS=180
+
+# Bounded read: never buffer an unbounded amount of caller-controlled input.
+RAW_INPUT="$(head -c 128 || true)"
+TARGET_SHA="$(printf '%s' "$RAW_INPUT" | head -n 1 | tr -d '[:space:]')"
+
+if [[ -z "$TARGET_SHA" ]]; then
+  echo "Checkout sync input is empty." >&2
+  exit 1
+fi
+if ! [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+  echo "Checkout sync input is not a 40-character lowercase hex commit SHA." >&2
+  exit 1
+fi
+
+if [[ ! -d "$DEPLOY_ROOT/.git" ]]; then
+  echo "Deployment checkout not found at $DEPLOY_ROOT." >&2
+  exit 1
+fi
+
+cd "$DEPLOY_ROOT"
+
+# The remote must be the expected origin; otherwise a mis-cloned or tampered
+# checkout could pull from somewhere else.
+REMOTE_URL="$(git config --get remote.origin.url || true)"
+if [[ "$REMOTE_URL" != "$ALLOWED_ORIGIN" ]]; then
+  echo "Unexpected remote origin: '${REMOTE_URL}' (expected '${ALLOWED_ORIGIN}')." >&2
+  exit 1
+fi
+
+# Fail rather than hang if git would otherwise ask for credentials.
+export GIT_TERMINAL_PROMPT=0
+export GIT_ASKPASS=/bin/true
+
+# Fetch refs only; does not move any local branch or the working tree.
+if ! timeout "$FETCH_TIMEOUT_SECONDS" git fetch --tags --prune origin; then
+  echo "git fetch from origin failed or timed out." >&2
+  exit 1
+fi
+
+# The commit must exist locally after the fetch.
+if ! git cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
+  echo "Commit ${TARGET_SHA} is not present in the fetched repository." >&2
+  exit 1
+fi
+
+# The commit must be reachable from origin/master or tagged by origin,
+# mirroring the build-provenance rule the CD workflow enforces.
+REACHABLE_FROM_MASTER=false
+if git merge-base --is-ancestor "$TARGET_SHA" origin/master 2>/dev/null; then
+  REACHABLE_FROM_MASTER=true
+fi
+TAGGED=false
+if [[ -n "$(git tag --points-at "$TARGET_SHA" 2>/dev/null)" ]]; then
+  TAGGED=true
+fi
+if [[ "$REACHABLE_FROM_MASTER" != "true" && "$TAGGED" != "true" ]]; then
+  echo "Commit ${TARGET_SHA} is neither reachable from origin/master nor tagged." >&2
+  exit 1
+fi
+
+# Check out the commit. No --force / --hard: a dirty tracked file blocks the
+# checkout on purpose, so an unexpected local modification fails loudly
+# instead of being silently discarded.
+git -c advice.detachedHead=false checkout --detach "$TARGET_SHA"
+
+RESOLVED_SHA="$(git rev-parse HEAD)"
+if [[ "$RESOLVED_SHA" != "$TARGET_SHA" ]]; then
+  echo "Checkout landed on ${RESOLVED_SHA}, expected ${TARGET_SHA}." >&2
+  exit 1
+fi
+
+echo "Checkout sync to ${TARGET_SHA} PASS"
