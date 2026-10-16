@@ -1,0 +1,12 @@
+[Unit]
+Description=Abixell One Staging - Disk Usage Alert Probe Timer
+Requires=abixell-disk-check.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

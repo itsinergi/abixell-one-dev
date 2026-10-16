@@ -147,6 +147,27 @@ services:
       retries: 12
       start_period: 10s
 
+  # Wave 7 (CP-ENV-07): Dozzle is an optional observability service for
+  # streaming container logs in a browser. It is disabled by default; an
+  # operator uncomments this block to enable it. Access is localhost-only
+  # (127.0.0.1:8081) and reached over an SSH tunnel, never published openly.
+  #
+  # SECURITY: mounting /var/run/docker.sock gives the container read access
+  # equivalent to host root over Docker state. The localhost bind + SSH-tunnel
+  # access pattern is the mitigation; do not expose 8081 to a public interface.
+  #
+  # dozzle:
+  #   image: amir20/dozzle@sha256:replace-with-pinned-digest
+  #   platform: linux/amd64
+  #   pull_policy: always
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   ports:
+  #     - "127.0.0.1:8081:8080"
+  #   networks: [ingress]
+  #   profiles: [observability]
+
 networks:
   backend:
     internal: true

@@ -1,0 +1,12 @@
+[Unit]
+Description=Abixell One Staging - API Health Alert Probe Timer
+Requires=abixell-api-probe.service
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
