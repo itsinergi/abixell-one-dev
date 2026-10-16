@@ -10,12 +10,15 @@
 
 ## 0. Deployment auto-recovery vs database restore (do not confuse these)
 
-The staging CD pipeline ([deployment-runbook §6/§9](deployment-runbook.md)) has an automatic **pre-migration recovery** path: if a deployment fails before its migration starts, the automation restarts the prior release's API/Web images against the *unchanged, unmigrated* database. This is image/container recovery, not database recovery — no restore script runs, no database rows change, and no backup set is consulted.
+The staging CD pipeline ([deployment-runbook §6/§9](deployment-runbook.md)) has two automatic recovery paths. Both are image/container recovery, not database recovery — no restore script runs, no database rows are restored, and no backup set is consulted:
+
+- **Pre-migration:** if a deployment fails before its migration starts, the automation restarts the prior release's API/Web images against the *unchanged, unmigrated* database.
+- **Post-migration (FD-ENV-04 Option A):** if the post-migration smoke check fails, the automation restarts the prior release's API/Web images from `last-success.json` against the *already-migrated* database and re-runs the smoke check once. The audit log records `DEPLOYMENT_FAILED_ROLLBACK_SUCCESS` or `DEPLOYMENT_FAILED_ROLLBACK_FAILED`. Migrations are forward-only, so this is safe only while the prior release stays compatible with the new schema; a `ROLLBACK_FAILED` outcome is an operator incident.
 
 The procedures in this runbook are a separate, always-operator-driven decision:
 
 - Deployment automation **never** invokes `migrate:down` and **never** triggers a restore from this runbook, at any phase, pre- or post-migration.
-- Once a migration has started, a deployment failure is fail-closed: the database has been mutated and only an operator — using the restore procedure below — can decide whether to repair forward or restore from a backup set.
+- Auto-rollback never restores the database. If the migrated database itself must be rolled back, only an operator — using the logical restore (§5) or point-in-time recovery (§7A) below — can decide whether to repair forward or restore.
 - A restore from this runbook is always a deliberate, reviewed incident action; it is never a side effect of a failed deployment.
 
 ## 1. Scope and ownership
@@ -35,12 +38,13 @@ The default assumptions below are a production starting point and must be approv
 
 | Objective | Default assumption | How to meet it |
 |---|---:|---|
-| RPO | 24 hours | At least one successful full logical backup per day. A shorter RPO requires more frequent dumps or provider-native continuous backup/WAL archiving. |
+| RPO (logical sets) | 24 hours | At least one successful full logical backup per day. |
+| RPO (database, staging with WAL archiving) | ≤5 seconds | `archive_timeout=5s` in `infra/deployment/compose.yml` plus a physical base backup and offsite WAL copy (§7A). Covers PostgreSQL only; document bytes still follow the logical-set RPO. |
 | RTO | 4 hours | Pre-provisioned host access, retained matching images, documented secrets, tested restore, and an operator available. |
 | Retention | 30 daily + 12 monthly sets | Enforce in encrypted off-host storage only after upload and checksum verification. |
-| Restore drill | At least quarterly and before a Production Gate | Restore into an isolated database/storage target and retain evidence. |
+| Restore drill | Logical: at least quarterly and before a Production Gate. PITR: monthly (systemd timer, §7A). | Restore into an isolated database/storage target and retain evidence. |
 
-The scripts implement complete logical sets and verification. They do not claim point-in-time recovery. If an approved RPO is shorter than the dump interval, add a PostgreSQL-provider or WAL-archive control and test that path separately.
+The logical scripts (§4–§5) implement complete sets and verification but not point-in-time recovery. Point-in-time recovery of PostgreSQL is a separate path (§7A) built on a physical base backup and archived WAL; it must be drilled separately and does not recover `FILE_STORAGE_ROOT`.
 
 ## 3. Required environment
 
@@ -158,9 +162,9 @@ The direct-target equivalent is `npm run verify:restore`. Verification recompute
 - [ ] Measured time from recovery start to accepted service is within RTO.
 - [ ] Evidence records backup ID, release, environment class, operator/reviewer, timestamps, outcome, and exceptions—never secrets or client free-text.
 
-## 7. Local/staging drill path
+## 7. Local/staging logical restore drill path
 
-A quarterly drill must not point at the live source database or storage path:
+A quarterly logical restore drill must not point at the live source database or storage path:
 
 1. Create a fresh PostgreSQL database, for example `abixell_restore_drill_<date>`.
 2. Create an empty temporary document directory outside the source storage tree.
@@ -171,6 +175,60 @@ A quarterly drill must not point at the live source database or storage path:
 7. Confirm the automated complete active-document checksum passes, then validate a tenant-isolation case manually.
 8. Save evidence before dropping only the disposable drill database and directory.
 
+## 7A. Point-in-time recovery (WAL archiving, staging)
+
+PITR recovers PostgreSQL only, to a chosen UTC timestamp, from a physical base backup plus archived WAL. A logical `pg_dump` set cannot be replayed against WAL, so PITR has its own base backup. All helpers below are reference sources in `infra/deployment/vps/`; none is deployed automatically.
+
+### 7A.1 One-time VPS setup (operator)
+
+1. Create the WAL directory named by `WAL_ROOT` in `/protected/staging.env` (default `/srv/abixell-one/wal`), owned by the container's postgres uid, mode `0700`. Confirm the uid with `docker compose ... exec postgres id -u postgres`.
+2. Redeploy or restart the `postgres` service so `archive_mode=on`, `archive_command`, and `archive_timeout=5s` from `compose.yml` take effect. Confirm with `SHOW archive_mode;` and that new files appear in `WAL_ROOT`.
+3. Install the helpers:
+
+```bash
+sudo install -o root -g root -m 0755 infra/deployment/vps/abixell-pitr-basebackup /usr/local/sbin/abixell-pitr-basebackup
+```
+
+```bash
+sudo install -o root -g root -m 0755 infra/deployment/vps/pitr-restore.sh /usr/local/sbin/abixell-pitr-restore
+```
+
+4. Install and enable the monthly drill timer (commands in the header of `abixell-pitr-drill.service`), and the audit-log rotation `abixell-one-logrotate` into `/etc/logrotate.d/abixell-one`.
+
+### 7A.2 Physical base backup
+
+Run `abixell-pitr-basebackup` as the deploy user. It streams `pg_basebackup -Ft -z -X none` from the running container to `$WAL_ROOT/base/<UTC-ts>/base.tar.gz`, verifies the archive is a readable gzip tar containing `backup_label`, discards it on any failure, and appends a `BASE_BACKUP` line to the deployment audit log.
+
+Take a fresh base backup at least as often as the drill timer fires; WAL replay time grows with the age of the base backup.
+
+### 7A.3 Offsite WAL and base backups
+
+Copy `WAL_ROOT` (WAL segments and `base/`) to the offsite remote `gdrive-abixell:abixell-one-staging-wal/`. Offsite copies fall under the §9 encryption rule. Upload with `rclone copy`/`rclone sync` from the host to the remote; when pulling back for recovery, use `rclone copy` only, never `rclone sync`, so newer local WAL that was not yet uploaded is never deleted.
+
+`WAL_ROOT` grows continuously: with `archive_timeout=5s`, every 5-second window with any write activity closes a full 16 MB segment. Monitor free disk space, and prune WAL older than the oldest base backup you still intend to restore from, only after that WAL is confirmed offsite.
+
+### 7A.4 PITR procedure
+
+```bash
+PITR_RESTORE_CONFIRM=PITR_RESTORE abixell-pitr-restore 2026-10-16T14:30:00Z
+```
+
+The script pulls missing WAL from offsite (skip with `--skip-offsite-sync`), selects the newest base backup, extracts it to a temporary directory, writes `recovery.signal` and the recovery target into `postgresql.auto.conf`, and starts a disposable `POSTGRES_IMAGE` container with `--network=none`. It never touches the live `postgres-data` volume. After replay promotes, it checks the `pgmigrations` head and `tenants` count, appends a `PITR_DRILL` line to the audit log, and removes the container and its data directory whether it succeeds or fails.
+
+The script proves that the database can be recovered to the target time. To serve a recovered database to users, an operator must take a separately reviewed incident decision; that cutover is not automated.
+
+### 7A.5 Monthly drill and CP-ENV-08 evidence
+
+`abixell-pitr-drill.timer` runs `abixell-pitr-restore` on the first day of each month with a target of 10 minutes before run time. CP-ENV-08 evidence for each drill:
+
+- [ ] WAL files present in `WAL_ROOT` and offsite.
+- [ ] `BASE_BACKUP | ... | success` line for the base backup used.
+- [ ] `PITR_DRILL | ... | success | migrationHead=..., tenants=...` line.
+- [ ] Measured RPO: newest archived WAL timestamp versus target time ≤5 seconds.
+- [ ] Logical `verify-restore` PASS from the most recent §7 drill.
+
+Read the outcome with `systemctl status abixell-pitr-drill.service` and `journalctl -u abixell-pitr-drill.service`. A failed drill prints the recovery container's last log lines to the journal.
+
 ## 8. Failure, rollback, and incident handling
 
 - **Backup fails:** keep the application serving unless it was intentionally quiesced, remove only `.partial` output, alert the operator, and retry after correction. Do not delete the previous known-good set.
@@ -178,7 +236,8 @@ A quarterly drill must not point at the live source database or storage path:
 - **Database restore fails:** leave the source untouched, discard the fresh failed target, diagnose, and retry into another fresh target.
 - **Document swap fails:** the restore script attempts to put the prior document directory back. Verify filesystem state manually before starting the API.
 - **Health or data verification fails:** do not direct users to the target. Preserve evidence and either retry from a prior set or repair under an approved incident plan.
-- **Release rollback after deployment:** roll application images back only when their schema compatibility is known. Never automate `migrate:down`; schema reversal or data restore is an explicit reviewed recovery decision.
+- **Release rollback after deployment:** automated post-migration image rollback (FD-ENV-04 Option A, §0) assumes the prior release is compatible with the migrated schema. If it records `DEPLOYMENT_FAILED_ROLLBACK_FAILED`, treat it as an incident. Never automate `migrate:down`; schema reversal or data restore is an explicit reviewed recovery decision.
+- **PITR drill fails:** check `journalctl -u abixell-pitr-drill.service` for the recovery container log. Common causes: no base backup older than the target, a gap in WAL, or replay exceeding the 300-second wait. The live database is unaffected; fix the cause and re-run manually.
 - **Suspected compromise:** do not overwrite evidence. Isolate the deployment, rotate secrets outside source control, restore from a known-good point, and review all external integration endpoints before reopening traffic.
 
 ## 9. Security rules

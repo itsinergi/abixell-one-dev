@@ -30,6 +30,7 @@ const required = [
   "PLATFORM_BOOTSTRAP_KEY",
   "CORS_ORIGINS",
   "BACKUP_ROOT",
+  "WAL_ROOT",
   "APPLICATION_RELEASE",
 ];
 

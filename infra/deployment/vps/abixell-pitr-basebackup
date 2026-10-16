@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#
+# Reference source for the staging VPS physical base-backup helper (Wave 8.3).
+#
+# Creates a physical base backup with `pg_basebackup` inside the running
+# postgres container and streams it to the host as a single gzipped tar. This
+# is the PITR starting point: a logical pg_dump (scripts/backup-postgres.mjs)
+# cannot be replayed against archived WAL, so PITR needs this instead.
+#
+# WAL segments are NOT included here (-X none); they are archived continuously
+# by postgres itself (compose.yml archive_command) and restored from WAL_ROOT.
+#
+# This is NOT deployed automatically. An operator installs it once during
+# VPS bootstrap (WP-ENV-02 Wave 8):
+#
+#   sudo install -o root -g root -m 0755 \
+#     infra/deployment/vps/abixell-pitr-basebackup \
+#     /usr/local/sbin/abixell-pitr-basebackup
+#
+# Usage:
+#   abixell-pitr-basebackup
+#
+# Fixed paths (do not parameterize):
+#   PROTECTED_ENV  = /protected/staging.env
+#   DEPLOY_ROOT    = /home/deploy/apps/abixell-one-dev
+#   Destination    = $WAL_ROOT/base/<UTC-timestamp>/base.tar.gz
+#
+# Returns:
+#   0 on success; 1 on failure. A failed attempt leaves no partial backup dir.
+#
+# Evidence (appended to DEPLOY_AUDIT_LOG):
+#   BASE_BACKUP | <iso-timestamp> | <backup-id> | <bytes> | success | <detail>
+#
+
+set -euo pipefail
+IFS=$'\n\t'
+
+if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
+  echo "Arbitrary commands are not accepted on this key." >&2
+  exit 1
+fi
+
+readonly PROTECTED_ENV="/protected/staging.env"
+readonly DEPLOY_ROOT="/home/deploy/apps/abixell-one-dev"
+
+if [[ ! -f "$PROTECTED_ENV" ]]; then
+  echo "ERROR: Protected environment not found: $PROTECTED_ENV" >&2
+  exit 1
+fi
+
+env_value() {
+  grep -E "^$1=" "$PROTECTED_ENV" | tail -1 | cut -d= -f2- | tr -d "'\""
+}
+
+WAL_ROOT=$(env_value WAL_ROOT)
+POSTGRES_USER_NAME=$(env_value POSTGRES_USER)
+COMPOSE_PROJECT_NAME=$(env_value COMPOSE_PROJECT_NAME)
+
+for pair in "WAL_ROOT:$WAL_ROOT" "POSTGRES_USER:$POSTGRES_USER_NAME" \
+  "COMPOSE_PROJECT_NAME:$COMPOSE_PROJECT_NAME"; do
+  if [[ -z "${pair#*:}" ]]; then
+    echo "ERROR: Could not read ${pair%%:*} from $PROTECTED_ENV" >&2
+    exit 1
+  fi
+done
+
+readonly WAL_ROOT POSTGRES_USER_NAME COMPOSE_PROJECT_NAME
+readonly BACKUP_TS="$(date -u +%Y%m%dT%H%M%SZ)"
+readonly BACKUP_DIR="$WAL_ROOT/base/$BACKUP_TS"
+readonly BACKUP_TAR="$BACKUP_DIR/base.tar.gz"
+readonly DEPLOY_AUDIT_LOG="/var/lock/abixell-one/${COMPOSE_PROJECT_NAME}/deploy-audit.log"
+
+if [[ -e "$BACKUP_DIR" ]]; then
+  echo "ERROR: Backup directory already exists: $BACKUP_DIR" >&2
+  exit 1
+fi
+
+mkdir -p "$BACKUP_DIR"
+cd "$DEPLOY_ROOT"
+
+echo "Creating physical base backup: $BACKUP_TAR" >&2
+
+# `-D -` streams the tar to stdout, so no container-side temp file and no
+# `docker cp` are needed. pg_basebackup's own progress goes to stderr, which
+# is why stdout stays a clean archive. `-X none` keeps WAL out of the base
+# backup; WAL comes from WAL_ROOT at recovery time.
+if ! docker compose \
+  --env-file "$PROTECTED_ENV" \
+  -f "infra/deployment/compose.yml" \
+  exec -T postgres \
+  pg_basebackup -U "$POSTGRES_USER_NAME" -D - -Ft -z -X none > "$BACKUP_TAR"; then
+  echo "ERROR: pg_basebackup failed." >&2
+  rm -rf "$BACKUP_DIR"
+  exit 1
+fi
+
+# Prove the archive is readable and actually contains a base backup before
+# declaring success — a truncated stream must never look like a good backup.
+if ! tar -tzf "$BACKUP_TAR" >/dev/null 2>&1; then
+  echo "ERROR: Base backup archive is not a readable gzip tar; discarding." >&2
+  rm -rf "$BACKUP_DIR"
+  exit 1
+fi
+if ! tar -tzf "$BACKUP_TAR" | grep -qx 'backup_label'; then
+  echo "ERROR: Base backup archive has no backup_label; discarding." >&2
+  rm -rf "$BACKUP_DIR"
+  exit 1
+fi
+
+BACKUP_BYTES=$(wc -c < "$BACKUP_TAR")
+echo "Base backup complete: $BACKUP_DIR ($BACKUP_BYTES bytes)" >&2
+
+mkdir -p "$(dirname "$DEPLOY_AUDIT_LOG")" 2>/dev/null || true
+echo "BASE_BACKUP | $(date -u +%Y-%m-%dT%H:%M:%SZ) | $BACKUP_TS | $BACKUP_BYTES | success | tar contains backup_label" \
+  >> "$DEPLOY_AUDIT_LOG" || {
+    echo "ERROR: base backup stored at $BACKUP_DIR but audit evidence could not be written to $DEPLOY_AUDIT_LOG." >&2
+    exit 1
+  }
+
+echo "Remember to sync offsite: rclone copy $WAL_ROOT/base gdrive-abixell:abixell-one-staging-wal/base" >&2
+echo "(use 'copy', not 'sync': sync would delete older base backups already pruned locally per runbook §7A.3, destroying offsite retention)" >&2
+exit 0

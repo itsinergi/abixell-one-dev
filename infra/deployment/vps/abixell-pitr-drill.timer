@@ -1,0 +1,16 @@
+# Monthly PITR drill schedule for ABIXELL ONE staging.
+#
+# This is NOT deployed automatically. Install alongside
+# abixell-pitr-drill.service; see that unit's header for the commands.
+
+[Unit]
+Description=ABIXELL ONE monthly PITR drill schedule
+
+[Timer]
+OnCalendar=*-*-01 03:30:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+Unit=abixell-pitr-drill.service
+
+[Install]
+WantedBy=timers.target

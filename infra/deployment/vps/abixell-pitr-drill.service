@@ -1,0 +1,43 @@
+# systemd oneshot unit that runs the monthly PITR restore drill.
+#
+# This is NOT deployed automatically. An operator installs it once during VPS
+# bootstrap (WP-ENV-02 Wave 8):
+#
+#   sudo install -o root -g root -m 0644 \
+#     infra/deployment/vps/abixell-pitr-drill.service \
+#     /etc/systemd/system/abixell-pitr-drill.service
+#   sudo install -o root -g root -m 0644 \
+#     infra/deployment/vps/abixell-pitr-drill.timer \
+#     /etc/systemd/system/abixell-pitr-drill.timer
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now abixell-pitr-drill.timer
+#
+# The drill restores into a disposable, network-isolated container and never
+# touches the live deployment's postgres-data volume, so it is safe to run
+# unattended. The PITR_RESTORE_CONFIRM acknowledgement is provided by the
+# unit's environment because the operator is not present to type it; this is
+# acceptable only because recovery targets an isolated throwaway container.
+#
+# The recovery target is "10 minutes ago" at run time, computed by GNU date.
+# A base backup older than that must exist (run abixell-pitr-basebackup at
+# least as often as this timer fires) and WAL must cover the gap.
+
+[Unit]
+Description=ABIXELL ONE monthly PITR (point-in-time recovery) drill
+Documentation=file:///home/deploy/apps/abixell-one-dev/docs/operations/backup-restore-dr-runbook.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+# Acknowledge the destructive-operation guard. Safe here only because the
+# script restores into a disposable isolated container, never the live DB.
+Environment=PITR_RESTORE_CONFIRM=PITR_RESTORE
+# Pull fresh WAL from offsite, then restore to 10 minutes before run time.
+ExecStart=/bin/bash -c '/usr/local/sbin/abixell-pitr-restore "$(date -u -d "10 minutes ago" +%%Y-%%m-%%dT%%H:%%M:%%SZ)"'
+WorkingDirectory=/home/deploy/apps/abixell-one-dev
+# A drill failure is an operational signal, not a service failure to retry.
+# Do not restart automatically; the audit log records the outcome.
+Restart=no
