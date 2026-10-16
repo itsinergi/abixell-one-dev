@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 
 /**
- * Pre-migration automatic recovery: restart the last successful release's
- * API/Web images and confirm it with a release-aware smoke check.
+ * Automatic recovery: restart the last successful release's API/Web images
+ * and confirm it with a release-aware smoke check.
  *
- * Only called when a deployment fails after quiescing the running release
- * but before migrations start (deploy.mjs decides that boundary). Never
- * invoked once the migration-started marker is durable: at that point the
- * schema may have moved forward and image-only recovery is unsafe, so the
- * caller fails closed instead.
+ * Called from two places in deploy.mjs:
+ *
+ *   1. Pre-migration: the deployment failed after quiescing the running
+ *      release but before the migration-started marker was durable. Nothing
+ *      has moved forward yet.
+ *   2. Post-migration (FD-ENV-04 Option A): the deployment failed after
+ *      migrations started. The migration is forward-only and the database is
+ *      never restored — only api/web are replaced with the prior release's
+ *      images, which is why this stays safe with a forward-only schema.
+ *
+ * In both cases only application images change. PostgreSQL data is never
+ * touched by recovery, so the WAL archiving path (Wave 8) and this path never
+ * contend.
  *
  * `last-success.json` is never written or modified by recovery; a failed
  * recovery attempt leaves it exactly as it was.

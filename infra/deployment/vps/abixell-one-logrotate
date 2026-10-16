@@ -1,0 +1,17 @@
+# logrotate configuration for ABIXELL ONE deployment audit logs.
+#
+# This is NOT deployed automatically. An operator installs it once during VPS
+# bootstrap (WP-ENV-02 Wave 6 completion):
+#
+#   sudo install -o root -g root -m 0644 \
+#     infra/deployment/vps/abixell-one-logrotate \
+#     /etc/logrotate.d/abixell-one
+#
+
+/var/lock/abixell-one/*/deploy-audit.log {
+    size 100M
+    rotate 12
+    compress
+    missingok
+    notifempty
+}

@@ -82,8 +82,8 @@ try {
   }
 
   if (needsRecovery) {
-    const recovered = await performRecovery();
-    if (recovered) {
+    const recovery = await performRecovery();
+    if (recovery.recovered) {
       process.stdout.write(
         "Pre-migration recovery PASS; prior release restored.\n",
       );
@@ -127,15 +127,45 @@ try {
       "Deployment completed and smoke verification passed.\n",
     );
   } catch (error) {
+    const reason = String(error?.message ?? error);
+    process.stderr.write(
+      `Deployment failed after migration started: ${reason}\n`,
+    );
     await audit.record({
       deploymentId,
       phase: "DEPLOYMENT_FAILED",
-      outcome: "failed-closed",
-      reason: String(error?.message ?? error),
+      outcome: "rollback-attempt",
+      reason,
       migrationStarted: true,
     });
+
+    // FD-ENV-04 Option A: restore the prior application images from
+    // last-success.json and re-smoke them once. The migration is forward-only
+    // and the database is never restored here; only api/web are replaced.
+    const rollback = await performRecovery();
+    if (rollback.recovered) {
+      await audit.record({
+        deploymentId,
+        phase: "DEPLOYMENT_FAILED_ROLLBACK_SUCCESS",
+        outcome: "prior-release-restored",
+        applicationRelease: rollback.prior.applicationRelease,
+        failedRelease: env.APPLICATION_RELEASE,
+      });
+      process.stderr.write(
+        `Rollback PASS; prior release ${rollback.prior.applicationRelease} restored. Deployment of ${env.APPLICATION_RELEASE} failed.\n`,
+      );
+      process.exit(1);
+    }
+
+    await audit.record({
+      deploymentId,
+      phase: "DEPLOYMENT_FAILED_ROLLBACK_FAILED",
+      outcome: "failed-closed",
+      reason: rollback.reason,
+      failedRelease: env.APPLICATION_RELEASE,
+    });
     fail(
-      `Deployment failed after migration started (fail-closed): ${error.message}`,
+      `Deployment failed after migration started and rollback failed (${rollback.reason}); operator intervention required`,
     );
   }
 } finally {
@@ -567,7 +597,7 @@ async function performRecovery() {
         ]);
       },
     });
-    return recovered.recovered;
+    return recovered;
   } finally {
     if (recoveryEnvWritten) {
       await rm(recoveryEnvFile, { force: true });
