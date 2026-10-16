@@ -181,7 +181,9 @@ PITR recovers PostgreSQL only, to a chosen UTC timestamp, from a physical base b
 
 ### 7A.1 One-time VPS setup (operator)
 
-1. Create the WAL directory named by `WAL_ROOT` in `/protected/staging.env` (default `/srv/abixell-one/wal`), owned by the container's postgres uid, mode `0700`. Confirm the uid with `docker compose ... exec postgres id -u postgres`.
+**Wave 9.3 amendment:** As of Wave 9 (Container & Secrets Hardening, 2026-10-16), `/protected/staging.env` no longer persists on disk after deployment. The `WAL_ROOT` value is now read from `/protected/staging.conf` (plaintext configuration). The step below still applies; just read `WAL_ROOT` from `staging.conf` instead.
+
+1. Create the WAL directory named by `WAL_ROOT` in `/protected/staging.conf` (default `/srv/abixell-one/wal`), owned by the container's postgres uid, mode `0700`. Confirm the uid with `docker compose --env-file /protected/staging.conf -f infra/deployment/compose.yml exec postgres id -u postgres`.
 2. Redeploy or restart the `postgres` service so `archive_mode=on`, `archive_command`, and `archive_timeout=5s` from `compose.yml` take effect. Confirm with `SHOW archive_mode;` and that new files appear in `WAL_ROOT`.
 3. Install the helpers:
 
@@ -247,3 +249,53 @@ Read the outcome with `systemctl status abixell-pitr-drill.service` and `journal
 - Never embed database passwords, bootstrap keys, JWT secrets, client names, domains, or storage credentials in scripts or evidence.
 - Keep backup sets physically/logically separated by dedicated deployment.
 - Test restoration regularly; successful creation alone is not evidence of recoverability.
+
+## 9A. Wave 9.3 — SOPS + age secrets (staging)
+
+**Authority:** WP-ENV-02 Wave 9 (Container & Secrets Hardening), DEC-ENV-SOPS Option A (deploy-user-owned key), ratified 2026-10-16. The CD wrapper (`infra/deployment/vps/abixell-staging-deploy-wrapper`) performs the split/encrypt/merge described here automatically on every deploy; this section covers operator setup and manual procedures the wrapper does not do for you.
+
+### 9A.1 One-time setup (operator)
+
+1. Install `sops` ≥ 3.7 on the VPS (binary release from the SOPS project, placed at `/usr/local/bin/sops`, mode `0755`).
+2. Generate the age key pair once: `age-keygen -o /protected/age-key.txt && chmod 600 /protected/age-key.txt && chown deploy:deploy /protected/age-key.txt`.
+3. Back up the age private key **offsite, in a location separate from the WAL/backup offsite remote** (`gdrive-abixell:...`, §7A.3). This is the two-lock requirement behind DEC-ENV-SOPS Option A: a single storage loss must never compromise both the encrypted secrets and the key that decrypts them.
+4. Migration from a pre-Wave-9 host (one-time, only if `/protected/staging.env` still exists): copy any operator-only variables into the new config file, then remove the old file:
+   ```bash
+   grep -E '^TELEGRAM_' /protected/staging.env >> /protected/staging.conf 2>/dev/null || true
+   chmod 600 /protected/staging.conf
+   shred -u /protected/staging.env
+   ```
+   The next CD deploy writes `staging.conf` and `staging.secrets.enc.env` from the wrapper; `/protected/staging.env` is not recreated.
+5. Reinstall the Wave 9.3 scripts per each file's own install header: `abixell-staging-deploy-wrapper`, `abixell-container-health.sh`, `abixell-api-probe.sh`, `abixell-alert-notify.sh`, `abixell-pitr-basebackup`, `pitr-restore.sh`. All six were changed to read `/protected/staging.conf` instead of the old `staging.env`.
+
+### 9A.2 Manual `docker compose` invocation (operator)
+
+Compose always loads `compose.yml` and interpolates every `${VAR:?}` placeholder, so any manual compose command (debugging, an ad hoc `exec`) needs the full merged environment, not just `staging.conf`. Build it in `/tmp`, use it, then shred it — never leave a merged plaintext file on disk:
+
+```bash
+SOPS_AGE_KEY_FILE=/protected/age-key.txt sops --decrypt --input-type json --output-type dotenv /protected/staging.secrets.enc.env > /tmp/.secrets.$$.env
+cat /protected/staging.conf /tmp/.secrets.$$.env > /tmp/.merged.$$.env
+chmod 600 /tmp/.secrets.$$.env /tmp/.merged.$$.env
+docker compose --env-file /tmp/.merged.$$.env -f infra/deployment/compose.yml <command>
+shred -u /tmp/.secrets.$$.env /tmp/.merged.$$.env
+```
+
+### 9A.3 Verification
+
+```bash
+SOPS_AGE_KEY_FILE=/protected/age-key.txt sops --decrypt /protected/staging.secrets.enc.env
+```
+
+Expect the 4 secret `KEY=value` lines (`POSTGRES_PASSWORD`, `JWT_ACCESS_SECRET`, `PLATFORM_BOOTSTRAP_KEY`, `DATABASE_URL`).
+
+### 9A.4 Rotation
+
+The wrapper re-encrypts the full secret set on every deploy from whatever key `/protected/age-key.txt` currently holds, so rotation is: generate a new age key pair, replace `/protected/age-key.txt` with it, run one CD deploy, then confirm decrypt (§9A.3) with the new key. Keep the old key backed up until the first successful decrypt with the new key is confirmed.
+
+### 9A.5 Key-loss recovery
+
+If `/protected/age-key.txt` is lost with no offsite backup, `staging.secrets.enc.env` is permanently undecryptable. Recovery requires rotating all 4 secret values at their source (PostgreSQL password, JWT secret, bootstrap key, `DATABASE_URL`), generating a fresh age key, and running CD once to re-encrypt. There is no way to recover the old values from the encrypted file without the matching private key.
+
+### 9A.6 Known gap
+
+`sops --output-type dotenv` quotes decrypted values (`KEY="value"`). This only affects the manual decrypt path in §9A.2 — the CD wrapper never re-serializes through that format, so `validate-env.mjs`/`deploy.mjs` never see the quoting. Strip quotes manually if piping the manual decrypt output into a tool that does not expect them.

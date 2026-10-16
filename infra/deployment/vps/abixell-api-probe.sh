@@ -34,7 +34,7 @@ if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
   exit 1
 fi
 
-readonly PROTECTED_ENV="/protected/staging.env"
+readonly PROTECTED_CONF="/protected/staging.conf"
 readonly STATE_DIR="/var/lib/abixell-one"
 readonly DOWN_SINCE_FILE="${STATE_DIR}/api-down-since"
 readonly ALERT_SENT_FILE="${STATE_DIR}/api-alert-sent"
@@ -43,13 +43,14 @@ readonly API_LIVENESS_WINDOW=120  # seconds
 
 mkdir -p "$STATE_DIR"
 
-if [[ ! -f "$PROTECTED_ENV" ]]; then
+if [[ ! -f "$PROTECTED_CONF" ]]; then
   exit 0
 fi
 
-# Extract WEB_PORT from env (used to probe /api/health).
+# Extract WEB_PORT from config (used to probe /api/health). Wave 9.3:
+# WEB_PORT is operational config, not a secret, so it lives in staging.conf.
 env_value() {
-  grep -E "^$1=" "$PROTECTED_ENV" | tail -1 | cut -d= -f2- | tr -d "'\""
+  grep -E "^$1=" "$PROTECTED_CONF" | tail -1 | cut -d= -f2- | tr -d "'\""
 }
 WEB_PORT=$(env_value WEB_PORT || echo "8080")
 readonly WEB_URL="http://127.0.0.1:${WEB_PORT}"

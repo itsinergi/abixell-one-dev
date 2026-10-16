@@ -20,9 +20,14 @@
 # Usage:
 #   abixell-pitr-basebackup
 #
+# Wave 9.3: reads /protected/staging.conf (operational config only, no secrets)
+# and reaches postgres with plain `docker exec` against a container selected by
+# Compose label. `docker compose exec` is not used because Compose always loads
+# and interpolates compose.yml, whose `${VAR:?}` secrets this helper has no
+# reason to hold.
+#
 # Fixed paths (do not parameterize):
-#   PROTECTED_ENV  = /protected/staging.env
-#   DEPLOY_ROOT    = /home/deploy/apps/abixell-one-dev
+#   PROTECTED_CONF = /protected/staging.conf
 #   Destination    = $WAL_ROOT/base/<UTC-timestamp>/base.tar.gz
 #
 # Returns:
@@ -40,16 +45,15 @@ if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
   exit 1
 fi
 
-readonly PROTECTED_ENV="/protected/staging.env"
-readonly DEPLOY_ROOT="/home/deploy/apps/abixell-one-dev"
+readonly PROTECTED_CONF="/protected/staging.conf"
 
-if [[ ! -f "$PROTECTED_ENV" ]]; then
-  echo "ERROR: Protected environment not found: $PROTECTED_ENV" >&2
+if [[ ! -f "$PROTECTED_CONF" ]]; then
+  echo "ERROR: Protected config not found: $PROTECTED_CONF" >&2
   exit 1
 fi
 
 env_value() {
-  grep -E "^$1=" "$PROTECTED_ENV" | tail -1 | cut -d= -f2- | tr -d "'\""
+  grep -E "^$1=" "$PROTECTED_CONF" | tail -1 | cut -d= -f2- | tr -d "'\""
 }
 
 WAL_ROOT=$(env_value WAL_ROOT)
@@ -59,7 +63,7 @@ COMPOSE_PROJECT_NAME=$(env_value COMPOSE_PROJECT_NAME)
 for pair in "WAL_ROOT:$WAL_ROOT" "POSTGRES_USER:$POSTGRES_USER_NAME" \
   "COMPOSE_PROJECT_NAME:$COMPOSE_PROJECT_NAME"; do
   if [[ -z "${pair#*:}" ]]; then
-    echo "ERROR: Could not read ${pair%%:*} from $PROTECTED_ENV" >&2
+    echo "ERROR: Could not read ${pair%%:*} from $PROTECTED_CONF" >&2
     exit 1
   fi
 done
@@ -76,7 +80,20 @@ if [[ -e "$BACKUP_DIR" ]]; then
 fi
 
 mkdir -p "$BACKUP_DIR"
-cd "$DEPLOY_ROOT"
+
+# Select the running postgres container of this Compose project by label
+# rather than by name, so a custom COMPOSE_PROJECT_NAME never breaks this.
+POSTGRES_CONTAINER_ID=$(docker ps \
+  --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+  --filter "label=com.docker.compose.service=postgres" \
+  --filter "status=running" \
+  --format '{{.ID}}' | head -1)
+
+if [[ -z "$POSTGRES_CONTAINER_ID" ]]; then
+  echo "ERROR: No running postgres container for project $COMPOSE_PROJECT_NAME." >&2
+  rm -rf "$BACKUP_DIR"
+  exit 1
+fi
 
 echo "Creating physical base backup: $BACKUP_TAR" >&2
 
@@ -84,10 +101,7 @@ echo "Creating physical base backup: $BACKUP_TAR" >&2
 # `docker cp` are needed. pg_basebackup's own progress goes to stderr, which
 # is why stdout stays a clean archive. `-X none` keeps WAL out of the base
 # backup; WAL comes from WAL_ROOT at recovery time.
-if ! docker compose \
-  --env-file "$PROTECTED_ENV" \
-  -f "infra/deployment/compose.yml" \
-  exec -T postgres \
+if ! docker exec "$POSTGRES_CONTAINER_ID" \
   pg_basebackup -U "$POSTGRES_USER_NAME" -D - -Ft -z -X none > "$BACKUP_TAR"; then
   echo "ERROR: pg_basebackup failed." >&2
   rm -rf "$BACKUP_DIR"

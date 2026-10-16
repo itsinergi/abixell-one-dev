@@ -97,6 +97,16 @@ services:
     platform: linux/amd64
     pull_policy: always
     restart: unless-stopped
+    # Wave 9 (Container Hardening): cap_drop removes all capabilities;
+    # no-new-privileges prevents child processes from gaining more privileges;
+    # read_only prevents persistent malware writes; tmpfs provides a writable /tmp
+    # without persisting to rootfs. Mitigates privilege escalation and container escape.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -134,6 +144,18 @@ services:
     platform: linux/amd64
     pull_policy: always
     restart: unless-stopped
+    # Wave 9 (Container Hardening): cap_drop removes all capabilities;
+    # no-new-privileges prevents child processes from gaining more privileges;
+    # read_only prevents persistent malware writes; tmpfs provides writable
+    # /tmp, /var/cache/nginx, and /var/run without persisting to rootfs.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
     depends_on:
       api:
         condition: service_healthy

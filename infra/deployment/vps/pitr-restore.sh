@@ -24,7 +24,7 @@
 #   --skip-offsite-sync    Skip the rclone WAL pull (local WAL already current).
 #
 # Fixed paths (do not parameterize):
-#   PROTECTED_ENV   = /protected/staging.env (read-only; sourced for
+#   PROTECTED_CONF  = /protected/staging.conf (read-only; read for
 #                     WAL_ROOT, POSTGRES_IMAGE, POSTGRES_USER)
 #   DEPLOY_AUDIT_LOG = /var/lock/abixell-one/<COMPOSE_PROJECT_NAME>/deploy-audit.log
 #   Base backups     = $WAL_ROOT/base/<UTC-compact-ts>/base.tar.gz
@@ -51,7 +51,7 @@ if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
   exit 1
 fi
 
-readonly PROTECTED_ENV="/protected/staging.env"
+readonly PROTECTED_CONF="/protected/staging.conf"
 
 if [[ "${PITR_RESTORE_CONFIRM:-}" != "PITR_RESTORE" ]]; then
   echo "ERROR: Set PITR_RESTORE_CONFIRM=PITR_RESTORE to acknowledge this destructive operation." >&2
@@ -66,8 +66,8 @@ fi
 readonly TARGET_TIMESTAMP="$1"
 readonly OFFSITE_SYNC="${2:-}"
 
-if [[ ! -f "$PROTECTED_ENV" ]]; then
-  echo "ERROR: Protected environment file not found: $PROTECTED_ENV" >&2
+if [[ ! -f "$PROTECTED_CONF" ]]; then
+  echo "ERROR: Protected config file not found: $PROTECTED_CONF" >&2
   exit 1
 fi
 
@@ -80,10 +80,11 @@ if [[ -n "$OFFSITE_SYNC" && "$OFFSITE_SYNC" != "--skip-offsite-sync" ]]; then
   exit 1
 fi
 
-# Pull only the variables this script needs; do not export the whole file
-# (it also holds JWT/DB secrets this script has no reason to hold).
+# Pull only the variables this script needs. Wave 9.3 keeps credentials out of
+# this file entirely, but the read-only, no-export pattern is retained: the
+# script has no reason to hold more than it uses.
 env_value() {
-  grep -E "^$1=" "$PROTECTED_ENV" | tail -1 | cut -d= -f2- | tr -d "'\""
+  grep -E "^$1=" "$PROTECTED_CONF" | tail -1 | cut -d= -f2- | tr -d "'\""
 }
 WAL_ROOT=$(env_value WAL_ROOT)
 POSTGRES_IMAGE=$(env_value POSTGRES_IMAGE)
@@ -95,7 +96,7 @@ for pair in "WAL_ROOT:$WAL_ROOT" "POSTGRES_IMAGE:$POSTGRES_IMAGE" \
   "POSTGRES_USER:$POSTGRES_USER_NAME" "POSTGRES_DB:$POSTGRES_DB_NAME" \
   "COMPOSE_PROJECT_NAME:$COMPOSE_PROJECT_NAME"; do
   if [[ -z "${pair#*:}" ]]; then
-    echo "ERROR: Could not read ${pair%%:*} from $PROTECTED_ENV" >&2
+    echo "ERROR: Could not read ${pair%%:*} from $PROTECTED_CONF" >&2
     exit 1
   fi
 done

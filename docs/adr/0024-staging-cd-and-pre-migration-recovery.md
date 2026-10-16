@@ -89,6 +89,8 @@ The VPS does not hold build credentials or rendering logic. A static, forced-com
 5. Wrapper invokes `node infra/deployment/deploy.mjs /protected/staging.env`.
 6. Exit code is the deployment outcome; cleanup on all paths.
 
+> **Wave 9.3 amendment (2026-10-16):** steps 4–5 are superseded. The wrapper now splits the validated env into `/protected/staging.secrets.enc.env` (SOPS+age, 4 secrets) and `/protected/staging.conf` (plaintext config, operator-only keys preserved), passes an ephemeral `/tmp` plaintext copy (mode 0600) to `deploy.mjs`, and shreds it after deploy exits. `/protected/staging.env` is no longer written. See the wrapper header and `docs/operations/backup-restore-dr-runbook.md` §9A.
+
 **Rationale:** The VPS is a runtime host, not a build/configuration host. All logic (provenance check, environment rendering, validation) runs in GitHub Actions (trusted CI context). The VPS wrapper is minimal, static, and cannot be updated during a deployment.
 
 ## Alternatives Considered
