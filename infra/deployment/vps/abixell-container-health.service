@@ -1,0 +1,11 @@
+[Unit]
+Description=Abixell One Staging - Container Health Alert Probe
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/abixell-container-health
+StandardOutput=journal
+StandardError=journal

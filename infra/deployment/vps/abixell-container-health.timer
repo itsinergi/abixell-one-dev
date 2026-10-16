@@ -1,0 +1,12 @@
+[Unit]
+Description=Abixell One Staging - Container Health Alert Probe Timer
+Requires=abixell-container-health.service
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=60s
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
