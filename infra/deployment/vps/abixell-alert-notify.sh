@@ -2,9 +2,14 @@
 #
 # Reference source for the staging VPS alert notification helper.
 #
-# Reads TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID from /protected/staging.env.
+# Reads TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID from /protected/staging.conf.
 # If either is unset, degrades gracefully to stderr log-only (no crash).
 # If both are set, sends a Telegram message via sendMessage API.
+#
+# Wave 9.3: staging.conf holds operational config only (no secrets covered by
+# SOPS). Telegram credentials live here, not in the encrypted secrets file,
+# because they are operator-supplied and must survive every CD deploy without
+# requiring re-encryption (see abixell-staging-deploy-wrapper header).
 #
 # This is NOT deployed automatically. An operator installs it once during
 # VPS bootstrap (WP-ENV-02 Wave 7, CP-ENV-07):
@@ -23,11 +28,11 @@
 #   0 on success or graceful degradation (no creds → log only);
 #   1 on Telegram API error.
 #
-# Operator setup (Wave 7):
+# Operator setup (Wave 7; path updated Wave 9.3):
 #   1. Get Telegram bot token from BotFather (t.me/BotFather).
 #   2. Get chat ID by adding bot to a Telegram channel, sending a message,
 #      and reading the update at https://api.telegram.org/bot<TOKEN>/getUpdates
-#   3. Add to /protected/staging.env:
+#   3. Add to /protected/staging.conf:
 #      TELEGRAM_BOT_TOKEN=<token>
 #      TELEGRAM_CHAT_ID=<chat-id>
 #   4. Reload: systemctl reload abixell-disk-check.timer (or run probes manually).
@@ -46,18 +51,18 @@ if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
   exit 1
 fi
 
-readonly PROTECTED_ENV="/protected/staging.env"
+readonly PROTECTED_CONF="/protected/staging.conf"
 readonly MESSAGE="${1:-No message provided}"
 readonly TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-if [[ ! -f "$PROTECTED_ENV" ]]; then
-  echo "[ALERT] $TIMESTAMP | $MESSAGE | env unavailable" >&2
+if [[ ! -f "$PROTECTED_CONF" ]]; then
+  echo "[ALERT] $TIMESTAMP | $MESSAGE | config unavailable" >&2
   exit 0
 fi
 
-# Extract env vars without sourcing the whole file (it contains secrets).
+# Extract config vars without sourcing the whole file.
 env_value() {
-  grep -E "^$1=" "$PROTECTED_ENV" | tail -1 | cut -d= -f2- | tr -d "'\""
+  grep -E "^$1=" "$PROTECTED_CONF" | tail -1 | cut -d= -f2- | tr -d "'\""
 }
 
 TELEGRAM_BOT_TOKEN=$(env_value TELEGRAM_BOT_TOKEN 2>/dev/null || echo "")

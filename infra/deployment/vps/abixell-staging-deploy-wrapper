@@ -21,11 +21,40 @@
 # "restrict" plus the forced command already ignore it, but the wrapper
 # refuses defensively anyway.
 #
+# Wave 9.3 (Container & Secrets Hardening) — Hybrid split design:
+#
+#   After validate-env.mjs PASS, the wrapper splits the validated env into:
+#     - Secrets (4 vars)  → SOPS+age encrypted → /protected/staging.secrets.enc.env
+#     - Config (rest)     → plaintext           → /protected/staging.conf
+#   deploy.mjs receives the full plaintext in a short-lived temp file
+#   (/tmp/staging.env.<PID>), then that file is shredded after deploy exits.
+#   /protected/staging.env no longer persists on disk after Wave 9 is in place.
+#
+#   Steady-state on disk after deploy:
+#     /protected/staging.conf           (config, non-secret, mode 0600)
+#     /protected/staging.secrets.enc.env (SOPS-encrypted secrets, mode 0600)
+#     /protected/age-key.txt            (age private key, mode 0600, deploy-owned)
+#     /protected/staging.env            → NOT PRESENT (no longer written)
+#
+#   Operator-added variables (e.g. TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+#   that live in staging.conf but are NOT in the CD-rendered env are preserved
+#   across deploys: the write merges new config with existing operator-only
+#   keys, so Telegram credentials survive without re-encryption.
+#
+# Wave 9 VPS pre-requisites (must be in place before reinstalling this wrapper):
+#   - sops ≥ 3.7 installed at /usr/local/bin/sops (or on PATH)
+#   - age-keygen run once: age-keygen -o /protected/age-key.txt
+#   - chmod 600 /protected/age-key.txt && chown deploy:deploy /protected/age-key.txt
+#   Documented in CP_ENV_09_OPERATOR_CHECKLIST.md §A and runbook §9A.
+#
 # Fixed paths (do not parameterize — fixed paths are what make a forced
 # command safe):
-#   DEPLOY_ROOT      = the pinned deployment tooling checkout on this host
-#   PROTECTED_ENV    = /protected/staging.env
-#   MAX_INPUT_BYTES  = 10 KiB (matches validate-deploy-input.mjs)
+#   DEPLOY_ROOT     = the pinned deployment tooling checkout on this host
+#   PROTECTED_CONF  = /protected/staging.conf   (config, plaintext)
+#   PROTECTED_ENC   = /protected/staging.secrets.enc.env (SOPS-encrypted)
+#   AGE_KEY_FILE    = /protected/age-key.txt    (age private key)
+#   MAX_INPUT_BYTES = 10 KiB (matches validate-deploy-input.mjs)
+#   SECRET_NAMES    = the four variable names classified as secrets
 
 set -euo pipefail
 
@@ -35,16 +64,57 @@ if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
 fi
 
 DEPLOY_ROOT="/home/deploy/apps/abixell-one-dev"
-PROTECTED_ENV="/protected/staging.env"
+PROTECTED_CONF="/protected/staging.conf"
+PROTECTED_ENC="/protected/staging.secrets.enc.env"
+AGE_KEY_FILE="/protected/age-key.txt"
 MAX_INPUT_BYTES=10240
 
+# Exactly four variables are classified as secrets (see Hybrid split design
+# above). All other env vars are operational config written to PROTECTED_CONF
+# in plaintext. If a new secret variable is added to .env.example, add its
+# name here and re-run age-keygen + re-encrypt staging.secrets.enc.env.
+SECRET_NAMES=(POSTGRES_PASSWORD JWT_ACCESS_SECRET PLATFORM_BOOTSTRAP_KEY DATABASE_URL)
+
+# Build an ERE pattern that matches any SECRET_NAMES var at start of a line.
+SECRET_PATTERN="^($(IFS='|'; echo "${SECRET_NAMES[*]}"))="
+
+# Pre-flight: verify sops and age key exist before consuming any stdin input.
+# Fail loudly so a missing Wave 9 prerequisite is immediately obvious rather
+# than silently skipping encryption (which would be a security hole).
+if ! command -v sops &>/dev/null; then
+  echo "ERROR: sops not found. Install sops ≥ 3.7 before using this wrapper (Wave 9 VPS prerequisite)." >&2
+  exit 1
+fi
+if [[ ! -f "$AGE_KEY_FILE" ]]; then
+  echo "ERROR: age key file not found: $AGE_KEY_FILE (Wave 9 prerequisite; run age-keygen)." >&2
+  exit 1
+fi
+AGE_PUBKEY=$(awk '/^# public key:/ {print $4; exit}' "$AGE_KEY_FILE")
+if [[ -z "$AGE_PUBKEY" ]]; then
+  echo "ERROR: Could not read age public key from $AGE_KEY_FILE." >&2
+  exit 1
+fi
+
+# Track temp files for the cleanup trap. Variables are set to "" until the
+# file is actually created, so the trap never tries to rm a path that was
+# never written.
+TMP_INPUT=""
+TMP_SECRETS=""
+TMP_PLAIN=""
+
+cleanup() {
+  [[ -n "$TMP_INPUT"   ]] && rm   -f "$TMP_INPUT"   2>/dev/null || true
+  [[ -n "$TMP_SECRETS" ]] && rm   -f "$TMP_SECRETS" 2>/dev/null || true
+  [[ -n "$TMP_PLAIN"   ]] && { shred -u "$TMP_PLAIN" 2>/dev/null || rm -f "$TMP_PLAIN" 2>/dev/null || true; }
+}
+trap cleanup EXIT
+
 TMP_INPUT="$(mktemp /protected/.staging.env.XXXXXX)"
-trap 'rm -f "$TMP_INPUT"' EXIT
+chmod 600 "$TMP_INPUT"
 
 # Read at most MAX_INPUT_BYTES+1 so an oversized payload is detectable
 # without buffering an unbounded amount of attacker-controlled input.
 head -c "$((MAX_INPUT_BYTES + 1))" > "$TMP_INPUT"
-chmod 600 "$TMP_INPUT"
 
 SIZE="$(wc -c < "$TMP_INPUT")"
 if (( SIZE == 0 )); then
@@ -63,16 +133,77 @@ cd "$DEPLOY_ROOT"
 # variable present.
 node infra/deployment/validate-deploy-input.mjs "$TMP_INPUT"
 
-# Atomic replace: validate-env.mjs runs against the *candidate* file before
-# it becomes /protected/staging.env, so a bad render never touches the file
-# the previous successful deployment is using mid-flight.
+# Atomic-validate against the candidate file: validate-env.mjs runs against
+# the incoming file before anything is written to disk, so a bad render never
+# corrupts the secrets artifact or config.
 node infra/deployment/validate-env.mjs "$TMP_INPUT"
 
-install -o deploy -g deploy -m 0600 "$TMP_INPUT" "$PROTECTED_ENV"
+# --- Secrets: extract, encrypt, write atomically ---
 
-# `exec` replaces this process, so the EXIT trap above never runs; remove
-# the temp file explicitly now that its content has been copied in place.
-rm -f "$TMP_INPUT"
-trap - EXIT
+TMP_SECRETS="$(mktemp /protected/.staging.secrets.XXXXXX)"
+chmod 600 "$TMP_SECRETS"
+grep -E "$SECRET_PATTERN" "$TMP_INPUT" > "$TMP_SECRETS" || true
 
-exec node infra/deployment/deploy.mjs "$PROTECTED_ENV"
+# sops --input-type dotenv reads KEY=VALUE lines and encrypts each value
+# separately, leaving key names visible in the output JSON envelope.
+# SOPS_AGE_KEY_FILE points at the private key so decryption works with the
+# same key; encryption uses the public key extracted from the same file above.
+TMP_ENC="$(mktemp /protected/.staging.secrets.enc.env.XXXXXX)"
+chmod 600 "$TMP_ENC"
+SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
+  sops --encrypt --age "$AGE_PUBKEY" \
+       --input-type dotenv --output-type json \
+       "$TMP_SECRETS" > "$TMP_ENC"
+mv "$TMP_ENC" "$PROTECTED_ENC"
+chmod 600 "$PROTECTED_ENC"
+rm -f "$TMP_SECRETS"; TMP_SECRETS=""
+
+# --- Config: extract non-secret vars, merge operator-only vars, write atomically ---
+
+TMP_CONF="$(mktemp /protected/.staging.conf.XXXXXX)"
+chmod 600 "$TMP_CONF"
+
+# Config vars: all KEY=VALUE lines NOT in SECRET_NAMES.
+grep -Ev "$SECRET_PATTERN" "$TMP_INPUT" \
+  | grep -E '^[A-Z_][A-Z0-9_]*=' >> "$TMP_CONF" || true
+
+# Preserve operator-added variables that exist in the current staging.conf but
+# are NOT in the CD-rendered env (e.g. TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# added by the operator per CP-ENV-07 Wave 7 setup). CD-managed vars win; only
+# truly operator-only vars (absent from the rendered env) are preserved.
+if [[ -f "$PROTECTED_CONF" ]]; then
+  while IFS= read -r existing_line; do
+    # Skip comments, blank lines, and lines that aren't KEY=VALUE.
+    [[ "$existing_line" =~ ^[A-Z_][A-Z0-9_]*= ]] || continue
+    existing_var="${existing_line%%=*}"
+    # Only preserve if this var is not already in the new config output.
+    if ! grep -qE "^${existing_var}=" "$TMP_CONF"; then
+      printf '%s\n' "$existing_line" >> "$TMP_CONF"
+    fi
+  done < "$PROTECTED_CONF"
+fi
+
+mv "$TMP_CONF" "$PROTECTED_CONF"
+chmod 600 "$PROTECTED_CONF"
+
+# --- Ephemeral plaintext for deploy.mjs ---
+
+# deploy.mjs receives the full validated env (config + secrets) via a short-
+# lived temp file in /tmp. The file is shredded immediately after deploy exits.
+# /protected/staging.env is no longer written: secrets live only in
+# PROTECTED_ENC (at rest) and in this ephemeral file (in flight).
+TMP_PLAIN="$(mktemp /tmp/.staging.env.XXXXXX)"
+chmod 600 "$TMP_PLAIN"
+cp "$TMP_INPUT" "$TMP_PLAIN"
+rm -f "$TMP_INPUT"; TMP_INPUT=""
+
+# --- Deploy (call, NOT exec — so cleanup/shred runs after deploy exits) ---
+
+DEPLOY_EXIT=0
+node infra/deployment/deploy.mjs "$TMP_PLAIN" || DEPLOY_EXIT=$?
+
+# Shred explicitly here; the EXIT trap also covers this on any error path.
+shred -u "$TMP_PLAIN" 2>/dev/null || rm -f "$TMP_PLAIN" 2>/dev/null || true
+TMP_PLAIN=""
+
+exit $DEPLOY_EXIT
