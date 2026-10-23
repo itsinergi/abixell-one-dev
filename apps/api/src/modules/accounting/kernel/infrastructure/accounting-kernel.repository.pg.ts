@@ -3,7 +3,9 @@ import type {
   AccountingAccount,
   AccountingPeriod,
   ApprovePeriodReopenInput,
+  ChartOfAccounts,
   CreateAccountInput,
+  CreateChartInput,
   CreateJournalInput,
   CreatePeriodInput,
   CreatePostingRuleInput,
@@ -24,6 +26,7 @@ import type {
   RejectPeriodReopenInput,
   RequestPeriodReopenInput,
   ReverseJournalInput,
+  TemplateAccountDef,
 } from "../domain/accounting-kernel.entity.js";
 import { recordGovernedAudit } from "../../../../infrastructure/persistence/repositories/governed-transaction.js";
 
@@ -194,6 +197,126 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
       [input.periodId, input.rejectedBy, input.reason],
     );
     return r.rows[0] ? toPeriod(r.rows[0]) : null;
+  }
+
+  // --- Chart of Accounts (Wave A6 builder) ------------------------------------
+
+  async createChart(input: CreateChartInput): Promise<ChartOfAccounts> {
+    const r = await this.pool.query(
+      `INSERT INTO chart_of_accounts
+         (tenant_id, legal_entity_id, coa_version_code, coa_version_date,
+          template_type, coa_status, is_active, created_by, updated_by)
+       VALUES ($1, $2, $3, $4::date, $5, 'draft', true, $6, $6)
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.legalEntityId,
+        input.coaVersionCode,
+        input.coaVersionDate,
+        input.templateType,
+        input.createdBy,
+      ],
+    );
+    return toChart(r.rows[0]);
+  }
+
+  async findChartById(tenantId: string, coaId: string): Promise<ChartOfAccounts | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM chart_of_accounts WHERE id = $1 AND tenant_id = $2`,
+      [coaId, tenantId],
+    );
+    return r.rows[0] ? toChart(r.rows[0]) : null;
+  }
+
+  async listCharts(
+    tenantId: string,
+    filter: { legalEntityId?: string },
+  ): Promise<ChartOfAccounts[]> {
+    const conditions = [`tenant_id = $1`];
+    const params: unknown[] = [tenantId];
+    if (filter.legalEntityId) {
+      params.push(filter.legalEntityId);
+      conditions.push(`legal_entity_id = $${params.length}`);
+    }
+    const r = await this.pool.query(
+      `SELECT * FROM chart_of_accounts WHERE ${conditions.join(" AND ")} ORDER BY coa_version_code`,
+      params,
+    );
+    return r.rows.map(toChart);
+  }
+
+  async bulkCreateAccounts(
+    tenantId: string,
+    legalEntityId: string,
+    coaId: string,
+    accounts: ReadonlyArray<TemplateAccountDef>,
+    createdBy: string | null,
+  ): Promise<AccountingAccount[]> {
+    return this.inTransaction(async (client) => {
+      // Template accounts reference each other by `accountCode` (portable
+      // across tenants); the DB needs real `parent_account_id` UUIDs. Insert
+      // in template order — every template here lists a parent before its
+      // children — resolving each parentCode against the ids inserted so
+      // far in this same batch, so a parent is always known by the time a
+      // child needs it.
+      const codeToId = new Map<string, string>();
+      const created: AccountingAccount[] = [];
+
+      for (const acct of accounts) {
+        const parentAccountId = acct.parentCode ? codeToId.get(acct.parentCode) ?? null : null;
+        if (acct.parentCode && !parentAccountId) {
+          throw new Error(
+            `Template account ${acct.accountCode} references unknown parentCode ${acct.parentCode} ` +
+              `(parent must precede child in template order)`,
+          );
+        }
+
+        const r = await client.query(
+          `INSERT INTO accounting_accounts
+             (tenant_id, legal_entity_id, coa_id, account_code, account_name,
+              account_class, normal_balance, account_type, parent_account_id,
+              is_active, created_by, updated_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $10)
+           RETURNING *`,
+          [
+            tenantId,
+            legalEntityId,
+            coaId,
+            acct.accountCode,
+            acct.accountName,
+            acct.accountClass,
+            acct.normalBalance,
+            acct.accountType,
+            parentAccountId,
+            createdBy,
+          ],
+        );
+        const row = toAccount(r.rows[0]);
+        codeToId.set(acct.accountCode, row.id);
+        created.push(row);
+      }
+
+      return created;
+    });
+  }
+
+  async approveChart(
+    tenantId: string,
+    coaId: string,
+    approvedBy: string | null,
+  ): Promise<ChartOfAccounts | null> {
+    const r = await this.pool.query(
+      `UPDATE chart_of_accounts
+         SET coa_status = 'approved',
+             approved_by = $3,
+             approved_date = now(),
+             updated_by = $3,
+             updated_at = now()
+       WHERE id = $1 AND tenant_id = $2 AND coa_status = 'draft'
+       RETURNING *`,
+      [coaId, tenantId, approvedBy],
+    );
+    return r.rows[0] ? toChart(r.rows[0]) : null;
   }
 
   // --- Accounts ---------------------------------------------------------------
@@ -1099,6 +1222,23 @@ function toPeriod(row: QueryResultRow): AccountingPeriod {
     reopenRejectedDate: row.reopen_rejected_date ?? null,
     reopenRejectReason: row.reopen_reject_reason ?? null,
     workflowInstanceId: row.workflow_instance_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toChart(row: QueryResultRow): ChartOfAccounts {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    legalEntityId: row.legal_entity_id,
+    coaVersionCode: row.coa_version_code,
+    coaVersionDate: toDateString(row.coa_version_date),
+    templateType: row.template_type,
+    coaStatus: row.coa_status,
+    isActive: row.is_active,
+    approvedBy: row.approved_by,
+    approvedDate: row.approved_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
