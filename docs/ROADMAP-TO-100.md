@@ -45,6 +45,13 @@ Remaining to 100%:
 Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
 traceability and move neither metric; the numbers above already reflect their closure.
 
+**FASE 0 item 3 + FASE 1 local E2E dry-run (2026-10-23, unweighted):** Pilot staging
+seed (`seed-pilot-catering.ts`) and 29 UAT-014 transaction chains proven end-to-end
+locally — 87 posted GL journals, debit = credit = 6.802.182.00, 29/29 invoices
+(INV-00001..00029), outbox published/matched for cost/invoice/tax events.
+Evidence: `UAT-014-Evidence/`. Staging execution of the same runbook remains open.
+No roadmap points earned; equivalent to a Phase 11F-style unweighted validation.
+
 ## 2. Recommended Phase Sequence
 
 The recommended route is:
