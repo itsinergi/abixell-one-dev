@@ -195,6 +195,7 @@ export interface ChartOfAccounts {
   /** Draft awaiting accountant review; approved for production use. */
   coaStatus: "draft" | "approved";
   isActive: boolean;
+  createdBy: string | null;
   approvedBy: string | null;
   approvedDate: Date | null;
   createdAt: Date;

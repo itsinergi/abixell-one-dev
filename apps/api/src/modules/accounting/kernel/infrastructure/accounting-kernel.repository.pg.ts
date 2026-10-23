@@ -1237,6 +1237,7 @@ function toChart(row: QueryResultRow): ChartOfAccounts {
     templateType: row.template_type,
     coaStatus: row.coa_status,
     isActive: row.is_active,
+    createdBy: row.created_by,
     approvedBy: row.approved_by,
     approvedDate: row.approved_date,
     createdAt: row.created_at,

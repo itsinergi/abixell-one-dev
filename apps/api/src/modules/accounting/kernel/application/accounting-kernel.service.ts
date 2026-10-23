@@ -545,6 +545,14 @@ export class AccountingKernelService {
       throw new ConflictError("Only draft charts can be approved");
     }
 
+    // Maker-checker SoD: approver must be a different person from the chart
+    // creator. Unconditional — no permission short-circuits it.
+    if (chart.createdBy && chart.createdBy === actor.userId) {
+      throw new ConflictError(
+        "The approver must be a different person from the chart creator (maker-checker)",
+      );
+    }
+
     const updated = await this.repo.approveChart(actor.tenantId, coaId, actor.userId);
     if (!updated) {
       throw new ConflictError("Chart is no longer in draft status");
