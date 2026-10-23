@@ -514,7 +514,17 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     name: "Administration",
     moduleCode: "platform",
     status: "di_menu",
-    permissions: ["config.manage"],
+    permissions: [
+      "config.manage",
+      "config.module.manage",
+      "config.platform.manage",
+      "config.org.manage",
+      "config.system.manage",
+      "config.user.manage",
+      "config.workflow.manage",
+      "config.notification.manage",
+      "config.document.manage",
+    ],
   },
   {
     path: "/admin",

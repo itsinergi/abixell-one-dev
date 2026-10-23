@@ -662,8 +662,20 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     name: "Administration",
     moduleCode: "platform",
     status: "di_menu",
-    permissions: ["config.manage"],
-    note: "Deliberately stricter than the Phase 0 admin endpoints, which mostly read `config.read`. Over-strict is a false deny the user can see; the reverse would be a silent grant.",
+    permissions: [
+      // Backward compat: existing roles with old monolithic code still grant access
+      "config.manage",
+      // Epic 15 Panel Admin: granular per-category permissions (Wave 1)
+      "config.module.manage",
+      "config.platform.manage",
+      "config.org.manage",
+      "config.system.manage",
+      "config.user.manage",
+      "config.workflow.manage",
+      "config.notification.manage",
+      "config.document.manage",
+    ],
+    note: "Panel Admin shell (Epic 15 Wave 1). Permissions: any of the 8 granular config.<category>.manage codes, or the legacy config.manage (backward compat). See CORE-ROADMAP.md §4.15 Decision #7.",
   },
   {
     path: "/admin",
