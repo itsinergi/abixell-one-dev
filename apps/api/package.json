@@ -16,6 +16,7 @@
     "migrate:down": "node-pg-migrate down -m migrations --envPath .env",
     "migrate:create": "node-pg-migrate create -m migrations",
     "seed": "tsx scripts/seed.ts",
+    "seed:pilot": "tsx scripts/seed-pilot-catering.ts",
     "sync-permissions": "node scripts/sync-role-permissions.mjs",
     "cleanup:test-tenants": "tsx scripts/cleanup-test-tenants.ts"
   },
