@@ -37,6 +37,20 @@ const accountSchema = z.object({
   parentAccountId: uuidSchema.nullable().optional(),
 });
 
+const chartSchema = z.object({
+  legalEntityId: uuidSchema,
+  coaVersionCode: z.string().min(1),
+  coaVersionDate: dateSchema,
+  templateType: z.enum(["SAK_UMUM", "SAK_EMKM"]).nullable(),
+});
+
+const instantiateTemplateSchema = z.object({
+  legalEntityId: uuidSchema,
+  coaVersionCode: z.string().min(1),
+  coaVersionDate: dateSchema,
+  templateType: z.enum(["SAK_UMUM", "SAK_EMKM"]),
+});
+
 const journalLineSchema = z.object({
   accountId: uuidSchema,
   lineNumber: z.number().min(1),
@@ -194,6 +208,33 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
       activeOnly: query.activeOnly === "true",
     });
     return reply.send(accounts);
+  });
+
+  // --- Chart of Accounts (Wave A6 builder) ---
+  app.get("/accounting/charts", { preHandler: app.authenticate }, async (request, reply) => {
+    const query = z.object({ legalEntityId: uuidSchema.optional() }).parse(request.query);
+    const charts = await svc().listCharts(request.actor!, {
+      legalEntityId: query.legalEntityId,
+    });
+    return reply.send(charts);
+  });
+
+  app.post("/accounting/charts", { preHandler: app.authenticate }, async (request, reply) => {
+    const body = chartSchema.parse(request.body);
+    const chart = await svc().createChart(request.actor!, body);
+    return reply.code(201).send(chart);
+  });
+
+  app.post("/accounting/charts/instantiate", { preHandler: app.authenticate }, async (request, reply) => {
+    const body = instantiateTemplateSchema.parse(request.body);
+    const result = await svc().instantiateTemplateForEntity(request.actor!, body);
+    return reply.code(201).send(result);
+  });
+
+  app.post("/accounting/charts/:id/approve", { preHandler: app.authenticate }, async (request, reply) => {
+    const params = z.object({ id: uuidSchema }).parse(request.params);
+    const chart = await svc().approveChart(request.actor!, params.id);
+    return reply.send(chart);
   });
 
   app.get("/accounting/accounts/hierarchy", { preHandler: app.authenticate }, async (request, reply) => {

@@ -190,7 +190,12 @@ export interface ChartOfAccounts {
   legalEntityId: string;
   coaVersionCode: string;
   coaVersionDate: string;
+  /** Template source: SAK_UMUM (full Indonesian standards), SAK_EMKM (simplified), or null for custom. */
+  templateType: "SAK_UMUM" | "SAK_EMKM" | null;
+  /** Draft awaiting accountant review; approved for production use. */
+  coaStatus: "draft" | "approved";
   isActive: boolean;
+  createdBy: string | null;
   approvedBy: string | null;
   approvedDate: Date | null;
   createdAt: Date;
@@ -438,6 +443,30 @@ export interface RejectPeriodReopenInput {
   reason: string;
 }
 
+/**
+ * Template account definition (Wave A6 COA builder). `parentCode` refers to
+ * another template account's code within the same template, resolved to an
+ * id at instantiation time — templates are code-addressed so they stay
+ * portable across tenants.
+ */
+export interface TemplateAccountDef {
+  accountCode: string;
+  accountName: string;
+  accountClass: AccountClass;
+  normalBalance: NormalBalance;
+  accountType: string | null;
+  parentCode: string | null;
+}
+
+export interface CreateChartInput {
+  tenantId: string;
+  legalEntityId: string;
+  coaVersionCode: string;
+  coaVersionDate: string;
+  templateType: "SAK_UMUM" | "SAK_EMKM" | null;
+  createdBy: string | null;
+}
+
 export interface CreateAccountInput {
   tenantId: string;
   legalEntityId: string;
@@ -532,6 +561,21 @@ export interface AccountingKernelRepository {
    * `reopenable`.
    */
   rejectPeriodReopen(input: RejectPeriodReopenInput): Promise<AccountingPeriod | null>;
+
+  // --- Chart of Accounts (Wave A6 builder) ---------------------------
+  createChart(input: CreateChartInput): Promise<ChartOfAccounts>;
+  findChartById(tenantId: string, coaId: string): Promise<ChartOfAccounts | null>;
+  listCharts(tenantId: string, filter: { legalEntityId?: string }): Promise<ChartOfAccounts[]>;
+  /** Bulk insert of template accounts; `parentCode` is resolved in-tree before insert. */
+  bulkCreateAccounts(
+    tenantId: string,
+    legalEntityId: string,
+    coaId: string,
+    accounts: ReadonlyArray<TemplateAccountDef>,
+    createdBy: string | null,
+  ): Promise<AccountingAccount[]>;
+  /** draft → approved. Returns null when not `draft`. */
+  approveChart(tenantId: string, coaId: string, approvedBy: string | null): Promise<ChartOfAccounts | null>;
 
   // --- Accounts -------------------------------------------------------
   createAccount(input: CreateAccountInput): Promise<AccountingAccount>;

@@ -252,6 +252,10 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/periods", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/periods/:id/lock", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/accounts", windowCode: "route:/finance/accounts" },
+  // Chart of Accounts builder (Wave A6) — chart configuration is the same
+  // family as periods/accounts above: draft, instantiate, approve all write
+  // account configuration, so one prefix covers the whole subtree.
+  { method: "*", apiPath: "/accounting/charts", windowCode: "route:/finance/accounts" },
   // Journal operations (create, post, validate) map to the transactions Window.
   { method: "*", apiPath: "/accounting/journals", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/journals/:id", windowCode: "route:/finance/transactions" },

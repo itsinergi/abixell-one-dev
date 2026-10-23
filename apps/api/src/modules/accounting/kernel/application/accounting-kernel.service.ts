@@ -11,6 +11,7 @@ import type { ConfigurationService } from "../../../../application/configuration
 import type {
   AccountingAccount,
   AccountingPeriod,
+  ChartOfAccounts,
   GeneralLedgerEntry,
   GlBalance,
   JournalHeader,
@@ -27,6 +28,7 @@ import type {
   ReversalType,
 } from "../domain/accounting-kernel.entity.js";
 import { ACCOUNT_CLASSES, COA_MAX_DEPTH, isValidMoney } from "../domain/accounting-kernel.entity.js";
+import { SAK_EMKM_TEMPLATE, SAK_UMUM_TEMPLATE } from "../domain/coa-templates.js";
 import type { RuleRegistryRepository } from "../../../../domain/rules/rule-registry.entity.js";
 
 /**
@@ -403,6 +405,173 @@ export class AccountingKernelService {
       throw new ConflictError("Parent account is not part of this entity's account hierarchy");
     }
     return hit.depth;
+  }
+
+  // --- Chart of Accounts (Wave A6 builder) --------------------------------
+
+  /**
+   * Create a draft COA shell (no accounts yet). Awaiting accountant approval
+   * before production use. Use `instantiateTemplateForEntity` to build from
+   * a SAK template in one step instead.
+   */
+  async createChart(
+    actor: ActorContext,
+    input: {
+      legalEntityId: string;
+      coaVersionCode: string;
+      coaVersionDate: string;
+      templateType: string | null;
+    },
+  ): Promise<ChartOfAccounts> {
+    await this.rbac.requirePermission(actor, "finance.accounting.configure");
+
+    const legalEntityId = await this.resolveLegalEntity(actor, input.legalEntityId);
+    const coaVersionDate = this.parseDate(input.coaVersionDate, "coaVersionDate");
+    const templateType = this.parseTemplateType(input.templateType);
+    const coaVersionCode = (input.coaVersionCode ?? "").trim();
+    if (!coaVersionCode) {
+      throw new ValidationError("coaVersionCode is required");
+    }
+
+    const chart = await this.repo.createChart({
+      tenantId: actor.tenantId,
+      legalEntityId,
+      coaVersionCode,
+      coaVersionDate,
+      templateType,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.coa.created",
+      entityType: "chart_of_accounts",
+      entityId: chart.id,
+      metadata: {
+        coaVersionCode: chart.coaVersionCode,
+        templateType: chart.templateType,
+        coaStatus: chart.coaStatus,
+      },
+    });
+
+    return chart;
+  }
+
+  async listCharts(
+    actor: ActorContext,
+    filter: { legalEntityId?: string } = {},
+  ): Promise<ChartOfAccounts[]> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
+    return this.repo.listCharts(actor.tenantId, filter);
+  }
+
+  /**
+   * Instantiate a SAK template as a draft COA with its full account tree for
+   * one legal entity. Parent links use `parentCode` (resolved by the repo in
+   * one transaction), so templates stay portable across tenants.
+   */
+  async instantiateTemplateForEntity(
+    actor: ActorContext,
+    input: {
+      legalEntityId: string;
+      coaVersionCode: string;
+      coaVersionDate: string;
+      templateType: "SAK_UMUM" | "SAK_EMKM";
+    },
+  ): Promise<{ chart: ChartOfAccounts; accounts: AccountingAccount[] }> {
+    await this.rbac.requirePermission(actor, "finance.accounting.configure");
+
+    const legalEntityId = await this.resolveLegalEntity(actor, input.legalEntityId);
+    const coaVersionDate = this.parseDate(input.coaVersionDate, "coaVersionDate");
+    const coaVersionCode = (input.coaVersionCode ?? "").trim();
+    if (!coaVersionCode) {
+      throw new ValidationError("coaVersionCode is required");
+    }
+    const template = input.templateType === "SAK_UMUM"
+      ? SAK_UMUM_TEMPLATE
+      : input.templateType === "SAK_EMKM"
+        ? SAK_EMKM_TEMPLATE
+        : null;
+    if (!template) {
+      throw new ValidationError('templateType must be "SAK_UMUM" or "SAK_EMKM"');
+    }
+
+    const chart = await this.repo.createChart({
+      tenantId: actor.tenantId,
+      legalEntityId,
+      coaVersionCode,
+      coaVersionDate,
+      templateType: input.templateType,
+      createdBy: actor.userId,
+    });
+
+    const accounts = await this.repo.bulkCreateAccounts(
+      actor.tenantId,
+      legalEntityId,
+      chart.id,
+      template,
+      actor.userId,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.coa.template_instantiated",
+      entityType: "chart_of_accounts",
+      entityId: chart.id,
+      metadata: {
+        templateType: input.templateType,
+        coaVersionCode: chart.coaVersionCode,
+        accountCount: accounts.length,
+      },
+    });
+
+    return { chart, accounts };
+  }
+
+  /** draft → approved. Maker-checker: approver differs from the chart creator. */
+  async approveChart(
+    actor: ActorContext,
+    coaId: string,
+  ): Promise<ChartOfAccounts> {
+    await this.rbac.requirePermission(actor, "finance.accounting.approve");
+
+    const chart = await this.repo.findChartById(actor.tenantId, coaId);
+    if (!chart || chart.tenantId !== actor.tenantId) {
+      throw new NotFoundError("ChartOfAccounts", coaId);
+    }
+    if (chart.coaStatus !== "draft") {
+      throw new ConflictError("Only draft charts can be approved");
+    }
+
+    // Maker-checker SoD: approver must be a different person from the chart
+    // creator. Unconditional — no permission short-circuits it.
+    if (chart.createdBy && chart.createdBy === actor.userId) {
+      throw new ConflictError(
+        "The approver must be a different person from the chart creator (maker-checker)",
+      );
+    }
+
+    const updated = await this.repo.approveChart(actor.tenantId, coaId, actor.userId);
+    if (!updated) {
+      throw new ConflictError("Chart is no longer in draft status");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.coa.approved",
+      entityType: "chart_of_accounts",
+      entityId: coaId,
+      metadata: {
+        coaVersionCode: chart.coaVersionCode,
+        templateType: chart.templateType,
+        approvedBy: actor.userId,
+      },
+    });
+
+    return updated;
   }
 
   // --- Journals ---------------------------------------------------------------
@@ -1391,6 +1560,15 @@ export class AccountingKernelService {
       throw new NotFoundError("LegalEntity", legalEntityId);
     }
     return legalEntityId;
+  }
+
+  private parseTemplateType(value: string | null | undefined): "SAK_UMUM" | "SAK_EMKM" | null {
+    if (!value) return null;
+    const normalized = String(value).trim().toUpperCase();
+    if (normalized !== "SAK_UMUM" && normalized !== "SAK_EMKM") {
+      throw new ValidationError('templateType must be "SAK_UMUM", "SAK_EMKM", or null');
+    }
+    return normalized as "SAK_UMUM" | "SAK_EMKM";
   }
 
   private parseAccountClass(value: string): AccountClass {
