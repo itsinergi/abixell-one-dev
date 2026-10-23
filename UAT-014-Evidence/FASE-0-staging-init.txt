@@ -1,0 +1,10 @@
+tenant|1
+users|6
+roles|5
+gl_accounts|5
+posting_rules|3
+open_periods|1
+items|2
+recipes|1
+posted_journals|87
+invoices|29

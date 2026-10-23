@@ -1,0 +1,44 @@
+E2E-014 CATERING PILOT — LOCAL DRY-RUN EVIDENCE
+Generated: 2026-10-23 (local dev DB abixell_one_dev, API localhost:4010)
+Environment: local only — staging dry-run pending (see runbook)
+
+FASE 0 item 3 — seed-pilot-catering.ts
+  Status: PASS (idempotent; second run logged "Skipped — tenant exists")
+  Counts (see FASE-0-staging-init.txt): tenant 1, users 6, roles 5,
+  gl_accounts 5, posting_rules 3, open_periods 1, items 2, recipes 1.
+
+FASE 1 — 29 transactions (run-pilot-fase1.ts, live API, real consumer)
+  Split: UAT-014-01 x20, UAT-014-02 x3, UAT-014-03 x3, UAT-014-04 x3
+  Each chain: WO create -> assign -> start -> complete -> verify ->
+  customer-accept -> 3 cost items -> finalize-costs (outbox event) ->
+  create-invoice (PPN 11%, markup 0.15).
+  Result: 29/29 chains complete. Invoices INV-00001 .. INV-00029.
+  Detail: FASE-1-local-chain.log
+
+GL evidence (outbox drained via scheduler job accounting-event-poster):
+  posted journals 87 (29 cost + 29 AR base + 29 AR tax), 174 lines
+  debit total  = credit total = 6.802.182.00  => BALANCED
+  1210 AR          Dr 3.814.182.00
+  2500 Accrued WO  Cr 2.988.000.00
+  4100 Revenue     Cr 3.436.200.00
+  2410 Tax Payable Cr   377.982.00
+  6200 WO Cost     Dr 2.988.000.00
+  invoice total 3.814.182.00 = AR debit (15% markup + 11% PPN applied)
+
+Outbox events (scm_accounting_ready_events):
+  work_order.cost_accumulated  published/matched  29
+  work_order.invoiced          published/matched  29
+  work_order.invoice_tax       published/matched  29
+  work_order.accepted          failed/ignored     29  (by design: acceptance
+    marker, no GL metadata; consumer marks ignored per WP-VER-01)
+
+Caveats:
+  - One consumer run logged "Event missing legalEntityId, periodId, or
+    effectiveAt" on a work_order.accepted event; those events never post to
+    GL and end state is ignored for all 29.
+  - Per-chain amounts vary by scenario (+1000/index) so chains are
+    distinguishable; the chain SHAPE is the WP-VER-01 proven one.
+
+Next: staging dry-run of seed-pilot-catering.ts via
+docs/operations/pilot-staging-init-runbook.md, then operator UAT on staging.
+Passwords were env-only throwaway dev strings (FD-009-S1) — rotate before pilot.
