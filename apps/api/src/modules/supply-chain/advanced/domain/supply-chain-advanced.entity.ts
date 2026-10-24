@@ -455,11 +455,13 @@ export interface CreateScmStockTransferLineInput {
 
 export interface RecordScmStockTransferShipmentInput {
   transferId: string;
+  createdBy?: string | null;
   lineShipments: Array<{ lineId: string; quantityShipped: number }>;
 }
 
 export interface RecordScmStockTransferReceiptInput {
   transferId: string;
+  createdBy?: string | null;
   lineReceipts: Array<{ lineId: string; quantityReceived: number }>;
 }
 
@@ -2541,6 +2543,12 @@ export interface SupplyChainAdvancedRepository {
     tenantId: string,
     input: CreateScmWarehouseTaskInput,
   ): Promise<{ task: ScmWarehouseTask; items: ScmWarehouseTaskItem[] }>;
+  /** Posts the physical move a completed task represents; skips pack/cycle_count. */
+  applyWarehouseTaskMovements(
+    tenantId: string,
+    taskId: string,
+    createdBy: string | null,
+  ): Promise<ScmWarehouseTaskItem[]>;
   updateWarehouseTaskStatus(
     tenantId: string,
     input: UpdateScmWarehouseTaskStatusInput,
@@ -2570,6 +2578,7 @@ export interface SupplyChainAdvancedRepository {
     reservationId: string,
     status: ScmReservationStatus,
     timestamp: Date,
+    createdBy?: string | null,
   ): Promise<ScmStockReservation | null>;
   findStockReservationById(tenantId: string, reservationId: string): Promise<ScmStockReservation | null>;
   listStockReservations(tenantId: string, filter?: ScmStockReservationFilter): Promise<ScmStockReservation[]>;
@@ -2591,6 +2600,13 @@ export interface SupplyChainAdvancedRepository {
   recordStockTransferReceipt(
     tenantId: string,
     input: RecordScmStockTransferReceiptInput,
+  ): Promise<ScmStockTransferLine[]>;
+  /** Pulls the still-in-transit quantity back to the source warehouse and
+   * resets the doc to draft so the sender can revise it. */
+  revertStockTransferToDraft(
+    tenantId: string,
+    transferId: string,
+    createdBy: string | null,
   ): Promise<ScmStockTransferLine[]>;
   findStockTransferById(
     tenantId: string,
@@ -2617,6 +2633,12 @@ export interface SupplyChainAdvancedRepository {
     lineId: string,
     adjustmentMovementId: string,
   ): Promise<ScmStockOpnameLine | null>;
+  /** Posts counted variances as stock adjustments; skips lines already adjusted. */
+  applyStockOpnameAdjustments(
+    tenantId: string,
+    opnameId: string,
+    createdBy: string | null,
+  ): Promise<ScmStockOpnameLine[]>;
   findStockOpnameById(
     tenantId: string,
     opnameId: string,

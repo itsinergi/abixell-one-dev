@@ -812,6 +812,7 @@ export class SupplyChainAdvancedService {
       reservationId,
       "fulfilled",
       new Date(),
+      actor.userId,
     );
     if (!reservation) {
       throw new NotFoundError("ScmStockReservation", reservationId);
@@ -1053,7 +1054,10 @@ export class SupplyChainAdvancedService {
     }
     await this.assertWarehouseInScope(actor, result.transfer.fromWarehouseId);
 
-    await this.repo.recordStockTransferShipment(actor.tenantId, input);
+    await this.repo.recordStockTransferShipment(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -1078,7 +1082,10 @@ export class SupplyChainAdvancedService {
     }
     await this.assertWarehouseInScope(actor, result.transfer.toWarehouseId);
 
-    await this.repo.recordStockTransferReceipt(actor.tenantId, input);
+    await this.repo.recordStockTransferReceipt(actor.tenantId, {
+      ...input,
+      createdBy: actor.userId,
+    });
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -1090,6 +1097,39 @@ export class SupplyChainAdvancedService {
     });
 
     return this.getStockTransfer(actor, input.transferId);
+  }
+
+  /**
+   * Receiver rejects part of a shipment: the still-in-transit quantity goes
+   * back to the source warehouse and the doc reopens as a draft so the sender
+   * can remove lines or change quantities. Receiving itself needs no approval
+   * — only the original shipment does.
+   */
+  async returnStockTransferToDraft(
+    actor: ActorContext,
+    transferId: string,
+    comment?: string,
+  ): Promise<StockTransferDetailView> {
+    await this.rbac.requirePermission(actor, "supply_chain.inventory.manage");
+    const result = await this.repo.findStockTransferById(actor.tenantId, transferId);
+    if (!result) {
+      throw new NotFoundError("ScmStockTransfer", transferId);
+    }
+    await this.assertWarehouseInScope(actor, result.transfer.fromWarehouseId);
+    await this.assertWarehouseInScope(actor, result.transfer.toWarehouseId);
+
+    await this.repo.revertStockTransferToDraft(actor.tenantId, transferId, actor.userId);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "scm_advanced.stock_transfer.returned_to_draft",
+      entityType: "scm_stock_transfer",
+      entityId: transferId,
+      metadata: { comment: comment ?? null },
+    });
+
+    return this.getStockTransfer(actor, transferId);
   }
 
   async createStockOpname(
@@ -1245,24 +1285,33 @@ export class SupplyChainAdvancedService {
     const workflowStatus = await this.workflow.getEntityStatus(actor, result.opname.workflowInstanceId);
 
     let projectedStatus = result.opname.status;
-    let completedAt: Date | undefined;
-    let completedBy: string | undefined;
 
     if (workflowStatus.instanceStatus === "approved") {
-      projectedStatus = "completed";
-      completedAt = new Date();
-      completedBy = actor.userId;
+      projectedStatus = "adjusted";
     } else if (workflowStatus.instanceStatus === "cancelled" || workflowStatus.instanceStatus === "rejected") {
       projectedStatus = "cancelled";
     }
 
-    await this.repo.updateStockOpnameProjection(actor.tenantId, {
-      opnameId,
-      status: projectedStatus,
-      completedAt,
-      completedBy,
-      updatedBy: actor.userId,
-    });
+    // Approval is what makes the physical count the truth: the adjustment pass
+    // posts the variances and flips the status in ONE transaction, so a failed
+    // posting can never leave an opname marked adjusted with no movements.
+    if (projectedStatus === "adjusted") {
+      const adjusted = await this.repo.applyStockOpnameAdjustments(actor.tenantId, opnameId, actor.userId);
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        actorUserId: actor.userId,
+        action: "scm_advanced.stock_opname.adjusted",
+        entityType: "scm_stock_opname",
+        entityId: opnameId,
+        metadata: { adjustedLines: adjusted.length },
+      });
+    } else {
+      await this.repo.updateStockOpnameProjection(actor.tenantId, {
+        opnameId,
+        status: projectedStatus,
+        updatedBy: actor.userId,
+      });
+    }
 
     return this.getStockOpname(actor, opnameId);
   }
