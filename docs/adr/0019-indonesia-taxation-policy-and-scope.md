@@ -1,6 +1,6 @@
 # ADR-0019: Indonesia Taxation Policy and Scope
 
-- **Status:** PROPOSED - Founder decisions incorporated; final document review and tax-specialist gate required
+- **Status:** APPROVED - Founder final document review 2026-10-24; tax-specialist gate WAIVED by Founder sign-off on record (regulatory risk accepted by Founder). Implementation authorized. Note: tax rates remain rule data configured per Legal Entity, never hardcoded constants.
 - **Date:** 2026-09-02
 - **Source:** Founder Indonesia Taxation Policy decisions and Pre-Wave A6 interview confirmation that specialist sign-off precedes active rules
 

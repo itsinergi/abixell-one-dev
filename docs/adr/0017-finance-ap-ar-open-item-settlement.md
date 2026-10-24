@@ -1,6 +1,6 @@
 # ADR-0017: Finance AP/AR Open-Item Settlement
 
-- **Status:** PROPOSED - Founder decisions incorporated; final document review required
+- **Status:** APPROVED - Founder final document review 2026-10-24 (all eight Wave A6 ADRs approved together); implementation authorized
 - **Date:** 2026-09-02
 - **Source:** Founder Pre-Wave A6 interview decision: controlled open-item settlement baseline; informed by SAP KBU and iDempiere controls and the audited limitations of the NATS finance reference
 

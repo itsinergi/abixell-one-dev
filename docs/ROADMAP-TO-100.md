@@ -48,7 +48,8 @@ traceability and move neither metric; the numbers above already reflect their cl
 **Implementation status snapshot (2026-10-24, unweighted):**
 
 - **Local E2E business proof (done):** FASE 0 item 3 pilot seed and FASE 1's 29 UAT-014 transaction chains were verified 2026-10-23 through the real API and outbox consumer — 87 posted GL journals, debit = credit = 6.802.182,00, invoices INV-00001..00029, AR 3.814.182,00. Pilot E2E-014 UAT **PASSED 4/4** exit criteria 2026-10-24 (FD-008/FD-009 locked; FD-009-S1 credential rotation done). Evidence: `UAT-014-Evidence/`. No roadmap points earned — equivalent to a Phase 11F-style unweighted validation.
-- **Commit state (2026-10-24):** `master` @ `882bbdd` (PR #40 COA Builder — templates, draft lifecycle, maker-checker approval). Active branch `feat/wave-a6-coa-builder` holds 5 unmerged commits (COA builder integration tests + dictionary seed, Epic 15 Panel Admin configuration center, demo-gs seed merge). 16 local commits across branches are not yet pushed to `origin`. Wave A6 ADRs 0015–0022 remain `PROPOSED`; the COA builder landed as accounting-kernel work and closes no Wave A6 point.
+- **Commit state (2026-10-24):** `master` @ `14d6dfa` (PR #41 Panel Admin configuration center + seed merge + docs snapshot). Active branch `feat/wave-a6-finance-close` holds WP-FIN-A6-01 (fiscal close + ledger governance).
+- **Wave A6 authorization (2026-10-24):** Founder approved all eight Wave A6 ADRs (0015–0022) as one decision — status `PROPOSED` → `APPROVED`. ADR-0019's tax-specialist gate is **waived by Founder sign-off on record** (regulatory risk accepted by Founder). Execution mode: automatic, work packages WP-FIN-A6-01..06 in sequence with per-WP PR + tests. Wave A6 points are earned only per unit after closure evidence, not at ADR approval.
 - **VPS staging (checked 2026-10-24):** `deploy@202.10.46.8` healthy — `abixell-one-staging-{web,api,postgres}` all `healthy` (up 5 days; images built 2026-10-15), database `abixell_one_staging` with 246 public tables, disk 17% (13G/79G), load ~0.01. The deployed build predates the COA builder / Panel Admin commits. Pilot staging init (`docs/operations/pilot-staging-init-runbook.md`) remains **deferred** per Founder decision 2026-10-23 ("local evidence is enough for now").
 
 ## 2. Recommended Phase Sequence
@@ -304,12 +305,12 @@ Pre-authorization architecture drafts for Founder review:
 - [ADR-0021: Finance Fixed-Asset Accounting and Depreciation](adr/0021-finance-fixed-asset-accounting-and-depreciation.md)
 - [ADR-0022: Finance Consolidation and Financial Statements](adr/0022-finance-consolidation-and-financial-statements.md)
 
-These records incorporate the Founder interview choices but remain `PROPOSED`,
-not final-approved or delivered. They create no earned progress, scope
-expansion, weight change, or runtime authorization.
-Wave A6 remains planned / optional at 21 points, and the expected result
-remains 308 / 353 (87.3%) only after separately authorized implementation
-and closure evidence.
+These records were `PROPOSED` until 2026-10-24, when Founder final document
+review approved all eight together (ADR-0019 tax-specialist gate waived by
+Founder sign-off on record). Implementation is authorized on that basis.
+Approval alone creates no earned progress, scope expansion, or weight change.
+Wave A6 remains at 21 points, and the expected result remains 308 / 353
+(87.3%) only after per-unit implementation and closure evidence.
 
 ## 10. Wave A7 - Project Delivery and HSE Advanced
 

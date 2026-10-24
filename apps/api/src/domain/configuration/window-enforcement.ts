@@ -252,6 +252,9 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/periods", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/periods/:id/lock", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/accounts", windowCode: "route:/finance/accounts" },
+  // Ledger governance (Wave A6 WP-FIN-A6-01) is account configuration —
+  // one active primary ledger per Legal Entity, same Window family.
+  { method: "*", apiPath: "/accounting/ledgers", windowCode: "route:/finance/accounts" },
   // Chart of Accounts builder (Wave A6) — chart configuration is the same
   // family as periods/accounts above: draft, instantiate, approve all write
   // account configuration, so one prefix covers the whole subtree.
