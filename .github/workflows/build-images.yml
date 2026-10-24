@@ -49,7 +49,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build API runtime image (local, for scan)
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./apps/api/Dockerfile
@@ -61,7 +61,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build API operations image (local, for scan)
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./apps/api/Dockerfile
@@ -73,7 +73,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Web image (local, for scan)
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./apps/web/Dockerfile
@@ -124,7 +124,7 @@ jobs:
 
       - name: Build and push API runtime image
         id: build-api
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./apps/api/Dockerfile
@@ -140,7 +140,7 @@ jobs:
 
       - name: Build and push API operations image
         id: build-api-operations
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./apps/api/Dockerfile
@@ -156,7 +156,7 @@ jobs:
 
       - name: Build and push Web image
         id: build-web
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./apps/web/Dockerfile
