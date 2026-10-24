@@ -3,7 +3,7 @@ import { AppShell } from "./shell/layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
 import { RoleSiteSelectionPage } from "./pages/RoleSiteSelectionPage";
 import { OverviewPage } from "./pages/OverviewPage";
-import { DashboardPage } from "./pages/DashboardPage";
+import { PanelAdminPage } from "./pages/admin/panel/PanelAdminPage";
 import { ComplaintsListPage } from "./pages/complaints/ComplaintsListPage";
 import { ComplaintCreatePage } from "./pages/complaints/ComplaintCreatePage";
 import { ComplaintDetailPage } from "./pages/complaints/ComplaintDetailPage";
@@ -110,7 +110,7 @@ export default function App() {
           <Route path="verification" element={<VerificationQueuePage />} />
           <Route path="verification/:complaintId" element={<VerificationDetailPage />} />
           <Route path="management" element={<ManagementDashboardPage />} />
-          <Route path="administration" element={<DashboardPage />} />
+          <Route path="administration" element={<PanelAdminPage />} />
           <Route path="administration/complaints" element={<ComplaintConfigPage />} />
           <Route path="surveys" element={<SurveyListPage />} />
           <Route path="surveys/:code" element={<SurveyDetailPage />} />

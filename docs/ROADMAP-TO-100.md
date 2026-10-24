@@ -11,7 +11,7 @@
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
 | Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and **Wave A5 are COMPLETED**; no wave is currently active. Waves A6–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
-| Design-only additions outside the denominator | **Epic 15 (Panel Admin) opened 2026-09-28** in `docs/plans/CORE-ROADMAP.md` §4.15 — configuration category structure locked, design interview not started. Design work only; moves no point in this document (see §14) |
+| Design-only additions outside the denominator | **Epic 15 (Panel Admin)** in `docs/plans/CORE-ROADMAP.md` §4.15 — structure locked 2026-09-28; **design interview complete 2026-10-23 (15 decisions locked, all 6 open items closed)**; implementation not authorized. Design work only; moves no point in this document (see §14) |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
 
@@ -44,6 +44,12 @@ Remaining to 100%:
 
 Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
 traceability and move neither metric; the numbers above already reflect their closure.
+
+**Implementation status snapshot (2026-10-24, unweighted):**
+
+- **Local E2E business proof (done):** FASE 0 item 3 pilot seed and FASE 1's 29 UAT-014 transaction chains were verified 2026-10-23 through the real API and outbox consumer — 87 posted GL journals, debit = credit = 6.802.182,00, invoices INV-00001..00029, AR 3.814.182,00. Pilot E2E-014 UAT **PASSED 4/4** exit criteria 2026-10-24 (FD-008/FD-009 locked; FD-009-S1 credential rotation done). Evidence: `UAT-014-Evidence/`. No roadmap points earned — equivalent to a Phase 11F-style unweighted validation.
+- **Commit state (2026-10-24):** `master` @ `882bbdd` (PR #40 COA Builder — templates, draft lifecycle, maker-checker approval). Active branch `feat/wave-a6-coa-builder` holds 5 unmerged commits (COA builder integration tests + dictionary seed, Epic 15 Panel Admin configuration center, demo-gs seed merge). 16 local commits across branches are not yet pushed to `origin`. Wave A6 ADRs 0015–0022 remain `PROPOSED`; the COA builder landed as accounting-kernel work and closes no Wave A6 point.
+- **VPS staging (checked 2026-10-24):** `deploy@202.10.46.8` healthy — `abixell-one-staging-{web,api,postgres}` all `healthy` (up 5 days; images built 2026-10-15), database `abixell_one_staging` with 246 public tables, disk 17% (13G/79G), load ~0.01. The deployed build predates the COA builder / Panel Admin commits. Pilot staging init (`docs/operations/pilot-staging-init-runbook.md`) remains **deferred** per Founder decision 2026-10-23 ("local evidence is enough for now").
 
 ## 2. Recommended Phase Sequence
 
@@ -409,4 +415,4 @@ The Core Roadmap (`docs/plans/CORE-ROADMAP.md`) hosts a design-interview program
 | Epic | Opened | State | Effect on this document |
 |---|---|---|---|
 | 1–14 | 2026-09-23 … 2026-09-25 | Design interviews complete; execution tracked separately in the Core Roadmap | None |
-| **15 — Panel Admin (single configuration center)** | 2026-09-28 | Structure locked: 8 configuration categories, 13 module slots (module list includes Finance, HSE, Project Delivery with status "not yet executed — slot prepared"); design interview not started; implementation not authorized | None. Panel Admin is a consolidation surface over configuration capabilities that already exist or are contracted per-epic; it adds no new roadmap scope. Any future implementation follows the governance rules in §13 and needs an explicit Founder directive |
+| **15 — Panel Admin (single configuration center)** | 2026-09-28 (structure) / 2026-10-23 (design interview) | Structure locked: 8 configuration categories, 13 module slots (module list includes Finance, HSE, Project Delivery with status "not yet executed — slot prepared"). Design interview 2026-10-23: 15 decisions locked — terminology override for all module labels (per-tenant), sidebar nested layout, toggle + setup wizard for module activation, template + custom RBAC roles, immediate save with audit + undo, dashboard summary + drill-down, granular per-category permissions, per-field precedence badges, toggle-only notification channel presets, per-module document templates, threshold/rule-only workflow config, single Module Config list page, `/administration` → Panel Admin with `/admin` kept as read-only detail dashboard, build as a unit after Epic 2–5 foundation; implementation not authorized | None. Panel Admin is a consolidation surface over configuration capabilities that already exist or are contracted per-epic; it adds no new roadmap scope. Any future implementation follows the governance rules in §13 and needs an explicit Founder directive |

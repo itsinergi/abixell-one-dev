@@ -1,8 +1,8 @@
 # Core Roadmap — Abixell One
 
-**Versi:** 1.16
-**Tanggal:** 2026-09-30
-**Status:** **Epic 1 selesai 2026-09-28** — enam gelombang (skema, sesi server-side, otorisasi hanya-role-aktif, ApprovalAuthority & SoD, route + UI, cutover + regresi) dibangun dan diuji; Epic 5–15 kini terbuka. Epic 2–6 sudah digali; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. **Wawancara customer scope selesai 2026-09-28 — enam keputusan terkunci (eksternal saja, default baca dua permission dengan opsi set penuh, permukaan internal tertutup, Admin Tenant pemberi, pencabutan manual plus penjaring sistem, tidak boleh campur scope); item terbuka 1–7 seluruhnya terkunci, termasuk item 4 (batch atomic all-or-nothing) dan item 5–7.** Implementasi seluruh pekerjaan yang lahir dari keputusan itu selesai 2026-09-28 (migration 1788300000000–1788700000000), termasuk penutupan utang kamus rute Wave 2/3. **Sisa Epic 4: hanya filter permukaan internal customer, yang menjadi deliverable wajib modul Service Operation karena belum ada query customer-facing untuk dipasangi filter.** **Epic 15 (Panel Admin) dibuka 2026-09-28 — struktur kategori konfigurasi dan slot modul terkunci sebagai bahan wawancara; detail di §4.15.**
+**Versi:** 1.18
+**Tanggal:** 2026-10-24
+**Status:** **Epic 1 selesai 2026-09-28** — enam gelombang (skema, sesi server-side, otorisasi hanya-role-aktif, ApprovalAuthority & SoD, route + UI, cutover + regresi) dibangun dan diuji; Epic 5–15 kini terbuka. Epic 2–6 sudah digali; Epic 7–13 sudah digali dan menunggu eksekusi; Epic 14 sudah digali 2026-09-25 (kernel posting; sisanya Wave A6); design system Epic 13 dibangun native di dalam repo; **Epic 4 selesai 2026-09-28 sampai UI/UX** — Gelombang 1 (langkah 5–11b), Gelombang 2 (langkah 11–16 beserta UI-nya), Gelombang 3 (langkah 17–21), dan Gelombang 4 (langkah 22–25) seluruhnya dibangun dan diuji. **Wawancara customer scope selesai 2026-09-28 — enam keputusan terkunci (eksternal saja, default baca dua permission dengan opsi set penuh, permukaan internal tertutup, Admin Tenant pemberi, pencabutan manual plus penjaring sistem, tidak boleh campur scope); item terbuka 1–7 seluruhnya terkunci, termasuk item 4 (batch atomic all-or-nothing) dan item 5–7.** Implementasi seluruh pekerjaan yang lahir dari keputusan itu selesai 2026-09-28 (migration 1788300000000–1788700000000), termasuk penutupan utang kamus rute Wave 2/3. **Sisa Epic 4: hanya filter permukaan internal customer, yang menjadi deliverable wajib modul Service Operation karena belum ada query customer-facing untuk dipasangi filter.** **Epic 15 (Panel Admin) wawancara desain selesai 2026-10-23 — 15 keputusan terkunci (Putaran 1–4 struktur + Putaran 5–6 model interaksi); seluruh 6 butir "Yang belum diputuskan" tertutup; menunggu eksekusi setelah fondasi Epic 2–5, detail di §4.15.** **Status implementasi 2026-10-24: E2E-014 pilot catering LULUS 4/4 (29 transaksi UAT-014 via API+outbox, GL 6.802.182,00 debit=kredit, 29 invoice AR, periode Okt-2026 di-lock; laporan `UAT-014-Evidence/`) — bukti lokal, tanpa bobot poin. Commit `master` @ `882bbdd` (PR #40 COA Builder Wave A6, masih PROPOSED/berat poin belum bergerak); branch aktif `feat/wave-a6-coa-builder` +5 commit belum merge (uji integrasi COA, Panel Admin Epic 15, seed demo-gs); 16 commit lokal belum push. VPS staging `202.10.46.8` sehat 3 container (build 2026-10-15, sebelum commit COA/Panel Admin); seed pilot staging ditunda keputusan Founder 2026-10-23.**
 **Basis riset:** `D:\RESEARCH AREA\research\idempiere` (22 dokumen) — **diverifikasi ulang ke source code `idempiere/idempiere` dan wiki resmi pada 2026-09-23**
 
 ---
@@ -185,7 +185,7 @@ Prinsip berikut berlaku untuk seluruh Epic, bukan hanya Epic 1.
 | 12 | Reporting, Scheduler & Notification Artifacts | Epic 7, 11 | **Digali 2026-09-25 — detail di §4.12, siap desain setelah Epic 7 dan 11** |
 | 13 | UI/UX Theme System & Generic Rendering | Epic 2 | **Digali 2026-09-25 — detail di §4.13, siap desain setelah Epic 2; design system dibangun native di dalam repo (keputusan #6 direvisi 2026-09-25)** |
 | 14 | Finance & Accounting Posting | Epic 7 | **Digali 2026-09-25 — detail di §4.14 (kernel posting saja); sisanya Wave A6 sesi terpisah; siap desain setelah Epic 7, 8, 9, 11 + tinjauan akuntan untuk template bagan akun** |
-| 15 | Panel Admin — Pusat Konfigurasi Tunggal | Epic 2, 4, 5, 8, 9, 12, 13 | **Dibuka 2026-09-28 — struktur 8 kategori konfigurasi dan 13 slot modul terkunci sebagai bahan wawancara (§4.15); wawancara desain belum dilakukan** |
+| 15 | Panel Admin — Pusat Konfigurasi Tunggal | Epic 2, 4, 5, 8, 9, 12, 13 | **Wawancara desain selesai 2026-10-23 — 15 keputusan terkunci (terminology override semua label, sidebar nested, toggle+wizard, template role, langsung+audit+undo, dashboard drill-down, permission granular per kategori, badge precedence, toggle kanal presets, template dokumen per modul, ambang workflow lokal, satu halaman daftar modul, `/administration`→Panel Admin, bangun sekaligus setelah Epic 2–5); detail di §4.15 Putaran 5–6** |
 
 Setiap Epic 2–15 digali lewat wawancara sebelum ditulis detail dan dieksekusi, mengikuti mekanisme yang sama dengan Epic 1.
 
@@ -4753,27 +4753,43 @@ Sumber daftar: katalog modul nyata `MODULE_METADATA` (`apps/web/src/lib/capabili
 | Katalog modul nyata (13 kode) | `MODULE_METADATA` [capabilities.ts:165](apps/web/src/lib/capabilities.ts:165) | Sumber daftar slot Module Config |
 | Registry tipe/kode dokumen lewat kontrak registrasi | Epic 8 §4.8 keputusan #22 | Pola registrasi konfigurasi per modul |
 
-#### Yang belum diputuskan (bahan wawancara desain)
+#### Keputusan wawancara desain 2026-10-23 (terkunci)
 
-1. **Model permission Panel Admin.** Satu `config.manage` untuk seluruh kategori, atau permission per kategori (`config.module.manage`, `config.platform.manage`, dst.), atau per modul (`<module>.configure` seperti pola `complaint.configure`)?
-2. **Nasib route `/administration` dan `/admin`.** Panel Admin menggantikan `/administration`; Admin Console tetap `/admin` sebagai dasbor detail baca? Apakah nama menu di tree berubah ("Administration" → "Panel Admin")?
-3. **Bentuk halaman Module Config.** Satu halaman kategori berisi daftar modul (klik modul → halaman konfigurasinya; modul tanpa isian render "belum tersedia"), atau setiap modul langsung jadi halaman di tree? Rekomendasi awal pembahasan: bentuk pertama — menghindari puluhan halaman stub di tree.
-4. **Penerapan istilah HRIS.** Terminology override per tenant (CFG-001, nol perubahan kode) atau penggantian label platform (`MODULE_METADATA` + seed menu + parity test — perubahan backend)?
-5. **Relasi dengan gelombang eksekusi Epics 2–14.** Panel Admin dibangun setelah Epics 2–5 ada (registry, menu, user, org) sebagai permukaan konsolidasi, atau bertahap per kategori mengikuti epic yang selesai?
-6. **Dashboard Panel Admin.** Apa yang tampil di halaman pertama: ringkasan status konfigurasi per kategori (terisi/belum), validasi konfigurasi (dual-admin-console §3.2 "tenant configuration validation"), atau keduanya?
+Wawancara desain Epic 15 dilakukan 2026-10-23. Lima belas keputusan terkunci; seluruh enam butir "Yang belum diputuskan" tertutup.
+
+##### Putaran 5 — Model interaksi
+
+1. **Terminology override berlaku untuk semua label modul, bukan hanya HRIS.** Klien dapat mengganti label setiap modul (mis. Finance → "Akuntansi", Supply Chain → "Pengadaan") lewat terminology override per tenant (CFG-001, tanpa perubahan kode). Istilah HRIS relabel open item #4 tertutup sebagai kasus khusus dari aturan umum ini.
+2. **Layout Panel Admin: sidebar menu dengan nested items.** Delapan kategori menjadi menu di sidebar kiri; klik kategori → konten konfigurasi spesifik kategori tampil di panel kanan utama. Pola konsol yang sudah dikenal (GitHub Settings / AWS Console).
+3. **Aktivasi modul: toggle langsung aktif + wizard setup singkat.** Toggle ON → modul langsung muncul di navigasi, tetapi wizard setup wajib diisi dulu (mis. Finance perlu COA awal + periode akuntansi pertama) sebelum modul dapat dipakai. Progress wizard terlihat jelas; tidak ada mode "aktif tapi kosong tanpa panduan".
+4. **Template role + role custom (RBAC).** Platform menyediakan template role siap pakai (Admin, Supervisor, Operator, Viewer). Klien menyalin template lalu menyesuaikan, atau membuat role baru dari katalog permission (CFG-010). Cepat untuk setup awal, tetap fleksibel untuk struktur kewenangan unik.
+5. **Perubahan konfigurasi berlaku langsung + audit + undo.** Setiap penyimpanan langsung berlaku (tanpa mode draft/publish), tercatat di audit trail (pelaku, waktu, nilai lama → nilai baru), dan dapat dikembalikan ke nilai sebelumnya dari catatan itu. Konsisten dengan prinsip structured-config-only (CFG-R3) — tanpa mode draft yang menggandakan keadaan nilai.
+6. **Dashboard Panel Admin: ringkasan status + drill-down.** Halaman pertama menampilkan kesehatan konfigurasi: modul aktif/nonaktif, kategori yang belum lengkap, perubahan terakhir, dan peringatan (mis. periode akuntansi belum dibuka). Klik elemen → langsung ke layar detail konfigurasinya. Menjawab open item #6 (ringkasan status **dan** validasi konfigurasi, keduanya).
+7. **Akses Panel Admin granular per kategori.** Permission per kategori (`config.module.manage`, `config.platform.manage`, `config.org.manage`, `config.system.manage`, `config.user.manage`, `config.workflow.manage`, `config.notification.manage`, `config.document.manage`) — bukan satu `config.manage` monolitik, bukan role Super Admin tunggal. Sesuai pola ApprovalAuthority tuple (Epic 1): otoritas berbasis kombinasi permission, bukan satu role besar. Menjawab open item #1.
+8. **Precedence visibility: badge sumber nilai di tiap field.** Setiap field konfigurasi berjenjang menampilkan badge kecil ("System Default" / "Client Override" / "Organization Override" / "Diset manual") sesuai pola `AD_SysConfig.ConfigurationLevel` (Epic 8 #16, ADR-0006). Klik badge → riwayat dan sumber nilai. Syarat UI yang sudah termuat di prinsip 4 Putaran 4; tanpa layar Precedence Explorer terpisah.
+9. **Notification & Kanal: toggle kanal presets, bukan setup detail.** Admin menyalakan/mematikan kanal yang sudah tersedia (SMTP Email, Web Push, Telegram — Epic 12). Setup detail kanal (host SMTP, kredensial, API token) dikelola internal platform, bukan di Panel Admin. Aman bagi klien (tanpa mengelola credentials), setup kanal baru tetap lewat tim platform.
+
+##### Putaran 6 — Isi kategori dan urutan eksekusi
+
+10. **Document Config: template dokumen per modul.** Setiap modul memiliki template dokumen awalnya sendiri (nomor urut, field metadata, format) — mis. Finance punya template "Invoice", HR punya "Attendance Record". Admin menyalin template lalu menyesuaikan. Bukan satu standar dokumen untuk seluruh tenant. Selaras dengan document codes (Epic 8 #2) dan document type registry (Epic 8 #1).
+11. **Workflow & Approval: atur ambang & aturan lokal, bukan bangun ulang alur.** Struktur approval (level, rule, SoD, anti self-approval — Epic 9, Epic 1) sudah dikunci platform. Panel Admin hanya mengatur skala lokal: batas nominal per level, jumlah approver per threshold, SLA per step (CFG-004). Admin tidak merancang ulang approval logic dari nol.
+12. **Module Config: satu halaman daftar modul, klik untuk detail.** Satu halaman "Module Config" berisi daftar 13 modul dari registry (bukan hardcode); klik modul → halaman konfigurasi modul. Modul tanpa isian (Finance, HSE, Project Delivery) tetap tampil dengan label "belum tersedia" / status `locked` + `lockedReason` dari server — bukan halaman stub di tree. Menjawab open item #3.
+13. **Route: `/administration` menjadi Panel Admin; `/admin` tetap dasbor detail.** Nama menu di tree berubah "Administration" → "Panel Admin". Admin Console (`/admin`) bertahan sebagai dasbor detail baca; setiap tombol/angka di dalamnya menautkan ke Panel Admin, bukan duplikasi kontrol tulis (prinsip 5 Putaran 4). Menjawab open item #2.
+14. **Urutan eksekusi: Panel Admin dibangun sekaligus setelah fondasi Epic 2–5.** Setelah registry modul (Epic 2), menu (Epic 3/4), user & role (Epic 4), dan org (Epic 5) stabil, Panel Admin dibangun sebagai satu kesatuan permukaan konsolidasi — bukan bertahap per kategori. Menjawab open item #5.
+15. **Status open item #4 (HRIS relabel): tertutup** oleh keputusan #1 — penerapan terminology override per tenant untuk semua label modul, tanpa penggantian label platform (`MODULE_METADATA` tidak diubah).
 
 #### Out-of-scope Epic 15
 
 - Membangun konfigurasi yang epic-nya belum dieksekusi — Panel Admin hanya menyiapkan rumahnya (slot), isi mengikuti epic pemilik.
 - Melewati guardrail: parameter yang menyentuh keamanan/audit tetap dipaksa ke level konfigurasi lebih tinggi (Epic 8 prinsip).
 - Platform Architect / Builder Console — ranah `dual-admin-console.md` §4, bukan Panel Admin.
-- Eksekusi implementasi apa pun sebelum wawancara desain dan kontrak §4.15 final.
+- Eksekusi implementasi sebelum fondasi Epic 2–5 stabil (keputusan #14: Panel Admin dibangun sekaligus setelahnya).
 
 #### Catatan implementasi terhadap keputusan roadmap
 
-- Bagian ini mengunci struktur kategori dan slot sebagai **bahan wawancara**; enam keputusan putaran 1–4 sudah disetujui pemilik produk pada 2026-09-28, enam item "yang belum diputuskan" menunggu wawancara desain.
-- Tidak ada migration, perubahan backend, atau commit implementasi yang diberi persetujuan oleh bagian ini.
-- Rekonsiliasi dengan kontrak CFG-010/CFG-015 (masih PARTIAL di PRD) dilakukan saat wawancara desain.
+- Bagian ini mengunci struktur kategori (Putaran 1–4, 2026-09-28) dan model interaksi (Putaran 5–6, wawancara desain 2026-10-23). Lima belas keputusan terkunci; seluruh enam butir "yang belum diputuskan" tertutup.
+- Tidak ada migration, perubahan backend, atau commit implementasi yang diberi persetujuan oleh bagian ini — wawancara mengunci desain, bukan eksekusi.
+- Rekonsiliasi dengan kontrak CFG-010/CFG-015 (masih PARTIAL di PRD) dilakukan saat eksekusi; keputusan #4 (template role + role custom) menutup ruang CFG-010, keputusan #11 (ambang workflow lokal) menutup ruang CFG-015.
 
 ---
 
@@ -4817,7 +4833,7 @@ Catatan tambahan yang memperkaya tapi tidak mengoreksi:
 | 15 | Definisi periode laporan tertutup dan prosedur koreksi saat hierarchy di-backdate | 5, 7, 12 | **Dijawab Epic 14 (2026-09-25):** periode tertutup = `finance_fiscal_periods.status = 'closed'`, dicapai hanya setelah daftar periksa penutupan lulus; koreksi memakai jurnal balik (Reverse Correct/Accrual) ke periode terbuka berikutnya bila periode asli tutup. Prosedur buka ulang = maker-checker + alasan + bukti dampak. Lihat §4.14 keputusan #10, #11, #13. |
 | 16 | Kebijakan file: storage, scan, versioning, expiry, retention, dan akses dokumen legal, identity file slot, maupun lampiran backdate | 5, 6, 7 | Belum. Epic 5 hanya menyiapkan slot metadata; identity file slot terkait Epic 6; dibahas pada session dokumen/file terpisah. |
 | 17 | Model User, Employee, Role, dan Business Partner beserta batas Epic 4, 5, dan 10 | 4, 5, 6, 10 | **Resolved di Epic 6 §4.6:** Business Partner canonical Individual/Organization; Employee role + profile; Department bukan scope; satu primary dan secondary placement terbatas, effective-dated. Customer Scope tetap pending karena external identity boundary sudah settled tetapi service portal belum dirinci. |
-| 18 | Model permission Panel Admin, nasib route `/administration` dan `/admin`, bentuk halaman Module Config, penerapan istilah HRIS, urutan eksekusi, dan isi dashboard | 15 | **Dibuka Epic 15 (2026-09-28)** — struktur 8 kategori dan 13 slot modul terkunci; enam butir ini menunggu wawancara desain. Lihat §4.15 "Yang belum diputuskan". |
+| 18 | Model permission Panel Admin, nasib route `/administration` dan `/admin`, bentuk halaman Module Config, penerapan istilah HRIS, urutan eksekusi, dan isi dashboard | 15 | **Selesai 2026-10-23** — enam butir tertutup lewat wawancara desain Epic 15 (keputusan #1, #7, #12, #13, #14, #6): terminology override semua label, permission granular per kategori, satu halaman daftar modul, `/administration`→Panel Admin, bangun sekaligus setelah Epic 2–5, dashboard ringkasan + drill-down. Lihat §4.15 Putaran 5–6. |
 
 ---
 

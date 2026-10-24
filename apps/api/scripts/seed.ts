@@ -13,6 +13,7 @@
  * Usage: npm run seed -w apps/api
  */
 import "dotenv/config";
+import { randomBytes } from "node:crypto";
 import { pool } from "../src/infrastructure/persistence/db.js";
 import { hashPassword } from "../src/infrastructure/security/password.js";
 
@@ -318,7 +319,9 @@ async function main() {
     );
   }
 
-  // Reference Data: seed two Priority Level items for this tenant.
+  // Reference Data: seed two Priority Level items for this tenant. The
+  // Epic-2 Wave-2 trigger already seeds low/medium/high/critical as core
+  // items on tenant creation, so these are additive only where absent.
   const priorityType = (
     await pool.query(`SELECT id FROM reference_data_types WHERE code = 'priority_level'`)
   ).rows[0];
@@ -326,7 +329,8 @@ async function main() {
     await pool.query(
       `INSERT INTO tenant_reference_data_items
          (tenant_id, reference_data_type_id, code, label, sort_order)
-       VALUES ($1, $2, 'high', 'High', 1), ($1, $2, 'low', 'Low', 2)`,
+       VALUES ($1, $2, 'high', 'High', 1), ($1, $2, 'low', 'Low', 2)
+       ON CONFLICT (tenant_id, reference_data_type_id, code) DO NOTHING`,
       [tenant.id, priorityType.id],
     );
   }
@@ -989,6 +993,381 @@ async function main() {
     ]);
   }
 
+  // --- Checkpoint 1C: Catering Vertical Foundation demo data ------------------
+  // The catering vertical is seeded INTO demo-gs so one tenant shows the whole
+  // system (identity, workflows, complaints, catering, accounting). The
+  // FASE-0 pilot script `seed-pilot-catering.ts` stays on its own branch for
+  // staging init — this section is a pure-SQL adaptation of the same fixture,
+  // without the FastifyInstance/HTTP calls that script uses. Catering roles are
+  // strictly additive: no existing demo role code is touched.
+  const cateringOrgUnit = (
+    await pool.query(
+      `INSERT INTO organization_units (tenant_id, legal_entity_id, parent_id, name, unit_type)
+       VALUES ($1, $2, $3, 'Catering Operations', 'Site') RETURNING id`,
+      [tenant.id, legalEntity.id, headOffice.id],
+    )
+  ).rows[0];
+
+  // Service pack activation: the catering module is opt-in per tenant
+  // (Checkpoint 0C deliberately does not activate modules by default), so the
+  // vertical needs its pack flag explicitly set here.
+  await pool.query(
+    `INSERT INTO service_pack_activations (tenant_id, pack_code, is_active, activated_by)
+     VALUES ($1, 'catering', true, $2)
+     ON CONFLICT (tenant_id, pack_code) DO UPDATE SET is_active = true`,
+    [tenant.id, admin.id],
+  );
+
+  // Catering roles (COORD_OPS / EXEC_OPS / VERIFY_OPS / BILL_OPS) with the
+  // pilot's permission sets, kept separate from the demo roles above.
+  const cateringRolePermissionCodes: Record<string, string[]> = {
+    COORD_OPS: [
+      "service_operations.read",
+      "service_operations.manage",
+      "service_operations.configure",
+      "customer.read",
+      "workflow.instance.start",
+      "workflow.instance.act",
+    ],
+    EXEC_OPS: ["service_operations.read", "service_operations.execute", "workflow.instance.act"],
+    VERIFY_OPS: ["service_operations.read", "service_operations.verify", "workflow.instance.act"],
+    BILL_OPS: ["service_operations.read", "service_operations.billing.manage", "customer.read"],
+  };
+  const cateringRoleIds: Record<string, string> = {};
+  for (const [code, permissionCodes] of Object.entries(cateringRolePermissionCodes)) {
+    const role = (
+      await pool.query(`INSERT INTO roles (tenant_id, code, name) VALUES ($1, $2, $2) RETURNING id`, [
+        tenant.id,
+        code,
+      ])
+    ).rows[0];
+    cateringRoleIds[code] = role.id;
+    const permissions = (
+      await pool.query(`SELECT id FROM permissions WHERE code = ANY($1)`, [permissionCodes])
+    ).rows;
+    if (permissions.length !== permissionCodes.length) {
+      throw new Error(
+        `catering role ${code}: expected ${permissionCodes.length} permissions, found ${permissions.length}`,
+      );
+    }
+    for (const p of permissions) {
+      await pool.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)`, [
+        role.id,
+        p.id,
+      ]);
+    }
+  }
+
+  // Catering users — same demo-fixture password pattern as the accounts above.
+  const cateringUsers = [
+    { roleCode: "COORD_OPS", email: "coord@demo.local", fullName: "Demo Coordinator Ops", password: "Coord12345!" },
+    { roleCode: "EXEC_OPS", email: "exec@demo.local", fullName: "Demo Executor Ops", password: "Exec12345!" },
+    { roleCode: "VERIFY_OPS", email: "verify@demo.local", fullName: "Demo Verifier Ops", password: "Verify12345!" },
+    { roleCode: "BILL_OPS", email: "bill@demo.local", fullName: "Demo Billing Ops", password: "Bill12345!" },
+  ];
+  for (const u of cateringUsers) {
+    const passwordHash = await hashPassword(u.password);
+    const user = (
+      await pool.query(
+        `INSERT INTO users (tenant_id, email, password_hash, full_name)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [tenant.id, u.email, passwordHash, u.fullName],
+      )
+    ).rows[0];
+    await pool.query(
+      `INSERT INTO user_role_assignments (user_id, role_id, scope_type)
+       VALUES ($1, $2, 'tenant')`,
+      [user.id, cateringRoleIds[u.roleCode]],
+    );
+  }
+
+  // Catering numbering: WO-00001 / INV-00001 — the same tenant-configurable
+  // mechanism as `demo_ticket` and `complaint_number` above.
+  await pool.query(
+    `INSERT INTO numbering_sequences (tenant_id, code, pattern, current_sequence)
+     VALUES ($1, 'work_order', 'WO-{SEQ:5}', 0), ($1, 'customer_invoice', 'INV-{SEQ:5}', 0)`,
+    [tenant.id],
+  );
+
+  // Catering workflow definition: Work Order Lifecycle (PLANNED →
+  // IN_PROGRESS → DONE → CLOSED). Steps/transitions/assignment rules are
+  // ordinary tenant configuration rows, exactly like complaint_lifecycle
+  // above — nothing catering-specific is hardcoded in the engine.
+  const cateringWorkflowDefinition = (
+    await pool.query(
+      `INSERT INTO workflow_definitions (tenant_id, code, name, entity_type, description, created_by)
+       VALUES ($1, 'service_operations_work_order', 'Work Order Lifecycle', 'work_order',
+               'Checkpoint 1C catering work-order lifecycle — PLANNED -> IN_PROGRESS -> DONE -> CLOSED.',
+               $2)
+       RETURNING id`,
+      [tenant.id, admin.id],
+    )
+  ).rows[0];
+  const cateringWorkflowVersion = (
+    await pool.query(
+      `INSERT INTO workflow_versions (workflow_definition_id, version_number, status, is_current, created_by, published_at)
+       VALUES ($1, 1, 'published', true, $2, now()) RETURNING id`,
+      [cateringWorkflowDefinition.id, admin.id],
+    )
+  ).rows[0];
+  const stepPlanned = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'PLANNED', 'Planned', 'task', true, false, 1) RETURNING id`,
+      [cateringWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepInProgress = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'IN_PROGRESS', 'In Progress', 'task', false, false, 2) RETURNING id`,
+      [cateringWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepDone = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, sequence_order)
+       VALUES ($1, 'DONE', 'Done', 'approval', false, false, 3) RETURNING id`,
+      [cateringWorkflowVersion.id],
+    )
+  ).rows[0];
+  const stepWoClosed = (
+    await pool.query(
+      `INSERT INTO workflow_steps (workflow_version_id, code, name, step_type, is_initial, is_terminal, terminal_status, sequence_order)
+       VALUES ($1, 'CLOSED', 'Closed', 'end', false, true, 'approved', 4) RETURNING id`,
+      [cateringWorkflowVersion.id],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO workflow_transitions (workflow_version_id, from_step_id, to_step_id, action_code, name, sort_order)
+     VALUES
+       ($1, $2, $3, 'start', 'Start', 1),
+       ($1, $3, $4, 'complete', 'Complete', 1),
+       ($1, $4, $5, 'verify', 'Verify', 1)`,
+    [cateringWorkflowVersion.id, stepPlanned.id, stepInProgress.id, stepDone.id, stepWoClosed.id],
+  );
+  for (const stepId of [stepPlanned.id, stepInProgress.id, stepDone.id]) {
+    await pool.query(
+      `INSERT INTO workflow_assignment_rules (workflow_step_id, sort_order, assignment_type, role_code, organization_unit_strategy)
+       VALUES ($1, 1, 'role', 'COORD_OPS', 'tenant')`,
+      [stepId],
+    );
+  }
+
+  // Catering customer + site (served by the Catering Operations unit above —
+  // kept separate from CUST-001/SITE-001, which belong to the complaint demo).
+  const cateringCustomer = (
+    await pool.query(
+      `INSERT INTO customers (tenant_id, code, name, owner_organization_unit_id)
+       VALUES ($1, 'CUST-CATER', 'Demo Catering Client', $2) RETURNING id`,
+      [tenant.id, cateringOrgUnit.id],
+    )
+  ).rows[0];
+  const cateringSite = (
+    await pool.query(
+      `INSERT INTO sites (tenant_id, customer_id, code, name)
+       VALUES ($1, $2, 'SITE-CATER', 'Demo Catering Site') RETURNING id`,
+      [tenant.id, cateringCustomer.id],
+    )
+  ).rows[0];
+
+  const cateringService = (
+    await pool.query(
+      `INSERT INTO services (tenant_id, code, name, description)
+       VALUES ($1, 'SVC-CATERING', 'Catering Service', 'Catering vertical demo service — seeded for the unified demo tenant')
+       RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO service_definitions (tenant_id, code, name, description, created_by)
+     VALUES ($1, 'catering_demo_service', 'Catering Demo Service', 'Work-order template for the catering vertical demo', $2)`,
+    [tenant.id, admin.id],
+  );
+  await pool.query(
+    `INSERT INTO customer_service_links (tenant_id, customer_id, service_id, site_id)
+     VALUES ($1, $2, $3, $4)`,
+    [tenant.id, cateringCustomer.id, cateringService.id, cateringSite.id],
+  );
+
+  // Units of measure + conversion (K4 simple factor): 1 KG = 1000 G.
+  const kgUnit = (
+    await pool.query(
+      `INSERT INTO units_of_measure (tenant_id, code, name, base_unit_code, category)
+       VALUES ($1, 'KG', 'Kilogram', 'KG', 'mass') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  const gUnit = (
+    await pool.query(
+      `INSERT INTO units_of_measure (tenant_id, code, name, base_unit_code, category)
+       VALUES ($1, 'G', 'Gram', 'G', 'mass') RETURNING id`,
+      [tenant.id],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO unit_conversions (tenant_id, from_unit_id, to_unit_id, factor, effective_from)
+     VALUES ($1, $2, $3, 1000::numeric(18,6), '2020-01-01')`,
+    [tenant.id, kgUnit.id, gUnit.id],
+  );
+
+  // Items + one valuation layer (100 KG @ 12.000 IDR/KG) — the layer the
+  // recipe costing below reads.
+  const riceItem = (
+    await pool.query(
+      `INSERT INTO items (tenant_id, code, name, unit_of_measure, unit_of_measure_id)
+       VALUES ($1, 'RICE', 'Rice', 'KG', $2) RETURNING id`,
+      [tenant.id, kgUnit.id],
+    )
+  ).rows[0];
+  const cookedRiceItem = (
+    await pool.query(
+      `INSERT INTO items (tenant_id, code, name, unit_of_measure, unit_of_measure_id)
+       VALUES ($1, 'COOKED-RICE', 'Cooked Rice', 'KG', $2) RETURNING id`,
+      [tenant.id, kgUnit.id],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO scm_valuation_layers
+       (tenant_id, item_id, received_date, original_quantity, remaining_quantity,
+        unit_cost, effective_unit_cost, total_value)
+     VALUES ($1, $2, CURRENT_DATE, 100, 100, 12000, 12000, 1200000)`,
+    [tenant.id, riceItem.id],
+  );
+
+  // Menu + recipe + ingredient (500 G rice → 2 KG cooked rice).
+  const TODAY = new Date().toISOString().slice(0, 10);
+  await pool.query(
+    `INSERT INTO catering_menus (tenant_id, code, name, effective_from, created_by, updated_by)
+     VALUES ($1, 'MENU-DEMO', 'Demo Lunch Menu', $2::date, $3, $3)`,
+    [tenant.id, TODAY, admin.id],
+  );
+  const cateringRecipe = (
+    await pool.query(
+      `INSERT INTO catering_recipes
+         (tenant_id, code, name, output_item_id, output_quantity, output_unit_id, effective_from, created_by, updated_by)
+       VALUES ($1, 'RC-COOKED-RICE', 'Cooked Rice Recipe', $2, 2, $3, $4::date, $5, $5)
+       RETURNING id`,
+      [tenant.id, cookedRiceItem.id, kgUnit.id, TODAY, admin.id],
+    )
+  ).rows[0];
+  await pool.query(
+    `INSERT INTO catering_recipe_ingredients (tenant_id, recipe_id, item_id, quantity, unit_id, sort_order)
+     VALUES ($1, $2, $3, 500, $4, 0)`,
+    [tenant.id, cateringRecipe.id, riceItem.id, gUnit.id],
+  );
+
+  // --- Checkpoint 1D: Accounting Foundation demo data -------------------------
+  // The catering vertical posts to the Accounting Kernel (work-order cost →
+  // invoice → tax), so the demo tenant needs the same accounting foundation
+  // the pilot seed builds: a non-login kernel actor, one open period, a COA,
+  // five GL accounts, and the three posting rules. Migrations seed posting
+  // rules for existing tenants only; a fresh tenant needs them here.
+  // Kernel actor is a service account: it never logs in. Store a real bcrypt
+  // hash of an unguessable throwaway secret (never printed, never recorded)
+  // instead of a placeholder, so the row can never be authenticated.
+  const kernelActorHash = await hashPassword(
+    randomBytes(32).toString("base64url"),
+  );
+  const kernelActor = (
+    await pool.query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name)
+       VALUES ($1, 'kernel-actor@demo.local', $2, 'Accounting Kernel Actor') RETURNING id`,
+      [tenant.id, kernelActorHash],
+    )
+  ).rows[0];
+
+  const accountingPeriod = (
+    await pool.query(
+      `INSERT INTO accounting_periods
+         (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name,
+          period_type, date_from, date_to, status, created_by)
+       VALUES ($1, $2, 'FY2026', 'OCT-2026', 'Oktober 2026', 'monthly',
+               '2026-10-01', '2026-10-31', 'open', $3) RETURNING id`,
+      [tenant.id, legalEntity.id, kernelActor.id],
+    )
+  ).rows[0];
+
+  const coa = (
+    await pool.query(
+      `INSERT INTO chart_of_accounts
+         (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
+       VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3) RETURNING id`,
+      [tenant.id, legalEntity.id, kernelActor.id],
+    )
+  ).rows[0];
+
+  const glAccounts = [
+    { code: "1210", name: "Accounts Receivable", cls: "ASSET", normal: "debit" },
+    { code: "2410", name: "Tax Payable", cls: "LIABILITY", normal: "credit" },
+    { code: "2500", name: "Accrued WO Cost", cls: "LIABILITY", normal: "credit" },
+    { code: "4100", name: "Service Revenue", cls: "INCOME", normal: "credit" },
+    { code: "6200", name: "WO Cost", cls: "EXPENSE", normal: "debit" },
+  ];
+  for (const acc of glAccounts) {
+    await pool.query(
+      `INSERT INTO accounting_accounts
+         (tenant_id, legal_entity_id, coa_id, account_code, account_name,
+          account_class, normal_balance, is_active, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
+      [tenant.id, legalEntity.id, coa.id, acc.code, acc.name, acc.cls, acc.normal, kernelActor.id],
+    );
+  }
+
+  const postingRules = [
+    {
+      code: "RULE_WO_COST_ACCUMULATED",
+      name: "WO Cost Accumulated",
+      trigger: "work_order.cost_accumulated",
+      legs: [
+        { accountCode: "6200", side: "debit", amountExpression: "AMOUNT" },
+        { accountCode: "2500", side: "credit", amountExpression: "AMOUNT" },
+      ],
+    },
+    {
+      code: "RULE_WO_INVOICED",
+      name: "WO Invoiced",
+      trigger: "work_order.invoiced",
+      legs: [
+        { accountCode: "1210", side: "debit", amountExpression: "AMOUNT" },
+        { accountCode: "4100", side: "credit", amountExpression: "AMOUNT" },
+      ],
+    },
+    {
+      code: "RULE_WO_INVOICE_TAX",
+      name: "WO Invoice Tax",
+      trigger: "work_order.invoice_tax",
+      legs: [
+        { accountCode: "1210", side: "debit", amountExpression: "AMOUNT" },
+        { accountCode: "2410", side: "credit", amountExpression: "AMOUNT" },
+      ],
+    },
+  ];
+  for (const rule of postingRules) {
+    await pool.query(
+      `INSERT INTO posting_rules
+         (tenant_id, rule_code, rule_name, rule_version, trigger_event_type,
+          accounting_formula, requires_approval, effective_date, is_active, created_by)
+       VALUES ($1, $2, $3, 'v1', $4, $5::jsonb, false, '2026-01-01', true, $6)`,
+      [tenant.id, rule.code, rule.name, rule.trigger, JSON.stringify(rule.legs), kernelActor.id],
+    );
+  }
+
+  // Tenant markup parameter (15%) at level 'S' — System-level value, the
+  // pilot's decimal default for invoice pricing.
+  const markupParam = (
+    await pool.query(`SELECT id FROM app_parameters WHERE code = $1`, [
+      "service_operations.invoice.default_markup",
+    ])
+  ).rows[0];
+  if (markupParam) {
+    await pool.query(
+      `INSERT INTO app_parameter_values (tenant_id, parameter_id, level, value, updated_by)
+       VALUES ($1, $2, 'S', '0.15'::jsonb, $3)`,
+      [tenant.id, markupParam.id, admin.id],
+    );
+  }
+
   console.log("Seed complete:");
   console.log(`  Tenant code:        ${DEMO_TENANT_CODE}`);
   console.log(`  Legal Entity:       ${legalEntity.id}`);
@@ -1021,6 +1400,17 @@ async function main() {
   console.log(
     `  Complaint Mgr login: complaintmanager@demo.local / ComplaintManager12345! (COMPLAINT_MANAGER, tenant-wide scope)`,
   );
+  console.log(`  Catering workflow:   service_operations_work_order v1 (published)`);
+  console.log(`  Catering org unit:   Catering Operations=${cateringOrgUnit.id} (under Head Office)`);
+  console.log(`  Catering customer:   ${cateringCustomer.id} (CUST-CATER) / site ${cateringSite.id} (SITE-CATER)`);
+  console.log(`  Catering menu/recipe: MENU-DEMO / RC-COOKED-RICE (RICE 500 G -> COOKED-RICE 2 KG)`);
+  console.log(`  Catering logins:`);
+  console.log(`    coord@demo.local  / Coord12345!   (COORD_OPS)`);
+  console.log(`    exec@demo.local   / Exec12345!    (EXEC_OPS)`);
+  console.log(`    verify@demo.local / Verify12345!  (VERIFY_OPS)`);
+  console.log(`    bill@demo.local   / Bill12345!    (BILL_OPS)`);
+  console.log(`  Accounting:          period ${accountingPeriod.id} (OCT-2026, open), COA FY2026, 5 GL accounts, 3 posting rules`);
+  console.log(`  Invoice markup:      service_operations.invoice.default_markup = 0.15`);
 
   await pool.end();
 }
