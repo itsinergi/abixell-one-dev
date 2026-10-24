@@ -272,6 +272,12 @@ export const WINDOW_RULES: WindowRule[] = [
   // transactions, matching journal creation.
   { method: "*", apiPath: "/accounting/posting-rules", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/posting-rules/generate", windowCode: "route:/finance/transactions" },
+  // Open-item settlement (Wave A6 WP-FIN-A6-02) is money movement between
+  // documents, not account configuration: every settlement write — creating
+  // an open item from a source document, allocating, and reversing an
+  // allocation — maps to the transactions Window alongside journal writes.
+  { method: "*", apiPath: "/accounting/open-items", windowCode: "route:/finance/transactions" },
+  { method: "*", apiPath: "/accounting/allocations", windowCode: "route:/finance/transactions" },
   // Manual requeue of a terminally-failed event (Phase 2 WP-INT-03) resets it
   // for re-posting, the same write surface as posting a journal.
   { method: "*", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
