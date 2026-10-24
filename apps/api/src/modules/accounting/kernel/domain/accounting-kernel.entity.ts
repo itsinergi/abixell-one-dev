@@ -541,6 +541,21 @@ export interface TemplateAccountDef {
   parentCode: string | null;
 }
 
+/**
+ * Layer 3 of the ADR-0015 COA stack: an optional industry / client overlay on
+ * top of the Indonesia baseline. Contract only — Wave A6 ships no packs, and a
+ * Mining Industry COA Pack needs separate Founder approval before it may be
+ * registered. `accountMappings` is the seam for future reporting/FSV overlays
+ * and stays opaque to the kernel until such a pack is authorized.
+ */
+export interface IndustryPack {
+  packCode: string;
+  packVersion: string;
+  /** Accounts added to the baseline; may not redefine or shadow baseline codes. */
+  accounts: ReadonlyArray<TemplateAccountDef>;
+  accountMappings?: Readonly<Record<string, string>>;
+}
+
 export interface CreateChartInput {
   tenantId: string;
   legalEntityId: string;
