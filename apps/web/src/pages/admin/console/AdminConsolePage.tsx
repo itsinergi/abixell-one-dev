@@ -135,7 +135,7 @@ function AdminConsoleContent() {
               key={section.key}
               to={sectionUrl(section.key)}
               aria-current={activeSection === section.key ? "page" : undefined}
-              className={`-mb-px inline-flex min-h-[44px] items-center rounded-t px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent sm:min-h-[36px] ${
+              className={`-mb-px inline-flex min-h-[44px] items-center rounded-t px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent sm:min-h-[36px] ${
                 activeSection === section.key
                   ? "border-b-2 border-accent text-ink"
                   : "border-b-2 border-transparent text-ink-dim hover:text-ink"
@@ -285,7 +285,7 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Workspace</dt>
-                <dd className="mt-1 break-words text-ink-dim">{tenantName || "Current tenant"}</dd>
+                <dd className="mt-1 wrap-break-word text-ink-dim">{tenantName || "Current tenant"}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Reported scope</dt>
@@ -426,7 +426,7 @@ function OverviewCard({
   return (
     <Link
       to={sectionUrl(destination)}
-      className="group rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      className="group rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
       aria-label={`Open ${title}`}
     >
       {content}

@@ -1,6 +1,58 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-ground: var(--bg);
+  --color-panel: var(--surface);
+  --color-panel-2: var(--surface-2);
+  --color-panel-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-ink-dim: var(--text-dim);
+  --color-ink-faint: var(--text-faint);
+
+  --color-accent: var(--accent);
+  --color-accent-line: var(--accent-line);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-on: var(--accent-on);
+
+  --color-status-ok: var(--ok);
+  --color-status-warn: var(--warn);
+  --color-status-danger: var(--danger);
+  --color-status-idle: var(--idle);
+  --color-status-ok-soft: var(--ok-soft);
+  --color-status-warn-soft: var(--warn-soft);
+  --color-status-danger-soft: var(--danger-soft);
+  --color-status-idle-soft: var(--idle-soft);
+
+  --height-row: var(--row);
+  --height-control: var(--control);
+
+  --min-height-row: var(--row);
+  --min-height-control: var(--control);
+
+  --radius: var(--radius);
+
+  --default-transition-duration: 120ms;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 /*
  * Epic 4 Wave 1 — design tokens.

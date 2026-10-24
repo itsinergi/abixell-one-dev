@@ -74,7 +74,7 @@ export function OverviewPage() {
                     <Link
                       key={page.code}
                       to={page.path}
-                      className="group flex min-h-[112px] flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                      className="group flex min-h-[112px] flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="text-sm font-semibold text-slate-900">{page.label}</h3>

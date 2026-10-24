@@ -650,7 +650,7 @@ function RatingInput({
           disabled={disabled}
           aria-pressed={value === number}
           onClick={() => onChange(number)}
-          className={`${compact ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm"} rounded border font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+          className={`${compact ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm"} rounded border font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400 ${
             value === number
               ? "border-slate-900 bg-slate-900 text-white"
               : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"

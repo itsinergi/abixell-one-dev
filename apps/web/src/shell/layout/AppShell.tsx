@@ -120,9 +120,9 @@ function NavRow({
       end={page.path === "/"}
       onClick={onNavigate}
       className={({ isActive }) =>
-        `${base} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 ${
+        `${base} transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 ${
           isActive
-            ? "bg-accent font-medium text-accent-on shadow-sm"
+            ? "bg-accent font-medium text-accent-on shadow-xs"
             : "text-ink-dim hover:bg-panel-3 hover:text-ink"
         }`
       }
@@ -181,7 +181,7 @@ function NavigationContent({
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="Filter navigation"
             autoComplete="off"
-            className="min-h-[44px] w-full rounded border border-line-strong bg-panel px-3 pr-9 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-2 focus:ring-accent-soft lg:min-h-[36px]"
+            className="min-h-[44px] w-full rounded border border-line-strong bg-panel px-3 pr-9 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-2 focus:ring-accent-soft lg:min-h-[36px]"
           />
           {query && (
             <button
@@ -191,7 +191,7 @@ function NavigationContent({
                 filterInputRef.current?.focus();
               }}
               aria-label="Clear navigation filter"
-              className="absolute inset-y-0 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r text-lg leading-none text-ink-faint hover:text-ink-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent lg:min-h-[36px] lg:min-w-[36px]"
+              className="absolute inset-y-0 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r text-lg leading-none text-ink-faint hover:text-ink-dim focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent lg:min-h-[36px] lg:min-w-[36px]"
             >
               ×
             </button>
@@ -238,7 +238,7 @@ function NavigationContent({
                           aria-expanded={isExpanded}
                           aria-controls={contentId}
                           onClick={() => onToggleModule(node.moduleCode)}
-                          className="flex min-h-[44px] w-full items-center justify-between rounded px-3 py-2 text-left text-sm font-medium text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 lg:min-h-[36px]"
+                          className="flex min-h-[44px] w-full items-center justify-between rounded px-3 py-2 text-left text-sm font-medium text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 lg:min-h-[36px]"
                         >
                           <span className="flex min-w-0 items-center gap-2">
                             <svg
@@ -297,7 +297,7 @@ function NavigationContent({
                 onQueryChange("");
                 filterInputRef.current?.focus();
               }}
-              className="mt-2 flex min-h-[44px] items-center font-medium text-ink-dim underline decoration-line-strong underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-[36px]"
+              className="mt-2 flex min-h-[44px] items-center font-medium text-ink-dim underline decoration-line-strong underline-offset-4 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent lg:min-h-[36px]"
             >
               Clear filter
             </button>
@@ -556,7 +556,7 @@ export function AppShell() {
     <div className="min-h-screen bg-ground text-ink lg:flex">
       <a
         href="#main-content"
-        className="fixed left-3 top-3 z-[60] -translate-y-20 rounded bg-accent px-4 py-2 text-sm font-medium text-accent-on shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-ground"
+        className="fixed left-3 top-3 z-60 -translate-y-20 rounded bg-accent px-4 py-2 text-sm font-medium text-accent-on shadow-lg transition-transform focus:translate-y-0 focus:outline-hidden focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-ground"
       >
         Skip to main content
       </a>
@@ -606,7 +606,7 @@ export function AppShell() {
             aria-modal="true"
             aria-labelledby="mobile-navigation-title"
             tabIndex={-1}
-            className="relative flex h-full w-full flex-col bg-panel shadow-2xl focus:outline-none sm:max-w-sm"
+            className="relative flex h-full w-full flex-col bg-panel shadow-2xl focus:outline-hidden sm:max-w-sm"
           >
             <div className="flex min-h-[64px] items-start justify-between gap-3 border-b border-line px-4 py-3">
               <div className="min-w-0">
@@ -619,7 +619,7 @@ export function AppShell() {
                 type="button"
                 onClick={closeMobileNavigation}
                 aria-label="Close navigation"
-                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-xl text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-xl text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
               >
                 ×
               </button>
@@ -651,7 +651,7 @@ export function AppShell() {
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-20">
-          <header className="flex min-h-[60px] items-center justify-between gap-3 border-b border-line bg-panel/95 px-4 backdrop-blur sm:px-6">
+          <header className="flex min-h-[60px] items-center justify-between gap-3 border-b border-line bg-panel/95 px-4 backdrop-blur-sm sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 ref={menuTriggerRef}
@@ -660,7 +660,7 @@ export function AppShell() {
                 aria-controls="mobile-navigation"
                 aria-label="Open navigation"
                 onClick={() => setMobileNavOpen(true)}
-                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded border border-line-strong bg-panel text-sm font-medium text-ink-dim hover:bg-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded border border-line-strong bg-panel text-sm font-medium text-ink-dim hover:bg-panel-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
               >
                 Menu
               </button>
@@ -713,7 +713,7 @@ export function AppShell() {
           )}
         </div>
 
-        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 p-4 focus:outline-none sm:p-6">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 p-4 focus:outline-hidden sm:p-6">
           <div className="mx-auto w-full max-w-[1600px]">
             {loading ? (
               <Spinner label="Loading your workspace…" />

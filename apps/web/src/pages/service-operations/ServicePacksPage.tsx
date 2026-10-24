@@ -239,7 +239,7 @@ export function ServicePacksPage() {
                     {def.checklistItems.map((item) => (
                       <li
                         key={item.code}
-                        className="flex items-center justify-between rounded bg-white px-2.5 py-1.5 shadow-sm"
+                        className="flex items-center justify-between rounded bg-white px-2.5 py-1.5 shadow-xs"
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-[11px] text-slate-400">

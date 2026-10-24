@@ -316,7 +316,7 @@ export function WorkforcePerformancePage() {
             placeholder="Action"
             value={reviewActionById[review.id] ?? ""}
             onChange={(event) => setReviewActionById((current) => ({ ...current, [review.id]: event.target.value }))}
-            className="!w-28 text-xs"
+            className="w-28! text-xs"
           />
           <Button
             variant="secondary"

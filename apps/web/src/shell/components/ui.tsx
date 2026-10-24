@@ -41,7 +41,7 @@ export const Button = forwardRef<
   return (
     <button
       ref={ref}
-      className={`inline-flex min-h-[44px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground sm:min-h-[36px] ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-[44px] items-center justify-center rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground sm:min-h-[36px] ${BUTTON_VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {children}
@@ -199,7 +199,7 @@ export function Alert({
 /* ------------------------------------------------- Form primitives (1C.2) */
 
 const CONTROL_CLASS =
-  "mt-1 min-h-[44px] w-full rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-60 sm:min-h-[36px]";
+  "mt-1 min-h-[44px] w-full rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent-soft disabled:opacity-60 sm:min-h-[36px]";
 
 /** Labelled field wrapper — pairs a label with a control and optional hint. */
 export function Field({
@@ -308,7 +308,7 @@ export function DataTable<T>({
                 <div className="mb-2 flex items-start justify-between gap-3 border-b border-line pb-2">
                   <div className="min-w-0 space-y-0.5">
                     {titleColumns.map((column, index) => (
-                      <div key={index} className="break-words text-sm font-semibold text-ink">
+                      <div key={index} className="wrap-break-word text-sm font-semibold text-ink">
                         {column.cell(row)}
                       </div>
                     ))}
@@ -325,7 +325,7 @@ export function DataTable<T>({
                   <span className="text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
                     {column.header}
                   </span>
-                  <span className="min-w-0 break-words text-right text-sm text-ink">
+                  <span className="min-w-0 wrap-break-word text-right text-sm text-ink">
                     {column.cell(row)}
                   </span>
                 </div>

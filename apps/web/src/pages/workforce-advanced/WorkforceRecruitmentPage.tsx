@@ -234,7 +234,7 @@ export function WorkforceRecruitmentPage() {
             placeholder="Action code"
             value={postingActionById[jobPosting.id] ?? ""}
             onChange={(event) => setPostingActionById((current) => ({ ...current, [jobPosting.id]: event.target.value }))}
-            className="!w-32 text-xs"
+            className="w-32! text-xs"
           />
           <Button
             variant="secondary"
@@ -288,7 +288,7 @@ export function WorkforceRecruitmentPage() {
               placeholder="Rating"
               value={ratingById[row.id] ?? ""}
               onChange={(event) => setRatingById((current) => ({ ...current, [row.id]: event.target.value }))}
-              className="!w-20"
+              className="w-20!"
             />
           </div>
           <Input

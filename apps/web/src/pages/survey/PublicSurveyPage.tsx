@@ -369,7 +369,7 @@ function PublicQuestionCard({
   onMatrixAnswerChange: (rowId: string, upd: Partial<LocalMatrixAnswer>) => void;
 }) {
   return (
-    <Card className="border border-slate-200 bg-white p-4 shadow-sm">
+    <Card className="border border-slate-200 bg-white p-4 shadow-xs">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="text-sm font-medium text-slate-800">
           <span className="font-semibold text-slate-900 mr-1.5">{index}.</span>

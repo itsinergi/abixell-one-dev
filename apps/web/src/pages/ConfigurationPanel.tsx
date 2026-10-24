@@ -156,7 +156,7 @@ export function ConfigurationPanel({ token, orgUnits, canManage, onMessage }: {
       <p className="mt-3 text-xs text-slate-500">This general panel supports reading and creating items. Item lifecycle changes are not available here.</p>
     </Panel>
     <Panel title="Numbering" action={canManage && <Button onClick={(event) => open({ kind: "number" }, event.currentTarget)}>Generate next number</Button>}>
-      <AdminSectionState {...numbering} onRetry={numbering.reload}>{numbering.data && <dl className="space-y-2 break-words text-sm"><dt>Sequence</dt><dd>{numberingCode}</dd><dt>Pattern</dt><dd>{numbering.data.pattern}</dd><dt>Current sequence</dt><dd>{numbering.data.currentSequence}</dd></dl>}</AdminSectionState>
+      <AdminSectionState {...numbering} onRetry={numbering.reload}>{numbering.data && <dl className="space-y-2 wrap-break-word text-sm"><dt>Sequence</dt><dd>{numberingCode}</dd><dt>Pattern</dt><dd>{numbering.data.pattern}</dd><dt>Current sequence</dt><dd>{numbering.data.currentSequence}</dd></dl>}</AdminSectionState>
       {lastNumber && <p className="mt-3 text-sm">Last generated: {lastNumber}</p>}
       <p className="mt-3 text-xs text-slate-500">Generate advances the stored sequence; it is not a preview. Sequence editing is not available.</p>
     </Panel>
@@ -166,7 +166,7 @@ export function ConfigurationPanel({ token, orgUnits, canManage, onMessage }: {
         <fieldset disabled={pending} className="space-y-4">
           {dialog?.kind === "module" && <p>{dialog.next ? "Activate" : "Deactivate"} {dialog.row.moduleName} for this tenant?</p>}
           {dialog?.kind === "flag" && <><p>Set <strong>{dialog.row.name}</strong> to <strong>{dialog.next ? "Enabled" : "Disabled"}</strong>?</p><p>Scope: {dialog.scopeName}</p><p className="text-sm text-slate-500">Existing unit overrides take precedence over tenant values.</p></>}
-          {dialog?.kind === "terminology" && <><p className="break-words text-sm">Key: {dialog.row.code}</p><Field label="Label" required><Input name="value" required defaultValue={dialog.row.value} /></Field></>}
+          {dialog?.kind === "terminology" && <><p className="wrap-break-word text-sm">Key: {dialog.row.code}</p><Field label="Label" required><Input name="value" required defaultValue={dialog.row.value} /></Field></>}
           {dialog?.kind === "reference" && <><p>Type: {dialog.typeName}</p><Field label="Code" required><Input name="code" required /></Field><Field label="Label" required><Input name="label" required /></Field><Field label="Sort order"><Input name="sortOrder" type="number" step="1" /></Field></>}
           {dialog?.kind === "number" && <p>Generate a number for {numberingCode}? This advances the stored sequence and cannot be undone here.</p>}
         </fieldset>

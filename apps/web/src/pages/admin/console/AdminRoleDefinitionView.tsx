@@ -455,7 +455,7 @@ export function AdminRoleDefinitionView({
                     disabled={!canManage}
                     maxLength={500}
                     rows={3}
-                    className="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm text-ink focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+                    className="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm text-ink focus-visible:border-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
                   />
                 </Field>
                 <p className="text-xs text-ink-dim tabular-nums">
@@ -616,9 +616,9 @@ export function AdminRoleDefinitionView({
           <div className="space-y-3">
             <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
               <dt className="text-ink-dim">Name</dt>
-              <dd className="break-words text-ink">{draft.name.trim()}</dd>
+              <dd className="wrap-break-word text-ink">{draft.name.trim()}</dd>
               <dt className="text-ink-dim">Description</dt>
-              <dd className="break-words text-ink">
+              <dd className="wrap-break-word text-ink">
                 {toDescription(draft.description) ?? <span className="text-ink-faint">none</span>}
               </dd>
               <dt className="text-ink-dim">Permissions</dt>
@@ -799,7 +799,7 @@ function PermissionPicker({
             value={module}
             onChange={(event) => onModuleChange(event.target.value)}
             aria-label="Filter permissions by module"
-            className="mt-1 min-h-[44px] rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft sm:min-h-[36px]"
+            className="mt-1 min-h-[44px] rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent-soft sm:min-h-[36px]"
           >
             <option value="all">All modules</option>
             {modules.map(([code, count]) => (
@@ -814,7 +814,7 @@ function PermissionPicker({
             type="checkbox"
             checked={selectedOnly}
             onChange={(event) => onSelectedOnlyChange(event.target.checked)}
-            className="h-4 w-4 accent-[var(--accent)]"
+            className="h-4 w-4 accent-(--accent)"
           />
           Selected only
         </label>
@@ -882,7 +882,7 @@ function PermissionPicker({
                         disabled={disabled || !option.selectable}
                         onChange={() => onToggle(option.code)}
                         aria-label={`Grant ${option.code}`}
-                        className="h-4 w-4 accent-[var(--accent)]"
+                        className="h-4 w-4 accent-(--accent)"
                       />
                     </td>
                     <td className="min-h-row px-3 align-middle">
@@ -998,7 +998,7 @@ function WindowPicker({
             value={module}
             onChange={(event) => onModuleChange(event.target.value)}
             aria-label="Filter windows by module"
-            className="mt-1 min-h-[44px] rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft sm:min-h-[36px]"
+            className="mt-1 min-h-[44px] rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent-soft sm:min-h-[36px]"
           >
             <option value="all">All modules</option>
             {modules.map(([code, count]) => (
@@ -1013,7 +1013,7 @@ function WindowPicker({
             type="checkbox"
             checked={selectedOnly}
             onChange={(event) => onSelectedOnlyChange(event.target.checked)}
-            className="h-4 w-4 accent-[var(--accent)]"
+            className="h-4 w-4 accent-(--accent)"
           />
           Selected only
         </label>
@@ -1063,7 +1063,7 @@ function WindowPicker({
                         disabled={disabled || !option.selectable}
                         onChange={() => onToggleWindow(option.code)}
                         aria-label={`Include ${option.code}`}
-                        className="h-4 w-4 accent-[var(--accent)]"
+                        className="h-4 w-4 accent-(--accent)"
                       />
                     </td>
                     <td className="min-h-row px-3 align-middle">
@@ -1091,7 +1091,7 @@ function WindowPicker({
                           disabled={disabled || !included}
                           onChange={() => onToggleFlag(option.code, "isReadWrite")}
                           aria-label={`Allow writes in ${option.code}`}
-                          className="h-4 w-4 accent-[var(--accent)]"
+                          className="h-4 w-4 accent-(--accent)"
                         />
                         {state ? (state.isReadWrite ? "Read/write" : "Read-only") : "—"}
                       </label>
@@ -1104,7 +1104,7 @@ function WindowPicker({
                           disabled={disabled || !included}
                           onChange={() => onToggleFlag(option.code, "isActive")}
                           aria-label={`Keep ${option.code} active`}
-                          className="h-4 w-4 accent-[var(--accent)]"
+                          className="h-4 w-4 accent-(--accent)"
                         />
                         {state ? (state.isActive ? "Active" : "Inactive") : "—"}
                       </label>
@@ -1236,7 +1236,7 @@ export function CreateRoleDialog({
               maxLength={500}
               rows={3}
               disabled={pending}
-              className="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm text-ink focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+              className="w-full rounded border border-line-strong bg-panel px-3 py-2 text-sm text-ink focus-visible:border-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
             />
           </Field>
         )}

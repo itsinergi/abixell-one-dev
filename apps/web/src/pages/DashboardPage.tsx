@@ -1141,7 +1141,7 @@ export function DashboardPage() {
         }
       >
         {selectedOu && (
-          <div className="space-y-4 break-words">
+          <div className="space-y-4 wrap-break-word">
             {lifecycleActionError && <Alert tone="error">{lifecycleActionError}</Alert>}
             {ouEditing ? (
               <form ref={ouEditFormRef} onSubmit={handleOuEdit} className="space-y-4">
@@ -1273,7 +1273,7 @@ export function DashboardPage() {
         }
       >
         {selectedLe && (
-          <div className="space-y-4 break-words">
+          <div className="space-y-4 wrap-break-word">
             {lifecycleActionError && <Alert tone="error">{lifecycleActionError}</Alert>}
             {leEditing ? (
               <form ref={leEditFormRef} onSubmit={handleLeEdit} className="space-y-4">
@@ -1393,7 +1393,7 @@ export function DashboardPage() {
         }
       >
         {selectedUser && (
-          <div className="space-y-4 break-words">
+          <div className="space-y-4 wrap-break-word">
             {lifecycleActionError && <Alert tone="error">{lifecycleActionError}</Alert>}
             {userDeleteConfirming && (
               <Alert tone="warning">
