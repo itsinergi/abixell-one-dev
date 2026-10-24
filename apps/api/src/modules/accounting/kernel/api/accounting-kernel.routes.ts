@@ -89,6 +89,21 @@ const rejectReopenSchema = z.object({
   reason: z.string().min(1),
 });
 
+/** Runbook attestations for month-end / year-end close (ADR-0016 §4). */
+const closePeriodSchema = z.object({
+  bankReconConfirmed: z.boolean(),
+  apArConfirmed: z.boolean(),
+  depreciationConfirmed: z.boolean(),
+  accrualsConfirmed: z.boolean(),
+});
+
+const createLedgerSchema = z.object({
+  legalEntityId: uuidSchema,
+  ledgerCode: z.string().min(1),
+  ledgerName: z.string().min(1),
+  currency: z.string().min(3).max(3),
+});
+
 const periodStatusQuerySchema = z
   .enum(["draft", "open", "closed", "reopenable", "tombstone"])
   .optional();
@@ -191,6 +206,53 @@ export function registerAccountingKernelRoutes(app: FastifyInstance, container: 
     const input = rejectReopenSchema.parse(request.body);
     await svc().rejectPeriodReopen(request.actor!, id, input);
     return reply.status(204).send();
+  });
+
+  // --- Fiscal close (WP-FIN-A6-01, ADR-0016 §4) -----------------------------
+
+  app.post(
+    "/accounting/periods/:id/close-month-end",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const input = closePeriodSchema.parse(request.body);
+      const closing = await svc().closeMonthEnd(request.actor!, id, input);
+      return reply.status(201).send(closing);
+    },
+  );
+
+  app.post(
+    "/accounting/periods/:id/close-year-end",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const input = closePeriodSchema.parse(request.body);
+      const closing = await svc().closeYearEnd(request.actor!, id, input);
+      return reply.status(201).send(closing);
+    },
+  );
+
+  app.get("/accounting/fiscal-closings", { preHandler: app.authenticate }, async (request, reply) => {
+    const query = request.query as { legalEntityId?: string; periodId?: string };
+    const closings = await svc().listFiscalClosings(request.actor!, {
+      legalEntityId: query.legalEntityId,
+      periodId: query.periodId,
+    });
+    return reply.send(closings);
+  });
+
+  // --- Ledger governance (WP-FIN-A6-01, ADR-0015 §3) -------------------------
+
+  app.get("/accounting/ledgers", { preHandler: app.authenticate }, async (request, reply) => {
+    const query = z.object({ legalEntityId: uuidSchema }).parse(request.query);
+    const ledgers = await svc().listLedgers(request.actor!, query.legalEntityId);
+    return reply.send(ledgers);
+  });
+
+  app.post("/accounting/ledgers", { preHandler: app.authenticate }, async (request, reply) => {
+    const input = createLedgerSchema.parse(request.body);
+    const ledger = await svc().createLedger(request.actor!, input);
+    return reply.status(201).send(ledger);
   });
 
   // --- Accounts (CRUD) -------------------------------------------------------

@@ -314,6 +314,89 @@ export interface JournalGlReconciliation {
   };
 }
 
+/** Month-end or year-end close run (WP-FIN-A6-01, ADR-0016 §4). */
+export type FiscalCloseKind = "month_end" | "year_end";
+
+export const FISCAL_CLOSE_KINDS: FiscalCloseKind[] = ["month_end", "year_end"];
+
+/**
+ * Checklist evidence recorded at close time (ADR-0016 §4 month-end list).
+ * Each checkpoint is a count of blockers found — all zero at a successful
+ * close. `bankReconStatus` / `apArReconciled` / `depreciationComplete` are
+ * the runbook items the operator confirmed (those modules may not exist yet).
+ */
+export interface FiscalCloseChecklist {
+  unpostedJournals: number;
+  reconciliationMatched: boolean;
+  glBalanceTotals: { debit: Money; credit: Money };
+  bankReconConfirmed: boolean;
+  apArConfirmed: boolean;
+  depreciationConfirmed: boolean;
+  accrualsConfirmed: boolean;
+}
+
+export interface FiscalClosing {
+  id: string;
+  tenantId: string;
+  legalEntityId: string;
+  periodId: string;
+  fiscalYearCode: string;
+  closeKind: FiscalCloseKind;
+  checklist: FiscalCloseChecklist;
+  /** Year-end only: null for month_end. */
+  incomeTotal: Money | null;
+  expenseTotal: Money | null;
+  retainedEarningsDelta: Money | null;
+  closingJournalId: string | null;
+  closedBy: string | null;
+  closedAt: Date;
+  createdAt: Date;
+}
+
+/**
+ * Ledger governance (ADR-0015 §3). Wave A6 activates exactly one primary
+ * ledger per Legal Entity; `ledgerRole` is the multi-ledger compatibility
+ * seam — only "primary" is permitted at runtime until separate Founder
+ * approval widens the contract.
+ */
+export interface AccountingLedger {
+  id: string;
+  tenantId: string;
+  legalEntityId: string;
+  ledgerCode: string;
+  ledgerName: string;
+  ledgerRole: "primary";
+  isPrimary: boolean;
+  isActive: boolean;
+  currency: string;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateLedgerInput {
+  tenantId: string;
+  legalEntityId: string;
+  ledgerCode: string;
+  ledgerName: string;
+  currency: string;
+  createdBy: string | null;
+}
+
+export interface CreateFiscalClosingInput {
+  tenantId: string;
+  legalEntityId: string;
+  periodId: string;
+  fiscalYearCode: string;
+  closeKind: FiscalCloseKind;
+  checklist: FiscalCloseChecklist;
+  incomeTotal: Money | null;
+  expenseTotal: Money | null;
+  retainedEarningsDelta: Money | null;
+  closingJournalId: string | null;
+  closedBy: string | null;
+}
+
 export interface PostingIdempotencyKey {
   id: string;
   tenantId: string;
@@ -643,6 +726,34 @@ export interface AccountingKernelRepository {
     legalEntityId: string,
     onOrAfterDate: string,
   ): Promise<AccountingPeriod | null>;
+
+  // --- Fiscal close + ledger governance (WP-FIN-A6-01) --------------------
+
+  /**
+   * Append-only close record. Fails closed (unique violation) when the same
+   * (tenant, period, closeKind) was already recorded — a second close run is
+   * never silently duplicated.
+   */
+  createFiscalClosing(input: CreateFiscalClosingInput): Promise<FiscalClosing>;
+  listFiscalClosings(
+    tenantId: string,
+    filter: { legalEntityId?: string; periodId?: string },
+  ): Promise<FiscalClosing[]>;
+  findFiscalClosing(
+    tenantId: string,
+    periodId: string,
+    closeKind: FiscalCloseKind,
+  ): Promise<FiscalClosing | null>;
+
+  /** Per-account P&L balances for a legal entity's fiscal year (year-end close). */
+  listFiscalYearPnlBalances(
+    tenantId: string,
+    legalEntityId: string,
+    fiscalYearCode: string,
+  ): Promise<Array<{ accountId: string; accountCode: string; accountClass: "INCOME" | "EXPENSE"; balance: Money }>>;
+
+  createLedger(input: CreateLedgerInput): Promise<AccountingLedger>;
+  listLedgers(tenantId: string, legalEntityId: string): Promise<AccountingLedger[]>;
 
   /**
    * Reverses a posted journal as a linked correction (ADR-0016 §2/§3): the

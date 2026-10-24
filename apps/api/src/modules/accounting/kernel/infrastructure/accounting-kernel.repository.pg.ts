@@ -27,6 +27,12 @@ import type {
   RequestPeriodReopenInput,
   ReverseJournalInput,
   TemplateAccountDef,
+  AccountingLedger,
+  CreateFiscalClosingInput,
+  CreateLedgerInput,
+  FiscalCloseChecklist,
+  FiscalCloseKind,
+  FiscalClosing,
 } from "../domain/accounting-kernel.entity.js";
 import { recordGovernedAudit } from "../../../../infrastructure/persistence/repositories/governed-transaction.js";
 
@@ -1178,6 +1184,136 @@ export class PgAccountingKernelRepository implements AccountingKernelRepository 
     );
     return r.rowCount! > 0;
   }
+
+  // --- Fiscal close + ledger governance (WP-FIN-A6-01) -----------------------
+
+  async createFiscalClosing(input: CreateFiscalClosingInput): Promise<FiscalClosing> {
+    const r = await this.pool.query(
+      `INSERT INTO fiscal_closings
+         (tenant_id, legal_entity_id, period_id, fiscal_year_code, close_kind,
+          checklist, income_total, expense_total, retained_earnings_delta,
+          closing_journal_id, closed_by)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::numeric, $8::numeric, $9::numeric, $10, $11)
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.legalEntityId,
+        input.periodId,
+        input.fiscalYearCode,
+        input.closeKind,
+        JSON.stringify(input.checklist),
+        input.incomeTotal,
+        input.expenseTotal,
+        input.retainedEarningsDelta,
+        input.closingJournalId,
+        input.closedBy,
+      ],
+    );
+    return toFiscalClosing(r.rows[0]);
+  }
+
+  async listFiscalClosings(
+    tenantId: string,
+    filter: { legalEntityId?: string; periodId?: string } = {},
+  ): Promise<FiscalClosing[]> {
+    const conditions = [`tenant_id = $1`];
+    const params: unknown[] = [tenantId];
+    if (filter.legalEntityId) {
+      params.push(filter.legalEntityId);
+      conditions.push(`legal_entity_id = $${params.length}`);
+    }
+    if (filter.periodId) {
+      params.push(filter.periodId);
+      conditions.push(`period_id = $${params.length}`);
+    }
+    const r = await this.pool.query(
+      `SELECT * FROM fiscal_closings WHERE ${conditions.join(" AND ")} ORDER BY closed_at DESC`,
+      params,
+    );
+    return r.rows.map(toFiscalClosing);
+  }
+
+  async findFiscalClosing(
+    tenantId: string,
+    periodId: string,
+    closeKind: FiscalCloseKind,
+  ): Promise<FiscalClosing | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM fiscal_closings WHERE tenant_id = $1 AND period_id = $2 AND close_kind = $3`,
+      [tenantId, periodId, closeKind],
+    );
+    return r.rows[0] ? toFiscalClosing(r.rows[0]) : null;
+  }
+
+  /**
+   * Per-account P&L result of a fiscal year from posted GL entries, exact
+   * decimal in SQL (WP-FIN-A6-01 year-end close). `balance` is the positive
+   * natural-side balance (income: credit−debit; expense: debit−credit).
+   * Class is read from the account, never inferred from code. Only accounts
+   * with GL activity appear; headers without postings are absent.
+   */
+  async listFiscalYearPnlBalances(
+    tenantId: string,
+    legalEntityId: string,
+    fiscalYearCode: string,
+  ): Promise<Array<{ accountId: string; accountCode: string; accountClass: "INCOME" | "EXPENSE"; balance: Money }>> {
+    const r = await this.pool.query(
+      `SELECT aa.id AS account_id, aa.account_code, aa.account_class,
+              (CASE WHEN aa.account_class = 'INCOME'
+                    THEN COALESCE(SUM(g.credit - g.debit), 0)
+                    ELSE COALESCE(SUM(g.debit - g.credit), 0)
+               END)::numeric(18,2) AS balance
+       FROM general_ledger_entries g
+       JOIN accounting_accounts aa ON aa.id = g.account_id
+       JOIN accounting_periods p ON p.id = g.period_id AND p.tenant_id = g.tenant_id
+       WHERE g.tenant_id = $1
+         AND p.legal_entity_id = $2
+         AND p.fiscal_year_code = $3
+         AND aa.account_class IN ('INCOME', 'EXPENSE')
+       GROUP BY aa.id, aa.account_code, aa.account_class
+      HAVING (CASE WHEN aa.account_class = 'INCOME'
+                   THEN COALESCE(SUM(g.credit - g.debit), 0)
+                   ELSE COALESCE(SUM(g.debit - g.credit), 0)
+              END) <> 0
+       ORDER BY aa.account_code`,
+      [tenantId, legalEntityId, fiscalYearCode],
+    );
+    return r.rows.map((row) => ({
+      accountId: row.account_id,
+      accountCode: row.account_code,
+      accountClass: row.account_class as "INCOME" | "EXPENSE",
+      balance: toMoney(row.balance),
+    }));
+  }
+
+  async createLedger(input: CreateLedgerInput): Promise<AccountingLedger> {
+    const r = await this.pool.query(
+      `INSERT INTO accounting_ledgers
+         (tenant_id, legal_entity_id, ledger_code, ledger_name, ledger_role,
+          is_primary, is_active, currency, created_by, updated_by)
+       VALUES ($1, $2, $3, $4, 'primary', true, true, $5, $6, $6)
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.legalEntityId,
+        input.ledgerCode,
+        input.ledgerName,
+        input.currency,
+        input.createdBy,
+      ],
+    );
+    return toLedger(r.rows[0]);
+  }
+
+  async listLedgers(tenantId: string, legalEntityId: string): Promise<AccountingLedger[]> {
+    const r = await this.pool.query(
+      `SELECT * FROM accounting_ledgers
+        WHERE tenant_id = $1 AND legal_entity_id = $2
+        ORDER BY is_primary DESC, created_at`,
+      [tenantId, legalEntityId],
+    );
+    return r.rows.map(toLedger);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1373,6 +1509,42 @@ function toPostingRule(row: QueryResultRow): PostingRule {
     isActive: row.is_active,
     effectiveDate: toDateString(row.effective_date),
     deprecatedDate: row.deprecated_date ? toDateString(row.deprecated_date) : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toFiscalClosing(row: QueryResultRow): FiscalClosing {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    legalEntityId: row.legal_entity_id,
+    periodId: row.period_id,
+    fiscalYearCode: row.fiscal_year_code,
+    closeKind: row.close_kind as FiscalCloseKind,
+    checklist: row.checklist as FiscalCloseChecklist,
+    incomeTotal: row.income_total !== null ? toMoney(row.income_total) : null,
+    expenseTotal: row.expense_total !== null ? toMoney(row.expense_total) : null,
+    retainedEarningsDelta: row.retained_earnings_delta !== null ? toMoney(row.retained_earnings_delta) : null,
+    closingJournalId: row.closing_journal_id,
+    closedBy: row.closed_by,
+    closedAt: row.closed_at,
+    createdAt: row.created_at,
+  };
+}
+
+function toLedger(row: QueryResultRow): AccountingLedger {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    legalEntityId: row.legal_entity_id,
+    ledgerCode: row.ledger_code,
+    ledgerName: row.ledger_name,
+    ledgerRole: row.ledger_role as "primary",
+    isPrimary: row.is_primary,
+    isActive: row.is_active,
+    currency: row.currency,
+    createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

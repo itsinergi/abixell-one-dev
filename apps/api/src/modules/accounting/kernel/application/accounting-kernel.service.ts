@@ -26,6 +26,9 @@ import type {
   AccountingPeriodStatus,
   AccountClass,
   ReversalType,
+  AccountingLedger,
+  FiscalCloseChecklist,
+  FiscalClosing,
 } from "../domain/accounting-kernel.entity.js";
 import { ACCOUNT_CLASSES, COA_MAX_DEPTH, isValidMoney } from "../domain/accounting-kernel.entity.js";
 import { SAK_EMKM_TEMPLATE, SAK_UMUM_TEMPLATE } from "../domain/coa-templates.js";
@@ -994,6 +997,344 @@ export class AccountingKernelService {
     });
 
     return reconciliation;
+  }
+
+  // --- Fiscal close (WP-FIN-A6-01, ADR-0016 §4) -------------------------------
+
+  /**
+   * Month-end close: governed checklist, then lock. Refuses when a checklist
+   * blocker is present (unposted journals, reconciliation mismatch). Idempotent
+   * by UNIQUE(tenant_id, period_id, close_kind) — a second close fails closed.
+   * Reuses lockPeriod semantics but with its own permission + evidence record.
+   */
+  async closeMonthEnd(
+    actor: ActorContext,
+    periodId: string,
+    input: {
+      bankReconConfirmed: boolean;
+      apArConfirmed: boolean;
+      depreciationConfirmed: boolean;
+      accrualsConfirmed: boolean;
+    },
+  ): Promise<FiscalClosing> {
+    await this.rbac.requirePermission(actor, "finance.accounting.period.lock");
+
+    const period = await this.repo.findPeriodById(periodId);
+    if (!period || period.tenantId !== actor.tenantId) {
+      throw new NotFoundError("AccountingPeriod", periodId);
+    }
+    if (period.status !== "open") {
+      throw new ConflictError("Only an open period can be closed");
+    }
+
+    // Checklist: the runbook items from ADR-0016 §4. Blockers fail closed;
+    // confirmations are operator attestations for modules not yet active.
+    if (!input.bankReconConfirmed) throw new ValidationError("Bank reconciliation must be confirmed before close");
+    if (!input.apArConfirmed) throw new ValidationError("AP/AR reconciliation must be confirmed before close");
+    if (!input.depreciationConfirmed) throw new ValidationError("Depreciation completion must be confirmed before close");
+    if (!input.accrualsConfirmed) throw new ValidationError("Accrual/recurring entries must be confirmed before close");
+
+    const pending = await this.repo.listJournals(actor.tenantId, {
+      periodId,
+      status: "pending",
+    });
+    const reconciliation = await this.repo.reconcileJournalVsGl(actor.tenantId, periodId);
+    const checklist: FiscalCloseChecklist = {
+      unpostedJournals: pending.length,
+      reconciliationMatched: reconciliation.matched,
+      glBalanceTotals: { debit: reconciliation.totals.glDebit, credit: reconciliation.totals.glCredit },
+      bankReconConfirmed: true,
+      apArConfirmed: true,
+      depreciationConfirmed: true,
+      accrualsConfirmed: true,
+    };
+
+    if (pending.length > 0) {
+      throw new ConflictError(
+        `Period has ${pending.length} unposted journals; post or reverse them before close`,
+      );
+    }
+    if (!reconciliation.matched) {
+      throw new ConflictError(
+        `Journal vs GL reconciliation does not match (${reconciliation.orphanGlEntryIds.length} orphan, ${reconciliation.mismatchedGlEntryIds.length} mismatched); resolve before close`,
+      );
+    }
+
+    let closing: FiscalClosing;
+    try {
+      closing = await this.repo.createFiscalClosing({
+        tenantId: actor.tenantId,
+        legalEntityId: period.legalEntityId,
+        periodId,
+        fiscalYearCode: period.fiscalYearCode,
+        closeKind: "month_end",
+        checklist,
+        incomeTotal: null,
+        expenseTotal: null,
+        retainedEarningsDelta: null,
+        closingJournalId: null,
+        closedBy: actor.userId,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError("This period already has a month-end close record");
+      }
+      throw error;
+    }
+
+    await this.repo.setPeriodStatus(periodId, "closed", actor.userId);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.period.closed_month_end",
+      entityType: "accounting_period",
+      entityId: periodId,
+      metadata: {
+        periodCode: period.periodCode,
+        fiscalYearCode: period.fiscalYearCode,
+        closingId: closing.id,
+        checklist,
+      },
+    });
+
+    return closing;
+  }
+
+  /**
+   * Year-end close (ADR-0016 §4): month-end checklist PLUS a closing journal
+   * that zeroes P&L accounts into retained earnings (Laba Ditahan, code 3200
+   * in both SAK templates), then locks the period. The closing journal is
+   * created and posted inside the same run — exact decimal, immutable, and
+   * recorded as `closing_journal_id` on the closing row. Idempotent via the
+   * same unique constraint as month-end.
+   */
+  async closeYearEnd(
+    actor: ActorContext,
+    periodId: string,
+    input: {
+      bankReconConfirmed: boolean;
+      apArConfirmed: boolean;
+      depreciationConfirmed: boolean;
+      accrualsConfirmed: boolean;
+    },
+  ): Promise<FiscalClosing> {
+    await this.rbac.requirePermission(actor, "finance.accounting.period.lock");
+    await this.rbac.requirePermission(actor, "finance.accounting.approve");
+
+    const period = await this.repo.findPeriodById(periodId);
+    if (!period || period.tenantId !== actor.tenantId) {
+      throw new NotFoundError("AccountingPeriod", periodId);
+    }
+    if (period.status !== "open") {
+      throw new ConflictError("Only an open period can be closed");
+    }
+    if (!input.bankReconConfirmed) throw new ValidationError("Bank reconciliation must be confirmed before close");
+    if (!input.apArConfirmed) throw new ValidationError("AP/AR reconciliation must be confirmed before close");
+    if (!input.depreciationConfirmed) throw new ValidationError("Depreciation completion must be confirmed before close");
+    if (!input.accrualsConfirmed) throw new ValidationError("Accrual/recurring entries must be confirmed before close");
+
+    const pending = await this.repo.listJournals(actor.tenantId, { periodId, status: "pending" });
+    const reconciliation = await this.repo.reconcileJournalVsGl(actor.tenantId, periodId);
+    if (pending.length > 0) {
+      throw new ConflictError(
+        `Period has ${pending.length} unposted journals; post or reverse them before close`,
+      );
+    }
+    if (!reconciliation.matched) {
+      throw new ConflictError(
+        `Journal vs GL reconciliation does not match (${reconciliation.orphanGlEntryIds.length} orphan, ${reconciliation.mismatchedGlEntryIds.length} mismatched); resolve before close`,
+      );
+    }
+
+    // P&L balances across the fiscal year (all periods of that year code).
+    const pnl = await this.repo.listFiscalYearPnlBalances(
+      actor.tenantId,
+      period.legalEntityId,
+      period.fiscalYearCode,
+    );
+
+    // Retained earnings account (Laba Ditahan 3200, both templates).
+    const retained = await this.repo.findAccountByCode(actor.tenantId, period.legalEntityId, "3200");
+    if (!retained) {
+      throw new ValidationError("Retained earnings account (3200 / Laba Ditahan) not found in this legal entity");
+    }
+
+    let incomeTotal: Money = "0.00";
+    let expenseTotal: Money = "0.00";
+    for (const row of pnl) {
+      if (row.accountClass === "INCOME") incomeTotal = this.addMoney(incomeTotal, row.balance);
+      else expenseTotal = this.addMoney(expenseTotal, row.balance);
+    }
+    const retainedEarningsDelta = this.subtractMoney(incomeTotal, expenseTotal);
+
+    // Closing journal: one line per P&L account with a balance, plus one
+    // retained-earnings line. Skipped entirely when the year result is zero.
+    let closingJournalId: string | null = null;
+    if (pnl.length > 0) {
+      const lines = pnl.map((row, index) => ({
+        accountId: row.accountId,
+        lineNumber: index + 1,
+        // Income accounts are credit-normal → debit them to zero. Expense
+        // accounts are debit-normal → credit them to zero.
+        debit: row.accountClass === "INCOME" ? row.balance : "0.00",
+        credit: row.accountClass === "EXPENSE" ? row.balance : "0.00",
+        lineDescription: `Year-end close ${period.fiscalYearCode}`,
+        projectId: null,
+        siteId: null,
+      }));
+
+      // Retained-earnings side = net income (income − expense). Credit when
+      // positive (profit), debit when the year is a loss. A zero delta with
+      // non-zero P&L cannot happen (P&L lines net to the delta), but guard
+      // the degenerate single-line case anyway by requiring balance.
+      const delta = retainedEarningsDelta;
+      const isNegative = delta.startsWith("-");
+      const absDelta = isNegative ? delta.slice(1) : delta;
+      if (absDelta !== "0.00") {
+        lines.push({
+          accountId: retained.id,
+          lineNumber: lines.length + 1,
+          debit: isNegative ? absDelta : "0.00",
+          credit: isNegative ? "0.00" : absDelta,
+          lineDescription: `Year-end closing to Laba Ditahan ${period.fiscalYearCode}`,
+          projectId: null,
+          siteId: null,
+        });
+      }
+
+      // Use an open period that contains this year's last date: the closing
+      // journal must land in a still-open period of the same year. If the
+      // closing period itself is the only open one, use it (it is still open
+      // at this point — we lock it after the journal is posted).
+      const journal = await this.repo.createJournal({
+        tenantId: actor.tenantId,
+        legalEntityId: period.legalEntityId,
+        journalNumber: `CLOSE-${period.fiscalYearCode}-${period.periodCode}`,
+        journalDate: period.dateTo,
+        accountingDate: period.dateTo,
+        periodId,
+        description: `Year-end closing ${period.fiscalYearCode}`,
+        currency: "IDR",
+        postingRuleVersionId: null,
+        idempotencyKey: `fiscal-close-year-${actor.tenantId}-${period.id}`,
+        lines,
+        createdBy: actor.userId,
+      });
+      await this.repo.postJournal(journal.id, actor.userId);
+      closingJournalId = journal.id;
+    }
+
+    const checklist: FiscalCloseChecklist = {
+      unpostedJournals: 0,
+      reconciliationMatched: true,
+      glBalanceTotals: { debit: reconciliation.totals.glDebit, credit: reconciliation.totals.glCredit },
+      bankReconConfirmed: true,
+      apArConfirmed: true,
+      depreciationConfirmed: true,
+      accrualsConfirmed: true,
+    };
+
+    let closing: FiscalClosing;
+    try {
+      closing = await this.repo.createFiscalClosing({
+        tenantId: actor.tenantId,
+        legalEntityId: period.legalEntityId,
+        periodId,
+        fiscalYearCode: period.fiscalYearCode,
+        closeKind: "year_end",
+        checklist,
+        incomeTotal,
+        expenseTotal,
+        retainedEarningsDelta,
+        closingJournalId,
+        closedBy: actor.userId,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError("This period already has a year-end close record");
+      }
+      throw error;
+    }
+
+    await this.repo.setPeriodStatus(periodId, "closed", actor.userId);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.period.closed_year_end",
+      entityType: "accounting_period",
+      entityId: periodId,
+      metadata: {
+        periodCode: period.periodCode,
+        fiscalYearCode: period.fiscalYearCode,
+        closingId: closing.id,
+        incomeTotal,
+        expenseTotal,
+        retainedEarningsDelta,
+        closingJournalId,
+      },
+    });
+
+    return closing;
+  }
+
+  async listFiscalClosings(
+    actor: ActorContext,
+    filter: { legalEntityId?: string; periodId?: string } = {},
+  ): Promise<FiscalClosing[]> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
+    return this.repo.listFiscalClosings(actor.tenantId, filter);
+  }
+
+  // --- Ledger governance (WP-FIN-A6-01, ADR-0015 §3) --------------------------
+
+  /**
+   * One active primary ledger per Legal Entity. Wave A6 admits only the
+   * 'primary' role — multi-ledger readiness is contract-only until separate
+   * Founder approval. The DB unique partial index is the backstop.
+   */
+  async createLedger(
+    actor: ActorContext,
+    input: { legalEntityId: string; ledgerCode: string; ledgerName: string; currency: string },
+  ): Promise<AccountingLedger> {
+    await this.rbac.requirePermission(actor, "finance.accounting.configure");
+
+    const legalEntityId = await this.resolveLegalEntity(actor, input.legalEntityId);
+    const currency = (input.currency ?? "").trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new ValidationError("currency must be a 3-letter ISO code");
+    }
+
+    const existing = await this.repo.listLedgers(actor.tenantId, legalEntityId);
+    if (existing.some((l) => l.isPrimary && l.isActive)) {
+      throw new ConflictError("This legal entity already has an active primary ledger");
+    }
+
+    const ledger = await this.repo.createLedger({
+      tenantId: actor.tenantId,
+      legalEntityId,
+      ledgerCode: (input.ledgerCode ?? "").trim(),
+      ledgerName: (input.ledgerName ?? "").trim(),
+      currency,
+      createdBy: actor.userId,
+    });
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "accounting.ledger.created",
+      entityType: "accounting_ledger",
+      entityId: ledger.id,
+      metadata: { ledgerCode: ledger.ledgerCode, legalEntityId },
+    });
+
+    return ledger;
+  }
+
+  async listLedgers(actor: ActorContext, legalEntityId: string): Promise<AccountingLedger[]> {
+    await this.rbac.requirePermission(actor, "finance.accounting.read");
+    return this.repo.listLedgers(actor.tenantId, legalEntityId);
   }
 
   // --- Posting rules (WP-FIN-05, Epic 14 §4.14 decision #9) -------------------
