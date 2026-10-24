@@ -17,10 +17,10 @@
     "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^5.2.0",
-    "autoprefixer": "^10.4.20",
     "eslint": "^9.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "playwright": "^1.56.0",

@@ -705,7 +705,7 @@ function SummaryItem({ label, children }: { label: string; children: ReactNode }
   return (
     <div>
       <dt className="text-xs font-semibold uppercase tracking-wide text-ink-dim">{label}</dt>
-      <dd className="mt-1 break-words text-ink">{children}</dd>
+      <dd className="mt-1 wrap-break-word text-ink">{children}</dd>
     </div>
   );
 }

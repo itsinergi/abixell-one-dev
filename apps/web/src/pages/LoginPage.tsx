@@ -56,7 +56,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm"
+        className="w-full max-w-sm space-y-4 rounded border border-slate-200 bg-white p-6 shadow-xs"
       >
         <div>
           <h1 className="text-lg font-semibold">Enterprise Management System</h1>

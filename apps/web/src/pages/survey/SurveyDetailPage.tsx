@@ -607,7 +607,7 @@ export function SurveyDetailPage() {
               ) : (
                 <ol className="space-y-4">
                   {detail.questions.map((q, i) => (
-                    <li key={q.id} className="rounded border border-slate-200 p-3 bg-white shadow-sm">
+                    <li key={q.id} className="rounded border border-slate-200 p-3 bg-white shadow-xs">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-slate-900">
                           {i + 1}. {q.text}

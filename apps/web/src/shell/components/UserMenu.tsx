@@ -106,7 +106,7 @@ export function UserMenu({
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex min-h-[44px] items-center gap-2 rounded border border-line-strong bg-panel px-2 py-1 text-sm hover:bg-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="flex min-h-[44px] items-center gap-2 rounded border border-line-strong bg-panel px-2 py-1 text-sm hover:bg-panel-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
       >
         <span
           aria-hidden="true"
@@ -115,14 +115,14 @@ export function UserMenu({
           {initials}
         </span>
         <span className="hidden min-w-0 flex-col items-start text-left sm:flex">
-          <span className="max-w-[10rem] truncate text-sm font-medium text-ink">{displayName}</span>
+          <span className="max-w-40 truncate text-sm font-medium text-ink">{displayName}</span>
           {activeRoleName ? (
-            <span className="max-w-[10rem] truncate text-xs text-ink-dim" title={activeScopeName ?? undefined}>
+            <span className="max-w-40 truncate text-xs text-ink-dim" title={activeScopeName ?? undefined}>
               {activeRoleName}
               {activeScopeName ? ` · ${activeScopeName}` : ""}
             </span>
           ) : (
-            email && <span className="max-w-[10rem] truncate text-xs text-ink-dim">{email}</span>
+            email && <span className="max-w-40 truncate text-xs text-ink-dim">{email}</span>
           )}
         </span>
       </button>
@@ -153,7 +153,7 @@ export function UserMenu({
               close();
               onSwitchRole();
             }}
-            className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-none"
+            className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-hidden"
           >
             Switch role…
           </button>
@@ -162,7 +162,7 @@ export function UserMenu({
             role="menuitem"
             tabIndex={-1}
             onClick={close}
-            className="block min-h-[44px] px-3 py-2 text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-none"
+            className="block min-h-[44px] px-3 py-2 text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-hidden"
           >
             Profile
           </NavLink>
@@ -174,7 +174,7 @@ export function UserMenu({
               close();
               onSignOut();
             }}
-            className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-none"
+            className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-hidden"
           >
             Sign out
           </button>

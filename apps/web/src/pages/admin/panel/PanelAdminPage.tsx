@@ -190,7 +190,7 @@ function Sidebar({ categories, selected, onSelect, canRead }: SidebarProps) {
   const visibleCategories = categories.filter(canRead);
 
   return (
-    <div className="w-80 flex-shrink-0 border-r border-line bg-panel-2">
+    <div className="w-80 shrink-0 border-r border-line bg-panel-2">
       <div className="sticky top-0 border-b border-line bg-panel p-3">
         <h2 className="text-sm font-semibold text-ink">Configuration</h2>
       </div>
@@ -204,7 +204,7 @@ function Sidebar({ categories, selected, onSelect, canRead }: SidebarProps) {
             <button
               key={category.key}
               onClick={() => onSelect(category.key)}
-              className={`w-full rounded px-2 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground ${
+              className={`w-full rounded px-2 py-2 text-left text-sm transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground ${
                 selected === category.key
                   ? "bg-accent text-accent-on"
                   : "text-ink-dim hover:bg-panel hover:text-ink"

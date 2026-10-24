@@ -721,7 +721,7 @@ export function ReportingInsightPage() {
                                   }}
                                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
                                     isSelected
-                                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                                      ? "bg-blue-600 text-white border-blue-600 shadow-xs"
                                       : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                                   }`}
                                 >
@@ -755,7 +755,7 @@ export function ReportingInsightPage() {
                                   }}
                                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
                                     isSelected
-                                      ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                                       : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                                   }`}
                                 >

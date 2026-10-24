@@ -179,7 +179,7 @@ export function OverlayDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center overflow-y-auto bg-black/50 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-70 flex items-end justify-center overflow-y-auto bg-black/50 p-0 sm:items-center sm:p-4"
       onMouseDown={handleBackdropClick}
     >
       <div
@@ -190,7 +190,7 @@ export function OverlayDialog({
         aria-describedby={description ? descriptionId : undefined}
         aria-busy={pending || undefined}
         tabIndex={-1}
-        className={`flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-lg border border-line bg-panel shadow-2xl focus:outline-none sm:max-h-[calc(100dvh-2rem)] sm:rounded ${
+        className={`flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-lg border border-line bg-panel shadow-2xl focus:outline-hidden sm:max-h-[calc(100dvh-2rem)] sm:rounded ${
           size === "lg" ? "sm:max-w-3xl" : "sm:max-w-xl"
         }`}
       >
@@ -210,7 +210,7 @@ export function OverlayDialog({
             onClick={onClose}
             disabled={pending}
             aria-label="Close dialog"
-            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-xl leading-none text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-xl leading-none text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
             ×
           </button>
