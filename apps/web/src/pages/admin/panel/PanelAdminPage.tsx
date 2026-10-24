@@ -21,8 +21,8 @@
  * Backward compat: old config.manage still works; new routes use granular codes (Wave 2)
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError } from "../../../lib/api";
+import { useEffect, useState } from "react";
+import { api } from "../../../lib/api";
 import { PERMISSIONS } from "../../../lib/capabilities";
 import { useAuth } from "../../../auth/AuthContext";
 import {
@@ -142,27 +142,6 @@ const emptyResourceState: ResourceState = {
   denied: false,
   sessionExpired: false,
 };
-
-function describeFailure(error: unknown): ResourceState {
-  const status = error instanceof ApiError ? error.status : null;
-  if (status === 403)
-    return { loading: false, error: null, denied: true, sessionExpired: false };
-  if (status === 401)
-    return {
-      loading: false,
-      error: "Your session has expired. Sign in again.",
-      denied: false,
-      sessionExpired: true,
-    };
-  const message =
-    error instanceof ApiError ? error.message : "An error occurred.";
-  return {
-    loading: false,
-    error: message,
-    denied: false,
-    sessionExpired: false,
-  };
-}
 
 /* ============================================================================
    Status Dashboard
@@ -422,38 +401,37 @@ export function PanelAdminPage() {
   const [orgUnits, setOrgUnits] = useState<OrgUnitOption[]>([]);
   const [message, setMessage] = useState<PanelMessage | null>(null);
 
-  const permissionsRef = useRef<string[]>([]);
+  const [permissions, setPermissions] = useState<string[]>([]);
 
   // Load permissions + org units once; both degrade silently into fallbacks.
   useEffect(() => {
-    permissionsRef.current = [];
     void Promise.all([api.me(token), api.organizationUnits(token)])
       .then(([me, units]) => {
-        permissionsRef.current = me.permissions ?? [];
+        setPermissions(me.permissions ?? []);
         setOrgUnits(units.map((u) => ({ id: u.id, name: u.name })));
       })
       .catch(() => {
-        permissionsRef.current = [];
+        setPermissions([]);
       });
   }, [token]);
 
-  const canRead = useCallback((category: Category) => {
-    // Step 4: check granular read perm, with fallback to config.manage (backward compat)
-    // Note: category.permissionRead is the authority code from CATEGORIES, not deduced from category.key.
-    if (!category.permissionRead) return false;
+  // Step 4: granular code from CATEGORIES (not deduced from key), with
+  // fallback to config.manage for backward compat.
+  const canRead = (category: Category) => {
+    const code = category.permissionRead;
     return (
-      permissionsRef.current.includes(category.permissionRead) ||
-      permissionsRef.current.includes(PERMISSIONS.configManage)
+      !!code &&
+      (permissions.includes(code) || permissions.includes(PERMISSIONS.configManage))
     );
-  }, []);
+  };
 
-  const canManageCategory = useCallback((category: Category) => {
-    if (!category.permissionManage) return false;
+  const canManageCategory = (category: Category) => {
+    const code = category.permissionManage;
     return (
-      permissionsRef.current.includes(category.permissionManage) ||
-      permissionsRef.current.includes(PERMISSIONS.configManage)
+      !!code &&
+      (permissions.includes(code) || permissions.includes(PERMISSIONS.configManage))
     );
-  }, []);
+  };
 
   const handleCategorySelect = (key: CategoryKey) => {
     setSelectedCategory(key);
