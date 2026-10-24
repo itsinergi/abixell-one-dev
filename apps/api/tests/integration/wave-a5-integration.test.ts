@@ -32,7 +32,7 @@ const ADMIN_PASSWORD = "Admin12345!";
 const OTHER_ADMIN_EMAIL = "otheradmin@wave-a5.local";
 const OTHER_ADMIN_PASSWORD = "OtherAdmin12345!";
 
-describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () => {
+describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
   const app = buildApp();
 
   // Primary Tenant Fixtures
@@ -3098,7 +3098,7 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         warehouseId: mainWarehouseId,
         lines: [
           {
-            purchaseOrderLineId: "00000000-0000-0000-0000-000000000001",
+            purchaseOrderLineId: "00000000-0000-4000-8000-000000000001",
             itemId: itemAlphaId,
             warehouseId: mainWarehouseId,
             stockCondition: "unrestricted",
@@ -3117,7 +3117,7 @@ describe.sequential("Wave A5 — Supply Chain Advanced Integration Suite", () =>
         supplierId: supplierAcmeId,
         lines: [
           {
-            purchaseOrderLineId: "00000000-0000-0000-0000-000000000001",
+            purchaseOrderLineId: "00000000-0000-4000-8000-000000000001",
             description: "Unauthorized service acceptance",
             quantity: 1,
             unitPrice: 1000000,

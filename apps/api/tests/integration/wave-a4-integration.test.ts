@@ -44,7 +44,7 @@ const ADMIN_PASSWORD = "Admin12345!";
 const OTHER_ADMIN_EMAIL = "otheradmin@wave-a4.local";
 const OTHER_ADMIN_PASSWORD = "OtherAdmin12345!";
 
-describe.sequential("Wave A4 — Workforce Advanced Integration Suite", () => {
+describe("Wave A4 — Workforce Advanced Integration Suite", () => {
   const app = buildApp();
 
   // Primary Tenant Fixtures

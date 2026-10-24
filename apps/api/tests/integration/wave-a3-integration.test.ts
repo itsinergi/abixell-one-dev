@@ -12,7 +12,7 @@ const OPERATOR_PASSWORD = "Operator12345!";
 const OTHER_ADMIN_EMAIL = "otheradmin@wave-a3.local";
 const OTHER_ADMIN_PASSWORD = "OtherAdmin12345!";
 
-describe.sequential("Wave A3 — Service Operations & Asset Advanced Integration Suite", () => {
+describe("Wave A3 — Service Operations & Asset Advanced Integration Suite", () => {
   const app = buildApp();
 
   let tenantId: string;

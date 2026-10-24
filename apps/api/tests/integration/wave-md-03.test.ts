@@ -17,7 +17,7 @@ const ADMIN_EMAIL = "admin@wave-md3.local";
 const ADMIN_PASSWORD = "Admin12345!";
 const TODAY = new Date().toISOString().slice(0, 10);
 
-describe.sequential("Wave MD-03 — Catering vertical master (WP-MD-03)", () => {
+describe("Wave MD-03 — Catering vertical master (WP-MD-03)", () => {
   const app = buildApp();
 
   let token: string;
@@ -338,7 +338,7 @@ describe.sequential("Wave MD-03 — Catering vertical master (WP-MD-03)", () => 
   it("rejects meal plan with unknown site (cross-tenant)", async () => {
     const res = await post("/catering/meal-plans", {
       menuCode: "MENU-LUNCH",
-      siteId: "00000000-0000-0000-0000-000000000099",
+      siteId: "00000000-0000-4000-8000-000000000099",
       mealDate: TODAY,
       mealType: "dinner",
     });

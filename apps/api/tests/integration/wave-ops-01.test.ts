@@ -16,7 +16,7 @@ const ADMIN_EMAIL = "admin@wave-ops1.local";
 const ADMIN_PASSWORD = "Admin12345!";
 const TODAY = new Date().toISOString().slice(0, 10);
 
-describe.sequential("Wave OPS-01 — Catering pack activation gate (WP-OPS-01)", () => {
+describe("Wave OPS-01 — Catering pack activation gate (WP-OPS-01)", () => {
   const app = buildApp();
 
   let token: string;

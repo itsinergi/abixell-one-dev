@@ -10,7 +10,7 @@ import type { Container } from "../../../composition-root.js";
 const registerSchema = z
   .object({
     ruleKey: z.string().trim().min(1),
-    payload: z.record(z.unknown()),
+    payload: z.record(z.string(), z.unknown()),
     activate: z.boolean().optional(),
   })
   .strict();

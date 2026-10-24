@@ -387,7 +387,7 @@ export function registerServiceQualityRoutes(app: FastifyInstance, container: Co
             "raise_complaint_severity",
             "create_capa_action",
           ]),
-          actionParameters: z.record(z.unknown()).default({}),
+          actionParameters: z.record(z.string(), z.unknown()).default({}),
         })
         .parse(request.body);
       const rule = await container.serviceQuality.createAutomationRule(request.actor!, body);

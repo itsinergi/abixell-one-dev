@@ -17,7 +17,7 @@ const CUSTOMER_PASSWORD = "Customer12345!";
  * direct SQL only to freeze time or recreate a process-crash reconciliation
  * gap that cannot be reached through a production route.
  */
-describe.sequential("Wave A1 — multidimensional Service Quality SLA", () => {
+describe("Wave A1 — multidimensional Service Quality SLA", () => {
   const app = buildApp();
   const reconciliationContainer = buildContainer();
 
