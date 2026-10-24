@@ -18,7 +18,7 @@ const ADMIN_PASSWORD = "Admin12345!";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
-describe.sequential("Wave MD-01 — Finance Master Data (WP-MD-01)", () => {
+describe("Wave MD-01 — Finance Master Data (WP-MD-01)", () => {
   const app = buildApp();
 
   let token: string;

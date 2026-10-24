@@ -173,7 +173,7 @@ const createVendorInvoiceLineSchema = z.object({
     "work_order",
     "service",
   ]).optional(),
-  accountAssignmentDimensions: z.record(z.unknown()).optional(),
+  accountAssignmentDimensions: z.record(z.string(), z.unknown()).optional(),
   notes: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),
 });
@@ -205,7 +205,7 @@ const createServiceAcceptanceLineSchema = z.object({
     "work_order",
     "service",
   ]).optional(),
-  accountAssignmentDimensions: z.record(z.unknown()).optional(),
+  accountAssignmentDimensions: z.record(z.string(), z.unknown()).optional(),
   notes: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),
 });

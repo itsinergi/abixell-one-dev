@@ -48,7 +48,7 @@ const createDistributionTokenSchema = z.object({
   recipientLabel: z.string().nullable().optional(),
   maxUses: z.number().int().positive().nullable().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const upsertTranslationSchema = z.object({

@@ -34,7 +34,7 @@ const addQuestionSchema = z.object({
   text: z.string().min(1),
   questionType: z.string().min(1),
   isRequired: z.boolean().optional(),
-  config: z.record(z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
   sortOrder: z.number().int().optional(),
   weight: z.number().min(0).optional(),
 });

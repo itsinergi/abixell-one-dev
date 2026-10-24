@@ -10,7 +10,7 @@ const ADMIN_PASSWORD = "Admin12345!";
 const RESPONDENT_EMAIL = "respondent@wave-a2.local";
 const RESPONDENT_PASSWORD = "Respondent12345!";
 
-describe.sequential("Wave A2 — Survey & Reporting Advanced Integration Suite", () => {
+describe("Wave A2 — Survey & Reporting Advanced Integration Suite", () => {
   const app = buildApp();
 
   let tenantId: string;
