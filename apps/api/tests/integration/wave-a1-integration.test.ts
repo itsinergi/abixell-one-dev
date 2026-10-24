@@ -9,7 +9,7 @@ const ADMIN_EMAIL = "admin@wave-a1.local";
 const ADMIN_PASSWORD = "Admin12345!";
 const CUSTOMER_PASSWORD = "Customer12345!";
 
-describe.sequential("Wave A1 — Advanced Commercial & Service Quality Integration Matrix", () => {
+describe("Wave A1 — Advanced Commercial & Service Quality Integration Matrix", () => {
   const app = buildApp();
 
   let tenantId: string;

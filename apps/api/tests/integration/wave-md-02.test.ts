@@ -17,7 +17,7 @@ const ADMIN_EMAIL = "admin@wave-md2.local";
 const ADMIN_PASSWORD = "Admin12345!";
 const TODAY = new Date().toISOString().slice(0, 10);
 
-describe.sequential("Wave MD-02 — UoM Central (WP-MD-02)", () => {
+describe("Wave MD-02 — UoM Central (WP-MD-02)", () => {
   const app = buildApp();
 
   let token: string;

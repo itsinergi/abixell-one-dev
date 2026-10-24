@@ -71,7 +71,7 @@ const createDemoTransactionSchema = z.object({ title: z.string().min(1) });
 const startInstanceSchema = z.object({
   definitionCode: z.string().min(1),
   entityId: z.string().uuid(),
-  contextData: z.record(z.unknown()).optional(),
+  contextData: z.record(z.string(), z.unknown()).optional(),
 });
 
 const actOnAssignmentSchema = z.object({
