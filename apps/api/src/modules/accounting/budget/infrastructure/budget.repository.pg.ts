@@ -423,7 +423,14 @@ export class PgBudgetRepository {
   // Consumption (ADR-0020 §4) — idempotent, concurrency-safe
   // ------------------------------------------------------------------
 
-  /** Signed consumption sum: a release cancels the row it reverses. */
+  /**
+   * Consumption rows belong to the governed BUDGET, not to one baseline
+   * version (ADR-0020 §4): actuals and commitments are facts about the budget
+   * scope. A revision re-plans the baseline and must not wipe that history, so
+   * every aggregation below joins through `finance_budget_versions` on
+   * `budget_id`. Scoping a sum to the active version alone would make the
+   * hard-stop control fail OPEN the moment a revision supersedes v1.
+   */
   private static readonly CONSUMED_EXPR = `
     COALESCE(SUM(CASE
       WHEN c.kind = 'actual' THEN c.amount
@@ -561,11 +568,15 @@ export class PgBudgetRepository {
       }
     }
 
+    // Every version's rows, not just the effective one: the baseline is
+    // re-planned by a revision, the facts it is measured against are not.
     const consumed = await this.pool.query(
       `SELECT c.* FROM finance_budget_consumptions c
-        WHERE c.tenant_id = $1 AND c.budget_version_id = $2
+         JOIN finance_budget_versions v
+           ON v.id = c.budget_version_id AND v.tenant_id = c.tenant_id
+        WHERE c.tenant_id = $1 AND v.budget_id = $2
         ORDER BY c.period_code, c.created_at`,
-      [tenantId, effectiveVersionId],
+      [tenantId, budgetId],
     );
 
     for (const row of consumed.rows as Row[]) {
@@ -674,8 +685,10 @@ export class PgBudgetRepository {
       const consumed = await client.query(
         `SELECT ${PgBudgetRepository.CONSUMED_EXPR} AS consumed
            FROM finance_budget_consumptions c
-          WHERE c.tenant_id = $1 AND c.budget_version_id = $2 AND c.period_code = $3`,
-        [input.tenantId, versionId, input.periodCode],
+           JOIN finance_budget_versions v
+             ON v.id = c.budget_version_id AND v.tenant_id = c.tenant_id
+          WHERE c.tenant_id = $1 AND v.budget_id = $2 AND c.period_code = $3`,
+        [input.tenantId, input.budgetId, input.periodCode],
       );
       const consumedUnits = toUnits(String(consumed.rows[0].consumed)) ?? 0n;
       const availableBeforeUnits = baseline - consumedUnits;

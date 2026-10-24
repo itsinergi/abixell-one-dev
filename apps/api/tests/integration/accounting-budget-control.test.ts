@@ -293,6 +293,88 @@ describe("WP-FIN-A6-03 — Budget control", () => {
     expect(read.activeVersionId).toBe(v2.id);
   });
 
+  // Regression: consumption is a fact about the budget scope, not about one
+  // baseline version (ADR-0020 §4). Scoping the sum to the active version made
+  // both the utilization projection and the hard_stop check forget every
+  // prior actual the moment a revision superseded v1 — the control failed OPEN
+  // exactly when a re-plan landed.
+  it("carries consumption across a revision instead of resetting it", async () => {
+    const le = await newLegalEntity("LE Revision Carryover");
+    await service.createPolicy(await actorWith(["finance.accounting.configure"]), {
+      legalEntityId: le,
+      effect: "hard_stop",
+      effectiveFrom: "2026-01-01",
+    });
+
+    const configure = await actorWith(["finance.accounting.configure"]);
+    const budget = await service.createBudget(configure, {
+      legalEntityId: le,
+      fiscalYearCode: "2026",
+      scenario: "original",
+      currency: "IDR",
+      name: "Revision carryover budget",
+      scope: nextScope(),
+    });
+    const v1 = await approveVersion(
+      (await service.createDraftVersion(configure, budget.id, {
+        totalAmount: "1000.0000",
+        weights: [{ periodCode: "2026-01", weight: "1" }],
+      })).id,
+    );
+    expect(v1.status).toBe("active");
+
+    // Spend 800 of the 1000 baseline against v1.
+    const first = await service.consume(configure, {
+      budgetId: budget.id,
+      periodCode: "2026-01",
+      amount: "800.0000",
+      kind: "actual",
+      idempotencyKey: `${TS}-carry-1`,
+    });
+    expect(first.decision).toBe("ok");
+
+    // Revise the baseline up to 2000. The 800 already spent is still spent.
+    const v2 = await approveVersion(
+      (await service.createDraftVersion(configure, budget.id, {
+        totalAmount: "2000.0000",
+        weights: [{ periodCode: "2026-01", weight: "1" }],
+        note: "revision",
+      })).id,
+    );
+    expect(v2.status).toBe("active");
+
+    const util = await service.utilization(await actorWith(["finance.accounting.read"]), budget.id);
+    const jan = util.periods.find((p) => p.periodCode === "2026-01")!;
+    expect(jan.baseline).toBe("2000.0000");
+    expect(jan.actual).toBe("800.0000");
+    expect(jan.available).toBe("1200.0000");
+    expect(util.total.actual).toBe("800.0000");
+
+    // 1300 against 1200 available must still trip the hard stop. Before the
+    // fix the check read 2000 available and let it through.
+    await expect(
+      service.consume(configure, {
+        budgetId: budget.id,
+        periodCode: "2026-01",
+        amount: "1300.0000",
+        kind: "actual",
+        idempotencyKey: `${TS}-carry-2`,
+      }),
+    ).rejects.toThrow(ConflictError);
+
+    // And the boundary still passes: exactly the remaining 1200.
+    const exact = await service.consume(configure, {
+      budgetId: budget.id,
+      periodCode: "2026-01",
+      amount: "1200.0000",
+      kind: "actual",
+      idempotencyKey: `${TS}-carry-3`,
+    });
+    expect(exact.decision).toBe("ok");
+    expect(exact.availableBefore).toBe("1200.0000");
+    expect(exact.availableAfter).toBe("0.0000");
+  });
+
   it("rejects a version when the Workflow instance rejects it", async () => {
     outcomeStatus = "rejected";
     try {
