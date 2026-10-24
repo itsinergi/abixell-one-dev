@@ -127,6 +127,8 @@ import { PgFinanceMasterRepository } from "./modules/finance/master/infrastructu
 import { FinanceMasterService } from "./modules/finance/master/application/finance-master.service.js";
 import { PgAccountingKernelRepository } from "./modules/accounting/kernel/infrastructure/accounting-kernel.repository.pg.js";
 import { AccountingKernelService } from "./modules/accounting/kernel/application/accounting-kernel.service.js";
+import { PgOpenItemRepository } from "./modules/accounting/open-item/infrastructure/open-item.repository.pg.js";
+import { OpenItemService } from "./modules/accounting/open-item/application/open-item.service.js";
 import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
 import { PgAccountingEventWritePort } from "./modules/supply-chain/ports/accounting-event.port.pg.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
@@ -503,6 +505,11 @@ export function buildContainer() {
     accountingKernelRepo,
   );
 
+  // WP-FIN-A6-02 — AP/AR open-item settlement (ADR-0017). Remaining balances
+  // are projections of the append-only allocation history; the repo holds the
+  // transaction+lock path that keeps over-allocation fail-closed.
+  const openItem = new OpenItemService(new PgOpenItemRepository(pool), rbac, audit);
+
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
   // Entity Authorization Resolver can close over `hse.canAccessForDocument`
   // (ADR-0012). HSE evidence is gated by hse.documents.read AND Data Scope.
@@ -873,6 +880,7 @@ export function buildContainer() {
     catering,
     accountingKernel,
     accountingEventConsumer,
+    openItem,
     hse,
     projectDelivery,
     reportingInsight,

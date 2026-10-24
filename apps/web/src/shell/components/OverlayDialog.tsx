@@ -75,8 +75,10 @@ export function OverlayDialog({
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  initialFocusRef?: React.RefObject<HTMLElement>;
-  restoreFocusRef?: React.RefObject<HTMLElement>;
+  // React 19: useRef<T>(null) yields RefObject<T | null>, so the props must
+  // accept the null or every call site is a type error.
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
+  restoreFocusRef?: React.RefObject<HTMLElement | null>;
   size?: "md" | "lg";
 }) {
   const generatedId = useId();

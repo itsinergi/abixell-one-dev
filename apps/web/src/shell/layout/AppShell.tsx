@@ -319,8 +319,8 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
 function useNavigationDrawer(
   open: boolean,
   setOpen: (open: boolean) => void,
-  drawerRef: RefObject<HTMLElement>,
-  triggerRef: RefObject<HTMLButtonElement>,
+  drawerRef: RefObject<HTMLElement | null>,
+  triggerRef: RefObject<HTMLButtonElement | null>,
 ) {
   const wasOpen = useRef(false);
 
