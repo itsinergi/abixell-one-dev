@@ -94,12 +94,13 @@ Demo also seeds `customeruser@democlient.local` / `CustomerUser12345!`
 
 | | |
 |---|---|
-| Baseline | `master` @ `b7b6d64` |
-| Phases complete | Phase 0 (0A–0F), Phase 1 (1A–1E) |
-| Tests | 150 passing (15 files) |
-| Migrations / tables | 14 / 58 |
-| Core Product Readiness | 41.4 % |
-| Full Approved Roadmap | 22.1 % |
+| Roadmap Baseline | v1.27 |
+| Measured at | `master` @ `c3fe17e` (2026-10-06) |
+| Phases complete | Phase 0–10, H, H2, 11A–11F, Waves A1–A5 |
+| Tests | 586/586 (39 files) — handoff baseline `7b66c65`, not rerun at `c3fe17e` |
+| Migrations | 91 |
+| Core Product Readiness | **100.0 %** (174/174) |
+| Full Approved Roadmap | **81.3 %** (287/353) |
 
 Progress figures and their calculation basis: [docs/canonical/product-progress.md](docs/canonical/product-progress.md).
 Next phase awaits Founder approval — see [docs/canonical/product-roadmap.md](docs/canonical/product-roadmap.md).
