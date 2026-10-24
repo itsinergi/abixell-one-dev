@@ -1,6 +1,6 @@
 # ADR-0018: Finance Bank Reconciliation Readiness Gate
 
-- **Status:** PROPOSED - Founder decisions incorporated; final document review required
+- **Status:** APPROVED - Founder final document review 2026-10-24 (all eight Wave A6 ADRs approved together); implementation authorized
 - **Date:** 2026-09-02
 - **Source:** Founder Pre-Wave A6 interview decision: CSV-first reconciliation, adapter readiness, and disabled payment initiation; informed by SAP KBU MT940/manual reconciliation patterns
 

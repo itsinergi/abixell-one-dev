@@ -1,6 +1,6 @@
 # ADR-0022: Finance Consolidation and Financial Statements
 
-- **Status:** PROPOSED - Founder decisions incorporated; final document review required
+- **Status:** APPROVED - Founder final document review 2026-10-24 (all eight Wave A6 ADRs approved together); implementation authorized
 - **Date:** 2026-09-02
 - **Source:** Founder Pre-Wave A6 interview decisions: basic governed consolidation and governed standard financial statements
 

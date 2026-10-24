@@ -1,6 +1,6 @@
 # ADR-0021: Finance Fixed-Asset Accounting and Depreciation
 
-- **Status:** PROPOSED - Founder decisions incorporated; final document review required
+- **Status:** APPROVED - Founder final document review 2026-10-24 (all eight Wave A6 ADRs approved together); implementation authorized
 - **Date:** 2026-09-02
 - **Source:** Founder Pre-Wave A6 interview decision: straight-line depreciation first with extensible method contracts
 

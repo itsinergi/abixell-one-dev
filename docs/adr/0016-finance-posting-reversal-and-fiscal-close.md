@@ -1,6 +1,6 @@
 # ADR-0016: Finance Posting, Reversal, and Fiscal Close
 
-- **Status:** PROPOSED - Founder decisions incorporated; final document review required
+- **Status:** APPROVED - Founder final document review 2026-10-24 (all eight Wave A6 ADRs approved together); implementation authorized
 - **Date:** 2026-09-02
 - **Source:** Founder Pre-Wave A6 interview decision: closed-period corrections post to the next open period by default; informed by iDempiere posting patterns, SAP KBU close controls, and existing Abixell One Finance Core invariants
 

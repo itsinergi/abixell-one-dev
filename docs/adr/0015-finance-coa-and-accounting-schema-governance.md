@@ -1,6 +1,6 @@
 # ADR-0015: Finance Chart of Accounts and Accounting Schema Governance
 
-- **Status:** PROPOSED - Founder decisions incorporated; final document review required
+- **Status:** APPROVED - Founder final document review 2026-10-24 (all eight Wave A6 ADRs approved together); implementation authorized
 - **Date:** 2026-09-02
 - **Source:** Founder Pre-Wave A6 interview decision: three-layer COA and one active primary ledger with multi-ledger readiness; informed by local NATS, SAP KBU, iDempiere, and finance research material
 
