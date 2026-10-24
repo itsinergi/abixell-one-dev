@@ -24,7 +24,10 @@ exports.up = (pgm) => {
 
   pgm.createTable("fiscal_closings", {
     id: { type: "uuid", primaryKey: true, default: pgm.func("gen_random_uuid()") },
-    tenant_id: { type: "uuid", notNull: true },
+    // Direct tenant ownership (GATE-3 migration-tenant-discipline): non-null
+    // uuid FK to tenants with ON DELETE CASCADE, so the row dies with the
+    // tenant like every other tenant-owned table.
+    tenant_id: { type: "uuid", notNull: true, references: "tenants", onDelete: "CASCADE" },
     legal_entity_id: { type: "uuid", notNull: true },
     period_id: { type: "uuid", notNull: true },
     fiscal_year_code: { type: "varchar(20)", notNull: true },
@@ -62,7 +65,8 @@ exports.up = (pgm) => {
 
   pgm.createTable("accounting_ledgers", {
     id: { type: "uuid", primaryKey: true, default: pgm.func("gen_random_uuid()") },
-    tenant_id: { type: "uuid", notNull: true },
+    // Direct tenant ownership (GATE-3 migration-tenant-discipline).
+    tenant_id: { type: "uuid", notNull: true, references: "tenants", onDelete: "CASCADE" },
     legal_entity_id: { type: "uuid", notNull: true },
     ledger_code: { type: "varchar(40)", notNull: true },
     ledger_name: { type: "varchar(120)", notNull: true },
@@ -98,16 +102,6 @@ exports.up = (pgm) => {
     },
   );
   pgm.createIndex("accounting_ledgers", ["tenant_id", "legal_entity_id"]);
-
-  // Tenant ownership: ledgers are tenant rows and must disappear with the
-  // tenant (test cleanup relies on tenant CASCADE deletes).
-  pgm.addConstraint("accounting_ledgers", "fk_accounting_ledgers_tenant", {
-    foreignKeys: {
-      columns: ["tenant_id"],
-      references: "tenants(id)",
-      onDelete: "cascade",
-    },
-  });
 };
 
 exports.down = (pgm) => {
