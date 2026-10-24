@@ -173,6 +173,15 @@ export const DEFAULT_API_EXCEPTIONS = [
     typeOnly: true,
   },
   {
+    // Wave A6 (WP-FIN-A6-03) — budget control sits under `accounting/budget`
+    // (Addendum layout), same reason as open-item above.
+    id: "route-container:budget",
+    source: "apps/api/src/modules/accounting/budget/api/budget.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     // Phase 5 (WP-MD-03) — the catering vertical sits under
     // `service-operations/vertical/catering` and does not match the core
     // route shape either.
