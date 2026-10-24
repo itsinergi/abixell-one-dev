@@ -389,7 +389,7 @@ function UserAccessDialog({
   onClose: () => void;
   onAssign: (user: AdminUserAccessSummary, trigger?: HTMLButtonElement) => void;
   onRemoved: (message: string) => void;
-  restoreFocusRef: React.RefObject<HTMLElement>;
+  restoreFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -454,7 +454,7 @@ function UserAccessDialog({
           </>
         }
       >
-        <div aria-hidden={bodyStacked || undefined} {...(bodyStacked ? { inert: "" } : {})}>
+        <div aria-hidden={bodyStacked || undefined} {...(bodyStacked ? { inert: true } : {})}>
         {loading ? (
           <Spinner label="Loading user access…" />
         ) : loadError ? (

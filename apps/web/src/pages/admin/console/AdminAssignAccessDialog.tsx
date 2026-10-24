@@ -58,7 +58,7 @@ export function AssignAccessDialog({
   targetEmail: string;
   onClose: () => void;
   onApplied: (message: string) => void;
-  restoreFocusRef?: React.RefObject<HTMLElement>;
+  restoreFocusRef?: React.RefObject<HTMLElement | null>;
 }) {
   const { session, logout } = useAuth();
   const token = session!.accessToken;

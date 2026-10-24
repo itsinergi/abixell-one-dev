@@ -33,7 +33,7 @@ export function AdminCreateUserDialog({
 }: {
   onClose: () => void;
   onCreated: (message: string) => void;
-  restoreFocusRef?: React.RefObject<HTMLElement>;
+  restoreFocusRef?: React.RefObject<HTMLElement | null>;
 }) {
   const { session } = useAuth();
   const token = session!.accessToken;
