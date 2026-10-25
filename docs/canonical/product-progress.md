@@ -6,8 +6,8 @@
 | **Authority** | Founder (Insting Tekno Sinergi) |
 | **Roadmap Baseline** | v1.27 |
 | **Progress Model** | v1.0 |
-| **Last Updated** | 2026-10-06 |
-| **Measured at** | Committed baseline `c3fe17e` (Epic 2 Wave 2-3 merged; 91 repository migrations); Track A worktree validated 2026-10-06 at `197` migration-owned permissions with `0` blocking boundary findings. Handoff-reported `586/586` API tests across 39 files and `149` permissions belong to the historical `7b66c65` baseline, not to this one. |
+| **Last Updated** | 2026-10-25 |
+| **Measured at** | Uncommitted working tree on 2026-10-25: WP-FIN-A6-05 API-first implementation verified with 36/36 focused integration tests, API typecheck PASS, migrations `1795500000000`–`1795500000020` applied, and platform-boundary validator PASS. No weighted roadmap progress claimed; commit, push, and PR intentionally deferred. |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
@@ -173,6 +173,7 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 | HR-ADV-001…009 | Wave A4; migration `1780000000000`; `payroll-policy.test.ts` (7) & `wave-a4-integration.test.ts` (26); full test suite (475) across 34 files |
 | SCM-ADV-001…008 | Wave A5; migration `1781000000000`; `wave-a5-integration.test.ts` (20) within the 495/495 full API regression across 35 files, plus separate focused valuation unit tests `valuation-policy.test.ts` (14/14) executed outside that full API regression |
 | SCM bounded-context decomposition | Wave A5.1 (unweighted); commits `5642284` through `7b66c65`; migrations `1782000000000`, `1783000000000`, `1784000000000`; explicit WMS and Procurement modules, canonical routes, compatibility shim, ports and frontend normalization; latest handoff reports 586/586 API tests across 39 files and 149 migration-owned permissions |
+| FIN-ADV fixed-asset accounting and depreciation | WP-FIN-A6-05 API-first implementation; migrations `1795500000000`, `1795500000010`, `1795500000020`; asset-book module, exact-cents straight-line depreciation, immutable/idempotent runs, linked reversals, Accounting Kernel GL posting; focused integration 36/36, typecheck PASS, boundary validator PASS; UI deferred to Wave A6.1; no weighted progress claimed until closure authorization |
 
 ## 6. Pending roadmap units
 

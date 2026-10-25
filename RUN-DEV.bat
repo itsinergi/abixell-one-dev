@@ -5,7 +5,7 @@ set "DB_CONTAINER=abixell-dev"
 set "DB_NAME=abixell_one_dev"
 set "WEB_PORT=5183"
 set "API_PORT=4010"
-set "DB_PORT=5442"
+set "DB_PORT=5542"
 title Abixell One %VARIANT%
 cd /d "%~dp0"
 if errorlevel 1 goto fail
@@ -48,6 +48,9 @@ if errorlevel 1 goto fail
 call npm run sync-permissions -w apps/api
 if errorlevel 1 goto fail
 if /i "%~1"=="--setup-only" exit /b 0
+rem Stop only existing services bound to this variant's API and Web ports.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports=@(%API_PORT%,%WEB_PORT%); Get-NetTCPConnection -State Listen -LocalPort $ports -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+powershell -NoProfile -Command "Start-Sleep -Seconds 2"
 start "Abixell %VARIANT% API" /D "%~dp0" "%ComSpec%" /d /k npm run dev:api
 start "Abixell %VARIANT% Web" /D "%~dp0" "%ComSpec%" /d /k npm run dev:web
 powershell -NoProfile -Command "Start-Sleep -Seconds 5"
