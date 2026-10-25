@@ -17,6 +17,12 @@
  * 2-decimal ledger without a rounding decision this module would then hide.
  */
 
+import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
+
+export interface AssetAccessPort {
+  assertAssetAccess(actor: ActorContext, assetId: string): Promise<void>;
+}
+
 export type AssetBookStatus = "draft" | "active" | "disposed";
 export type AssetBookEventType = "capitalization" | "transfer" | "impairment" | "disposal" | "reversal";
 export type DepreciationRunStatus = "posted" | "reversed";

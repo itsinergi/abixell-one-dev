@@ -538,7 +538,7 @@ export function buildContainer() {
     rbac,
     audit,
     accountingKernel,
-    asset,
+    { assertAssetAccess: (actor, assetId) => asset.assertAssetAccess(actor, assetId) },
   );
 
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`

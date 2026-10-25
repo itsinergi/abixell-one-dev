@@ -187,6 +187,11 @@ export class AssetService {
     return { assets, custodians };
   }
 
+  async assertAssetAccess(actor: ActorContext, id: string): Promise<void> {
+    await this.rbac.requirePermission(actor, "asset.read");
+    await this.getAuthorizedAsset(actor, id);
+  }
+
   async getAsset(actor: ActorContext, id: string): Promise<AssetDetailView> {
     await this.rbac.requirePermission(actor, "asset.read");
     const asset = await this.getAuthorizedAsset(actor, id);

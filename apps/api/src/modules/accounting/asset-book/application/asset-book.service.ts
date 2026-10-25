@@ -3,7 +3,7 @@ import { ConflictError, NotFoundError, ValidationError } from "../../../../domai
 import type { AuditService } from "../../../../application/audit/audit.service.js";
 import type { RbacService } from "../../../../application/rbac/rbac.service.js";
 import type { AccountingKernelService } from "../../kernel/application/accounting-kernel.service.js";
-import type { AssetService } from "../../../asset/core/application/asset.service.js";
+import type { AssetAccessPort } from "../domain/asset-book.entity.js";
 import {
   type AssetBook,
   type AssetBookEvent,
@@ -39,7 +39,7 @@ export class AssetBookService {
     private readonly rbac: RbacService,
     private readonly audit: AuditService,
     private readonly kernel: AccountingKernelService,
-    private readonly assets: AssetService,
+    private readonly assets: AssetAccessPort,
   ) {}
 
   private unwrap<T>(fn: () => Promise<T>): Promise<T> {
@@ -51,19 +51,8 @@ export class AssetBookService {
   }
 
   /** The single authorization path for an asset. Never a direct `assets` read. */
-  private async requireAssetAccess(actor: ActorContext, assetId: string): Promise<void> {
-    let visible: boolean;
-    try {
-      visible = await this.assets.canAccessForDocument(actor, assetId);
-    } catch {
-      visible = false;
-    }
-    // canAccessForDocument also requires a document capability; an accounting
-    // operator legitimately has none, so fall back to the asset read path,
-    // which enforces the same tenant + Data Scope checks.
-    if (!visible) {
-      await this.assets.getAsset(actor, assetId);
-    }
+  private requireAssetAccess(actor: ActorContext, assetId: string): Promise<void> {
+    return this.assets.assertAssetAccess(actor, assetId);
   }
 
   // ------------------------------------------------------------------
