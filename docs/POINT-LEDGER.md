@@ -150,16 +150,13 @@ Twelve delivered capability groups, evidence per `product-progress.md` §5:
 | Budgeting & cost center | 3 | 3 | 0 | `009c8a4` (#58) |
 | Bank reconciliation | 2 | 2 | 0 | `0ed302c` (#59) |
 | Fixed-asset accounting & depreciation | 3 | 3 | 0 | `f394209` (#61, API-first; UI deferred to Wave A6.1) |
-| Tax / consolidation / financial statements | 5 | 0 | 0 | — |
-| **Total** | **21** | **16** | **0** | |
+| Tax / consolidation / financial statements | 5 | 5 | 0 | `7f87018` (#62 tax, ADR-0019); `3bb4d4f` (#63 consolidation + FSV, ADR-0022) |
+| **Total** | **21** | **21** | **0** | |
 
-Two things keep A6 at 0 earned:
-
-1. **Tax / consolidation / statements** has no implementation at all — no
-   `accounting/{tax,consolidation,statements}` module, no FX or consolidation tables, no
-   financial-statement views.
-2. **No closure evidence** has been recorded for the five built units: no closure
-   authorization, no canonical progress-log entry, no A6 menu-catalog or web pages.
+Every Wave A6 unit is now built. What keeps A6 at 0 earned is the second half only:
+**no closure evidence** has been recorded for any of the six units — no closure
+authorization, no canonical progress-log entry, no A6 menu-catalog or web pages. The
+Finance Advanced screens are the A6.1 boundary, not an A6 gap.
 
 Closing A6 therefore moves the headline to **308 / 353 = 87.3%**.
 
@@ -170,7 +167,7 @@ Closing A6 therefore moves the headline to **308 / 353 = 87.3%**.
 - **ADR approval earns nothing.** Founder approved all eight Wave A6 ADRs (0015–0022) on
   2026-10-24; that authorizes work, it does not earn points.
 - **Built ≠ earned.** A merged, tested, typechecked module still earns 0 until closure
-  evidence is accepted. Wave A6's 16 built points are the current example.
+  evidence is accepted. Wave A6's 21 built points are the current example.
 - **Individual client configuration is not product progress** (`product-progress.md:149`).
 - **No denominator change** without Founder approval of new roadmap scope.
 - Units whose weight cannot be read directly from `product-roadmap.md` would be marked
