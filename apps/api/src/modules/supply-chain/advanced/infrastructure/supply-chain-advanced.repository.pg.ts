@@ -3956,6 +3956,32 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         const ownerType = line.ownerType ?? "own";
         const ownerPartyId = line.ownerPartyId ?? null;
 
+        // A return against a receiving line consumes that line's returned
+        // quantity, atomically. This is what makes the supply ineligible for
+        // payment later: accepted-eligible qty is
+        // quantity_accepted - quantity_returned - quantity_reversed, so a
+        // return that is not recorded here would leave the vendor invoice
+        // looking payable. The cap is the physically received quantity, not
+        // the accepted one — rejected and quarantined goods are exactly what
+        // gets sent back before any inspection outcome exists.
+        if (line.receivingLineId) {
+          const capRes = await client.query(
+            `UPDATE scm_receiving_lines
+                SET quantity_returned = quantity_returned + $3
+              WHERE tenant_id = $1
+                AND id = $2
+                AND receiving_record_id IS NOT NULL
+                AND quantity_received - quantity_returned - quantity_reversed >= $3
+              RETURNING id`,
+            [tenantId, line.receivingLineId, line.quantity],
+          );
+          if (!capRes.rows[0]) {
+            throw new ConflictError(
+              `Return quantity ${line.quantity} for receiving line ${line.receivingLineId} exceeds the still-returnable quantity`,
+            );
+          }
+        }
+
         // Returning goods to the supplier is a real goods-out: the stock
         // leaves the exact position it was sitting in. The ledger refuses a
         // negative balance, so a return of stock that is not there fails here
@@ -5241,6 +5267,39 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         }
         if (inv.status !== "approved") {
           throw new ValidationError(`Vendor invoice ${invId} has status '${inv.status}', must be 'approved'`);
+        }
+      }
+
+      // Recheck accepted eligibility at payment time. Approval can predate a
+      // return or receipt reversal, so invoice status alone is insufficient.
+      const eligibilityRes = await client.query(
+        `SELECT vil.vendor_invoice_id,
+                vil.purchase_order_line_id,
+                SUM(vil.quantity_invoiced) AS invoiced_qty,
+                COALESCE((
+                  SELECT SUM(sl.quantity_accepted - sl.quantity_returned - sl.quantity_reversed)
+                    FROM scm_receiving_lines sl
+                    JOIN scm_receiving_records sr
+                      ON sr.id = sl.receiving_record_id AND sr.tenant_id = sl.tenant_id
+                   WHERE sl.tenant_id = vil.tenant_id
+                     AND sr.purchase_order_id = vi.purchase_order_id
+                     AND sl.purchase_order_line_id = vil.purchase_order_line_id
+                ), 0) AS eligible_qty
+           FROM scm_vendor_invoice_lines vil
+           JOIN scm_vendor_invoices vi
+             ON vi.id = vil.vendor_invoice_id AND vi.tenant_id = vil.tenant_id
+          WHERE vil.tenant_id = $1
+            AND vil.vendor_invoice_id = ANY($2::uuid[])
+          GROUP BY vil.tenant_id, vil.vendor_invoice_id, vil.purchase_order_line_id, vi.purchase_order_id`,
+        [tenantId, invoiceIds],
+      );
+      for (const row of eligibilityRes.rows) {
+        const invoicedQty = num(row.invoiced_qty);
+        const eligibleQty = num(row.eligible_qty);
+        if (invoicedQty > eligibleQty) {
+          throw new ConflictError(
+            `Vendor invoice ${row.vendor_invoice_id} is no longer payment-eligible: invoiced qty ${invoicedQty} exceeds accepted-eligible qty ${eligibleQty}`,
+          );
         }
       }
 

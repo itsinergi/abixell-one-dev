@@ -1957,6 +1957,60 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       const getRtvRes = await get(`/supply-chain/advanced/returns-to-vendor/${returnToVendorId}`, adminToken);
       expect(getRtvRes.statusCode).toBe(200);
       expect(getRtvRes.json().returnToVendor.id).toBe(returnToVendorId);
+
+      // The return consumes the receiving line's returned quantity, which is
+      // what later removes the supply from payment eligibility.
+      const recAfter = await get(`/supply-chain/advanced/receiving-records/${receivingRecordId}`, adminToken);
+      const lineAfter = recAfter.json().lines.find((l: { id: string }) => l.id === receivingLineId);
+      expect(lineAfter.quantityReturned).toBe(2);
+      expect(recAfter.json().receiving.status).not.toBe("reversed");
+    });
+
+    it("caps return to vendor at the still-returnable received quantity", async () => {
+      // 10 received, 2 already returned → 8 returnable. Asking for 9 must fail
+      // instead of quietly overdrawing the line.
+      const overReturn = await post("/supply-chain/advanced/returns-to-vendor", adminToken, {
+        idempotencyKey: `rtv-over-${Date.now()}`,
+        supplierId: supplierAcmeId,
+        purchaseOrderId,
+        warehouseId: mainWarehouseId,
+        reason: "Over-return attempt",
+        lines: [
+          {
+            receivingLineId,
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            locationId: binMainA1Id,
+            stockCondition: "rejected",
+            ownerType: "own",
+            quantity: 9,
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(overReturn.statusCode).toBe(409);
+
+      const recAfter = await get(`/supply-chain/advanced/receiving-records/${receivingRecordId}`, adminToken);
+      const lineAfter = recAfter.json().lines.find((l: { id: string }) => l.id === receivingLineId);
+      expect(lineAfter.quantityReturned).toBe(2);
+    });
+
+    it("keeps a vendor complaint separate from the physical return", async () => {
+      // A complaint records the business case and moves nothing. If it also
+      // reduced the returnable quantity, the goods could never be shipped back.
+      const complaint = await post("/supply-chain/advanced/discrepancies", adminToken, {
+        receivingLineId,
+        discrepancyType: "quality",
+        quantity: 2,
+        description: "OEM firmware build is two revisions behind the agreed spec",
+      });
+      expect(complaint.statusCode).toBe(201);
+      expect(complaint.json().status).toBe("open");
+
+      const recAfter = await get(`/supply-chain/advanced/receiving-records/${receivingRecordId}`, adminToken);
+      const lineAfter = recAfter.json().lines.find((l: { id: string }) => l.id === receivingLineId);
+      expect(lineAfter.quantityReturned).toBe(2);
+      expect(lineAfter.quantityAccepted).toBe(8);
     });
 
     it("creates, queries, and transitions immutable accounting-ready events", async () => {

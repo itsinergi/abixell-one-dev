@@ -553,6 +553,38 @@ describe("WP-PRO-03: AP Payment Batch (Approved Invoice Payment)", () => {
   });
 
   // ============================================================================
+  // TEST 3c: A later return removes payment eligibility
+  // ============================================================================
+  it("TEST 3c: should reject payment for an invoice whose accepted supply was returned", async () => {
+    const svc = new SupplyChainAdvancedService(repo, rbac, audit, mockWorkflow, mockEvents, mockConfiguration);
+    const returnedInvoiceId = await makeApprovedInvoice(1000000);
+
+    await pool.query(
+      `INSERT INTO scm_vendor_invoice_lines (
+         tenant_id, vendor_invoice_id, purchase_order_line_id, receiving_line_id,
+         description, quantity_invoiced, unit_price, currency, line_amount,
+         account_assignment_type, sort_order
+       ) VALUES ($1, $2, $3, $4, 'Returned supply', 100, 10000, 'IDR', 1000000, 'expense', 0)`,
+      [tenantId, returnedInvoiceId, purchaseOrderLineId, receivingLineId],
+    );
+    await pool.query(
+      `UPDATE scm_receiving_lines
+          SET quantity_returned = quantity_accepted
+        WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, receivingLineId],
+    );
+
+    await expect(
+      svc.createPaymentBatch(actor, {
+        organizationUnitId,
+        currency: "IDR",
+        idempotencyKey: `batch-3c-${randomUUID()}`,
+        lines: [{ vendorInvoiceId: returnedInvoiceId, overrideReason: null }],
+      }),
+    ).rejects.toThrow(/no longer payment-eligible|accepted-eligible/i);
+  });
+
+  // ============================================================================
   // TEST 4: Approve batch (within/NULL limit) → status='approved' + GL events
   // ============================================================================
   it("TEST 4: should approve batch and emit vendor.invoice.payment_approved events", async () => {
