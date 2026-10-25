@@ -1740,11 +1740,37 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         const variance = num(line.physicalQuantity) - num(line.systemQuantity);
         if (variance === 0) continue;
 
+        // A line counted at warehouse level carries no bin. Posting it against a
+        // null-location bucket would miss the stock that actually sits in a bin,
+        // so resolve the one position holding it. Ambiguous counts are refused
+        // rather than guessed.
+        let locationId = line.locationId;
+        let batchId = line.batchId;
+        if (!locationId) {
+          const posRes = await client.query(
+            `SELECT location_id, batch_id FROM scm_advanced_stock_balances
+              WHERE tenant_id = $1 AND item_id = $2 AND warehouse_id = $3
+                AND quantity > 0
+                AND stock_condition = 'unrestricted' AND owner_type = 'own'
+                AND owner_party_id IS NULL
+                AND (location_id IS NOT NULL OR batch_id IS NOT NULL)`,
+            [tenantId, line.itemId, opname.warehouseId],
+          );
+          if (posRes.rows.length === 1) {
+            locationId = posRes.rows[0]!.location_id;
+            batchId = posRes.rows[0]!.batch_id;
+          } else if (posRes.rows.length > 1) {
+            throw new ValidationError(
+              `Opname line ${line.id} has no storage location but item ${line.itemId} is held in ${posRes.rows.length} positions; count per bin instead`,
+            );
+          }
+        }
+
         const movement = await this.recordMovementTx(client, tenantId, {
           itemId: line.itemId,
           warehouseId: opname.warehouseId,
-          locationId: line.locationId,
-          batchId: line.batchId,
+          locationId,
+          batchId,
           stockCondition: "unrestricted",
           ownerType: "own",
           ownerPartyId: null,
