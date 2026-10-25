@@ -131,6 +131,8 @@ import { PgOpenItemRepository } from "./modules/accounting/open-item/infrastruct
 import { OpenItemService } from "./modules/accounting/open-item/application/open-item.service.js";
 import { PgBudgetRepository } from "./modules/accounting/budget/infrastructure/budget.repository.pg.js";
 import { BudgetService } from "./modules/accounting/budget/application/budget.service.js";
+import { PgBankReconRepository } from "./modules/accounting/bank-recon/infrastructure/bank-recon.repository.pg.js";
+import { BankReconService } from "./modules/accounting/bank-recon/application/bank-recon.service.js";
 import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
 import { PgAccountingEventWritePort } from "./modules/supply-chain/ports/accounting-event.port.pg.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
@@ -517,6 +519,12 @@ export function buildContainer() {
   // and fail-closed on hard_stop policies.
   const budget = new BudgetService(new PgBudgetRepository(pool), rbac, audit, workflow);
 
+  // WP-FIN-A6-04 — Bank reconciliation (ADR-0018). Statement facts are imported
+  // and matched; the ledger is read for the book side, never written here. No
+  // bank adapter is wired: the reserved ports stay unimplemented in Wave A6 and
+  // `BankPaymentInitiator` is disabled by the Founder decision.
+  const bankRecon = new BankReconService(new PgBankReconRepository(pool), rbac, audit);
+
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
   // Entity Authorization Resolver can close over `hse.canAccessForDocument`
   // (ADR-0012). HSE evidence is gated by hse.documents.read AND Data Scope.
@@ -889,6 +897,7 @@ export function buildContainer() {
     accountingEventConsumer,
     openItem,
     budget,
+    bankRecon,
     hse,
     projectDelivery,
     reportingInsight,

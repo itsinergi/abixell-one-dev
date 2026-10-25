@@ -61,6 +61,7 @@ import { registerCateringRoutes } from "./modules/service-operations/vertical/ca
 import { registerAccountingKernelRoutes } from "./modules/accounting/kernel/api/accounting-kernel.routes.js";
 import { registerOpenItemRoutes } from "./modules/accounting/open-item/api/open-item.routes.js";
 import { registerBudgetRoutes } from "./modules/accounting/budget/api/budget.routes.js";
+import { registerBankReconRoutes } from "./modules/accounting/bank-recon/api/bank-recon.routes.js";
 import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
 import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
@@ -231,6 +232,8 @@ export function buildApp(): FastifyInstance {
     registerOpenItemRoutes(scoped, container);
     // WP-FIN-A6-03 — Budget control (ADR-0020)
     registerBudgetRoutes(scoped, container);
+    // WP-FIN-A6-04 — Bank reconciliation (ADR-0018)
+    registerBankReconRoutes(scoped, container);
     // Phase 7 — HSE Core
     registerHseRoutes(scoped, container);
     // Phase 8 — Project Delivery Core

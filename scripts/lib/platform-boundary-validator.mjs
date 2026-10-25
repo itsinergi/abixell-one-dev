@@ -182,6 +182,15 @@ export const DEFAULT_API_EXCEPTIONS = [
     typeOnly: true,
   },
   {
+    // Wave A6 (WP-FIN-A6-04) — bank reconciliation sits under
+    // `accounting/bank-recon` (Addendum layout), same reason as budget above.
+    id: "route-container:bank-recon",
+    source: "apps/api/src/modules/accounting/bank-recon/api/bank-recon.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     // Phase 5 (WP-MD-03) — the catering vertical sits under
     // `service-operations/vertical/catering` and does not match the core
     // route shape either.
