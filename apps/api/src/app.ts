@@ -64,6 +64,7 @@ import { registerBudgetRoutes } from "./modules/accounting/budget/api/budget.rou
 import { registerBankReconRoutes } from "./modules/accounting/bank-recon/api/bank-recon.routes.js";
 import { registerAssetBookRoutes } from "./modules/accounting/asset-book/api/asset-book.routes.js";
 import { registerTaxRoutes } from "./modules/accounting/tax/api/tax.routes.js";
+import { registerConsolidationRoutes } from "./modules/accounting/consolidation/api/consolidation.routes.js";
 import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
 import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
@@ -240,6 +241,8 @@ export function buildApp(): FastifyInstance {
     registerAssetBookRoutes(scoped, container);
     // WP-FIN-A6-06a — Indonesia tax baseline (ADR-0019)
     registerTaxRoutes(scoped, container);
+    // WP-FIN-A6-06b — Consolidation (ADR-0022)
+    registerConsolidationRoutes(scoped, container);
     // Phase 7 — HSE Core
     registerHseRoutes(scoped, container);
     // Phase 8 — Project Delivery Core

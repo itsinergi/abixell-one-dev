@@ -209,6 +209,15 @@ export const DEFAULT_API_EXCEPTIONS = [
     typeOnly: true,
   },
   {
+    // Wave A6 (WP-FIN-A6-06b) — consolidation sits under
+    // `accounting/consolidation` (Addendum layout), same reason as asset-book.
+    id: "route-container:consolidation",
+    source: "apps/api/src/modules/accounting/consolidation/api/consolidation.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     // Phase 5 (WP-MD-03) — the catering vertical sits under
     // `service-operations/vertical/catering` and does not match the core
     // route shape either.

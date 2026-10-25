@@ -309,6 +309,24 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/tax-rules", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/tax-rule-versions", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/tax-calculations", windowCode: "route:/finance/accounts" },
+  // WP-FIN-A6-06b — consolidation. Groups, FSV versions and eliminations are
+  // configuration of the reporting perimeter; translation runs read the ledger
+  // and produce a report, so they sit with the statements rather than the
+  // posting surface.
+  { method: "*", apiPath: "/accounting/consolidation-groups", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/consolidation-groups/:id", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/consolidation-groups/:id/members", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/consolidation-groups/:id/members/:legalEntityId", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/consolidation-groups/:id/actions", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/fsv-versions", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/fsv-versions/:id/lines", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/fsv-versions/:id/actions", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/fx-rate-sets", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/fx-rate-sets/:id/rates", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/translation-runs", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/translation-runs/:id", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/eliminations", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/eliminations/:id/actions", windowCode: "route:/finance/accounts" },
   // Manual requeue of a terminally-failed event (Phase 2 WP-INT-03) resets it
   // for re-posting, the same write surface as posting a journal.
   { method: "*", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
