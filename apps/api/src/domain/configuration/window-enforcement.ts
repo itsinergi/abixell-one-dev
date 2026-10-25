@@ -285,6 +285,15 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/budgets", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/budget-versions", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/budget-policies", windowCode: "route:/finance/accounts" },
+  // Bank reconciliation (Wave A6 WP-FIN-A6-04). Bank master registration and
+  // statement import are configuration of the account the ledger is measured
+  // against; matching, reversal and close are the money-movement surface.
+  { method: "*", apiPath: "/accounting/bank-accounts", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/bank-statements", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/bank-statement-lines", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/bank-reconciliations", windowCode: "route:/finance/transactions" },
+  { method: "*", apiPath: "/accounting/bank-matches", windowCode: "route:/finance/transactions" },
+  { method: "*", apiPath: "/accounting/bank-period-movement", windowCode: "route:/finance/accounts" },
   // Manual requeue of a terminally-failed event (Phase 2 WP-INT-03) resets it
   // for re-posting, the same write surface as posting a journal.
   { method: "*", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
