@@ -301,6 +301,14 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/asset-books", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/asset-book-events", windowCode: "route:/finance/accounts" },
   { method: "*", apiPath: "/accounting/depreciation-runs", windowCode: "route:/finance/transactions" },
+  // Tax baseline (Wave A6 WP-FIN-A6-06a). Registrations, rules and rule
+  // versions are tax policy configuration — the same family as account and
+  // period configuration. A calculation is evidence, not a ledger write, and it
+  // is raised from the same configuration surface.
+  { method: "*", apiPath: "/accounting/tax-registrations", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/tax-rules", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/tax-rule-versions", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/tax-calculations", windowCode: "route:/finance/accounts" },
   // Manual requeue of a terminally-failed event (Phase 2 WP-INT-03) resets it
   // for re-posting, the same write surface as posting a journal.
   { method: "*", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
