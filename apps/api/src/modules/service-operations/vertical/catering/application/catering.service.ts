@@ -7,7 +7,7 @@ import {
 } from "../../../../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../../../../../application/audit/audit.service.js";
 import type { RbacService } from "../../../../../application/rbac/rbac.service.js";
-import type { CustomerService } from "../../../../../application/customer/customer.service.js";
+import type { CustomerScopePort } from "../../../core/domain/service-operations.entity.js";
 import type {
   CateringMealBatch,
   CateringMealPlan,
@@ -52,7 +52,7 @@ export class CateringService {
     private readonly uom: UomPort,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
-    private readonly customers: CustomerService,
+    private readonly customers: CustomerScopePort,
     private readonly packs: PackActivationPort,
   ) {}
 

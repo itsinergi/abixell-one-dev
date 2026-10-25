@@ -11,7 +11,7 @@ import type {
   WorkflowService,
 } from "../../../../application/workflow/workflow.service.js";
 import type { ConfigurationService } from "../../../../application/configuration/configuration.service.js";
-import type { CustomerService } from "../../../../application/customer/customer.service.js";
+import type { CustomerScopePort } from "../domain/service-operations.entity.js";
 import type {
   CreateInvoiceInput,
   CreateInvoiceResult,
@@ -121,7 +121,7 @@ export interface WorkOrderDetailView {
 export class ServiceOperationsService {
   constructor(
     private readonly repo: ServiceOperationsRepository,
-    private readonly customers: CustomerService,
+    private readonly customers: CustomerScopePort,
     private readonly workflow: WorkflowService,
     private readonly configuration: ConfigurationService,
     private readonly audit: AuditService,

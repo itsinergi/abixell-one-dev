@@ -200,13 +200,6 @@ export const DEFAULT_API_EXCEPTIONS = [
     symbols: ["Container"],
     typeOnly: true,
   },
-  {
-    id: "transition:service-operations-customer-service",
-    source: "apps/api/src/modules/service-operations/core/application/service-operations.service.ts",
-    target: "apps/api/src/application/customer/customer.service.ts",
-    symbols: ["CustomerService"],
-    typeOnly: true,
-  },
 ];
 
 const CHECK_DEFINITIONS = [
