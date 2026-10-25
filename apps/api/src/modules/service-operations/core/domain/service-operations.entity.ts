@@ -12,6 +12,18 @@
  */
 
 import type { PoolClient } from "pg";
+import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
+export interface AuthorizedCustomer {
+  id: string;
+  ownerOrganizationUnitId: string | null;
+}
+
+export interface CustomerScopePort {
+  listScopedCustomerIds(actor: ActorContext): Promise<string[]>;
+  getAuthorized(actor: ActorContext, customerId: string): Promise<AuthorizedCustomer>;
+  canAccessForDocument(actor: ActorContext, customerId: string): Promise<boolean>;
+}
+
 
 // ---------------------------------------------------------------------------
 // Service Definition (template) — SO-CORE-001 / SO-CORE-007
