@@ -278,7 +278,7 @@ Wave A6 turns operational cash tracking into full accounting depth.
 | Finance | FIN-ADV group | AP/AR and aging | 3 |
 | Finance | FIN-ADV group | Budgeting and cost center | 3 |
 | Finance | FIN-ADV group | Bank reconciliation | 2 |
-| Finance | FIN-ADV group | Fixed-asset accounting and depreciation | 3 |
+| Finance | FIN-ADV group | Fixed-asset accounting and depreciation — API-first A6-05 implemented; UI separate in Wave A6.1 | 3 | IN PROGRESS |
 | Finance | FIN-ADV group | Tax, consolidation, and financial statements | 5 |
 | Total | Wave A6 |  | 21 |
 

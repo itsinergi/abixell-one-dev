@@ -133,6 +133,8 @@ import { PgBudgetRepository } from "./modules/accounting/budget/infrastructure/b
 import { BudgetService } from "./modules/accounting/budget/application/budget.service.js";
 import { PgBankReconRepository } from "./modules/accounting/bank-recon/infrastructure/bank-recon.repository.pg.js";
 import { BankReconService } from "./modules/accounting/bank-recon/application/bank-recon.service.js";
+import { PgAssetBookRepository } from "./modules/accounting/asset-book/infrastructure/asset-book.repository.pg.js";
+import { AssetBookService } from "./modules/accounting/asset-book/application/asset-book.service.js";
 import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
 import { PgAccountingEventWritePort } from "./modules/supply-chain/ports/accounting-event.port.pg.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
@@ -526,6 +528,19 @@ export function buildContainer() {
   // `BankPaymentInitiator` is disabled by the Founder decision.
   const bankRecon = new BankReconService(new PgBankReconRepository(pool), rbac, audit);
 
+  // WP-FIN-A6-05 — Fixed asset book + depreciation (ADR-0019). The asset book
+  // never reads `assets` directly: every asset is authorized through
+  // `asset.getAsset` / `asset.canAccessForDocument` so Data Scope is decided in
+  // one place. Depreciation posts through the kernel's internal seam, keeping
+  // the Accounting Kernel the sole writer of the GL (ADR-0023).
+  const assetBook = new AssetBookService(
+    new PgAssetBookRepository(pool),
+    rbac,
+    audit,
+    accountingKernel,
+    { assertAssetAccess: (actor, assetId) => asset.assertAssetAccess(actor, assetId) },
+  );
+
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
   // Entity Authorization Resolver can close over `hse.canAccessForDocument`
   // (ADR-0012). HSE evidence is gated by hse.documents.read AND Data Scope.
@@ -899,6 +914,7 @@ export function buildContainer() {
     openItem,
     budget,
     bankRecon,
+    assetBook,
     hse,
     projectDelivery,
     reportingInsight,

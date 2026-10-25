@@ -191,6 +191,15 @@ export const DEFAULT_API_EXCEPTIONS = [
     typeOnly: true,
   },
   {
+    // Wave A6 (WP-FIN-A6-05) — the fixed asset book sits under
+    // `accounting/asset-book` (Addendum layout), same reason as bank-recon.
+    id: "route-container:asset-book",
+    source: "apps/api/src/modules/accounting/asset-book/api/asset-book.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     // Phase 5 (WP-MD-03) — the catering vertical sits under
     // `service-operations/vertical/catering` and does not match the core
     // route shape either.

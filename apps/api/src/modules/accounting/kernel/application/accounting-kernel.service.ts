@@ -759,6 +759,89 @@ export class AccountingKernelService {
   }
 
   /**
+   * Internal journal creation without authorization — callers must authorize
+   * first. Extracted for in-process module callers that hold their own
+   * permission gate but still need the kernel to be the one that writes the
+   * journal (WP-FIN-A6-05 depreciation runs post their own legs).
+   *
+   * Unlike `generateJournalInternal` this takes explicit lines: the caller
+   * knows its own accounts, and forcing a posting rule here would make the
+   * asset book's per-book account configuration a second, unused surface.
+   *
+   * TRUST BOUNDARY: public for in-process internal callers only. Never wire this
+   * to an HTTP route.
+   */
+  async createJournalInternal(
+    tenantId: string,
+    input: {
+      legalEntityId: string;
+      journalNumber: string;
+      journalDate: string;
+      accountingDate: string;
+      periodId: string;
+      description: string | null;
+      currency: string;
+      idempotencyKey: string;
+      lines: ReadonlyArray<{
+        accountId: string;
+        lineNumber: number;
+        debit: string | number;
+        credit: string | number;
+        lineDescription: string | null;
+        projectId: string | null;
+        siteId: string | null;
+      }>;
+    },
+  ): Promise<JournalHeader> {
+    const journalDate = this.parseDate(input.journalDate, "journalDate");
+    const accountingDate = this.parseDate(input.accountingDate, "accountingDate");
+
+    const idempotencyKey = (input.idempotencyKey ?? "").trim();
+    if (!idempotencyKey) throw new ValidationError("idempotencyKey is required");
+
+    const period = await this.repo.findPeriodById(input.periodId);
+    if (!period || period.tenantId !== tenantId) {
+      throw new NotFoundError("AccountingPeriod", input.periodId);
+    }
+    if (period.status === "closed" || period.status === "reopenable") {
+      throw new ConflictError("Cannot create journal in a non-open accounting period");
+    }
+
+    try {
+      return await this.repo.createJournal({
+        tenantId,
+        legalEntityId: input.legalEntityId,
+        journalNumber: input.journalNumber,
+        journalDate,
+        accountingDate,
+        periodId: input.periodId,
+        description: input.description,
+        currency: input.currency,
+        postingRuleVersionId: null,
+        idempotencyKey,
+        lines: input.lines.map((line) => ({
+          accountId: line.accountId,
+          lineNumber: line.lineNumber,
+          debit: this.parseMoney(line.debit),
+          credit: this.parseMoney(line.credit),
+          lineDescription: line.lineDescription,
+          projectId: line.projectId,
+          siteId: line.siteId,
+        })),
+        createdBy: null,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError(
+          "A journal with this idempotency key already exists",
+          "idempotency_key_conflict",
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Internal journal posting without authorization — callers must authorize first.
    * Extracted from postJournal for use by the event consumer (a system principal
    * that holds no assignment row, so rbac.requirePermission cannot be satisfied).

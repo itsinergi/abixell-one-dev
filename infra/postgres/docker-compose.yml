@@ -10,7 +10,7 @@ services:
       POSTGRES_DB: abixell_one_dev
     # Local Windows environment only.
     ports:
-      - "127.0.0.1:5442:5432"
+      - "127.0.0.1:5542:5432"
     volumes:
       - abixell_dev_pgdata:/var/lib/postgresql/data
     healthcheck:
