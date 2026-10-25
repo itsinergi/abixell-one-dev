@@ -129,6 +129,8 @@ import { PgAccountingKernelRepository } from "./modules/accounting/kernel/infras
 import { AccountingKernelService } from "./modules/accounting/kernel/application/accounting-kernel.service.js";
 import { PgOpenItemRepository } from "./modules/accounting/open-item/infrastructure/open-item.repository.pg.js";
 import { OpenItemService } from "./modules/accounting/open-item/application/open-item.service.js";
+import { PgBudgetRepository } from "./modules/accounting/budget/infrastructure/budget.repository.pg.js";
+import { BudgetService } from "./modules/accounting/budget/application/budget.service.js";
 import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
 import { PgAccountingEventWritePort } from "./modules/supply-chain/ports/accounting-event.port.pg.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
@@ -510,6 +512,11 @@ export function buildContainer() {
   // transaction+lock path that keeps over-allocation fail-closed.
   const openItem = new OpenItemService(new PgOpenItemRepository(pool), rbac, audit);
 
+  // WP-FIN-A6-03 — Budget control (ADR-0020). Versioned baselines go through
+  // the Workflow Engine for maker-checker approval; consumption is idempotent
+  // and fail-closed on hard_stop policies.
+  const budget = new BudgetService(new PgBudgetRepository(pool), rbac, audit, workflow);
+
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
   // Entity Authorization Resolver can close over `hse.canAccessForDocument`
   // (ADR-0012). HSE evidence is gated by hse.documents.read AND Data Scope.
@@ -881,6 +888,7 @@ export function buildContainer() {
     accountingKernel,
     accountingEventConsumer,
     openItem,
+    budget,
     hse,
     projectDelivery,
     reportingInsight,

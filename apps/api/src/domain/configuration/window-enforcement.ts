@@ -278,6 +278,13 @@ export const WINDOW_RULES: WindowRule[] = [
   // allocation — maps to the transactions Window alongside journal writes.
   { method: "*", apiPath: "/accounting/open-items", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/allocations", windowCode: "route:/finance/transactions" },
+  // Budget control (Wave A6 WP-FIN-A6-03). Baseline/policy definition is
+  // configuration; consumption and version actions are money movement.
+  { method: "*", apiPath: "/accounting/budget-consumptions", windowCode: "route:/finance/transactions" },
+  { method: "POST", apiPath: "/accounting/budget-versions/:id/actions", windowCode: "route:/finance/transactions" },
+  { method: "*", apiPath: "/accounting/budgets", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/budget-versions", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/budget-policies", windowCode: "route:/finance/accounts" },
   // Manual requeue of a terminally-failed event (Phase 2 WP-INT-03) resets it
   // for re-posting, the same write surface as posting a journal.
   { method: "*", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
