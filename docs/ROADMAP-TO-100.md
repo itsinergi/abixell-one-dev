@@ -10,7 +10,7 @@
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and **Wave A5 are COMPLETED**; no wave is currently active. Waves A6–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
+| Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and **Wave A5 are COMPLETED**. **Wave A6 is AUTHORIZED and in execution** (Founder approved ADRs 0015–0022 on 2026-10-24; work packages `WP-FIN-A6-01…06`), earning points only per unit after closure evidence. Waves A7–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
 | Design-only additions outside the denominator | **Epic 15 (Panel Admin)** in `docs/plans/CORE-ROADMAP.md` §4.15 — structure locked 2026-09-28; **design interview complete 2026-10-23 (15 decisions locked, all 6 open items closed)**; implementation not authorized. Design work only; moves no point in this document (see §14) |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
@@ -52,6 +52,61 @@ traceability and move neither metric; the numbers above already reflect their cl
 - **Wave A6 authorization (2026-10-24):** Founder approved all eight Wave A6 ADRs (0015–0022) as one decision — status `PROPOSED` → `APPROVED`. ADR-0019's tax-specialist gate is **waived by Founder sign-off on record** (regulatory risk accepted by Founder). Execution mode: automatic, work packages WP-FIN-A6-01..06 in sequence with per-WP PR + tests. Wave A6 points are earned only per unit after closure evidence, not at ADR approval.
 - **VPS staging (checked 2026-10-24):** `deploy@202.10.46.8` healthy — `abixell-one-staging-{web,api,postgres}` all `healthy` (up 5 days; images built 2026-10-15), database `abixell_one_staging` with 246 public tables, disk 17% (13G/79G), load ~0.01. The deployed build predates the COA builder / Panel Admin commits. Pilot staging init (`docs/operations/pilot-staging-init-runbook.md`) remains **deferred** per Founder decision 2026-10-23 ("local evidence is enough for now").
 
+## 1a. Point Ledger — where the 353 points live
+
+Full unit-by-unit detail with evidence: **[POINT-LEDGER.md](POINT-LEDGER.md)**. This section is
+the compact view. Both are derivative; `docs/canonical/product-progress.md` remains canonical.
+
+| Layer | Total | Earned | % |
+|---|---:|---:|---:|
+| Platform Core (PC-1…PC-13) | 41 | 41 | 100.0% |
+| Platform Hardening (PH-1…PH-8) | 16 | 16 | 100.0% |
+| Business Core (BC-1…BC-11) | 117 | 117 | 100.0% |
+| Advanced Capabilities (12 modules) | 179 | 113 | 63.1% |
+| **Full Approved Roadmap** | **353** | **287** | **81.3%** |
+
+Advanced Capabilities, 179 points across 12 modules:
+
+| Module | W | Earned |
+|---|---:|---:|
+| Customer & Commercial | 8 | 8 |
+| Service Quality | 11 | 11 |
+| Survey & Assessment | 19 | 19 |
+| Service Operations | 13 | 8 |
+| Workforce (HR) | 24 | 24 |
+| Finance | 21 | 0 |
+| Supply Chain | 22 | 22 |
+| Asset | 11 | 11 |
+| Project Delivery | 13 | 0 |
+| HSE | 14 | 0 |
+| Platform (cross-cutting) | 13 | 0 |
+| Reporting | 10 | 10 |
+| **Total** | **179** | **113** |
+
+The 66 remaining points:
+
+| Wave | Pts | State |
+|---|---:|---|
+| Wave A6 — Finance Advanced | 21 | Authorized 2026-10-24, in execution (`WP-FIN-A6-01…06`) |
+| Wave A7 — Project Delivery + HSE Advanced | 27 | Not authorized |
+| Wave A8 — Platform cross-cutting Advanced | 13 | Not authorized |
+| `SO-ADV-006` — Offline Field PWA | 5 | Deferred, awaits dedicated ADR |
+
+Wave A6 is the only wave where **built** and **earned** diverge. Merged code without
+closure evidence earns 0 under the `COMPLETED = full weight` rule.
+
+| Unit | Pts | Built | Earned | Built by |
+|---|---:|---:|---:|---|
+| GL / COA / journal | 5 | 5 | 0 | `882bbdd` (#40 COA Builder) |
+| AP/AR + aging | 3 | 3 | 0 | `010ba93` (#57) |
+| Budgeting & cost center | 3 | 3 | 0 | `009c8a4` (#58) |
+| Bank reconciliation | 2 | 2 | 0 | `0ed302c` (#59) |
+| Fixed-asset accounting & depreciation | 3 | 3 | 0 | `f394209` (#61, API-first; UI → Wave A6.1) |
+| Tax / consolidation / financial statements | 5 | 0 | 0 | — |
+| **Total** | **21** | **16** | **0** | |
+
+Closing Wave A6 moves the headline to **308 / 353 = 87.3%**.
+
 ## 2. Recommended Phase Sequence
 
 The recommended route is:
@@ -73,7 +128,7 @@ The recommended route is:
 | 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 335 / 353 | 94.9% | 100.0% |
 | 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 348 / 353 | 98.6% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and Wave A5 are earned and complete; the current baseline is now row 5. Waves A6–A8 remain planned / optional and none is authorized. Delivering all planned Waves A6–A8 yields 348 / 353 = 98.6%. Reaching the full 353 / 353 (100.0%) requires completing the separately deferred `SO-ADV-006` (5 pts) following Founder approval and a dedicated ADR. No wave is started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2, Wave A1, Wave A2, Wave A3 (revised), Wave A4, and Wave A5 are earned and complete; the current baseline is now row 5. **Wave A6 is authorized** (Founder approved ADRs 0015–0022 on 2026-10-24) and is in execution, but authorization alone earns no points — its 21 points are earned per unit only after closure evidence. Waves A7–A8 remain planned / optional and unauthorized. Delivering all planned Waves A6–A8 yields 348 / 353 = 98.6%. Reaching the full 353 / 353 (100.0%) requires completing the separately deferred `SO-ADV-006` (5 pts) following Founder approval and a dedicated ADR. No wave is started by this document.
 
 ## 3. Phase H2 - Production Gate
 
@@ -272,15 +327,19 @@ All boundaries held. Multi-warehouse topology, bin storage locations, batch quar
 
 Wave A6 turns operational cash tracking into full accounting depth.
 
-| Area | Unit | Capability | Pts |
-|---|---|---|---:|
-| Finance | FIN-ADV group | GL, chart of accounts, and journal | 5 |
-| Finance | FIN-ADV group | AP/AR and aging | 3 |
-| Finance | FIN-ADV group | Budgeting and cost center | 3 |
-| Finance | FIN-ADV group | Bank reconciliation | 2 |
-| Finance | FIN-ADV group | Fixed-asset accounting and depreciation — API-first A6-05 implemented; UI separate in Wave A6.1 | 3 | IN PROGRESS |
-| Finance | FIN-ADV group | Tax, consolidation, and financial statements | 5 |
-| Total | Wave A6 |  | 21 |
+| Area | Unit | Capability | Pts | Built | Earned |
+|---|---|---|---:|---:|---:|
+| Finance | FIN-ADV group | GL, chart of accounts, and journal | 5 | 5 | 0 |
+| Finance | FIN-ADV group | AP/AR and aging | 3 | 3 | 0 |
+| Finance | FIN-ADV group | Budgeting and cost center | 3 | 3 | 0 |
+| Finance | FIN-ADV group | Bank reconciliation | 2 | 2 | 0 |
+| Finance | FIN-ADV group | Fixed-asset accounting and depreciation | 3 | 3 | 0 |
+| Finance | FIN-ADV group | Tax, consolidation, and financial statements | 5 | 0 | 0 |
+| Total | Wave A6 |  | 21 | 16 | 0 |
+
+Five of six units are built (`WP-FIN-A6-01…05`); fixed-asset is API-first with its UI
+deferred to Wave A6.1. Tax/consolidation/statements is not started. No unit has closure
+evidence yet, so A6 earns 0 of 21 — see §1a and [POINT-LEDGER.md](POINT-LEDGER.md) §7.1.
 
 Expected result:
 
@@ -373,6 +432,8 @@ Recommended boundaries:
 | Planned Platform cross-cutting Advanced (A8) | 13 | Partner API (3), AI readiness (5), and marketplace ecosystem (5) complete |
 | Deferred `SO-ADV-006` (Offline Field PWA) | 5 | Awaiting dedicated Founder architecture ADR, approval, implementation, and verification |
 | Total remaining Advanced | 66 | 48 (A6–A7) + 13 (A8) + 5 (SO-ADV-006); Full Approved Roadmap reaches 353 / 353 |
+
+Unit-level ownership of every remaining point (and of every earned point): [POINT-LEDGER.md](POINT-LEDGER.md).
 
 After planned Waves A6–A8 (excluding deferred `SO-ADV-006`):
 
