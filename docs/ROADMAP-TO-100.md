@@ -102,8 +102,8 @@ closure evidence earns 0 under the `COMPLETED = full weight` rule.
 | Budgeting & cost center | 3 | 3 | 0 | `009c8a4` (#58) |
 | Bank reconciliation | 2 | 2 | 0 | `0ed302c` (#59) |
 | Fixed-asset accounting & depreciation | 3 | 3 | 0 | `f394209` (#61, API-first; UI → Wave A6.1) |
-| Tax / consolidation / financial statements | 5 | 0 | 0 | — |
-| **Total** | **21** | **16** | **0** | |
+| Tax / consolidation / financial statements | 5 | 5 | 0 | `7f87018` (#62 tax); `3bb4d4f` (#63 consolidation) |
+| **Total** | **21** | **21** | **0** | |
 
 Closing Wave A6 moves the headline to **308 / 353 = 87.3%**.
 
@@ -334,12 +334,12 @@ Wave A6 turns operational cash tracking into full accounting depth.
 | Finance | FIN-ADV group | Budgeting and cost center | 3 | 3 | 0 |
 | Finance | FIN-ADV group | Bank reconciliation | 2 | 2 | 0 |
 | Finance | FIN-ADV group | Fixed-asset accounting and depreciation | 3 | 3 | 0 |
-| Finance | FIN-ADV group | Tax, consolidation, and financial statements | 5 | 0 | 0 |
-| Total | Wave A6 |  | 21 | 16 | 0 |
+| Finance | FIN-ADV group | Tax, consolidation, and financial statements | 5 | 5 | 0 |
+| Total | Wave A6 |  | 21 | 21 | 0 |
 
-Five of six units are built (`WP-FIN-A6-01…05`); fixed-asset is API-first with its UI
-deferred to Wave A6.1. Tax/consolidation/statements is not started. No unit has closure
-evidence yet, so A6 earns 0 of 21 — see §1a and [POINT-LEDGER.md](POINT-LEDGER.md) §7.1.
+All six units are built (`WP-FIN-A6-01…06`); fixed-asset and the Finance Advanced screens
+are API-first with their UI deferred to Wave A6.1. No unit has closure evidence yet, so A6
+earns 0 of 21 — see §1a and [POINT-LEDGER.md](POINT-LEDGER.md) §7.1.
 
 Expected result:
 
