@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { activateAllModules, authHeader, bootstrapTenant, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, login, provisionExternalCustomerUser, provisionFirstAdmin } from "./helpers.js";
 
 /**
  * Wave MD-03 — Catering vertical master (WP-MD-03, DEC-007 K5/K6).
@@ -432,6 +432,71 @@ describe("Wave MD-03 — Catering vertical master (WP-MD-03)", () => {
     const consumed = await get("/catering/meal-batches?status=consumed");
     expect(consumed.statusCode).toBe(200);
     expect(consumed.json().every((b: { status: string }) => b.status === "consumed")).toBe(true);
+  });
+
+  // =========================================================================
+  // Customer Data Scope (Epic 4 §4.4 line 3)
+  // =========================================================================
+
+  it("hides catering master and other customers' plans from a customer-scoped reader", async () => {
+    // A second customer with its own site and meal plan, so a leak would show.
+    const otherCust = await pool.query(
+      `INSERT INTO customers (tenant_id, code, name) VALUES ($1, 'CUST-MD3-OTHER', 'Other Customer') RETURNING id`,
+      [tenantId],
+    );
+    const otherCustId = otherCust.rows[0].id as string;
+    const otherSite = await pool.query(
+      `INSERT INTO sites (tenant_id, customer_id, code, name) VALUES ($1, $2, 'SITE-MD3-OTHER', 'Other Site') RETURNING id`,
+      [tenantId, otherCustId],
+    );
+    await post("/catering/meal-plans", {
+      menuCode: "MENU-LUNCH",
+      siteId: otherSite.rows[0].id,
+      mealDate: TODAY,
+      mealType: "breakfast",
+      plannedPortions: 5,
+    });
+
+    const email = `custscope-md3-${Date.now()}@wave-md3.local`;
+    const scoped = await provisionExternalCustomerUser({
+      tenantId,
+      email,
+      password: "Passw0rd12345!",
+      permissionCodes: ["service_operations.read"],
+    });
+    const scopedToken = (await login(app, TENANT_CODE, email, "Passw0rd12345!")).body.accessToken;
+
+    // A site of their own, with one plan — so a leak would be visible.
+    const ownSite = await pool.query(
+      `INSERT INTO sites (tenant_id, customer_id, code, name) VALUES ($1, $2, 'SITE-MD3-SCOPED', 'Scoped Site') RETURNING id`,
+      [tenantId, scoped.customerId],
+    );
+    const ownSiteId = ownSite.rows[0].id as string;
+    await post("/catering/meal-plans", {
+      menuCode: "MENU-LUNCH",
+      siteId: ownSiteId,
+      mealDate: TODAY,
+      mealType: "snack",
+      plannedPortions: 3,
+    });
+
+    // Meal plans: only the ones whose site belongs to this customer.
+    const plans = await get("/catering/meal-plans", scopedToken);
+    expect(plans.statusCode).toBe(200);
+    const visible = plans.json() as { siteId: string | null }[];
+    expect(visible).toHaveLength(1);
+    expect(visible[0].siteId).toBe(ownSiteId);
+
+    // Meal batches: fail closed — a batch with no plan is not theirs.
+    const batches = await get("/catering/meal-batches", scopedToken);
+    expect(batches.statusCode).toBe(200);
+    expect(batches.json()).toEqual([]);
+
+    // Menus / recipes / ingredients / costing are tenant master data: refused.
+    expect((await get("/catering/menus", scopedToken)).statusCode).toBe(403);
+    expect((await get("/catering/recipes", scopedToken)).statusCode).toBe(403);
+    expect((await get("/catering/recipes/RC-COOKED-RICE/ingredients", scopedToken)).statusCode).toBe(403);
+    expect((await post("/catering/recipes/RC-COOKED-RICE/cost", {}, scopedToken)).statusCode).toBe(403);
   });
 
   // =========================================================================
