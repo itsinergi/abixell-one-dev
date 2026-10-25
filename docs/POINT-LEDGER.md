@@ -150,7 +150,7 @@ Twelve delivered capability groups, evidence per `product-progress.md` §5:
 | Budgeting & cost center | 3 | 3 | 0 | `009c8a4` (#58) |
 | Bank reconciliation | 2 | 2 | 0 | `0ed302c` (#59) |
 | Fixed-asset accounting & depreciation | 3 | 3 | 0 | `f394209` (#61, API-first; UI deferred to Wave A6.1) |
-| Tax / consolidation / financial statements | 5 | 5 | 0 | `7f87018` (#62 tax, ADR-0019); `3bb4d4f` (#63 consolidation + FSV, ADR-0022) |
+| Tax / consolidation / financial statements | 5 | 5 | 0 | `7f87018` (#62 tax, ADR-0019); `8bb062a` (#63 consolidation + FSV, ADR-0022) |
 | **Total** | **21** | **21** | **0** | |
 
 Every Wave A6 unit is now built. What keeps A6 at 0 earned is the second half only:
