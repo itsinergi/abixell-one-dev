@@ -1511,7 +1511,37 @@ export const api = {
       method: "POST", token, body: { actionCode, comment: comment ?? null },
     }),
 
-  // 9. Spend Analytics
+  // 9. Receiving, Inspection & Returns
+  scmReceivingRecords: (token: string, query: { purchaseOrderId?: string; supplierId?: string; warehouseId?: string; status?: ScmReceivingStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmReceivingRecord[]>(`/wms/receiving-records${qs}`, { token });
+  },
+  scmReceivingRecord: (token: string, id: string) =>
+    request<ScmReceivingRecordDetail>(`/wms/receiving-records/${id}`, { token }),
+  createScmReceivingRecord: (token: string, body: CreateScmReceivingRecordBody) =>
+    request<ScmReceivingRecordDetail>("/wms/receiving-records", { method: "POST", token, body }),
+  createScmInspection: (token: string, body: CreateScmInspectionBody) =>
+    request<ScmInspection>("/wms/inspections", { method: "POST", token, body }),
+  scmInspectionByReceivingLine: (token: string, receivingLineId: string) =>
+    request<ScmInspection>(`/wms/inspections/by-receiving-line/${receivingLineId}`, { token }),
+  scmDiscrepancies: (token: string, query: { receivingLineId?: string; discrepancyType?: ScmDiscrepancyType; status?: ScmDiscrepancyStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmDiscrepancyRecord[]>(`/wms/discrepancies${qs}`, { token });
+  },
+  createScmDiscrepancy: (token: string, body: CreateScmDiscrepancyBody) =>
+    request<ScmDiscrepancyRecord>("/wms/discrepancies", { method: "POST", token, body }),
+  resolveScmDiscrepancy: (token: string, id: string, body: { status: "resolved" | "cancelled"; resolutionNotes?: string | null }) =>
+    request<ScmDiscrepancyRecord>(`/wms/discrepancies/${id}/resolve`, { method: "PATCH", token, body }),
+  scmReturnsToVendor: (token: string, query: { supplierId?: string; purchaseOrderId?: string; warehouseId?: string; status?: ScmReturnToVendorStatus } = {}) => {
+    const qs = queryString(query);
+    return request<ScmReturnToVendor[]>(`/wms/returns-to-vendor${qs}`, { token });
+  },
+  scmReturnToVendor: (token: string, id: string) =>
+    request<ScmReturnToVendorDetail>(`/wms/returns-to-vendor/${id}`, { token }),
+  createScmReturnToVendor: (token: string, body: CreateScmReturnToVendorBody) =>
+    request<ScmReturnToVendorDetail>("/wms/returns-to-vendor", { method: "POST", token, body }),
+
+  // 10. Spend Analytics
   computeScmSpendSnapshot: (token: string, body: ComputeScmSpendSnapshotBody) =>
     request<ScmSpendAnalyticsSnapshot[]>("/procurement/spend-analytics/compute", { method: "POST", token, body }),
   scmSpendSnapshots: (token: string, query: { periodType?: ScmSpendAnalyticsPeriodType; organizationUnitId?: string } = {}) => {
@@ -3698,6 +3728,228 @@ export type CreateScmStockOpnameBody = {
 export type RecordScmStockOpnameCountBody = {
   lineId: string;
   physicalQuantity: number;
+};
+
+// --- Receiving, Inspection & Returns (Wave A6 GAP #9) -------------------
+//
+// The receiving chain is one document series: a receipt books the goods, an
+// inspection releases them out of quality hold, a discrepancy records a
+// complaint, and a return ships goods back. `paymentEligible` is not a stored
+// column — it is `quantityAccepted - quantityReturned - quantityReversed`,
+// the same expression the payment batch re-checks at transaction time.
+
+export type ScmStockCondition =
+  | "unrestricted"
+  | "quality_hold"
+  | "rejected"
+  | "quarantined"
+  | "blocked"
+  | "in_transit"
+  | "in_repair";
+
+export type ScmStockOwnerType = "own" | "supplier" | "customer";
+
+export type ScmReceivingStatus =
+  | "received"
+  | "partially_inspected"
+  | "accepted"
+  | "rejected"
+  | "reversed";
+
+export type ScmInspectionResult = "accepted" | "rejected" | "mixed" | "quarantined";
+
+export type ScmDiscrepancyType = "shortage" | "overage" | "damage" | "quality" | "document";
+export type ScmDiscrepancyStatus = "open" | "resolved" | "cancelled";
+export type ScmReturnToVendorStatus = "executed" | "cancelled";
+
+export type ScmAccountAssignmentType =
+  | "stock"
+  | "expense"
+  | "asset"
+  | "project"
+  | "work_order"
+  | "service";
+
+export type ScmReceivingRecord = {
+  id: string;
+  tenantId: string;
+  receiptNumber: string;
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  warehouseId: string;
+  locationId: string | null;
+  receivedAt: string;
+  receivedBy: string | null;
+  status: ScmReceivingStatus;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type ScmReceivingLine = {
+  id: string;
+  tenantId: string;
+  receivingRecordId: string;
+  purchaseOrderLineId: string;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  quantityReceived: number;
+  quantityAccepted: number;
+  quantityRejected: number;
+  quantityQuarantined: number;
+  quantityReturned: number;
+  quantityReversed: number;
+  unitCost: number | null;
+  currency: string;
+  accountAssignmentType: ScmAccountAssignmentType;
+  inspectionRequired: boolean;
+  notes: string | null;
+  sortOrder: number;
+};
+
+export type ScmReceivingRecordDetail = {
+  receiving: ScmReceivingRecord;
+  lines: ScmReceivingLine[];
+};
+
+export type CreateScmReceivingRecordBody = {
+  idempotencyKey: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  warehouseId: string;
+  locationId?: string | null;
+  receiptNumber?: string;
+  notes?: string | null;
+  lines: {
+    purchaseOrderLineId: string;
+    itemId: string;
+    warehouseId?: string | null;
+    locationId?: string | null;
+    quantityReceived: number;
+    unitCost?: number | null;
+    currency?: string;
+    accountAssignmentType: ScmAccountAssignmentType;
+    inspectionRequired?: boolean;
+    notes?: string | null;
+    sortOrder?: number;
+  }[];
+};
+
+export type ScmInspection = {
+  id: string;
+  tenantId: string;
+  receivingLineId: string;
+  inspectionNumber: string;
+  idempotencyKey: string;
+  inspectedAt: string;
+  inspectedBy: string | null;
+  quantityAccepted: number;
+  quantityRejected: number;
+  quantityQuarantined: number;
+  result: ScmInspectionResult;
+  reason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type CreateScmInspectionBody = {
+  receivingLineId: string;
+  idempotencyKey: string;
+  inspectionNumber?: string;
+  quantityAccepted?: number;
+  quantityRejected?: number;
+  quantityQuarantined?: number;
+  result: ScmInspectionResult;
+  reason?: string | null;
+};
+
+export type ScmDiscrepancyRecord = {
+  id: string;
+  tenantId: string;
+  receivingLineId: string;
+  discrepancyType: ScmDiscrepancyType;
+  quantity: number | null;
+  description: string;
+  status: ScmDiscrepancyStatus;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  resolutionNotes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type CreateScmDiscrepancyBody = {
+  receivingLineId: string;
+  discrepancyType: ScmDiscrepancyType;
+  quantity?: number | null;
+  description: string;
+};
+
+export type ScmReturnToVendor = {
+  id: string;
+  tenantId: string;
+  returnNumber: string;
+  idempotencyKey: string;
+  supplierId: string;
+  purchaseOrderId: string | null;
+  warehouseId: string;
+  returnedAt: string;
+  returnedBy: string | null;
+  reason: string;
+  status: ScmReturnToVendorStatus;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type ScmReturnToVendorLine = {
+  id: string;
+  tenantId: string;
+  returnToVendorId: string;
+  receivingLineId: string | null;
+  itemId: string;
+  warehouseId: string;
+  locationId: string | null;
+  batchId: string | null;
+  stockCondition: ScmStockCondition;
+  ownerType: ScmStockOwnerType;
+  ownerPartyId: string | null;
+  quantity: number;
+  movementId: string | null;
+  notes: string | null;
+  sortOrder: number;
+};
+
+export type ScmReturnToVendorDetail = {
+  returnToVendor: ScmReturnToVendor;
+  lines: ScmReturnToVendorLine[];
+};
+
+export type CreateScmReturnToVendorBody = {
+  idempotencyKey: string;
+  supplierId: string;
+  purchaseOrderId?: string | null;
+  warehouseId: string;
+  reason: string;
+  notes?: string | null;
+  lines: {
+    receivingLineId?: string | null;
+    itemId: string;
+    warehouseId: string;
+    locationId?: string | null;
+    batchId?: string | null;
+    stockCondition: ScmStockCondition;
+    ownerType: ScmStockOwnerType;
+    quantity: number;
+    notes?: string | null;
+    sortOrder?: number;
+  }[];
 };
 
 export type ScmValuationLayer = {
