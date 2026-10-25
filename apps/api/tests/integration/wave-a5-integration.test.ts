@@ -100,13 +100,28 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
   let disposalId: string;
   let warehouseTaskId: string;
 
-  const post = (url: string, token: string, payload?: Record<string, unknown>) =>
-    app.inject({
+  const post = async (url: string, token: string, payload?: Record<string, unknown>) => {
+    const response = await app.inject({
       method: "POST",
       url,
       headers: authHeader(token),
       ...(payload === undefined ? {} : { payload }),
     });
+    // Receiving now requires an issued PO. Keep this suite's many receiving
+    // fixtures explicit without changing tests that exercise other lifecycles.
+    if (url === "/purchase-orders" && response.statusCode === 201) {
+      const orderId = response.json().order.id as string;
+      const issue = await app.inject({
+        method: "POST",
+        url: `/purchase-orders/${orderId}/issue`,
+        headers: authHeader(token),
+      });
+      if (issue.statusCode !== 200) {
+        throw new Error(`Fixture PO issue failed: ${issue.statusCode}`);
+      }
+    }
+    return response;
+  };
 
   const get = (url: string, token: string) =>
     app.inject({
@@ -1141,6 +1156,11 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       });
       expect(recPartialRes.statusCode).toBe(201);
       const recPartialLineId = recPartialRes.json().lines[0].id;
+      const receivedPoLine = await pool.query(
+        `SELECT quantity_received FROM purchase_order_lines WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, poPartialLineId],
+      );
+      expect(Number(receivedPoLine.rows[0].quantity_received)).toBe(20);
 
       // Partial inspection: accept 10, reject 5, quarantine 3 (total 18 of 20)
       const inspPartialRes = await post("/supply-chain/advanced/inspections", adminToken, {
@@ -1169,6 +1189,45 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       expect(lineData.quantityReceived - (lineData.quantityAccepted + lineData.quantityRejected + lineData.quantityQuarantined)).toBe(2);
     });
 
+    it("GAP-6: hard-block WMS over-receipt", async () => {
+      const poRes = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 5, unitPrice: 10000000 }],
+      });
+      const poId = poRes.json().order.id;
+      const poLineId = poRes.json().lines[0].id;
+      const receipt = (quantityReceived: number) =>
+        post("/supply-chain/advanced/receiving-records", adminToken, {
+          idempotencyKey: `rec-over-receipt-${quantityReceived}-${Date.now()}`,
+          purchaseOrderId: poId,
+          supplierId: supplierAcmeId,
+          warehouseId: secondaryWarehouseId,
+          lines: [{
+            purchaseOrderLineId: poLineId,
+            itemId: itemAlphaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived,
+            unitCost: 10000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: {},
+            inspectionRequired: true,
+            sortOrder: 1,
+          }],
+        });
+
+      expect((await receipt(6)).statusCode).toBe(409);
+      const unchanged = await pool.query(
+        `SELECT quantity_received FROM purchase_order_lines WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, poLineId],
+      );
+      expect(Number(unchanged.rows[0].quantity_received)).toBe(0);
+    });
+
     it("WP-WMS-01: over-disposition rejection — quantity_rejected > quantity_received", async () => {
       // Create PO + receiving for over-disposition test
       const poOverRes = await post("/purchase-orders", adminToken, {
@@ -1188,7 +1247,7 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
         lines: [
           {
             purchaseOrderLineId: poOverLineId,
-            itemId: itemBetaId,
+            itemId: itemAlphaId,
             warehouseId: secondaryWarehouseId,
             stockCondition: "quality_hold",
             ownerType: "own",

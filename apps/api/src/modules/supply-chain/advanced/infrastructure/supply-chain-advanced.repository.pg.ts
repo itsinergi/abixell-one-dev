@@ -3050,6 +3050,31 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       const lines: ScmReceivingLine[] = [];
       let sort = 0;
       for (const line of input.lines) {
+        // Receiving is a PO hand-off: only an issued, non-cancelled line may
+        // advance, and the guard lives inside the locked UPDATE so concurrent
+        // receipts cannot jointly exceed the ordered quantity.
+        const poLineRes = await client.query(
+          `UPDATE purchase_order_lines pol
+              SET quantity_received = pol.quantity_received + $3
+             FROM purchase_orders po
+            WHERE pol.tenant_id = $1
+              AND pol.id = $2
+              AND pol.purchase_order_id = $4
+              AND pol.item_id = $5
+              AND po.id = pol.purchase_order_id
+              AND po.tenant_id = pol.tenant_id
+              AND po.issued_at IS NOT NULL
+              AND po.cancelled_at IS NULL
+              AND pol.quantity_received + $3 <= pol.quantity_ordered
+            RETURNING pol.id`,
+          [tenantId, line.purchaseOrderLineId, line.quantityReceived, input.purchaseOrderId, line.itemId],
+        );
+        if (!poLineRes.rows[0]) {
+          throw new ConflictError(
+            `Receiving line ${line.purchaseOrderLineId} is not issued, mismatched, cancelled, or exceeds the ordered quantity`,
+          );
+        }
+
         const lRes = await client.query(
           `INSERT INTO scm_receiving_lines (
              tenant_id, receiving_record_id, purchase_order_line_id, item_id,
