@@ -102,7 +102,7 @@ closure evidence earns 0 under the `COMPLETED = full weight` rule.
 | Budgeting & cost center | 3 | 3 | 0 | `009c8a4` (#58) |
 | Bank reconciliation | 2 | 2 | 0 | `0ed302c` (#59) |
 | Fixed-asset accounting & depreciation | 3 | 3 | 0 | `f394209` (#61, API-first; UI → Wave A6.1) |
-| Tax / consolidation / financial statements | 5 | 5 | 0 | `7f87018` (#62 tax); `3bb4d4f` (#63 consolidation) |
+| Tax / consolidation / financial statements | 5 | 5 | 0 | `7f87018` (#62 tax); `8bb062a` (#63 consolidation) |
 | **Total** | **21** | **21** | **0** | |
 
 Closing Wave A6 moves the headline to **308 / 353 = 87.3%**.
