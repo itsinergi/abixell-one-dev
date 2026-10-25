@@ -13,11 +13,14 @@
 
 import type { PoolClient } from "pg";
 import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
-import type { Customer } from "../../../../domain/customer/customer.entity.js";
+export interface AuthorizedCustomer {
+  id: string;
+  ownerOrganizationUnitId: string | null;
+}
 
 export interface CustomerScopePort {
   listScopedCustomerIds(actor: ActorContext): Promise<string[]>;
-  getAuthorized(actor: ActorContext, customerId: string): Promise<Customer>;
+  getAuthorized(actor: ActorContext, customerId: string): Promise<AuthorizedCustomer>;
   canAccessForDocument(actor: ActorContext, customerId: string): Promise<boolean>;
 }
 
