@@ -1079,7 +1079,21 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       // Fulfilling a reservation issues the goods for real: the stock leaves
       // the warehouse, not just the reserved bucket.
       if (reservation.status === "active" && status === "fulfilled") {
-        await this.recordMovementTx(client, tenantId, {
+        const context = await this.resolveAccountingContextTx(
+          client,
+          tenantId,
+          reservation.warehouseId,
+          timestamp,
+        );
+        const unitCost = await this.resolveUnitCostTx(
+          client,
+          tenantId,
+          reservation.itemId,
+          reservation.warehouseId,
+        );
+        const preallocatedEventId = crypto.randomUUID();
+
+        const issued = await this.recordMovementTx(client, tenantId, {
           itemId: reservation.itemId,
           warehouseId: reservation.warehouseId,
           locationId: reservation.locationId,
@@ -1089,13 +1103,44 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
           ownerPartyId: null,
           movementType: "out",
           quantity: reservation.quantity,
+          unitCost,
+          totalCost: multiplyQuantityCost(reservation.quantity, unitCost),
           referenceType: "scm_stock_reservation",
           referenceId: reservation.id,
           referenceNumber: reservation.reservationNumber,
+          accountingReadyEventId: preallocatedEventId,
           notes: `Issued for reservation ${reservation.reservationNumber} (${reservation.reservedForType})`,
           occurredAt: timestamp,
           createdBy,
         });
+
+        await this.createAccountingReadyEventTx(
+          client,
+          tenantId,
+          {
+            eventType: "inventory.goods_issued",
+            sourceDocumentType: "scm_stock_reservation",
+            sourceDocumentId: reservation.id,
+            sourceMovementId: issued.movement.id,
+            effectiveAt: timestamp,
+            amount: multiplyQuantityCost(reservation.quantity, unitCost),
+            quantity: reservation.quantity,
+            unitCost,
+            accountAssignmentType: "expense",
+            accountAssignmentDimensions: { legalEntityId: context.legalEntityId },
+            idempotencyKey: `reservation-fulfil:${reservation.id}`,
+            payload: {
+              legalEntityId: context.legalEntityId,
+              periodId: context.periodId,
+              reservationNumber: reservation.reservationNumber,
+              reservedForType: reservation.reservedForType,
+              reservedForId: reservation.reservedForId,
+              warehouseId: reservation.warehouseId,
+            },
+            createdBy,
+          },
+          preallocatedEventId,
+        );
       }
 
       const fulfilledAt = status === "fulfilled" ? timestamp : reservation.fulfilledAt;
@@ -1766,6 +1811,22 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
           }
         }
 
+        const context = await this.resolveAccountingContextTx(
+          client,
+          tenantId,
+          opname.warehouseId,
+          opname.completedAt ?? new Date(),
+        );
+        const unitCost = await this.resolveUnitCostTx(
+          client,
+          tenantId,
+          line.itemId,
+          opname.warehouseId,
+        );
+        const varianceQty = Math.abs(variance);
+        const amount = multiplyQuantityCost(varianceQty, unitCost);
+        const preallocatedEventId = crypto.randomUUID();
+
         const movement = await this.recordMovementTx(client, tenantId, {
           itemId: line.itemId,
           warehouseId: opname.warehouseId,
@@ -1775,13 +1836,49 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
           ownerType: "own",
           ownerPartyId: null,
           movementType: variance > 0 ? "opname_in" : "opname_out",
-          quantity: Math.abs(variance),
+          quantity: varianceQty,
+          unitCost,
+          totalCost: amount,
           referenceType: "scm_stock_opname",
           referenceId: opname.id,
           referenceNumber: opname.opnameNumber,
+          accountingReadyEventId: preallocatedEventId,
           notes: `Opname adjustment on ${opname.opnameNumber}: system ${line.systemQuantity}, physical ${line.physicalQuantity}`,
           createdBy,
         });
+
+        // Surplus and shrinkage need opposite journal sides, and a posting rule
+        // is chosen by event type alone (amountExpression only knows a positive
+        // AMOUNT). They therefore emit different event types.
+        await this.createAccountingReadyEventTx(
+          client,
+          tenantId,
+          {
+            eventType: variance > 0 ? "inventory.goods_received" : "inventory.adjusted",
+            sourceDocumentType: "scm_stock_opname",
+            sourceDocumentId: opname.id,
+            sourceDocumentLineId: line.id,
+            sourceMovementId: movement.movement.id,
+            effectiveAt: opname.completedAt ?? new Date(),
+            amount,
+            quantity: varianceQty,
+            unitCost,
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: { legalEntityId: context.legalEntityId },
+            idempotencyKey: `opname-adjust:${line.id}`,
+            payload: {
+              legalEntityId: context.legalEntityId,
+              periodId: context.periodId,
+              opnameNumber: opname.opnameNumber,
+              warehouseId: opname.warehouseId,
+              systemQuantity: num(line.systemQuantity),
+              physicalQuantity: num(line.physicalQuantity),
+              variance,
+            },
+            createdBy,
+          },
+          preallocatedEventId,
+        );
 
         const linkRes = await client.query(
           `UPDATE scm_stock_opname_lines
@@ -3552,6 +3649,92 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     input: CreateScmAccountingReadyEventInput,
   ): Promise<ScmAccountingReadyEvent> {
     return this.inTransaction((client) => this.createAccountingReadyEventTx(client, tenantId, input));
+  }
+
+  /**
+   * Resolves the accounting context an event needs, or refuses the operation.
+   *
+   * The Accounting consumer posts every event into exactly one legal entity and
+   * one open period, so a goods movement that cannot name both would post to
+   * nowhere. Fail closed: the caller's whole transaction rolls back rather than
+   * moving stock that Finance can never see.
+   */
+  private async resolveAccountingContextTx(
+    client: PoolClient,
+    tenantId: string,
+    warehouseId: string,
+    effectiveAt: Date,
+  ): Promise<{ legalEntityId: string; periodId: string }> {
+    const leRes = await client.query(
+      `SELECT ou.legal_entity_id
+         FROM scm_warehouses w
+         JOIN organization_units ou
+           ON ou.tenant_id = w.tenant_id AND ou.id = w.organization_unit_id
+        WHERE w.tenant_id = $1 AND w.id = $2 AND ou.legal_entity_id IS NOT NULL`,
+      [tenantId, warehouseId],
+    );
+    const legalEntityId: string | undefined = leRes.rows[0]?.legal_entity_id;
+    if (!legalEntityId) {
+      throw new ValidationError(
+        `Warehouse ${warehouseId} has no legal entity through its organization unit; cannot emit an accounting event`,
+      );
+    }
+
+    const periodRes = await client.query(
+      `SELECT id FROM accounting_periods
+        WHERE tenant_id = $1 AND legal_entity_id = $2 AND status = 'open'
+          AND date_from <= $3::date AND date_to >= $3::date
+        ORDER BY date_from DESC
+        LIMIT 1`,
+      [tenantId, legalEntityId, effectiveAt.toISOString().slice(0, 10)],
+    );
+    const periodId: string | undefined = periodRes.rows[0]?.id;
+    if (!periodId) {
+      throw new ConflictError(
+        `No open accounting period for ${effectiveAt.toISOString().slice(0, 10)} in legal entity ${legalEntityId}`,
+      );
+    }
+    return { legalEntityId, periodId };
+  }
+
+  /**
+   * Weighted-average unit cost of the item in that warehouse.
+   *
+   * Layers are the authority. Stock can also arrive without one — a raw
+   * `POST /movements` carries its own unit cost and mints no layer — so fall
+   * back to the most recent inbound movement's cost rather than valuing the
+   * issue at zero and posting a nil journal.
+   *
+   * ponytail: layers are keyed by (item, warehouse), not by bin/condition, so
+   * every movement in a warehouse shares one cost. Add position-level costing
+   * when tenants start needing it.
+   */
+  private async resolveUnitCostTx(
+    client: PoolClient,
+    tenantId: string,
+    itemId: string,
+    warehouseId: string,
+  ): Promise<number> {
+    const r = await client.query(
+      `SELECT SUM(remaining_quantity * effective_unit_cost) / NULLIF(SUM(remaining_quantity), 0) AS avg_cost
+         FROM scm_valuation_layers
+        WHERE tenant_id = $1 AND item_id = $2 AND warehouse_id = $3 AND remaining_quantity > 0`,
+      [tenantId, itemId, warehouseId],
+    );
+    const layerCost = numOrNull(r.rows[0]?.avg_cost);
+    if (layerCost !== null && layerCost > 0) return layerCost;
+
+    const lastIn = await client.query(
+      `SELECT unit_cost
+         FROM scm_advanced_stock_movements
+        WHERE tenant_id = $1 AND item_id = $2 AND warehouse_id = $3
+          AND movement_type IN ('in', 'transfer_in', 'adjustment_in', 'opname_in')
+          AND unit_cost IS NOT NULL AND unit_cost > 0
+        ORDER BY occurred_at DESC, created_at DESC
+        LIMIT 1`,
+      [tenantId, itemId, warehouseId],
+    );
+    return num(lastIn.rows[0]?.unit_cost);
   }
 
   private async createAccountingReadyEventTx(

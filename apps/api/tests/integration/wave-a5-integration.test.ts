@@ -466,6 +466,64 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       address: "999 Remote St",
     });
     otherWarehouseId = otherWhRes.json().id;
+
+    // -----------------------------------------------------------------------
+    // 6. GL prerequisites for SCM stock movements
+    //
+    // Goods movements now emit accounting-ready events (ADR-0023) and the emit
+    // path fails closed: no legal entity or no open period means the stock
+    // movement is refused. Group 2 moves stock, so these rows must exist before
+    // any test runs — migrations only seed tenants that existed at migration
+    // time, and this tenant is created here at runtime.
+    // -----------------------------------------------------------------------
+    await pool.query(
+      `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status, created_by)
+       VALUES ($1, $2, 'FY2026', 'P-ANNUAL', 'Fiscal Year 2026', 'annual', '2026-01-01', '2026-12-31', 'open', $3)
+       ON CONFLICT (tenant_id, legal_entity_id, fiscal_year_code, period_code) DO NOTHING`,
+      [tenantId, legalEntityId, adminUserId],
+    );
+
+    const coaSeed = await pool.query(
+      `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
+       VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3)
+       ON CONFLICT (tenant_id, legal_entity_id, coa_version_code) DO NOTHING
+       RETURNING id`,
+      [tenantId, legalEntityId, adminUserId],
+    );
+    const coaSeedId =
+      coaSeed.rows[0]?.id ??
+      (
+        await pool.query(
+          `SELECT id FROM chart_of_accounts WHERE tenant_id = $1 AND legal_entity_id = $2 AND coa_version_code = 'FY2026'`,
+          [tenantId, legalEntityId],
+        )
+      ).rows[0].id;
+
+    await pool.query(
+      `INSERT INTO accounting_accounts (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance, is_active, created_by)
+       VALUES
+         ($1, $2, $3, '1301', 'Inventory', 'ASSET', 'debit', true, $4),
+         ($1, $2, $3, '5100', 'Harga Pokok Penjualan', 'EXPENSE', 'debit', true, $4),
+         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)
+       ON CONFLICT (tenant_id, legal_entity_id, coa_id, account_code) DO NOTHING`,
+      [tenantId, legalEntityId, coaSeedId, adminUserId],
+    );
+
+    await pool.query(
+      `INSERT INTO posting_rules (tenant_id, rule_code, rule_name, rule_version, trigger_event_type, accounting_formula, requires_approval, effective_date, is_active, created_by, updated_by)
+       VALUES
+         ($1, 'RULE_SCM_GOODS_ISSUED', 'SCM Goods Issued', 'v1', 'inventory.goods_issued',
+          '[{"accountCode":"5100","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"1301","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+          false, '2026-01-01'::date, true, $2, $2),
+         ($1, 'RULE_SCM_GOODS_RECEIVED', 'SCM Goods Received', 'v1', 'inventory.goods_received',
+          '[{"accountCode":"1301","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"5100","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+          false, '2026-01-01'::date, true, $2, $2),
+         ($1, 'RULE_SCM_STOCK_ADJUSTED', 'SCM Stock Adjusted', 'v1', 'inventory.adjusted',
+          '[{"accountCode":"5100","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"1301","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+          false, '2026-01-01'::date, true, $2, $2)
+       ON CONFLICT (tenant_id, rule_code, rule_version) DO NOTHING`,
+      [tenantId, adminUserId],
+    );
   });
 
   afterAll(async () => {
@@ -642,6 +700,22 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
         [tenantId, reservationId],
       );
       expect(fulfillMovements.rows.map((r) => `${r.movement_type}:${r.quantity}`)).toEqual(["out:2.0000"]);
+
+      // ...and Finance can see it: the movement carries an accounting-ready
+      // event written in the same transaction (ADR-0023).
+      const issueEvent = await pool.query(
+        `SELECT event_type, source_document_type, amount, outbox_state, payload
+           FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND source_document_type = 'scm_stock_reservation' AND source_document_id = $2`,
+        [tenantId, reservationId],
+      );
+      expect(issueEvent.rows).toHaveLength(1);
+      expect(issueEvent.rows[0]).toMatchObject({
+        event_type: "inventory.goods_issued",
+        outbox_state: "pending",
+      });
+      expect(issueEvent.rows[0].payload.legalEntityId).toBe(legalEntityId);
+      expect(issueEvent.rows[0].payload.periodId).toBeTruthy();
     });
 
     it("configures dynamic reorder threshold policy and verifies alert generation", async () => {
@@ -840,6 +914,21 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       const afterOpname = await get(`/supply-chain/advanced/balances?warehouseId=${mainWarehouseId}&itemId=${itemAlphaId}`, adminToken);
       const binA1 = afterOpname.json().find((b: { locationId: string }) => b.locationId === binMainA1Id);
       expect(binA1.onHandQuantity).toBe(5);
+
+      // Shrinkage emits `inventory.adjusted` (not `goods_received`): the two
+      // variances need opposite journal sides and a posting rule is chosen by
+      // event type alone.
+      const opnameEvent = await pool.query(
+        `SELECT event_type, quantity, outbox_state FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND source_document_type = 'scm_stock_opname' AND source_document_id = $2`,
+        [tenantId, opnameId],
+      );
+      expect(opnameEvent.rows).toHaveLength(1);
+      expect(opnameEvent.rows[0]).toMatchObject({
+        event_type: "inventory.adjusted",
+        quantity: "1.0000",
+        outbox_state: "pending",
+      });
     });
   });
 
@@ -883,28 +972,40 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       // WP-WMS-02: Seed GL prerequisites (accounts, period, rule) for tenant created at test runtime.
       // The migration only seeds tenants existing at migration time; test-created tenants need manual seeding.
 
-      // Create open accounting period covering today (2026-10-11)
+      // Create open accounting period covering today (2026-10-11). The yearly
+      // period is already seeded in beforeAll; this monthly one narrows the
+      // lookup, which orders by date_from DESC.
       const periodResult = await pool.query(
         `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status, created_by)
-         VALUES ($1, $2, 'FY2026', 'P-10', 'October 2026', 'monthly', '2026-10-01', '2026-10-31', 'open', $3) RETURNING id`,
+         VALUES ($1, $2, 'FY2026', 'P-10', 'October 2026', 'monthly', '2026-10-01', '2026-10-31', 'open', $3)
+         ON CONFLICT (tenant_id, legal_entity_id, fiscal_year_code, period_code) DO NOTHING
+         RETURNING id`,
         [tenantId, legalEntityId, adminUserId],
       );
-      const periodId = periodResult.rows[0].id;
+      const periodId =
+        periodResult.rows[0]?.id ??
+        (
+          await pool.query(
+            `SELECT id FROM accounting_periods WHERE tenant_id = $1 AND legal_entity_id = $2 AND fiscal_year_code = 'FY2026' AND period_code = 'P-10'`,
+            [tenantId, legalEntityId],
+          )
+        ).rows[0].id;
 
-      // Create chart of accounts
-      const coaResult = await pool.query(
-        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
-         VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3) RETURNING id`,
-        [tenantId, legalEntityId, adminUserId],
-      );
-      const coaId = coaResult.rows[0].id;
+      // Chart of accounts and accounts are seeded in beforeAll; resolve them.
+      const coaId = (
+        await pool.query(
+          `SELECT id FROM chart_of_accounts WHERE tenant_id = $1 AND legal_entity_id = $2 AND coa_version_code = 'FY2026'`,
+          [tenantId, legalEntityId],
+        )
+      ).rows[0].id;
 
       // Seed accounts 1301 (ASSET/debit) and 2401 (LIABILITY/credit) per RULE_LANDED_COST_APPLIED formula
       await pool.query(
         `INSERT INTO accounting_accounts (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance, is_active, created_by)
          VALUES
          ($1, $2, $3, '1301', 'Inventory', 'ASSET', 'debit', true, $4),
-         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)`,
+         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)
+         ON CONFLICT (tenant_id, legal_entity_id, coa_id, account_code) DO NOTHING`,
         [tenantId, legalEntityId, coaId, adminUserId],
       );
 
@@ -1372,6 +1473,47 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       );
       expect(eventAfter.rows[0].outbox_state).toBe("published");
       expect(eventAfter.rows[0].reconciliation_state).toBe("matched");
+
+      // The stock-movement events raised back in Group 2 were pending too, and
+      // this same pass consumes them: goods issued on reservation fulfilment,
+      // shrinkage on opname. Both must reach a posted journal, not just sit in
+      // the outbox.
+      const movementEvents = await pool.query(
+        `SELECT e.event_type, e.outbox_state, e.reconciliation_state,
+                jh.id AS journal_header_id
+           FROM scm_accounting_ready_events e
+           LEFT JOIN journal_headers jh
+             ON jh.tenant_id = e.tenant_id AND jh.idempotency_key = e.idempotency_key
+          WHERE e.tenant_id = $1
+            AND e.event_type IN ('inventory.goods_issued', 'inventory.adjusted')
+          ORDER BY e.event_type`,
+        [tenantId],
+      );
+      expect(movementEvents.rows.map((r) => r.event_type)).toEqual([
+        "inventory.adjusted",
+        "inventory.goods_issued",
+      ]);
+      for (const row of movementEvents.rows) {
+        expect(row.outbox_state).toBe("published");
+        expect(row.reconciliation_state).toBe("matched");
+        expect(row.journal_header_id).toBeTruthy();
+      }
+
+      // Goods issued is a real issue of value: Dr 5100 / Cr 1301.
+      const issuedLegs = await pool.query(
+        `SELECT aa.account_code, jl.debit, jl.credit
+           FROM journal_lines jl
+           JOIN accounting_accounts aa ON aa.id = jl.account_id
+           JOIN journal_headers jh ON jh.id = jl.journal_header_id
+          WHERE jh.tenant_id = $1 AND jh.idempotency_key LIKE 'reservation-fulfil:%'
+          ORDER BY aa.account_code`,
+        [tenantId],
+      );
+      expect(issuedLegs.rows.map((r) => r.account_code)).toEqual(["1301", "5100"]);
+      expect(Number(issuedLegs.rows[0].credit)).toBeGreaterThan(0);
+      expect(Number(issuedLegs.rows[0].debit)).toBe(0);
+      expect(Number(issuedLegs.rows[1].debit)).toBeGreaterThan(0);
+      expect(Number(issuedLegs.rows[1].credit)).toBe(0);
 
       // === Journal reconciles: header idempotency key + 2 lines (1301 debit / 2401 credit) ===
       const headerRow = await pool.query(
