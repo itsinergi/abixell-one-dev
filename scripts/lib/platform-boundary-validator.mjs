@@ -200,6 +200,15 @@ export const DEFAULT_API_EXCEPTIONS = [
     typeOnly: true,
   },
   {
+    // Wave A6 (WP-FIN-A6-06a) — the tax baseline sits under
+    // `accounting/tax` (Addendum layout), same reason as asset-book.
+    id: "route-container:tax",
+    source: "apps/api/src/modules/accounting/tax/api/tax.routes.ts",
+    target: "apps/api/src/composition-root.ts",
+    symbols: ["Container"],
+    typeOnly: true,
+  },
+  {
     // Phase 5 (WP-MD-03) — the catering vertical sits under
     // `service-operations/vertical/catering` and does not match the core
     // route shape either.

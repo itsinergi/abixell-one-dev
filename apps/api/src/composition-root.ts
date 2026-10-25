@@ -135,6 +135,8 @@ import { PgBankReconRepository } from "./modules/accounting/bank-recon/infrastru
 import { BankReconService } from "./modules/accounting/bank-recon/application/bank-recon.service.js";
 import { PgAssetBookRepository } from "./modules/accounting/asset-book/infrastructure/asset-book.repository.pg.js";
 import { AssetBookService } from "./modules/accounting/asset-book/application/asset-book.service.js";
+import { PgTaxRepository } from "./modules/accounting/tax/infrastructure/tax.repository.pg.js";
+import { TaxService } from "./modules/accounting/tax/application/tax.service.js";
 import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
 import { PgAccountingEventWritePort } from "./modules/supply-chain/ports/accounting-event.port.pg.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
@@ -541,6 +543,12 @@ export function buildContainer() {
     { assertAssetAccess: (actor, assetId) => asset.assertAssetAccess(actor, assetId) },
   );
 
+  // WP-FIN-A6-06a — Indonesia tax baseline (ADR-0019). Registrations and rule
+  // versions are effective-dated policy; rule versions go through the Workflow
+  // Engine for maker-checker approval. This service records calculations as
+  // evidence and never posts — the Accounting Kernel stays the sole GL writer.
+  const tax = new TaxService(new PgTaxRepository(pool), rbac, audit, workflow);
+
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
   // Entity Authorization Resolver can close over `hse.canAccessForDocument`
   // (ADR-0012). HSE evidence is gated by hse.documents.read AND Data Scope.
@@ -915,6 +923,7 @@ export function buildContainer() {
     budget,
     bankRecon,
     assetBook,
+    tax,
     hse,
     projectDelivery,
     reportingInsight,

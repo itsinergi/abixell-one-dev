@@ -67,6 +67,10 @@ The scheduler/outbox flakiness recorded at the prior closure baseline is resolve
 | Business Core | 117 / 117 | **100 %** |
 | Advanced Capabilities | 113 / 179 | **63.1 %** |
 
+Unit-level mapping of these totals (which named unit owns which point, built vs earned):
+see [POINT-LEDGER.md](../POINT-LEDGER.md). That file is derivative — the numbers above and
+in §4 remain canonical.
+
 ## 3. Per-module progress
 
 ### Business Core only
