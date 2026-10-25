@@ -119,7 +119,7 @@ function NavRow({
       to={page.path}
       end={page.path === "/"}
       onClick={onNavigate}
-      className={({ isActive }) =>
+      className={({ isActive }: { isActive: boolean }) =>
         `${base} transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 ${
           isActive
             ? "bg-accent font-medium text-accent-on shadow-xs"

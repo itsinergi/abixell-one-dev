@@ -5,6 +5,7 @@
  *  the definition is readable. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import type { MouseEvent } from "react";
 import { useAuth } from "../../../auth/AuthContext";
 import {
   api,
@@ -171,7 +172,7 @@ export function AdminRolesView({
           {canRead && (
             <Link
               to={`/admin/roles/${encodeURIComponent(role.code)}`}
-              onClick={(event) => event.stopPropagation()}
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => event.stopPropagation()}
               className="inline-flex min-h-[44px] items-center justify-center rounded border border-line-strong bg-panel px-3 py-1.5 text-sm font-medium text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent sm:min-h-[36px]"
             >
               Definition
