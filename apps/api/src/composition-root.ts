@@ -137,6 +137,8 @@ import { PgAssetBookRepository } from "./modules/accounting/asset-book/infrastru
 import { AssetBookService } from "./modules/accounting/asset-book/application/asset-book.service.js";
 import { PgTaxRepository } from "./modules/accounting/tax/infrastructure/tax.repository.pg.js";
 import { TaxService } from "./modules/accounting/tax/application/tax.service.js";
+import { PgConsolidationRepository } from "./modules/accounting/consolidation/infrastructure/consolidation.repository.pg.js";
+import { ConsolidationService } from "./modules/accounting/consolidation/application/consolidation.service.js";
 import { AccountingEventConsumerService } from "./modules/accounting/consumer/accounting-event-consumer.service.js";
 import { PgAccountingEventWritePort } from "./modules/supply-chain/ports/accounting-event.port.pg.js";
 import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repository.pg.js";
@@ -549,6 +551,18 @@ export function buildContainer() {
   // evidence and never posts — the Accounting Kernel stays the sole GL writer.
   const tax = new TaxService(new PgTaxRepository(pool), rbac, audit, workflow);
 
+  // WP-FIN-A6-06b — Consolidation (ADR-0022). Groups, FSV versions and
+  // eliminations all go through the Workflow Engine. The module reads posted
+  // ledger facts and translates them; eliminations post through the kernel, so
+  // ADR-0023 holds — this module never writes the GL itself.
+  const consolidation = new ConsolidationService(
+    new PgConsolidationRepository(pool),
+    rbac,
+    audit,
+    workflow,
+    accountingKernel,
+  );
+
   // Phase 7 — HSE Core. Built before DocumentService so its `hse_record`
   // Entity Authorization Resolver can close over `hse.canAccessForDocument`
   // (ADR-0012). HSE evidence is gated by hse.documents.read AND Data Scope.
@@ -924,6 +938,7 @@ export function buildContainer() {
     bankRecon,
     assetBook,
     tax,
+    consolidation,
     hse,
     projectDelivery,
     reportingInsight,
