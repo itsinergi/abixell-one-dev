@@ -294,6 +294,13 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/accounting/bank-reconciliations", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/bank-matches", windowCode: "route:/finance/transactions" },
   { method: "*", apiPath: "/accounting/bank-period-movement", windowCode: "route:/finance/accounts" },
+  // Fixed asset books + depreciation (Wave A6 WP-FIN-A6-05). Registering a
+  // book, activating it, disposing of it and appending its events are all
+  // configuration of how one asset is carried; a depreciation run posts to the
+  // ledger, so it maps to the transactions Window alongside journal writes.
+  { method: "*", apiPath: "/accounting/asset-books", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/asset-book-events", windowCode: "route:/finance/accounts" },
+  { method: "*", apiPath: "/accounting/depreciation-runs", windowCode: "route:/finance/transactions" },
   // Manual requeue of a terminally-failed event (Phase 2 WP-INT-03) resets it
   // for re-posting, the same write surface as posting a journal.
   { method: "*", apiPath: "/accounting/events/:id/requeue", windowCode: "route:/finance/transactions" },
