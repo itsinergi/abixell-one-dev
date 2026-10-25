@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { pool } from "../../src/infrastructure/persistence/db.js";
-import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstAdmin } from "./helpers.js";
+import { activateAllModules, authHeader, bootstrapTenant, createReadOnlyRole, login, provisionExternalCustomerUser, provisionFirstAdmin } from "./helpers.js";
 
 const TENANT_CODE = `wave-a3-main-${Date.now()}`;
 const OTHER_TENANT_CODE = `wave-a3-other-${Date.now()}`;
@@ -23,6 +23,7 @@ describe("Wave A3 — Service Operations & Asset Advanced Integration Suite", ()
   let otherAdminToken: string;
   let operatorUserId: string;
   let operatorToken: string;
+  let customerScopeToken: string;
 
   let legalEntityId: string;
   let orgUnitId: string;
@@ -102,6 +103,17 @@ describe("Wave A3 — Service Operations & Asset Advanced Integration Suite", ()
 
     const operatorLogin = await login(app, TENANT_CODE, OPERATOR_EMAIL, OPERATOR_PASSWORD);
     operatorToken = operatorLogin.body.accessToken;
+
+    // Customer-scoped reader holding the optimization read permission — the
+    // permission ceiling (§4.4 decision 2) allows exactly this pair.
+    const customerEmail = `custscope-a3-${Date.now()}@wave-a3.local`;
+    await provisionExternalCustomerUser({
+      tenantId,
+      email: customerEmail,
+      password: OPERATOR_PASSWORD,
+      permissionCodes: ["service_operations.optimization.read"],
+    });
+    customerScopeToken = (await login(app, TENANT_CODE, customerEmail, OPERATOR_PASSWORD)).body.accessToken;
 
     // 4. Seed numbering sequences for both tenants
     for (const [tToken, tId] of [[adminToken, tenantId], [otherAdminToken, otherTenantId]] as const) {
@@ -502,6 +514,19 @@ describe("Wave A3 — Service Operations & Asset Advanced Integration Suite", ()
     it("enforces RBAC permission on optimization apply", async () => {
       const res = await post(`/service-operations/optimization/runs/${optimizationRunId}/apply`, operatorToken);
       expect(res.statusCode).toBe(403);
+    });
+
+    it("refuses optimization runs to a customer-scoped actor (§4.4 line 3)", async () => {
+      // A run spans every customer and names internal staff — there is no
+      // customer axis to filter on, so the surface is internal-only.
+      expect((await get("/service-operations/optimization/runs", customerScopeToken)).statusCode).toBe(403);
+      expect(
+        (await get(`/service-operations/optimization/runs/${optimizationRunId}`, customerScopeToken)).statusCode,
+      ).toBe(403);
+      expect(
+        (await post("/service-operations/optimization/runs", customerScopeToken, { targetDate: "2026-09-02" }))
+          .statusCode,
+      ).toBe(403);
     });
 
     it("enforces multi-tenant isolation on optimization runs", async () => {

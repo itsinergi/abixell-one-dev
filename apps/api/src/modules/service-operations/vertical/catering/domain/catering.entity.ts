@@ -209,13 +209,21 @@ export interface CateringRepository {
     mealDate: string,
     mealType: MealType,
   ): Promise<CateringMealPlan | null>;
-  listMealPlans(tenantId: string, mealDate?: string): Promise<CateringMealPlan[]>;
+  listMealPlans(
+    tenantId: string,
+    mealDate?: string,
+    customerIds?: string[],
+  ): Promise<CateringMealPlan[]>;
   findMealPlanById(tenantId: string, id: string): Promise<CateringMealPlan | null>;
 
   createMealBatch(input: CreateMealBatchInput): Promise<CateringMealBatch>;
   findMealBatchByNumber(tenantId: string, batchNumber: string): Promise<CateringMealBatch | null>;
   findMealBatchById(tenantId: string, id: string): Promise<CateringMealBatch | null>;
-  listMealBatches(tenantId: string, status?: MealBatchStatus): Promise<CateringMealBatch[]>;
+  listMealBatches(
+    tenantId: string,
+    status?: MealBatchStatus,
+    customerIds?: string[],
+  ): Promise<CateringMealBatch[]>;
   setMealBatchStatus(id: string, status: MealBatchStatus): Promise<CateringMealBatch | null>;
 
   /** K5 simple costing, all arithmetic in PostgreSQL: per ingredient of

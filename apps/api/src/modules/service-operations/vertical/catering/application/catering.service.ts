@@ -1,11 +1,13 @@
 import type { ActorContext } from "../../../../../domain/shared-kernel/audit-context.js";
 import {
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../../../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../../../../../application/audit/audit.service.js";
 import type { RbacService } from "../../../../../application/rbac/rbac.service.js";
+import type { CustomerService } from "../../../../../application/customer/customer.service.js";
 import type {
   CateringMealBatch,
   CateringMealPlan,
@@ -50,6 +52,7 @@ export class CateringService {
     private readonly uom: UomPort,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly customers: CustomerService,
     private readonly packs: PackActivationPort,
   ) {}
 
@@ -97,6 +100,7 @@ export class CateringService {
 
   async listMenus(actor: ActorContext, activeOnly = false): Promise<CateringMenu[]> {
     await this.rbac.requirePermission(actor, "service_operations.read");
+    this.requireInternalActor(actor);
     return this.repo.listMenus(actor.tenantId, activeOnly);
   }
 
@@ -155,11 +159,13 @@ export class CateringService {
 
   async listRecipes(actor: ActorContext, activeOnly = false): Promise<CateringRecipe[]> {
     await this.rbac.requirePermission(actor, "service_operations.read");
+    this.requireInternalActor(actor);
     return this.repo.listRecipes(actor.tenantId, activeOnly);
   }
 
   async getRecipeByCode(actor: ActorContext, code: string): Promise<CateringRecipe> {
     await this.rbac.requirePermission(actor, "service_operations.read");
+    this.requireInternalActor(actor);
     return this.getRecipeOrThrow(actor.tenantId, code);
   }
 
@@ -212,6 +218,7 @@ export class CateringService {
 
   async listRecipeIngredients(actor: ActorContext, recipeCode: string): Promise<CateringRecipeIngredient[]> {
     await this.rbac.requirePermission(actor, "service_operations.read");
+    this.requireInternalActor(actor);
     const recipe = await this.getRecipeOrThrow(actor.tenantId, recipeCode);
     return this.repo.listIngredients(actor.tenantId, recipe.id);
   }
@@ -227,6 +234,7 @@ export class CateringService {
     onDate?: string,
   ): Promise<RecipeCostResult> {
     await this.rbac.requirePermission(actor, "service_operations.read");
+    this.requireInternalActor(actor);
     const recipe = await this.getRecipeOrThrow(actor.tenantId, recipeCode);
     if (onDate && !DATE_PATTERN.test(onDate)) {
       throw new ValidationError("onDate must be YYYY-MM-DD");
@@ -317,7 +325,9 @@ export class CateringService {
 
   async listMealPlans(actor: ActorContext, mealDate?: string): Promise<CateringMealPlan[]> {
     await this.rbac.requirePermission(actor, "service_operations.read");
-    return this.repo.listMealPlans(actor.tenantId, mealDate);
+    const customerIds = await this.scopedCustomerIds(actor);
+    if (customerIds && customerIds.length === 0) return [];
+    return this.repo.listMealPlans(actor.tenantId, mealDate, customerIds ?? undefined);
   }
 
   // ===================================================================
@@ -375,7 +385,9 @@ export class CateringService {
 
   async listMealBatches(actor: ActorContext, status?: MealBatchStatus): Promise<CateringMealBatch[]> {
     await this.rbac.requirePermission(actor, "service_operations.read");
-    return this.repo.listMealBatches(actor.tenantId, status);
+    const customerIds = await this.scopedCustomerIds(actor);
+    if (customerIds && customerIds.length === 0) return [];
+    return this.repo.listMealBatches(actor.tenantId, status, customerIds ?? undefined);
   }
 
   /** draft → confirmed → consumed, forward only. Confirmation is the
@@ -430,6 +442,23 @@ export class CateringService {
   private async assertItemExists(tenantId: string, itemId: string): Promise<void> {
     if (!(await this.repo.itemExists(tenantId, itemId))) {
       throw new NotFoundError("Item", itemId);
+    }
+  }
+
+  /** Customer Data Scope for a customer-scoped actor; null when the actor's
+   * active assignment is internal (menus/recipes are tenant configuration and
+   * carry no customer axis). */
+  private async scopedCustomerIds(actor: ActorContext): Promise<string[] | null> {
+    if (actor.assignmentId === null || actor.scopeType !== "customer") return null;
+    return this.customers.listScopedCustomerIds(actor);
+  }
+
+  /** Internal-only surface: menus, recipes, ingredients and K5 costing are
+   * tenant master data — costing additionally exposes supplier prices. A
+   * customer-scoped actor is refused outright (Epic 4 §4.4 line 3). */
+  private requireInternalActor(actor: ActorContext): void {
+    if (actor.assignmentId !== null && actor.scopeType === "customer") {
+      throw new ForbiddenError("This area is available to internal operational users only");
     }
   }
 

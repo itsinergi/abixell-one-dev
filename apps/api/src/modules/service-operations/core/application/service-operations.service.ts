@@ -267,13 +267,20 @@ export class ServiceOperationsService {
     await this.rbac.requirePermission(actor, "service_operations.read");
     const customerIds = await this.customers.listScopedCustomerIds(actor);
     const requests = await this.repo.listWorkRequests(actor.tenantId, { customerIds });
-    return requests.map((request) => ({ request, state: workRequestState(request) }));
+    const customer = this.isCustomerActor(actor);
+    return requests.map((request) => ({
+      request: customer ? { ...request, requestedByUserId: "" } : request,
+      state: workRequestState(request),
+    }));
   }
 
   async getWorkRequest(actor: ActorContext, id: string): Promise<{ request: WorkRequest; state: string }> {
     await this.rbac.requirePermission(actor, "service_operations.read");
     const request = await this.getAuthorizedWorkRequest(actor, id);
-    return { request, state: workRequestState(request) };
+    return {
+      request: this.isCustomerActor(actor) ? { ...request, requestedByUserId: "" } : request,
+      state: workRequestState(request),
+    };
   }
 
   async cancelWorkRequest(actor: ActorContext, id: string, reason: string | null): Promise<WorkRequest> {
@@ -864,6 +871,7 @@ export class ServiceOperationsService {
   /** List cost items for a Work Order (read tier). */
   async listCostItems(actor: ActorContext, workOrderId: string): Promise<WorkOrderCostItem[]> {
     await this.rbac.requirePermission(actor, "service_operations.read");
+    this.requireInternalActor(actor);
     const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
     return this.repo.listCostItems(actor.tenantId, workOrder.id);
   }
@@ -1234,6 +1242,15 @@ export class ServiceOperationsService {
       const view = await this.workflow.getEntityWorkflowView(actor, workOrder.workflowInstanceId);
       availableActions = view.availableActions ?? [];
     }
+    if (this.isCustomerActor(actor)) {
+      return {
+        workOrder: this.redactWorkOrder(workOrder),
+        serviceDefinition,
+        checklist: checklist.map((item) => ({ ...item, note: null, completedByUserId: null })),
+        status: redactStatus(status),
+        availableActions,
+      };
+    }
     return { workOrder, serviceDefinition, checklist, status, availableActions };
   }
 
@@ -1355,15 +1372,54 @@ export class ServiceOperationsService {
   }
 
   private async withStatus(actor: ActorContext, orders: WorkOrder[]) {
+    const customer = this.isCustomerActor(actor);
     const rows: { workOrder: WorkOrder; status: EntityWorkflowStatus | null }[] = [];
     for (const workOrder of orders) {
       let status: EntityWorkflowStatus | null = null;
       if (workOrder.workflowInstanceId) {
         status = await this.workflow.getEntityStatus(actor, workOrder.workflowInstanceId);
       }
-      rows.push({ workOrder, status });
+      rows.push({
+        workOrder: customer ? this.redactWorkOrder(workOrder) : workOrder,
+        status: customer ? redactStatus(status) : status,
+      });
     }
     return rows;
+  }
+
+  // ===================================================================
+  // Customer-safe projection (Epic 4 §4.4 line 3)
+  // ===================================================================
+
+  /** True when the actor's ACTIVE assignment is customer-scoped. Such an actor
+   * sees the internal operational surface filtered: no internal staff
+   * identities and no internal notes. Internal actors are unaffected. */
+  private isCustomerActor(actor: ActorContext): boolean {
+    return actor.assignmentId !== null && actor.scopeType === "customer";
+  }
+
+  /** Internal-only surface: cost breakdowns and supplier prices have no
+   * customer axis, so a customer-scoped actor is refused outright rather
+   * than shown a partial view. Same posture as Complaint's internal view. */
+  private requireInternalActor(actor: ActorContext): void {
+    if (this.isCustomerActor(actor)) {
+      throw new ForbiddenError("This area is available to internal operational users only");
+    }
+  }
+
+  /** Drops the staff identities and internal notes carried by a Work Order.
+   * Customer acceptance facts are the customer's own words — kept. */
+  private redactWorkOrder(workOrder: WorkOrder): WorkOrder {
+    return {
+      ...workOrder,
+      assignedToUserId: null,
+      assignedByUserId: null,
+      startedByUserId: null,
+      completedByUserId: null,
+      verifiedByUserId: null,
+      completionNotes: null,
+      verificationNotes: null,
+    };
   }
 
   private async requireAnyOperationalCapability(actor: ActorContext): Promise<void> {
@@ -1429,6 +1485,13 @@ export class ServiceOperationsService {
       throw new ForbiddenError("This Work Order is assigned to another executor");
     }
   }
+}
+
+/** Workflow status carries the pending Assignment's staff id — null it for a
+ * customer-scoped reader. `isMine` is harmless (it is the reader's own id). */
+function redactStatus(status: EntityWorkflowStatus | null): EntityWorkflowStatus | null {
+  if (!status?.assignment) return status;
+  return { ...status, assignment: { ...status.assignment, userId: null } };
 }
 
 function parseDate(value: string | null | undefined, field: string): Date | null {

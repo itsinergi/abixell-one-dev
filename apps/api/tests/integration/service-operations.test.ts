@@ -432,6 +432,52 @@ describe("Phase 2 — Service Operations & Work Management Core", () => {
     expect(foreign.statusCode).toBe(403);
   });
 
+  it("SO-CORE-012 / §4.4 line 3: a customer-scoped user gets no internal staff ids or notes", async () => {
+    const wo = await post("/work-orders", coordinatorToken, {
+      customerId: customerAId,
+      serviceDefinitionCode: SERVICE_CODE,
+      title: "Internal surface filter",
+    });
+    const workOrderId = wo.json().id;
+    await post(`/work-orders/${workOrderId}/assign`, coordinatorToken, { assigneeUserId: executorUserId });
+    await post(`/work-orders/${workOrderId}/start`, executorToken);
+    await post(`/work-orders/${workOrderId}/complete`, executorToken, { notes: "internal completion note" });
+
+    // The list projection carries neither staff ids nor internal notes, and
+    // the workflow status does not name the pending assignee either.
+    const listed = (await get("/work-orders", customerUserToken)).json() as {
+      workOrder: Record<string, unknown>;
+      status: { assignment: { userId: string | null } | null } | null;
+    }[];
+    const row = listed.find((r) => r.workOrder.id === workOrderId);
+    expect(row).toBeDefined();
+    expect(row!.workOrder.assignedToUserId).toBeNull();
+    expect(row!.workOrder.assignedByUserId).toBeNull();
+    expect(row!.workOrder.startedByUserId).toBeNull();
+    expect(row!.workOrder.completedByUserId).toBeNull();
+    expect(row!.workOrder.completionNotes).toBeNull();
+    expect(row!.workOrder.verificationNotes).toBeNull();
+    expect(row!.status?.assignment?.userId ?? null).toBeNull();
+
+    // Detail: same redaction, plus checklist notes and completers.
+    const detail = (await get(`/work-orders/${workOrderId}`, customerUserToken)).json();
+    expect(detail.workOrder.assignedToUserId).toBeNull();
+    expect(detail.workOrder.completionNotes).toBeNull();
+    for (const item of detail.checklist as Record<string, unknown>[]) {
+      expect(item.note).toBeNull();
+      expect(item.completedByUserId).toBeNull();
+    }
+
+    // Cost breakdown is internal-only — refused, not partially shown.
+    expect((await get(`/work-orders/${workOrderId}/cost-items`, customerUserToken)).statusCode).toBe(403);
+
+    // An internal actor still sees the full row.
+    const internal = (await get("/work-orders", coordinatorToken)).json() as {
+      workOrder: { id: string; assignedToUserId: string | null };
+    }[];
+    expect(internal.find((r) => r.workOrder.id === workOrderId)!.workOrder.assignedToUserId).toBe(executorUserId);
+  });
+
   // --- Cross-tenant isolation ------------------------------------------
 
   it("Cross-tenant: another tenant's Work Order is invisible, immutable, and cannot receive evidence", async () => {

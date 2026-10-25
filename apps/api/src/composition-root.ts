@@ -482,6 +482,7 @@ export function buildContainer() {
     uomRepo,
     audit,
     rbac,
+    customer,
     serviceOperationsAdvancedRepo,
   );
 

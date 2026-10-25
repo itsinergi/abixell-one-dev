@@ -1,6 +1,7 @@
 import type { ActorContext } from "../../../../domain/shared-kernel/audit-context.js";
 import {
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from "../../../../domain/shared-kernel/errors.js";
@@ -303,6 +304,7 @@ export class ServiceOperationsAdvancedService {
     input: GenerateOptimizationRunInput,
   ): Promise<OptimizationRun> {
     await this.rbac.requirePermission(actor, "service_operations.optimization.read");
+    this.requireInternalActor(actor);
     const targetDate = this.validateTargetDate(input.targetDate);
 
     if (input.organizationUnitId) {
@@ -356,14 +358,26 @@ export class ServiceOperationsAdvancedService {
 
   async listOptimizationRuns(actor: ActorContext, limit?: number): Promise<OptimizationRun[]> {
     await this.rbac.requirePermission(actor, "service_operations.optimization.read");
+    this.requireInternalActor(actor);
     return this.repo.listOptimizationRuns(actor.tenantId, limit);
   }
 
   async getOptimizationRun(actor: ActorContext, id: string): Promise<OptimizationRun> {
     await this.rbac.requirePermission(actor, "service_operations.optimization.read");
+    this.requireInternalActor(actor);
     const run = await this.repo.findOptimizationRunById(actor.tenantId, id);
     if (!run) throw new NotFoundError("OptimizationRun", id);
     return run;
+  }
+
+  /** Route/roster optimisation is internal planning: a run spans every
+   * customer in the tenant and its proposals name internal staff. There is no
+   * customer axis to filter on, so a customer-scoped actor is refused rather
+   * than shown a cross-customer slice (Epic 4 §4.4 line 3). */
+  private requireInternalActor(actor: ActorContext): void {
+    if (actor.assignmentId !== null && actor.scopeType === "customer") {
+      throw new ForbiddenError("This area is available to internal operational users only");
+    }
   }
 
   /**

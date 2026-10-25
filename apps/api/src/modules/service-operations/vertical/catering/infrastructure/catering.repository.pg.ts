@@ -261,16 +261,32 @@ export class PgCateringRepository implements CateringRepository {
     return r.rows[0] ? toMealPlan(r.rows[0]) : null;
   }
 
-  async listMealPlans(tenantId: string, mealDate?: string): Promise<CateringMealPlan[]> {
-    const r = mealDate
-      ? await this.pool.query(
-          `SELECT * FROM catering_meal_plans WHERE tenant_id = $1 AND meal_date = $2::date ORDER BY meal_type`,
-          [tenantId, mealDate],
-        )
-      : await this.pool.query(
-          `SELECT * FROM catering_meal_plans WHERE tenant_id = $1 ORDER BY meal_date DESC, meal_type`,
-          [tenantId],
-        );
+  /** `customerIds` is the Customer Data Scope filter: a plan's customer is the
+   * customer of its site. A plan with no site, or a site outside the allowed
+   * set, is excluded — fail closed. */
+  async listMealPlans(
+    tenantId: string,
+    mealDate?: string,
+    customerIds?: string[],
+  ): Promise<CateringMealPlan[]> {
+    const params: unknown[] = [tenantId];
+    const where = ["p.tenant_id = $1"];
+    if (mealDate) {
+      params.push(mealDate);
+      where.push(`p.meal_date = $${params.length}::date`);
+    }
+    if (customerIds) {
+      params.push(customerIds);
+      where.push(
+        `EXISTS (SELECT 1 FROM sites s WHERE s.id = p.site_id AND s.customer_id = ANY($${params.length}::uuid[]))`,
+      );
+    }
+    const r = await this.pool.query(
+      `SELECT p.* FROM catering_meal_plans p
+        WHERE ${where.join(" AND ")}
+        ORDER BY ${mealDate ? "p.meal_type" : "p.meal_date DESC, p.meal_type"}`,
+      params,
+    );
     return r.rows.map(toMealPlan);
   }
 
@@ -321,16 +337,36 @@ export class PgCateringRepository implements CateringRepository {
     return r.rows[0] ? toMealBatch(r.rows[0]) : null;
   }
 
-  async listMealBatches(tenantId: string, status?: MealBatchStatus): Promise<CateringMealBatch[]> {
-    const r = status
-      ? await this.pool.query(
-          `SELECT * FROM catering_meal_batches WHERE tenant_id = $1 AND status = $2 ORDER BY created_at DESC`,
-          [tenantId, status],
-        )
-      : await this.pool.query(
-          `SELECT * FROM catering_meal_batches WHERE tenant_id = $1 ORDER BY created_at DESC`,
-          [tenantId],
-        );
+  /** `customerIds` is the Customer Data Scope filter, reached through the
+   * batch's meal plan → site → customer. A batch with no meal plan is
+   * excluded — fail closed. */
+  async listMealBatches(
+    tenantId: string,
+    status?: MealBatchStatus,
+    customerIds?: string[],
+  ): Promise<CateringMealBatch[]> {
+    const params: unknown[] = [tenantId];
+    const where = ["b.tenant_id = $1"];
+    if (status) {
+      params.push(status);
+      where.push(`b.status = $${params.length}`);
+    }
+    if (customerIds) {
+      params.push(customerIds);
+      where.push(
+        `EXISTS (
+           SELECT 1 FROM catering_meal_plans p
+             JOIN sites s ON s.id = p.site_id
+            WHERE p.id = b.meal_plan_id AND s.customer_id = ANY($${params.length}::uuid[])
+         )`,
+      );
+    }
+    const r = await this.pool.query(
+      `SELECT b.* FROM catering_meal_batches b
+        WHERE ${where.join(" AND ")}
+        ORDER BY b.created_at DESC`,
+      params,
+    );
     return r.rows.map(toMealBatch);
   }
 
