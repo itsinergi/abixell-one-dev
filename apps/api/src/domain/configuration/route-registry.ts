@@ -603,6 +603,22 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     status: "di_menu",
     permissions: ["finance.read"],
   },
+  {
+    path: "/finance/accounting",
+    name: "Accounting",
+    moduleCode: "finance",
+    status: "di_menu",
+    permissions: ["finance.accounting.read", "finance.accounting.configure"],
+    note: "Wave A6.1 overview of periods, ledgers, charts, and accounts. Reads the Accounting Kernel directly.",
+  },
+  {
+    path: "/finance/statements",
+    name: "Financial Statements",
+    moduleCode: "finance",
+    status: "di_menu",
+    permissions: ["finance.accounting.read"],
+    note: "Wave A6.1 aging, journals, GL postings, and consolidation. Reads the Accounting Kernel directly.",
+  },
 
   // --- HSE (module: hse) ---------------------------------------------------
   {

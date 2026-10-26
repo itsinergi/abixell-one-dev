@@ -51,6 +51,8 @@ import { FinanceAccountsPage } from "./modules/finance/FinanceAccountsPage";
 import { FinanceTransactionsPage } from "./modules/finance/FinanceTransactionsPage";
 import { FinanceTransactionDetailPage } from "./modules/finance/FinanceTransactionDetailPage";
 import { CashflowPage } from "./modules/finance/CashflowPage";
+import { AccountingPage } from "./modules/finance/AccountingPage";
+import { FinancialStatementsPage } from "./modules/finance/FinancialStatementsPage";
 import { HseRegisterPage } from "./modules/hse/HseRegisterPage";
 import { HseReportPage } from "./modules/hse/HseReportPage";
 import { HseDetailPage } from "./modules/hse/HseDetailPage";
@@ -172,6 +174,9 @@ export default function App() {
           <Route path="finance/transactions" element={<FinanceTransactionsPage />} />
           <Route path="finance/transactions/:transactionId" element={<FinanceTransactionDetailPage />} />
           <Route path="finance/cashflow" element={<CashflowPage />} />
+          {/* Wave A6.1 — Finance Advanced */}
+          <Route path="finance/accounting" element={<AccountingPage />} />
+          <Route path="finance/statements" element={<FinancialStatementsPage />} />
           {/* Phase 7 — HSE */}
           <Route path="hse" element={<HseRegisterPage />} />
           <Route path="hse/report" element={<HseReportPage />} />
