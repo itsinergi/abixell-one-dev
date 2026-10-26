@@ -53,6 +53,12 @@ import { FinanceTransactionDetailPage } from "./modules/finance/FinanceTransacti
 import { CashflowPage } from "./modules/finance/CashflowPage";
 import { AccountingPage } from "./modules/finance/AccountingPage";
 import { FinancialStatementsPage } from "./modules/finance/FinancialStatementsPage";
+import { FinanceJournalsPage } from "./modules/finance/FinanceJournalsPage";
+import { FinanceOpenItemsPage } from "./modules/finance/FinanceOpenItemsPage";
+import { FinanceBudgetsPage } from "./modules/finance/FinanceBudgetsPage";
+import { FinanceBankReconPage } from "./modules/finance/FinanceBankReconPage";
+import { FinanceAssetsPage } from "./modules/finance/FinanceAssetsPage";
+import { FinanceTaxPage } from "./modules/finance/FinanceTaxPage";
 import { HseRegisterPage } from "./modules/hse/HseRegisterPage";
 import { HseReportPage } from "./modules/hse/HseReportPage";
 import { HseDetailPage } from "./modules/hse/HseDetailPage";
@@ -177,6 +183,14 @@ export default function App() {
           {/* Wave A6.1 — Finance Advanced */}
           <Route path="finance/accounting" element={<AccountingPage />} />
           <Route path="finance/statements" element={<FinancialStatementsPage />} />
+          {/* Wave A6.2 — Finance Advanced write surface. Six screens, one
+              page each, on routes the A6 API surface already serves. */}
+          <Route path="finance/journals" element={<FinanceJournalsPage />} />
+          <Route path="finance/open-items" element={<FinanceOpenItemsPage />} />
+          <Route path="finance/budgets" element={<FinanceBudgetsPage />} />
+          <Route path="finance/bank-recon" element={<FinanceBankReconPage />} />
+          <Route path="finance/fixed-assets" element={<FinanceAssetsPage />} />
+          <Route path="finance/tax" element={<FinanceTaxPage />} />
           {/* Phase 7 — HSE */}
           <Route path="hse" element={<HseRegisterPage />} />
           <Route path="hse/report" element={<HseReportPage />} />

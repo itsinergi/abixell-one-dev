@@ -1719,6 +1719,168 @@ export const api = {
   accountingFsvVersions: (token: string, query: { fsvCode?: string } = {}) =>
     request<AccountingFsvVersionRecord[]>(`/accounting/fsv-versions${queryString(query)}`, { token }),
 
+  // --- Accounting Kernel mutations (Wave A6.2) --------------------------
+  // Every call below has an existing route and an existing permission check;
+  // the client adds no rule of its own. Money is sent as text, verbatim.
+  accountingCreateJournal: (token: string, body: AccountingJournalInput) =>
+    request<AccountingJournalRecord>("/accounting/journals", { method: "POST", token, body }),
+  accountingValidateJournal: (token: string, id: string) =>
+    request<{ balanced: boolean; debitTotal: string; creditTotal: string }>(
+      `/accounting/journals/${id}/validate`,
+      { method: "POST", token },
+    ),
+  accountingPostJournal: (token: string, id: string) =>
+    request<AccountingJournalRecord>(`/accounting/journals/${id}/post`, { method: "POST", token }),
+  accountingReverseJournal: (token: string, id: string, body: { type: "reverse_correct" | "reverse_accrual"; reason: string }) =>
+    request<AccountingJournalRecord>(`/accounting/journals/${id}/reverse`, { method: "POST", token, body }),
+  accountingLockPeriod: (token: string, id: string, body: { reason: string }) =>
+    request<void>(`/accounting/periods/${id}/lock`, { method: "POST", token, body }),
+  accountingRequestReopen: (token: string, id: string, body: { reason: string; impactEvidence: string }) =>
+    request<void>(`/accounting/periods/${id}/reopen`, { method: "POST", token, body }),
+  accountingCloseMonthEnd: (token: string, id: string, body: AccountingCloseAttestation) =>
+    request<AccountingFiscalClosingRecord>(`/accounting/periods/${id}/close-month-end`, { method: "POST", token, body }),
+  accountingCloseYearEnd: (token: string, id: string, body: AccountingCloseAttestation) =>
+    request<AccountingFiscalClosingRecord>(`/accounting/periods/${id}/close-year-end`, { method: "POST", token, body }),
+  accountingCreateLedger: (token: string, body: { legalEntityId: string; ledgerCode: string; ledgerName: string; currency: string }) =>
+    request<AccountingLedgerRecord>("/accounting/ledgers", { method: "POST", token, body }),
+  accountingApproveChart: (token: string, id: string) =>
+    request<AccountingChartRecord>(`/accounting/charts/${id}/approve`, { method: "POST", token }),
+
+  // --- Open items (WP-FIN-A6-02) ---------------------------------------
+  accountingOpenItems: (token: string, query: { side?: "AR" | "AP"; legalEntityId?: string } = {}) =>
+    request<AccountingOpenItemRecord[]>(`/accounting/open-items${queryString(query)}`, { token }),
+  accountingCreateOpenItem: (token: string, body: AccountingOpenItemInput) =>
+    request<AccountingOpenItemRecord>("/accounting/open-items", { method: "POST", token, body }),
+  accountingAllocate: (token: string, body: AccountingAllocationInput) =>
+    request<AccountingOpenItemAllocationRecord>("/accounting/open-items/allocate", { method: "POST", token, body }),
+
+  // --- Budget control (WP-FIN-A6-03) -----------------------------------
+  accountingBudgets: (token: string, query: { legalEntityId?: string; fiscalYearCode?: string } = {}) =>
+    request<AccountingBudgetRecord[]>(`/accounting/budgets${queryString(query)}`, { token }),
+  accountingCreateBudget: (token: string, body: AccountingBudgetInput) =>
+    request<AccountingBudgetRecord>("/accounting/budgets", { method: "POST", token, body }),
+  accountingBudgetVersions: (token: string, budgetId: string) =>
+    request<AccountingBudgetVersionRecord[]>(`/accounting/budgets/${budgetId}/versions`, { token }),
+  accountingCreateBudgetVersion: (
+    token: string,
+    budgetId: string,
+    body: { totalAmount: string; weights: { periodCode: string; weight: string }[]; note: string | null },
+  ) => request<AccountingBudgetVersionRecord>(`/accounting/budgets/${budgetId}/versions`, { method: "POST", token, body }),
+  accountingBudgetAction: (token: string, versionId: string, body: { actionCode: string; comment: string | null }) =>
+    request<AccountingBudgetVersionRecord>(`/accounting/budget-versions/${versionId}/actions`, { method: "POST", token, body }),
+  accountingBudgetUtilization: (token: string, budgetId: string) =>
+    request<AccountingBudgetUtilization>(`/accounting/budgets/${budgetId}/utilization`, { token }),
+  accountingConsumeBudget: (token: string, body: AccountingBudgetConsumptionInput) =>
+    request<AccountingBudgetConsumptionRecord>("/accounting/budget-consumptions", { method: "POST", token, body }),
+
+  // --- Bank reconciliation (WP-FIN-A6-04) ------------------------------
+  accountingBankAccounts: (token: string, query: { legalEntityId?: string } = {}) =>
+    request<AccountingBankAccountRecord[]>(`/accounting/bank-accounts${queryString(query)}`, { token }),
+  accountingCreateBankAccount: (token: string, body: AccountingBankAccountInput) =>
+    request<AccountingBankAccountRecord>("/accounting/bank-accounts", { method: "POST", token, body }),
+  accountingImportStatement: (
+    token: string,
+    body: { bankAccountId: string; formatProfile: string; sourceFileName: string; content: string },
+  ) => request<AccountingBankStatementImportRecord>("/accounting/bank-statements/import", { method: "POST", token, body }),
+  accountingStatementLines: (token: string, query: { bankAccountId?: string; includeDuplicates?: boolean } = {}) =>
+    request<AccountingBankStatementLineRecord[]>(`/accounting/bank-statement-lines${queryString(query)}`, { token }),
+  accountingBankReconciliations: (token: string, query: { bankAccountId?: string } = {}) =>
+    request<AccountingBankReconciliationRecord[]>(`/accounting/bank-reconciliations${queryString(query)}`, { token }),
+  accountingOpenReconciliation: (token: string, body: { bankAccountId: string; periodId: string }) =>
+    request<AccountingBankReconciliationRecord>("/accounting/bank-reconciliations", { method: "POST", token, body }),
+  accountingBankMatches: (token: string, reconciliationId: string) =>
+    request<AccountingBankMatchRecord[]>(`/accounting/bank-reconciliations/${reconciliationId}/matches`, { token }),
+  accountingCreateBankMatch: (token: string, body: AccountingBankMatchInput) =>
+    request<AccountingBankMatchRecord>("/accounting/bank-matches", { method: "POST", token, body }),
+  accountingCloseReconciliation: (token: string, id: string, body: { statementBalance: string | null }) =>
+    request<AccountingBankReconciliationRecord>(`/accounting/bank-reconciliations/${id}/close`, { method: "POST", token, body }),
+  accountingBankPeriodMovement: (token: string, query: { bankAccountId: string; periodId: string }) =>
+    request<AccountingBankPeriodMovement>(`/accounting/bank-period-movement${queryString(query)}`, { token }),
+  accountingStatementLineCandidates: (
+    token: string,
+    lineId: string,
+    query: { dateToleranceDays?: number } = {},
+  ) =>
+    request<AccountingMatchCandidate[]>(
+      `/accounting/bank-statement-lines/${lineId}/candidates${queryString(query)}`,
+      { token },
+    ),
+  accountingReverseBankMatch: (token: string, id: string, body: { idempotencyKey: string; note: string | null }) =>
+    request<AccountingBankMatchRecord>(`/accounting/bank-matches/${id}/reverse`, { method: "POST", token, body }),
+
+  // --- Fixed assets + depreciation (WP-FIN-A6-05) ----------------------
+  accountingAssetBooks: (token: string, query: { legalEntityId?: string; bookCode?: string } = {}) =>
+    request<AccountingAssetBookRecord[]>(`/accounting/asset-books${queryString(query)}`, { token }),
+  accountingCreateAssetBook: (token: string, body: AccountingAssetBookInput) =>
+    request<AccountingAssetBookRecord>("/accounting/asset-books", { method: "POST", token, body }),
+  accountingActivateAssetBook: (token: string, id: string) =>
+    request<AccountingAssetBookRecord>(`/accounting/asset-books/${id}/activate`, { method: "POST", token }),
+  accountingDepreciationRuns: (token: string, query: { legalEntityId?: string; periodId?: string } = {}) =>
+    request<AccountingDepreciationRunRecord[]>(`/accounting/depreciation-runs${queryString(query)}`, { token }),
+  accountingRunDepreciation: (
+    token: string,
+    body: { legalEntityId: string; bookCode: string; periodId: string; idempotencyKey: string; description: string | null },
+  ) => request<AccountingDepreciationRunRecord>("/accounting/depreciation-runs", { method: "POST", token, body }),
+  accountingReverseDepreciationRun: (token: string, id: string, body: { idempotencyKey: string; reason: string }) =>
+    request<AccountingDepreciationRunRecord>(`/accounting/depreciation-runs/${id}/reverse`, { method: "POST", token, body }),
+  accountingDisposeAssetBook: (
+    token: string,
+    id: string,
+    body: { disposalDate: string; evidenceDocumentId: string; proceeds: string | null; note: string | null; idempotencyKey: string },
+  ) => request<AccountingAssetBookRecord>(`/accounting/asset-books/${id}/dispose`, { method: "POST", token, body }),
+
+  // --- Tax baseline (WP-FIN-A6-06a) ------------------------------------
+  accountingTaxRegistrations: (token: string, legalEntityId: string) =>
+    request<AccountingTaxRegistrationRecord[]>(`/accounting/tax-registrations${queryString({ legalEntityId })}`, { token }),
+  accountingRegisterTaxpayer: (
+    token: string,
+    body: { legalEntityId: string; taxpayerStatus: "pkp" | "non_pkp"; effectiveFrom: string; registrationNumber: string | null },
+  ) => request<AccountingTaxRegistrationRecord>("/accounting/tax-registrations", { method: "POST", token, body }),
+  accountingTaxRules: (token: string, query: { legalEntityId?: string } = {}) =>
+    request<AccountingTaxRuleRecord[]>(`/accounting/tax-rules${queryString(query)}`, { token }),
+  accountingCreateTaxRule: (
+    token: string,
+    body: { legalEntityId: string; ruleCode: string; taxType: "ppn" | "pph22" | "pph23" | "pph26"; description: string | null },
+  ) => request<AccountingTaxRuleRecord>("/accounting/tax-rules", { method: "POST", token, body }),
+  accountingTaxRuleVersions: (token: string, ruleId: string) =>
+    request<AccountingTaxRuleVersionRecord[]>(`/accounting/tax-rules/${ruleId}/versions`, { token }),
+  accountingTaxRuleVersionAction: (
+    token: string,
+    versionId: string,
+    body: { actionCode: string; comment: string | null },
+  ) =>
+    request<AccountingTaxRuleVersionRecord>(`/accounting/tax-rule-versions/${versionId}/actions`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  accountingCreateTaxRuleVersion: (
+    token: string,
+    ruleId: string,
+    body: {
+      rate: string;
+      basis: "gross" | "net" | "dpp";
+      roundingMode?: "half_up" | "half_even" | "truncate";
+      requiresPkp?: boolean;
+      accountId: string;
+      effectiveFrom: string;
+      effectiveTo: string | null;
+    },
+  ) => request<AccountingTaxRuleVersionRecord>(`/accounting/tax-rules/${ruleId}/versions`, { method: "POST", token, body }),
+  accountingTaxCalculations: (token: string, query: { legalEntityId?: string } = {}) =>
+    request<AccountingTaxCalculationRecord[]>(`/accounting/tax-calculations${queryString(query)}`, { token }),
+  accountingCalculateTax: (
+    token: string,
+    body: {
+      legalEntityId: string;
+      ruleCode: string;
+      basisAmount: string;
+      calculationDate: string;
+      currency?: string;
+      idempotencyKey: string;
+    },
+  ) => request<AccountingTaxCalculationRecord>("/accounting/tax-calculations", { method: "POST", token, body }),
+
   // --- Reporting & Operational Insight (Phase 9) ------------------------
   reportingReports: (token: string) => request<ReportDefinition[]>("/reporting/reports", { token }),
   reportingReport: (token: string, code: string) =>
@@ -2803,6 +2965,348 @@ export type AccountingFsvVersionRecord = {
   status: string;
   effectiveFrom: string;
   effectiveTo: string | null;
+};
+
+// --- Accounting mutations (Wave A6.2) ---------------------------------
+// Inputs mirror the zod schemas on the API routes. Every amount stays a
+// string at the precision the route accepts: 4 decimals for open items and
+// budgets, 2 for bank reconciliation, assets, tax and consolidation.
+
+export type AccountingJournalLineInput = {
+  accountId: string;
+  lineNumber: number;
+  debit: string;
+  credit: string;
+  lineDescription: string | null;
+  projectId: string | null;
+  siteId: string | null;
+};
+
+export type AccountingJournalInput = {
+  legalEntityId: string;
+  journalNumber: string;
+  journalDate: string;
+  accountingDate: string;
+  periodId: string;
+  description: string | null;
+  currency: string;
+  lines: AccountingJournalLineInput[];
+};
+
+export type AccountingCloseAttestation = {
+  bankReconConfirmed: boolean;
+  apArConfirmed: boolean;
+  depreciationConfirmed: boolean;
+  accrualsConfirmed: boolean;
+};
+
+export type AccountingOpenItemRecord = {
+  id: string;
+  legalEntityId: string;
+  side: "AR" | "AP";
+  direction: "debit" | "credit";
+  sourceKind: string;
+  partyType: "customer" | "supplier";
+  partyId: string;
+  documentNo: string;
+  documentDate: string;
+  dueDate: string | null;
+  currency: string;
+  originalAmount: Money;
+};
+
+export type AccountingOpenItemInput = {
+  legalEntityId: string;
+  side: "AR" | "AP";
+  direction: "debit" | "credit";
+  sourceKind: "invoice" | "payment" | "credit_note" | "debit_note" | "down_payment" | "withholding" | "unapplied";
+  sourceRefTable: string;
+  sourceRefId: string;
+  partyType: "customer" | "supplier";
+  partyId: string;
+  documentNo: string;
+  documentDate: string;
+  dueDate: string | null;
+  currency: string;
+  originalAmount: string;
+};
+
+export type AccountingOpenItemAllocationRecord = {
+  id: string;
+  sourceOpenItemId: string;
+  targetOpenItemId: string;
+  amount: Money;
+  currency: string;
+  allocationDate: string;
+  idempotencyKey: string;
+};
+
+export type AccountingAllocationInput = {
+  legalEntityId: string;
+  sourceOpenItemId: string;
+  targetOpenItemId: string;
+  amount: string;
+  allocationDate: string;
+  idempotencyKey: string;
+};
+
+export type AccountingBudgetRecord = {
+  id: string;
+  legalEntityId: string;
+  fiscalYearCode: string;
+  scenario: "original" | "revision" | "forecast";
+  currency: string;
+  name: string;
+  activeVersionId: string | null;
+};
+
+export type AccountingBudgetInput = {
+  legalEntityId: string;
+  fiscalYearCode: string;
+  scenario: "original" | "revision" | "forecast";
+  currency: string;
+  name: string;
+};
+
+export type AccountingBudgetVersionRecord = {
+  id: string;
+  budgetId: string;
+  versionNumber: number;
+  status: string;
+  note: string | null;
+  approvedAt: string | null;
+};
+
+export type AccountingBudgetUtilization = {
+  budgetId: string;
+  versionId: string | null;
+  currency: string;
+  periods: {
+    periodCode: string;
+    baseline: Money;
+    actual: Money;
+    committed: Money;
+    released: Money;
+    adjustments: Money;
+    available: Money;
+    variance: Money;
+  }[];
+  total: {
+    baseline: Money;
+    actual: Money;
+    committed: Money;
+    released: Money;
+    adjustments: Money;
+    available: Money;
+    variance: Money;
+  };
+};
+
+export type AccountingBudgetConsumptionRecord = {
+  id: string;
+  budgetVersionId: string;
+  periodCode: string;
+  kind: "actual" | "commitment" | "adjustment" | "release";
+  amount: Money;
+  note: string | null;
+};
+
+export type AccountingBudgetConsumptionInput = {
+  budgetId: string;
+  periodCode: string;
+  amount: string;
+  kind: "actual" | "commitment" | "adjustment" | "release";
+  idempotencyKey: string;
+  note: string | null;
+};
+
+export type AccountingBankAccountRecord = {
+  id: string;
+  legalEntityId: string;
+  bankName: string;
+  houseBankCode: string;
+  accountNumberMasked: string;
+  name: string;
+  currency: string;
+  ledgerAccountId: string;
+  reconciliationPolicy: "manual" | "suggested";
+  effectiveFrom: string;
+  isActive: boolean;
+};
+
+export type AccountingBankAccountInput = {
+  legalEntityId: string;
+  bankName: string;
+  houseBankCode: string;
+  bankAccountId: string;
+  accountNumberMasked: string;
+  name: string;
+  currency: string;
+  ledgerAccountId: string;
+  reconciliationPolicy: "manual" | "suggested";
+  effectiveFrom: string;
+};
+
+export type AccountingBankStatementImportRecord = {
+  id: string;
+  bankAccountId: string;
+  formatProfile: string;
+  sourceFileName: string;
+  lineCount: number;
+  duplicateLineCount: number;
+  createdAt: string;
+};
+
+export type AccountingBankStatementLineRecord = {
+  id: string;
+  bankAccountId: string;
+  valueDate: string;
+  amount: Money;
+  direction: "debit" | "credit";
+  currency: string;
+  reference: string | null;
+  counterparty: string | null;
+  duplicateStatus: "accepted" | "review_queue";
+};
+
+export type AccountingBankReconciliationRecord = {
+  id: string;
+  bankAccountId: string;
+  periodId: string;
+  status: "open" | "closed";
+  statementBalance: Money | null;
+  closedBookBalance: Money | null;
+  closedStatementBalance: Money | null;
+  closedAt: string | null;
+};
+
+export type AccountingBankMatchRecord = {
+  id: string;
+  reconciliationId: string;
+  statementLineId: string;
+  glEntryId: string;
+  amount: Money;
+  matchKind: "manual" | "confirmed";
+  reversesId: string | null;
+};
+
+export type AccountingBankMatchInput = {
+  reconciliationId: string;
+  statementLineId: string;
+  glEntryId: string;
+  amount: string;
+  matchKind: "manual" | "confirmed";
+  matchReason: string | null;
+  idempotencyKey: string;
+  note: string | null;
+};
+
+export type AccountingBankPeriodMovement = {
+  periodId: string;
+  bookMovement: Money;
+  statementMovement: Money;
+  difference: Money;
+  currency: string;
+};
+
+/** A ledger entry the service proposes as the other half of a statement line.
+ * `score` and `reasons` come from the service — the page does not rank them. */
+export type AccountingMatchCandidate = {
+  glEntryId: string;
+  postingDate: string;
+  amount: Money;
+  documentType: string | null;
+  ledgerReference: string;
+  score: number;
+  reasons: string[];
+};
+
+export type AccountingAssetBookRecord = {
+  id: string;
+  legalEntityId: string;
+  assetId: string;
+  bookCode: string;
+  assetClass: string;
+  capitalizationDate: string;
+  inServiceDate: string;
+  acquisitionCost: Money;
+  residualValue: Money;
+  usefulLifeMonths: number;
+  methodCode: string;
+  methodVersion: number;
+  status: "draft" | "active" | "disposed";
+  accumulatedDepreciation: Money;
+  disposedAt: string | null;
+};
+
+export type AccountingAssetBookInput = {
+  legalEntityId: string;
+  ledgerId: string;
+  assetId: string;
+  bookCode: string;
+  assetClass: string;
+  capitalizationDate: string;
+  inServiceDate: string;
+  acquisitionCost: string;
+  residualValue: string;
+  usefulLifeMonths: number;
+  depreciationExpenseAccountId: string;
+  accumulatedDepreciationAccountId: string;
+};
+
+export type AccountingDepreciationRunRecord = {
+  id: string;
+  legalEntityId: string;
+  bookCode: string;
+  periodId: string;
+  status: "posted" | "reversed";
+  totalAmount: Money;
+  currency: string;
+  journalId: string | null;
+  reversesRunId: string | null;
+};
+
+export type AccountingTaxRegistrationRecord = {
+  id: string;
+  legalEntityId: string;
+  taxpayerStatus: "pkp" | "non_pkp";
+  registrationNumber: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  status: "active" | "superseded";
+};
+
+export type AccountingTaxRuleRecord = {
+  id: string;
+  legalEntityId: string;
+  ruleCode: string;
+  taxType: "ppn" | "pph22" | "pph23" | "pph26";
+  description: string | null;
+};
+
+export type AccountingTaxRuleVersionRecord = {
+  id: string;
+  taxRuleId: string;
+  versionNumber: number;
+  rate: string;
+  basis: "gross" | "net" | "dpp";
+  roundingMode: "half_up" | "half_even" | "truncate";
+  requiresPkp: boolean;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  status: "draft" | "approved" | "superseded";
+};
+
+export type AccountingTaxCalculationRecord = {
+  id: string;
+  legalEntityId: string;
+  ruleVersionId: string;
+  taxpayerStatus: "pkp" | "non_pkp";
+  basisAmount: Money;
+  rate: string;
+  taxAmount: Money;
+  currency: string;
+  calculationDate: string;
 };
 
 // --- Project Delivery types (Phase 8) -----------------------------------

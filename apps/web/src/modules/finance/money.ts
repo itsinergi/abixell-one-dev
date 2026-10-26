@@ -33,6 +33,12 @@ export function isValidAmountInput(value: string): boolean {
   return /^\d{1,16}(\.\d{1,2})?$/.test(value.trim()) && /[1-9]/.test(value);
 }
 
+/** Four decimals, as open-item and budget routes accept. Zero is allowed here
+ * because a budget weight or an allocation may legitimately be zero. */
+export function isValidAmount4Input(value: string): boolean {
+  return /^\d{1,16}(\.\d{1,4})?$/.test(value.trim());
+}
+
 export function accountTypeLabel(type: string): string {
   switch (type) {
     case "cash":
