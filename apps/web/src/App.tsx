@@ -59,6 +59,7 @@ import { FinanceBudgetsPage } from "./modules/finance/FinanceBudgetsPage";
 import { FinanceBankReconPage } from "./modules/finance/FinanceBankReconPage";
 import { FinanceAssetsPage } from "./modules/finance/FinanceAssetsPage";
 import { FinanceTaxPage } from "./modules/finance/FinanceTaxPage";
+import { FinancePeriodsPage } from "./modules/finance/FinancePeriodsPage";
 import { HseRegisterPage } from "./modules/hse/HseRegisterPage";
 import { HseReportPage } from "./modules/hse/HseReportPage";
 import { HseDetailPage } from "./modules/hse/HseDetailPage";
@@ -191,6 +192,9 @@ export default function App() {
           <Route path="finance/bank-recon" element={<FinanceBankReconPage />} />
           <Route path="finance/fixed-assets" element={<FinanceAssetsPage />} />
           <Route path="finance/tax" element={<FinanceTaxPage />} />
+          {/* Wave A8 — period lifecycle and closing, on routes the kernel
+              already serves. */}
+          <Route path="finance/periods" element={<FinancePeriodsPage />} />
           {/* Phase 7 — HSE */}
           <Route path="hse" element={<HseRegisterPage />} />
           <Route path="hse/report" element={<HseReportPage />} />

@@ -134,9 +134,23 @@ Thirteen delivered capability groups, evidence per `product-progress.md` §5:
 
 | Wave | Pts | State | Owner |
 |---|---:|---|---|
-| Wave A8 — Platform cross-cutting Advanced | 13 | Not authorized | unscoped |
+| Wave A8 — Platform cross-cutting Advanced | 13 | Not authorized | `PLT-ADV-001/002/003` (see §7.3) |
 | `SO-ADV-006` — Offline Field PWA | 5 | Deferred | awaits dedicated ADR |
 | **Total** | **18** | | |
+
+### 7.3 Wave A8 — built vs earned
+
+Requirement IDs written 2026-10-27 (`WP-PLT-A8-00`, decomposition only). No code, no
+closure evidence, no point movement: all three units stay **0 built / 0 earned** and
+Wave A8 stays unauthorized. Each unit's ADR is `PROPOSED`; approving an ADR earns
+nothing (§8).
+
+| Unit | Pts | Built | Earned | Backing ADR |
+|---|---:|---:|---:|---|
+| `PLT-ADV-001` Partner API surface | 3 | 0 | 0 | ADR-0028 (PROPOSED) |
+| `PLT-ADV-002` AI readiness | 5 | 0 | 0 | ADR-0029 (PROPOSED) |
+| `PLT-ADV-003` Marketplace & ecosystem | 5 | 0 | 0 | ADR-0030 (PROPOSED) |
+| **Total** | **13** | **0** | **0** | |
 
 ### 7.1 Wave A6 — built vs earned
 

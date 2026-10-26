@@ -63,7 +63,26 @@ Grouped by owning domain. Each becomes a roadmap unit when approved for a wave.
 | HSE | Investigation methodology · risk assessment (JSA/HIRA) · permit to work · inspection & audit · environmental monitoring · CAPA · leading/lagging indicators |
 | Project Delivery | WBS & dependencies · Gantt · resource loading · baseline management · earned value · cost control · project accounting |
 | Reporting | Self-service BI / warehouse · predictive analytics |
-| Platform (cross-cutting) | API economy / partner integration surface · AI readiness (sentiment, summarisation, assistive automation) · marketplace & ecosystem |
+| Platform (cross-cutting) | `PLT-ADV-001` partner API surface · `PLT-ADV-002` AI readiness (sentiment, summarisation, assistive automation) · `PLT-ADV-003` marketplace & ecosystem |
+
+## Platform Advanced requirements (`PLT-ADV-*`)
+
+Decomposed from the Platform (cross-cutting) backlog row above. These three IDs
+carry the 13 points already allocated to Wave A8 in `product-roadmap.md` §9 and
+`POINT-LEDGER.md` §5 — the decomposition adds requirement text, **not**
+denominator. All three stay `DEFERRED`: none is authorized for runtime work,
+and each has a `PROPOSED` ADR that must be approved before implementation.
+
+| ID | Requirement | Backing ADR | Status |
+|---|---|---|---|
+| **PLT-ADV-001** | **Partner API surface.** The platform shall expose a documented, versioned API (`/api/partner/v1/…`) for partner and client system integration, authenticated by machine credentials separate from user sessions, with the tenant derived from the credential rather than the request, a registered subset of stable endpoints, and no configuration or schema mutation reachable through it. Implements `INT-012`. | [ADR-0028](../../adr/0028-partner-api-surface-and-versioning.md) | DEFERRED |
+| **PLT-ADV-002** | **AI readiness.** The platform shall provide assistive-only AI capabilities — sentiment, summarisation, and assistive automation — that never authoritatively write business state, never use one tenant's data for another tenant, never train or fine-tune on tenant data, minimise and redact data before egress, are auditable and reversible in effect, are opt-in and fail closed, and remain provider-independent. | [ADR-0029](../../adr/0029-ai-readiness-data-boundary.md) | DEFERRED |
+| **PLT-ADV-003** | **Marketplace & ecosystem.** The platform shall distribute ecosystem items as declarative manifests composed statically under ADR-0014, authored only through the governed Builder, installed with explicit bounded capability grants, pinned to an exact version with a content digest, recording publisher provenance rather than assuming trust, and never reaching another tenant. No executable server code, migration, or SQL may be distributed. | [ADR-0030](../../adr/0030-marketplace-and-ecosystem-packaging.md) | DEFERRED |
+
+Activation independence follows `ADV-GEN-001…004` like any other Advanced
+capability. The weight split (3 / 5 / 5) is the Wave A8 plan's, recorded in
+[WAVE-A6-CLOSURE-A7-A8-PLAN.md](../../plans/WAVE-A6-CLOSURE-A7-A8-PLAN.md) §6;
+approving an ADR earns no points.
 
 ## Rules for Advanced
 

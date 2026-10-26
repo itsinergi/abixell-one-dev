@@ -514,6 +514,18 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     permissions: ["finance.accounting.read", "finance.accounting.configure"],
   },
   {
+    path: "/finance/periods",
+    name: "Periods & Closing",
+    moduleCode: "finance",
+    status: "di_menu",
+    permissions: [
+      "finance.accounting.read",
+      "finance.accounting.period.lock",
+      "finance.accounting.configure",
+      "finance.accounting.approve",
+    ],
+  },
+  {
     path: "/finance/tax",
     name: "Tax",
     moduleCode: "finance",

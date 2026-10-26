@@ -660,6 +660,14 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     note: "Wave A6.2 asset books, depreciation runs, run reversal, and disposal. One run posts one journal for every active book in the period.",
   },
   {
+    path: "/finance/periods",
+    name: "Periods & Closing",
+    moduleCode: "finance",
+    status: "di_menu",
+    permissions: ["finance.accounting.read", "finance.accounting.period.lock", "finance.accounting.configure", "finance.accounting.approve"],
+    note: "Wave A8 period lifecycle: lock periods, request their reopen, approve or reject requests, close month or year, and manage ledgers and charts. All seven operations enforce maker-checker and use the kernel for state transitions.",
+  },
+  {
     path: "/finance/tax",
     name: "Tax",
     moduleCode: "finance",

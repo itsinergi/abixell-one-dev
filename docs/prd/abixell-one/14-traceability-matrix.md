@@ -128,11 +128,14 @@ Maps every meaningful IGSEP legacy requirement area to its Abixell One dispositi
 | Reporting & Analytics (doc 16) | `RPT-CORE-*` / `RPT-ADV-*` | ADAPT + RECLASSIFY | Business Core / Advanced | PLANNED | RPT.1–RPT.4 |
 | Mobile Architecture (doc 15) | `UX-004/005/006/007` | ADAPT (responsive + PWA, no native app) | Platform Core | DELIVERED | PC-13 |
 | UI Design System (doc 14) | `UX-003` | ADOPT | Platform Core | DELIVERED | PC-13 |
-| AI Readiness (doc 21) | Platform Advanced | DEFER | Advanced | DEFERRED | Wave A |
-| Marketplace / Partner ecosystem (doc 22) | Platform Advanced | DEFER | Advanced | DEFERRED | Wave A |
+| Partner API surface | `PLT-ADV-001` (implements `INT-012`) | DEFER ¹ | Platform Advanced | DEFERRED | Wave A |
+| AI Readiness (doc 21) | `PLT-ADV-002` | DEFER | Platform Advanced | DEFERRED | Wave A |
+| Marketplace / Partner ecosystem (doc 22) | `PLT-ADV-003` | DEFER | Platform Advanced | DEFERRED | Wave A |
 | Knowledge Preservation / Continuous Improvement (docs 23, 24) | Documentation governance | **SUPERSEDE** → `docs/canonical/documentation-map.md` | Governance | DELIVERED | — |
 | Execution Protocol (doc 25) | Checkpoint/approval process | **SUPERSEDE** → decision log + roadmap governance | Governance | DELIVERED | — |
 | 5-year strategy roadmap (doc 22) | `docs/canonical/product-roadmap.md` | **SUPERSEDE** (template → real roadmap) | Governance | DELIVERED | — |
+
+¹ Cross-reference row, not an additional legacy area: `INT-012` already lives inside the doc 11 area counted at line 125. The three `PLT-ADV-*` IDs are the requirement-level decomposition of the two DEFER areas (Partner API surface, AI Readiness / Marketplace) and are defined in [06-advanced-capabilities.md](06-advanced-capabilities.md#platform-advanced-requirements-plt-adv-).
 
 ## Disposition summary
 
