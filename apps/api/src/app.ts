@@ -67,6 +67,8 @@ import { registerTaxRoutes } from "./modules/accounting/tax/api/tax.routes.js";
 import { registerConsolidationRoutes } from "./modules/accounting/consolidation/api/consolidation.routes.js";
 import { registerHseRoutes } from "./modules/hse/core/api/hse.routes.js";
 import { registerProjectDeliveryRoutes } from "./modules/project-delivery/core/api/project-delivery.routes.js";
+import { registerProjectDeliveryAdvancedRoutes } from "./modules/project-delivery/advanced/api/project-delivery-advanced.routes.js";
+import { registerHseAdvancedRoutes } from "./modules/hse/advanced/api/hse-advanced.routes.js";
 import { registerReportingInsightRoutes } from "./modules/reporting-insight/core/api/reporting-insight.routes.js";
 import { registerReportingAdvancedRoutes } from "./interfaces/http/routes/reporting-advanced.js";
 import { buildContainer } from "./composition-root.js";
@@ -247,6 +249,10 @@ export function buildApp(): FastifyInstance {
     registerHseRoutes(scoped, container);
     // Phase 8 — Project Delivery Core
     registerProjectDeliveryRoutes(scoped, container);
+    // Wave A7 / PRJ-ADV-001…008 — Project Delivery Advanced (ADR-0026)
+    registerProjectDeliveryAdvancedRoutes(scoped, container);
+    // Wave A7 / HSE-ADV-001…007 — HSE Advanced (ADR-0027)
+    registerHseAdvancedRoutes(scoped, container);
     // Phase 9 — Reporting & Operational Insight Core
     registerReportingInsightRoutes(scoped, container);
     // Wave A2 / RPT-ADV-001…002 — governed BI and predictive analytics

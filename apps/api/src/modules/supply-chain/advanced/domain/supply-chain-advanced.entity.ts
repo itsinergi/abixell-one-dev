@@ -83,7 +83,10 @@ export type ScmAccountingReadyEventType =
   | "work_order.accepted"
   | "work_order.cost_accumulated"
   | "work_order.invoiced"
-  | "work_order.invoice_tax";
+  | "work_order.invoice_tax"
+  // Wave A7 — Project Delivery Advanced emits incurred project cost. The
+  // outbox is shared; the kernel, not the emitter, decides the accounts.
+  | "project.cost_incurred";
 export type ScmAccountingOutboxState = "pending" | "published" | "failed" | "suppressed";
 export type ScmAccountingReconciliationState = "unmatched" | "matched" | "reversed" | "ignored";
 export type ScmAccountingEventStateKind = "outbox" | "reconciliation";
