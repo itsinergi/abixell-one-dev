@@ -145,6 +145,18 @@ import { PgHseRepository } from "./modules/hse/core/infrastructure/hse.repositor
 import { HseService } from "./modules/hse/core/application/hse.service.js";
 import { PgProjectDeliveryRepository } from "./modules/project-delivery/core/infrastructure/project-delivery.repository.pg.js";
 import { ProjectDeliveryService } from "./modules/project-delivery/core/application/project-delivery.service.js";
+// Wave A7 — Project Delivery Advanced (ADR-0026). Planning math and project
+// cost truth are Advanced-only; the ledger stays the Accounting Kernel's.
+import { PgProjectDeliveryAdvancedRepository } from "./modules/project-delivery/advanced/infrastructure/project-delivery-advanced.repository.pg.js";
+import { ProjectPlanService } from "./modules/project-delivery/advanced/application/project-plan.service.js";
+import { ProjectCostService } from "./modules/project-delivery/advanced/application/project-cost.service.js";
+// Wave A7 — HSE Advanced (ADR-0027). CAPA is a separate aggregate from the Core
+// follow-up, permit lifecycle is the Workflow Engine's, and indicators are
+// frozen snapshots.
+import { PgHseAdvancedRepository } from "./modules/hse/advanced/infrastructure/hse-advanced.repository.pg.js";
+import { HseAdvancedService } from "./modules/hse/advanced/application/hse-advanced.service.js";
+import { HseAssuranceService } from "./modules/hse/advanced/application/hse-assurance.service.js";
+import { HseCapaService } from "./modules/hse/advanced/application/hse-capa.service.js";
 import { PgReportingInsightRepository } from "./modules/reporting-insight/core/infrastructure/reporting-insight.repository.pg.js";
 import { ReportingInsightService } from "./modules/reporting-insight/core/application/reporting-insight.service.js";
 import { PgBiRepository } from "./modules/reporting-insight/advanced/infrastructure/bi.repository.pg.js";
@@ -585,6 +597,23 @@ export function buildContainer() {
     eventBus,
   );
 
+  // Wave A7 — Project Delivery Advanced (PRJ-ADV-001…008). `accountingEventPort`
+  // is the same `PgAccountingEventWritePort` Supply Chain and Workforce emit
+  // through, so Project Delivery never gains a path to the ledger itself
+  // (ADR-0026 §2).
+  const projectDeliveryAdvancedRepo = new PgProjectDeliveryAdvancedRepository(pool);
+  const projectPlan = new ProjectPlanService(projectDeliveryAdvancedRepo, audit, rbac);
+  const projectCost = new ProjectCostService(projectDeliveryAdvancedRepo, accountingEventPort, audit, rbac);
+
+  // Wave A7 — HSE Advanced (HSE-ADV-001…007). Its own repository reads the Core
+  // HSE tables through reference ports only, so nothing here can write a Core
+  // record or a Core follow-up (ADR-0027 §1). `workflow` is passed in for
+  // permits alone: permit lifecycle is the Engine's, not this module's (§4).
+  const hseAdvancedRepo = new PgHseAdvancedRepository(pool);
+  const hseAdvanced = new HseAdvancedService(hseAdvancedRepo, workflow, configuration, audit, rbac);
+  const hseAssurance = new HseAssuranceService(hseAdvancedRepo, configuration, audit, rbac);
+  const hseCapa = new HseCapaService(hseAdvancedRepo, configuration, audit, rbac);
+
   // Phase 9 — Reporting & Operational Insight Core. Read-only projections over
   // activated modules; explicit reporting permissions and Data Scope enforced
   // in the service/repository, without importing business-module internals.
@@ -940,7 +969,12 @@ export function buildContainer() {
     tax,
     consolidation,
     hse,
+    hseAdvanced,
+    hseAssurance,
+    hseCapa,
     projectDelivery,
+    projectPlan,
+    projectCost,
     reportingInsight,
     reportingBi,
     reportingPredictive,

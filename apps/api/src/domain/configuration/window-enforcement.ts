@@ -344,6 +344,19 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/project-delivery/projects/:projectId", windowCode: "route:/project-delivery/:projectId" },
   { method: "*", apiPath: "/project-delivery", windowCode: "route:/project-delivery" },
 
+  // Wave A7 — Project Delivery Advanced. The window codes published by
+  // `registerProjectDeliveryAdvancedRoutes` were chosen so this block is a
+  // short prefix list rather than a route-by-route census: the Advanced plan
+  // and cost routes hang off a project, so they belong to the project detail
+  // window, exactly as the Core activity and milestone routes do.
+  { method: "*", apiPath: "/project-delivery/wbs", windowCode: "route:/project-delivery/:projectId" },
+  { method: "*", apiPath: "/project-delivery/dependencies", windowCode: "route:/project-delivery/:projectId" },
+  { method: "*", apiPath: "/project-delivery/baselines", windowCode: "route:/project-delivery/:projectId" },
+  { method: "*", apiPath: "/project-delivery/cost-entries", windowCode: "route:/project-delivery/:projectId" },
+  // Resources are tenant-scoped, so they belong to the list window, not to any
+  // one project's detail window.
+  { method: "*", apiPath: "/project-delivery/resources", windowCode: "route:/project-delivery" },
+
   // --- reporting_insight ---------------------------------------------------
   { method: "*", apiPath: "/reporting", windowCode: "route:/reporting" },
 
