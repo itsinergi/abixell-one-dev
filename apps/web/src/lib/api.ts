@@ -1690,6 +1690,35 @@ export const api = {
     return request<CashflowResult>(`/finance/cashflow?${qs}`, { token });
   },
 
+  // --- Accounting Kernel reads (Wave A6) --------------------------------
+  // Read-only views only. Every mutation stays behind the dedicated
+  // accounting screens; this surface exists so the Accounting and Financial
+  // Statements pages can show what the kernel already holds.
+  accountingPeriods: (token: string, query: { legalEntityId?: string; status?: string } = {}) =>
+    request<AccountingPeriodRecord[]>(`/accounting/periods${queryString(query)}`, { token }),
+  accountingLedgers: (token: string, legalEntityId: string) =>
+    request<AccountingLedgerRecord[]>(`/accounting/ledgers${queryString({ legalEntityId })}`, { token }),
+  accountingCharts: (token: string, query: { legalEntityId?: string } = {}) =>
+    request<AccountingChartRecord[]>(`/accounting/charts${queryString(query)}`, { token }),
+  accountingAccounts: (token: string, query: { legalEntityId?: string; activeOnly?: boolean } = {}) =>
+    request<AccountingAccountRecord[]>(`/accounting/accounts${queryString(query)}`, { token }),
+  accountingFiscalClosings: (token: string, query: { legalEntityId?: string; periodId?: string } = {}) =>
+    request<AccountingFiscalClosingRecord[]>(`/accounting/fiscal-closings${queryString(query)}`, { token }),
+  accountingAging: (token: string, query: { side: "AR" | "AP"; asOfDate: string; currency: string }) =>
+    request<AccountingAgingResult>(`/accounting/aging${queryString(query)}`, { token }),
+  accountingGlEntries: (token: string, query: { accountId?: string; periodId?: string } = {}) =>
+    request<AccountingGlEntryRecord[]>(`/accounting/gl-entries${queryString(query)}`, { token }),
+  accountingJournals: (token: string, query: { periodId?: string; status?: string } = {}) =>
+    request<AccountingJournalRecord[]>(`/accounting/journals${queryString(query)}`, { token }),
+  accountingConsolidationGroups: (token: string) =>
+    request<AccountingConsolidationGroupRecord[]>("/accounting/consolidation-groups", { token }),
+  accountingTranslationRuns: (token: string, query: { groupId?: string; periodId?: string } = {}) =>
+    request<AccountingTranslationRunRecord[]>(`/accounting/translation-runs${queryString(query)}`, { token }),
+  accountingEliminations: (token: string, query: { groupId?: string; periodId?: string } = {}) =>
+    request<AccountingEliminationRecord[]>(`/accounting/eliminations${queryString(query)}`, { token }),
+  accountingFsvVersions: (token: string, query: { fsvCode?: string } = {}) =>
+    request<AccountingFsvVersionRecord[]>(`/accounting/fsv-versions${queryString(query)}`, { token }),
+
   // --- Reporting & Operational Insight (Phase 9) ------------------------
   reportingReports: (token: string) => request<ReportDefinition[]>("/reporting/reports", { token }),
   reportingReport: (token: string, code: string) =>
@@ -2620,6 +2649,160 @@ export type RecordFinanceTransactionBody = {
   projectId?: string | null;
   siteId?: string | null;
   customerId?: string | null;
+};
+
+// --- Accounting Kernel types (Wave A6) ---------------------------------
+// Shapes mirror the API entities. Amounts are strings; dates are
+// `YYYY-MM-DD` strings unless the kernel returns a real Date.
+
+export type AccountingPeriodRecord = {
+  id: string;
+  legalEntityId: string;
+  fiscalYearCode: string;
+  periodCode: string;
+  periodName: string;
+  periodType: "monthly" | "quarterly" | "annual";
+  dateFrom: string;
+  dateTo: string;
+  status: "draft" | "open" | "closed" | "reopenable" | "tombstone";
+  lockedDate: string | null;
+  lockedBy: string | null;
+  reopenRequestedDate: string | null;
+  reopenReason: string | null;
+};
+
+export type AccountingLedgerRecord = {
+  id: string;
+  legalEntityId: string;
+  ledgerCode: string;
+  ledgerName: string;
+  ledgerRole: "primary";
+  isPrimary: boolean;
+  isActive: boolean;
+  currency: string;
+};
+
+export type AccountingChartRecord = {
+  id: string;
+  legalEntityId: string;
+  coaVersionCode: string;
+  coaVersionDate: string;
+  templateType: "SAK_UMUM" | "SAK_EMKM" | null;
+  coaStatus: "draft" | "approved";
+  isActive: boolean;
+  approvedBy: string | null;
+  approvedDate: string | null;
+};
+
+export type AccountingAccountRecord = {
+  id: string;
+  legalEntityId: string;
+  coaId: string;
+  accountCode: string;
+  accountName: string;
+  accountClass: "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "EXPENSE";
+  normalBalance: "debit" | "credit";
+  accountType: string | null;
+  parentAccountId: string | null;
+  isActive: boolean;
+};
+
+export type AccountingFiscalClosingRecord = {
+  id: string;
+  legalEntityId: string;
+  periodId: string;
+  fiscalYearCode: string;
+  closeKind: "month_end" | "year_end";
+  incomeTotal: Money | null;
+  expenseTotal: Money | null;
+  retainedEarningsDelta: Money | null;
+  closingJournalId: string | null;
+  closedBy: string | null;
+  closedAt: string;
+};
+
+export type AccountingAgingBucket = {
+  label: string;
+  fromDays: number;
+  toDays: number | null;
+  amount: Money;
+  itemCount: number;
+};
+
+export type AccountingAgingResult = {
+  asOfDate: string;
+  side: "AR" | "AP";
+  currency: string;
+  totalOpen: Money;
+  buckets: AccountingAgingBucket[];
+};
+
+export type AccountingGlEntryRecord = {
+  id: string;
+  accountId: string;
+  periodId: string;
+  journalLineId: string;
+  postingDate: string;
+  debit: Money;
+  credit: Money;
+  documentType: string | null;
+  documentId: string | null;
+};
+
+export type AccountingJournalRecord = {
+  id: string;
+  legalEntityId: string;
+  journalNumber: string;
+  journalDate: string;
+  accountingDate: string;
+  periodId: string;
+  description: string | null;
+  currency: string;
+  status: "pending" | "posted" | "failed" | "reversed";
+  isBalanced: boolean;
+  reversalOfId: string | null;
+};
+
+export type AccountingConsolidationGroupRecord = {
+  id: string;
+  groupCode: string;
+  name: string;
+  reportingCurrency: string;
+  status: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+};
+
+export type AccountingTranslationRunRecord = {
+  id: string;
+  groupId: string;
+  periodId: string;
+  reportingCurrency: string;
+  translatedTotal: Money;
+  residualAmount: Money;
+  status: string;
+  journalId: string | null;
+};
+
+export type AccountingEliminationRecord = {
+  id: string;
+  groupId: string;
+  periodId: string;
+  description: string;
+  amount: Money;
+  currency: string;
+  status: string;
+  journalId: string | null;
+};
+
+export type AccountingFsvVersionRecord = {
+  id: string;
+  fsvCode: string;
+  versionNumber: number;
+  description: string | null;
+  status: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
 };
 
 // --- Project Delivery types (Phase 8) -----------------------------------

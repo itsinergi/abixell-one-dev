@@ -465,6 +465,20 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     permissions: ["finance.read"],
   },
   {
+    path: "/finance/accounting",
+    name: "Accounting",
+    moduleCode: "finance",
+    status: "di_menu",
+    permissions: ["finance.accounting.read", "finance.accounting.configure"],
+  },
+  {
+    path: "/finance/statements",
+    name: "Financial Statements",
+    moduleCode: "finance",
+    status: "di_menu",
+    permissions: ["finance.accounting.read"],
+  },
+  {
     path: "/hse",
     name: "HSE",
     moduleCode: "hse",
