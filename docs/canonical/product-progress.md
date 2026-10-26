@@ -4,20 +4,20 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.28 |
+| **Roadmap Baseline** | v1.29 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-10-26 |
-| **Measured at** | Wave A6 closure on 2026-10-26: `WP-FIN-A6-01…06` all built and all six units now carry closure evidence, so Wave A6 earns its full 21 of 21. Build evidence: WP-FIN-A6-05 API-first verified with 36/36 focused integration tests (migrations `1795500000000`–`1795500000020`); WP-FIN-A6-06a tax baseline merged as `7f87018` (#62, ADR-0019); WP-FIN-A6-06b consolidation/FSV/translation/eliminations verified with 32/32 focused integration tests (migrations `1795700000000`–`1795700000010`, ADR-0022), full API regression 1465 passed / 27 skipped (a further 5 tests time out at the 5s limit under parallel load and pass when their files run in isolation), API typecheck PASS, platform-boundary validator PASS. UI evidence: A6.1 read-only pages `08e2ea5` (#66, the squash-merge that absorbed the terminology fix); A6.2 write pages via migration `1795900000000`, with route-registry parity 8/8, menu seed parity 10/10, menu terminology 9/9, and menu filter 5/5, both typechecks PASS. Evidence: [closure-evidence-wave-a6.md](../closure-evidence-wave-a6.md). |
+| **Measured at** | Wave A7 closure on 2026-10-26: `WP-PRJ-A7-01…05` and `WP-HSE-A7-01…07` all built and every unit carries closure evidence, so Wave A7 earns its full 27 of 27. Build evidence: one squash-merged commit `47dda03` (#68) carrying both modules, 71/71 focused A7 integration tests, migrations `1796000000000`–`1796200000010`. CI run `40315268423` green across all eight gates with 106 files / 1568 tests passing and 0 skipped; platform-boundary validator 0 blocking / 1 advisory / 235 migration-owned permissions; API and Web typecheck PASS. Three defects were found by the A7 tests and fixed in the same commit: unbound permit creation returned 404 (only `ConflictError` was caught, not `NotFoundError`), indicator rates were scaled 10,000× too small, and the project-accounting port forced a float. Evidence: [closure-evidence-wave-a7.md](../closure-evidence-wave-a7.md). Wave A6 closure (previous measurement, 2026-10-26): `WP-FIN-A6-01…06` all built and all six units now carry closure evidence, so Wave A6 earns its full 21 of 21. Build evidence: WP-FIN-A6-05 API-first verified with 36/36 focused integration tests (migrations `1795500000000`–`1795500000020`); WP-FIN-A6-06a tax baseline merged as `7f87018` (#62, ADR-0019); WP-FIN-A6-06b consolidation/FSV/translation/eliminations verified with 32/32 focused integration tests (migrations `1795700000000`–`1795700000010`, ADR-0022), full API regression 1465 passed / 27 skipped (a further 5 tests time out at the 5s limit under parallel load and pass when their files run in isolation), API typecheck PASS, platform-boundary validator PASS. UI evidence: A6.1 read-only pages `08e2ea5` (#66, the squash-merge that absorbed the terminology fix); A6.2 write pages via migration `1795900000000`, with route-registry parity 8/8, menu seed parity 10/10, menu terminology 9/9, and menu filter 5/5, both typechecks PASS. Evidence: [closure-evidence-wave-a6.md](../closure-evidence-wave-a6.md). |
 | **Related** | [PRD](../prd/abixell-one/00-README.md) · [product-roadmap.md](product-roadmap.md) · [product-blueprint.md](product-blueprint.md) · [documentation-map.md](documentation-map.md) |
 
 ---
 
 ## 1. Headline
 
-| Metric | Value | Δ since v1.27 |
+| Metric | Value | Δ since v1.28 |
 |---|---:|---:|
 | **Core Product Readiness** | **100.0 %** | — 0.0 pts |
-| **Full Approved Roadmap Progress** | **87.3 %** | + 21.0 pts |
+| **Full Approved Roadmap Progress** | **94.9 %** | + 27.0 pts |
 
 Two metrics are reported deliberately. A single number would misrepresent the product: the deployable Core is far more mature than the full Advanced roadmap, and optional Advanced depth should not make a usable product look unfinished.
 
@@ -32,7 +32,7 @@ Phase 0 Track A hardening (unweighted) ran on 2026-10-06 against the committed b
 
 Wave A5.1 separates Warehouse Management (36 tables, 12 domain services, `/wms/*`) and Procurement Management (12 tables, 5 domain services, `/procurement/*`), with shared master-data ports, accounting-event ports, legacy route compatibility and frontend response normalization. These domain ownership counts are not a fresh count of the complete live database. The previous 165-table measurement belongs to Wave A5, not this baseline. Repository migration inventory is recorded in the roadmap; applied database state was not remeasured.
 
-**Reconciliation rule:** the handoff is the latest historical development record for full delivery validation, but its v1.19 / 51.0% headline is stale relative to completed Waves A1–A6 in canonical v1.28. This update advances documentation to v1.28 without rolling back earned progress: Core remains 174/174 (100.0%), Advanced 134/179 (74.9%), and Full 308/353 (87.3%). A5.1, Epic 2 Wave 2-3 foundation, and Phase 0 Track A hardening earn no additional roadmap weight. Wave A6's 21 points are earned, not authorized-only: every one of its seven build units is merged and every capability group carries accepted closure evidence. This evidence does not authorize Wave A7, Wave A8, Track B, release, or other pending work.
+**Reconciliation rule:** the handoff is the latest historical development record for full delivery validation, but its v1.19 / 51.0% headline is stale relative to completed Waves A1–A7 in canonical v1.29. This update advances documentation to v1.29 without rolling back earned progress: Core remains 174/174 (100.0%), Advanced 161/179 (89.9%), and Full 335/353 (94.9%). A5.1, Epic 2 Wave 2-3 foundation, and Phase 0 Track A hardening earn no additional roadmap weight. Wave A7's 27 points are earned, not authorized-only: both capability groups are merged and every one of the twelve build units carries accepted closure evidence. This evidence does not authorize Wave A8, `SO-ADV-006`, Track B, release, or other pending work.
 
 Wave A5 delivers 22 weighted Advanced points across 6 completed capability groups:
 1. **Multi-warehouse, Storage Topology, Batch & Serial Tracking** (`SCM-ADV-001/002/003`, 5 pts): Hierarchical warehouses and location bins, batch/lot tracking with manufacturing/expiry dates and quarantine status, individual item serial tracking with warranty periods and movement audit.
@@ -65,7 +65,7 @@ The scheduler/outbox flakiness recorded at the prior closure baseline is resolve
 | Platform Core | 41 / 41 | **100 %** |
 | Platform Hardening | 16 / 16 | **100.0 %** |
 | Business Core | 117 / 117 | **100 %** |
-| Advanced Capabilities | 134 / 179 | **74.9 %** |
+| Advanced Capabilities | 161 / 179 | **89.9 %** |
 
 Unit-level mapping of these totals (which named unit owns which point, built vs earned):
 see [POINT-LEDGER.md](../POINT-LEDGER.md). That file is derivative — the numbers above and
@@ -99,9 +99,9 @@ in §4 remain canonical.
 | Reporting & Operational Insight | 20 / 20 | **100 %** |
 | Service Operations & Work Mgmt | 21 / 26 | 80.8 % |
 | Supply Chain Core | 36 / 36 | **100 %** |
-| Project Delivery Core | 8 / 21 | 38.1 % |
-| Finance Core | 12 / 33 | 36.4 % |
-| HSE Core | 9 / 23 | 39.1 % |
+| Project Delivery Core | 21 / 21 | **100 %** |
+| Finance Core | 33 / 33 | **100 %** |
+| HSE Core | 23 / 23 | **100 %** |
 | Platform (cross-cutting Advanced) | 0 / 13 | 0 % |
 
 ---
@@ -115,7 +115,7 @@ Earned rule: `COMPLETED = full weight`; `IN PROGRESS = 0` (conservative, no esti
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16   (+7 — Phase H2 Production Hardening)
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed 134   (+19 — Wave A1; +23 — Wave A2; +19 — Wave A3 revised; +24 — Wave A4; +22 — Wave A5; +21 — Wave A6)
+Advanced Capabilities  total 179   completed 161   (+19 — Wave A1; +23 — Wave A2; +19 — Wave A3 revised; +24 — Wave A4; +22 — Wave A5; +21 — Wave A6; +27 — Wave A7)
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174   (unchanged)
@@ -125,8 +125,19 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353       (unchanged)
-  completed   = 174 + 134 = 308
-  (308 + 0) / 353 × 100 = 87.3 %
+  completed   = 174 + 161 = 335
+  (335 + 0) / 353 × 100 = 94.9 %
+
+Wave A7 earned weight (six capability groups COMPLETED, full weight each):
+  WBS, dependencies, critical path, Gantt          PRJ-ADV-001/002/003  (WBS, Dependencies, Schedule)       5
+  Resource loading, levelling, baseline, variance  PRJ-ADV-004/005      (Resources, Baselines)              3
+  Earned value, cost control, project accounting   PRJ-ADV-006/007/008  (EV, Cost Ledger, Kernel Hand-off)  5
+  Investigation, JSA/HIRA, risk matrices           HSE-ADV-001/002      (Methodology, Matrix, Assessments)  5
+  Permit to work                                   HSE-ADV-003          (Content, Workflow Lifecycle)       3
+  Inspection and audit programmes                  HSE-ADV-004          (Programmes, Occurrences, Findings) 3
+  Environmental monitoring, CAPA, indicators       HSE-ADV-005/006/007  (Readings, CAPA, Snapshots)         3
+                                                                                                    = 27
+  Advanced completed 134 + 27 = 161 · Full completed 308 + 27 = 335
 
 Wave A6 earned weight (six capability groups COMPLETED, full weight each):
   GL, chart of accounts, and journal               FIN-ADV-001          (COA, Journals, Posting)            5
@@ -193,7 +204,7 @@ Arithmetic was recomputed programmatically and by hand; both agree.
 
 ## 6. Pending roadmap units
 
-All Advanced units except the delivered Survey-to-Action units (2), Wave A1 units (6), Wave A2 units (7), Wave A3 units (5), Wave A4 units (6), Wave A5 units (6), and the six completed Wave A6 Finance capability groups. The remaining Advanced backlog is 45 points: Wave A3 deferred `SO-ADV-006` (5 pts), Wave A7 Project Delivery + HSE work (27), and Wave A8 platform cross-cutting work (13). These waves remain optional and out of Core scope. Platform Hardening has no pending roadmap units.
+All Advanced units except the delivered Survey-to-Action units (2), Wave A1 units (6), Wave A2 units (7), Wave A3 units (5), Wave A4 units (6), Wave A5 units (6), the six completed Wave A6 Finance capability groups, and Wave A7's six Project Delivery and HSE capability groups. The remaining Advanced backlog is 18 points: Wave A3 deferred `SO-ADV-006` (5 pts) and Wave A8 platform cross-cutting work (13). These waves remain optional and out of Core scope. Platform Hardening has no pending roadmap units.
 
 ## 7. Active phase
 
@@ -201,9 +212,23 @@ All Advanced units except the delivered Survey-to-Action units (2), Wave A1 unit
 
 Completed phases: Phase 10, Phase H (Pilot Hardening), Phase H2 (Production Hardening), unweighted Phases 11A/11B/11C/11D/11E/11F, weighted Advanced Waves A1–A6, unweighted Wave A5.1, and all Core Product Readiness units.
 
-Pending: Waves A6–A8, Phase 11G, deferred `SO-ADV-006`, and Track B (Phase 0 expanded scope). These remain awaiting separate Founder authorization.
+Pending: Waves A8, Phase 11G, deferred `SO-ADV-006`, and Track B (Phase 0 expanded scope). These remain awaiting separate Founder authorization.
 
 ## 8. Progress change log
+
+### v1.29 — 2026-10-26: Wave A7 (Project Delivery Advanced + HSE Advanced) delivered — weighted
+
+Twenty-seven Advanced points earned across six capability groups, each COMPLETED at full weight: WBS/dependencies/critical path/Gantt (`PRJ-ADV-001/002/003`, 5); resource loading/levelling/baseline/variance (`PRJ-ADV-004/005`, 3); earned value/cost control/project accounting (`PRJ-ADV-006/007/008`, 5); investigation/JSA-HIRA/risk matrices (`HSE-ADV-001/002`, 5); permit to work (`HSE-ADV-003`, 3); inspection and audit programmes (`HSE-ADV-004`, 3); environmental monitoring/CAPA/indicators (`HSE-ADV-005/006/007`, 3). Advanced completed 134 → 161; Full numerator 308 → 335 (87.3 % → 94.9 %). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified.
+
+Build evidence: both capability groups merged as one squash commit `47dda03` (#68) across three migrations `1796000000000`–`1796200000010`, creating 23 tables (9 Project Delivery, 14 HSE) and cataloguing 10 new permissions (225 → 235 migration-owned) plus 61 new routes in the api-resource dictionary. Focused A7 integration 71/71. CI run `40315268423` green across all eight gates: 106 test files, 1568 tests passing, 0 skipped; `dictionary-seed-parity.test.ts` 7/7; API and Web typecheck PASS; platform-boundary validator 0 blocking / 1 advisory.
+
+Three product defects were found by the A7 tests and fixed in the same commit. `startPermitWorkflow` caught only `ConflictError`, but `workflow.startInstance` answers `NotFoundError` when the definition does not exist at all, so permit creation failed with a 404 in any tenant without a published `hse_permit_lifecycle` — the ADR-0027 §4 promise that a permit survives unbound never held. `ratePerHours` scaled its quotient once against a denominator `toScaled4` had already multiplied by 10⁴, reporting every HSE indicator rate 10,000× too small (an incident frequency rate of 1.0000 came back as 0.0001). `ProjectAccountingEventInput.amount` was typed `number`, contradicting its own comment and ADR-0026 §5, and `tsc` refused the decimal string at the call site.
+
+The first CI run (`40312981087`) was red on GATE-6: 10 permissions had no seeded process row and 61 served routes had no api-resource row, because the two schema migrations extended neither dictionary seed function. `1796200000010_wave-a7-dictionary-seed` repairs that with the rename-chain UNION pattern, moving both catalogues in one migration.
+
+Boundaries held: the Accounting Kernel remains the sole GL writer, with Project Delivery handing cost entries to the outbox as `project.cost_incurred` and writing no journal (ADR-0026 §2); `hse_permits` carries no status column, because the lifecycle is the Workflow Engine's alone (ADR-0027 §4); CAPA references a Core follow-up read-only and never mutates it (ADR-0027 §1); Data Scope is fail-closed. Wave A7 delivers the API, persistence, authorization, ledger, and verification surface only — no Advanced UI exists for either module, which is the deliberate boundary, not a gap.
+
+Wave A8 (13 pts) remains unauthorized, `SO-ADV-006` (5 pts) deferred, Track B HOLD, Release NO-GO. Evidence: [closure-evidence-wave-a7.md](../closure-evidence-wave-a7.md).
 
 ### v1.28 — 2026-10-26: Wave A6 (Finance Advanced) delivered — weighted
 
@@ -228,6 +253,7 @@ Unweighted closure of accounting-readiness receiving/reversals and SCM decomposi
 
 | Baseline | Date | Core Readiness | Full Roadmap | Note |
 |---|---|---:|---:|---|
+| v1.29 | 2026-10-26 | 100.0 % | 94.9 % | **Wave A7 (Project Delivery Advanced + HSE Advanced) delivered — weighted.** Numerator +27 across six capability groups: WBS/dependencies/critical path/Gantt (`PRJ-ADV-001/002/003`, 5), resource loading/levelling/baseline/variance (`PRJ-ADV-004/005`, 3), earned value/cost control/project accounting (`PRJ-ADV-006/007/008`, 5), investigation/JSA-HIRA/risk matrices (`HSE-ADV-001/002`, 5), permit to work (`HSE-ADV-003`, 3), inspection and audit programmes (`HSE-ADV-004`, 3), environmental monitoring/CAPA/indicators (`HSE-ADV-005/006/007`, 3). Advanced 134 → 161; Full 308 → 335 (87.3 % → 94.9 %). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Both capability groups merged as one squash commit `47dda03` (#68) across migrations `1796000000000`–`1796200000010`; 23 new tables (9 Project Delivery, 14 HSE); 10 new migration-owned permissions (225 → 235); 61 new routes registered in the api-resource dictionary. Test evidence: 71/71 focused A7 integration tests; CI run `40315268423` green across all eight gates with 106 files / 1568 tests passing and 0 skipped; `dictionary-seed-parity.test.ts` 7/7; API and Web typecheck PASS; platform-boundary validator 0 blocking / 1 advisory / 235 migration-owned permissions. Three defects the A7 tests found were fixed in the same commit: `startPermitWorkflow` caught only `ConflictError`, so a tenant with no published `hse_permit_lifecycle` definition got a 404 instead of an unbound permit (ADR-0027 §4); `ratePerHours` scaled its quotient once against a 10⁴-scaled denominator, reporting every HSE indicator rate 10,000× too small; and `ProjectAccountingEventInput.amount` was typed `number`, forcing the float step ADR-0026 §5 forbids. The first CI run (`40312981087`) was red on `dictionary-seed-parity` because the two schema migrations catalogued permissions and routes without extending the dictionary seed functions; `1796200000010` repairs that with the rename-chain UNION pattern. Boundaries held: Accounting Kernel remains the sole GL writer, Project Delivery posts through `project.cost_incurred` on `scm_accounting_ready_events` and writes no journal; `hse_permits` carries no status column — the lifecycle is the Workflow Engine's alone; CAPA references a Core follow-up read-only and never mutates it; Data Scope fail-closed. Wave A7 delivers the API, persistence, authorization, ledger, and verification surface only — no Advanced UI for either module. Wave A8 (13 pts) remains unauthorized, `SO-ADV-006` (5 pts) deferred, Track B HOLD, Release NO-GO. Evidence: [closure-evidence-wave-a7.md](../closure-evidence-wave-a7.md). |
 | v1.28 | 2026-10-26 | 100.0 % | 87.3 % | **Wave A6 (Finance Advanced) delivered — weighted.** Numerator +21 across six capability groups: GL/COA/journal (`FIN-ADV-001`, 5), AP/AR + aging (`FIN-ADV-002`, 3), Budgeting & cost center (`FIN-ADV-003`, 3), Bank reconciliation (`FIN-ADV-004`, 2), Fixed-asset accounting & depreciation (`FIN-ADV-005`, 3), Tax/consolidation/statements (`FIN-ADV-006/007/008`, 5). Advanced 113 → 134; Full 287 → 308. Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Seven build units merged (`e54d76c` #42, `010ba93` #57, `009c8a4` #58, `0ed302c` #59, `f394209` #61, `7f87018` #62, `8bb062a` #63) across migrations `1795100000000`–`1795700000010`; focused integration 144/144. UI delivered in two waves: A6.1 read-only pages (`08e2ea5` #66, `9549709` absorbed into it, migration `1795800000000`) and A6.2 write pages (migration `1795900000000`). Catalog evidence: route window catalogue 79 rows, menu catalogue 65 rows, terminology allowlist 65 = 65, route-registry parity 8/8, menu seed parity 10/10, menu terminology 9/9, menu filter 5/5, both typechecks PASS, zero tenant menus with NULL `window_id`, zero with no tree row. Boundaries held: Accounting Kernel sole GL writer; money string in and out at two-decimal integer cents; existing `finance.accounting.*` permissions only, no new permission and no `role_permissions` row. `FIN-ADV-007` and `FIN-ADV-008` remain read-only by ADR-0022. Waves A7–A8, `SO-ADV-006` (deferred), Track B, and Release remain unstarted; Release NO-GO. |
 | v1.25 | 2026-09-01 | 100.0 % | 81.3 % | **Wave A5 (Supply Chain Advanced) delivered — weighted.** Numerator +22 across six capability groups: Multi-Warehouse, Bin, Batch & Serial Tracking (`SCM-ADV-001/002/003`, 5), Reservations, Reorder, Transfers & Opname (`SCM-ADV-004`, 3), Valuation & Landed Cost (`SCM-ADV-005`, 3), RFQ/Tender/Bid Scoring & Award (`SCM-ADV-006`, 5), Supplier Scorecards & Master Contracts (`SCM-ADV-007`, 3), Spend Analytics (`SCM-ADV-008`, 3). Advanced 91 → 113; Full 265 → 287. Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0 % — pure earned progress, no scope added or reclassified. Live database evidence: 165 application base tables (166 including `pgmigrations`, plus one public VIEW), 33 migrations, 128 permissions (0 duplicate codes, 14 added by Wave A5), and migration head `1781000000000_wave-a5-supply-chain-advanced`. Test evidence: 495/495 full API regression runs across 35 files, with Wave A5 adding 20 tests in `wave-a5-integration.test.ts`; additional focused valuation unit coverage is 14/14 in `valuation-policy.test.ts`, executed separately from the full API regression. Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings, 128 migration-owned permissions), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities). Centralized hierarchical Organization Unit Data Scope is enforced through `RbacService` with fail-closed empty-scope semantics across every Supply Chain Advanced access path; every new relationship carries composite `(tenant_id, id)` foreign keys preventing cross-tenant referencing; the Advanced Stock Ledger is append-only with atomic balance mutation under pessimistic row locks and corrections applied only via compensating ledger rows; stock transfers, opnames, RFQs, supplier evaluations, and purchasing contracts delegate lifecycle ownership exclusively to the Workflow Engine (`workflow_instance_id` as source of truth, zero competing local state machines); inventory valuation and landed-cost allocation use exact scaled-integer fixed-point arithmetic with zero authoritative floating-point drift; spend analytics queries are bounded, tenant-safe, and parameterized under a 15-second local statement timeout. Launcher remains PARTIAL / ENVIRONMENT-BLOCKED at `db:up` (Docker daemon unreachable; native Windows `postgres.exe` owns port 5432); downstream migrate/seed/sync-permissions/dev steps were re-inspected for Wave A5 compatibility and required no launcher change. Waves A6–A8, `SO-ADV-006` (deferred), Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |
 | v1.24 | 2026-09-01 | 100.0 % | 75.1 % | **Wave A4 final precision and canonical closure completed (unweighted correction).** No product unit, numerator, or denominator change — Advanced remains 91/179 and Full remains 265/353 at 75.1 %. This is a pre-closure correction pass over the already-delivered Wave A4 baseline, not new roadmap scope. Three items were addressed: (1) centralized hierarchical Organization Unit Data Scope enforcement across every Workforce Advanced list, detail, mutation, workflow, calculation, apply, and document-authorization access path (ADR-0009/ADR-0012), replacing per-endpoint ad hoc checks; (2) approved-overtime aggregation in `calculatePayrollRun()` now sources `actual_hours` with `estimated_hours` fallback, excludes pending/rejected/cancelled requests, avoids double-counting, and preserves approved/closed payroll run immutability; (3) elimination of authoritative floating-point drift in `payroll-policy.ts` — `toCents`/`mulRateCents`/`divCents` now parse exact-decimal strings instead of `Math.round(value * scale)` and fail closed with `ValidationError` (HTTP 400) on non-finite, NaN, exponential, or excessive-scale input instead of silently coercing to `0n`. A pre-existing, unrelated Wave A3 test defect was also fixed in a separate commit: `wave-a3-integration.test.ts`'s reliability-analytics window was hardcoded to a historical August 2026 date range being compared against a server-stamped `completed_at = now()`, which failed once the wall clock passed the window; the fix anchors `periodEnd` to the actual test-run date. Live database evidence refreshed with fresh measurement: 141 application base tables (142 including `pgmigrations`, plus one public VIEW — 4 more than the 137/138 recorded at v1.23, a pre-existing undercount in that baseline now corrected by direct `information_schema` measurement, not new schema), 32 migrations (unchanged), 114 permissions (unchanged), and migration head `1780000000000_wave-a4-workforce-advanced` (unchanged). Test evidence: 475/475 full API runs across 34 files — +9 tests and +1 file versus the v1.23-recorded 466 across 33, comprising the new `payroll-policy.test.ts` (7 tests: fixed-point overtime division, component/total cents integrity, exact two-decimal round-trip, excessive-scale rejection, non-finite/exponential rejection, deterministic statutory rate multiplication, and fail-closed rate/divisor validation) plus 2 additional Wave A4 integration tests raising `wave-a4-integration.test.ts` from 24 to 26. Quality gates PASS: platform boundaries (23/23 tests, 0 blocking findings, 114 migration-owned permissions), lint (0 errors), typecheck (0 errors), build (API and Web clean), PWA validation, `npm audit --omit=dev` (0 vulnerabilities), and the required 10-step browser E2E PASS against API `:4000` / Web `:5173` backed by native PostgreSQL (Docker daemon unreachable on this machine; native Windows `postgres.exe` on port 5432 used instead, per the standing environment-substitution rule — `db:up` itself remains PARTIAL / ENVIRONMENT-BLOCKED, not falsely reported PASS). Runtime commits `bef34e1` (data scope + overtime + arithmetic), `8c4f414` (exact-decimal boundary hardening), `361c85d` (Wave A3 date-window stabilization, test-only, separately authorized). Waves A5–A8, `SO-ADV-006` (deferred), Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. |

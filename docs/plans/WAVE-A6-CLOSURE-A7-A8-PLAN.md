@@ -3,23 +3,24 @@
 | Item | Nilai |
 |---|---|
 | Dokumen | Rencana gelombang (derivative, bukan kanonik) |
-| Baseline | `master` @ `0d511c8` 2026-10-26; 308 / 353 pts (87.3%) — Tahap 1 (A6 closure) selesai |
+| Baseline | `master` @ `47dda03` 2026-10-26; 335 / 353 pts (94.9%) — Tahap 0, 1, dan 2 selesai |
 | Target akhir rencana | 348 / 353 pts (98.6%) |
-| Poin yang dicakup | 61 (A6 closure 21 + A7 27 + A8 13) |
+| Poin yang dicakup | 61 (A6 closure 21 + A7 27 + A8 13) — 48 sudah earned, 13 tersisa |
 | Di luar cakupan | `SO-ADV-006` (5 pts, deferred), Phase 11G, Epic 15 |
-| Status otorisasi | Tahap 0 dan Tahap 1 **selesai**. Tahap 2 (A7) **diotorisasi** 2026-10-26 atas direktif Founder. Tahap 3 (A8) belum diotorisasi |
+| Status otorisasi | Tahap 0, Tahap 1 (A6), dan Tahap 2 (A7) **selesai dan earned**. Tahap 3 (A8) belum diotorisasi |
 | Dokumen kanonik | `docs/canonical/product-roadmap.md`, `docs/canonical/product-progress.md` |
 
 Dokumen ini menjawab satu pertanyaan: bagaimana 66 poin Advanced yang tersisa dipecah menjadi
 work package yang bisa dieksekusi, dengan angka dan batas yang tidak bergerak. Ia tidak
-mengubah denominator dan tidak mengklaim satu poin pun.
+mengubah denominator. Tahap 0–2 sudah selesai; 48 dari 61 poin yang direncanakan di sini sudah
+earned lewat `47dda03` (PR #68).
 
 ## 1. Titik awal
 
 | Blok | Pts | State per 2026-10-26 |
 |---|---:|---|
-| Wave A6 — Finance Advanced | 21 | **21 earned.** Tujuh unit merged, delapan layar terpasang, closure evidence diterima; headline 308 / 353 (87.3%) |
-| Wave A7 — Project Delivery + HSE Advanced | 27 | **Diotorisasi 2026-10-26.** Requirement ID ada di PRD; work package ditetapkan di §5 |
+| Wave A6 — Finance Advanced | 21 | **21 earned.** Tujuh unit merged, delapan layar terpasang, closure evidence diterima |
+| Wave A7 — Project Delivery + HSE Advanced | 27 | **27 earned** 2026-10-26 (`47dda03`, PR #68). CI run `40315268423` hijau 8/8 gate, 1568 tes, 71 tes integrasi A7; headline 335 / 353 (94.9%) |
 | Wave A8 — Platform cross-cutting | 13 | Belum diotorisasi; **tidak ada requirement ID** — hanya tiga frasa kapabilitas di `ROADMAP-TO-100.md` §11 |
 | `SO-ADV-006` — Offline Field PWA | 5 | Deferred; ADR-nya harus menimpa tiga requirement DELIVERED (`UX-006`, `UX-007`, `PLT-NFR-002`) |
 
@@ -27,10 +28,10 @@ Baseline runtime yang dipakai sebagai titik ukur (dari build A6, 2026-10-25):
 
 | Item | Nilai |
 |---|---|
-| Migration head | `1795900000000_wave-a6-2-finance-advanced-write-routes` |
-| Jumlah migration | 144 |
-| Permission migration-owned | 225 |
-| Full API regression | 1465 passed / 27 skipped (5 timeout paralel, lulus saat isolasi) |
+| Migration head | `1796200000010_wave-a7-dictionary-seed` |
+| Jumlah migration | 149 |
+| Permission migration-owned | 235 |
+| Full API regression | 1568 tests / 0 failed / 0 skipped (CI GATE-6, run `40315268423`) |
 | Boundary validator | 0 blocking, 1 advisory (Module Manifest) |
 
 ## 2. Aturan poin
@@ -81,7 +82,10 @@ Batas yang berubah: `docs/closure-evidence-wave-a6.md:29` menyatakan layar Finan
 adalah batas A6.1, bukan gap A6. Rencana ini menjadikan batas itu pekerjaan, bukan alasan
 menunda klaim. Setelah WP-FIN-A6-07…13 selesai, pernyataan itu harus diperbarui.
 
-## 5. Tahap 2 — Wave A7 (27 pts → 335 / 353 = 94.9%)
+## 5. Tahap 2 — Wave A7 (27 pts → 335 / 353 = 94.9%) — SELESAI
+
+Status 2026-10-26: seluruh WP di bawah merged sebagai `47dda03` (PR #68) dan 27 poin earned.
+Evidence: [closure-evidence-wave-a7.md](../closure-evidence-wave-a7.md).
 
 | WP | Unit | Pts | Isi |
 |---|---|---:|---|
@@ -150,13 +154,13 @@ gelombang menambah full API regression, dengan jumlah skip dinyatakan terpisah.
 ```text
 Baseline                287 / 353 = 81.3%
 + A6 closure (21)       308 / 353 = 87.3%   SELESAI — diklaim 2026-10-26
-+ A7 (27)               335 / 353 = 94.9%   target Tahap 2, belum diklaim
++ A7 (27)               335 / 353 = 94.9%   SELESAI — diklaim 2026-10-26 (`47dda03`, PR #68)
 + A8 (13)               348 / 353 = 98.6%   target Tahap 3, belum diotorisasi
 + SO-ADV-006 (5)        353 / 353 = 100.0%   (di luar rencana ini)
 ```
 
-Baris A6 di atas adalah **klaim yang sudah diterima**. Baris A7 dan A8 tetap **target**, bukan
-klaim: tidak satu poin pun bertambah sampai closure evidence unit A7 diterima.
+Baris A6 dan A7 di atas adalah **klaim yang sudah diterima**. Baris A8 tetap **target**, bukan
+klaim: tidak satu poin pun bertambah sampai closure evidence unit A8 diterima.
 
 ## 10. Hubungan dengan dokumen kanonik
 

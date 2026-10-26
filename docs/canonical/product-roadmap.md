@@ -4,7 +4,7 @@
 |---|---|
 | **Document Status** | CANONICAL |
 | **Authority** | Founder (Insting Tekno Sinergi) |
-| **Roadmap Baseline** | v1.28 |
+| **Roadmap Baseline** | v1.29 |
 | **Progress Model** | v1.0 |
 | **Last Updated** | 2026-10-26 |
 | **Supersedes** | `docs/history/igsep/22-Enterprise-Product-Strategy-Roadmap.md` as roadmap source of truth (that document is retained as a **template/strategy input**, not an implementation roadmap) |
@@ -55,7 +55,7 @@ Git history and checkpoint names are preserved exactly as delivered.
 | **Phase 6** | Finance Core | BC-8 Finance |
 | **Phase 1F** | — | **NOT APPLICABLE** (FD-POST-1-01: never authoritatively defined; Phase 1 closed after 1E) |
 
-**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED. Phase 11B (unweighted boundary enforcement) — COMPLETED. Phase 11C (unweighted read-only admin console) — COMPLETED. Phase 11D (unweighted platform experience system & UX direction) — COMPLETED. Phase 11E (unweighted platform shell & admin console UX foundation) — COMPLETED. Phase 11F (unweighted governed admin access management and access-lifecycle hardening) — COMPLETED. Wave A1 — COMPLETED. Wave A2 — COMPLETED. Wave A3 (revised) — COMPLETED. Wave A4 — COMPLETED. Wave A5 — COMPLETED. Wave A5.1 (unweighted SCM decomposition: WMS & Procurement) — COMPLETED.**
+**Phase 0 — COMPLETED. Phase 1 — COMPLETED (FD-POST-1-02). Phase 2 — COMPLETED. Phase 3 — COMPLETED. Phase 4 — COMPLETED. Phase 5 — COMPLETED. Phase 6 — COMPLETED. Phase 7 — COMPLETED. Phase 8 — COMPLETED. Phase 9 — COMPLETED. Phase 10 — COMPLETED. Phase H — COMPLETED. Phase H2 — COMPLETED. Phase 11A (unweighted architecture/governance) — COMPLETED. Phase 11B (unweighted boundary enforcement) — COMPLETED. Phase 11C (unweighted read-only admin console) — COMPLETED. Phase 11D (unweighted platform experience system & UX direction) — COMPLETED. Phase 11E (unweighted platform shell & admin console UX foundation) — COMPLETED. Phase 11F (unweighted governed admin access management and access-lifecycle hardening) — COMPLETED. Wave A1 — COMPLETED. Wave A2 — COMPLETED. Wave A3 (revised) — COMPLETED. Wave A4 — COMPLETED. Wave A5 — COMPLETED. Wave A5.1 (unweighted SCM decomposition: WMS & Procurement) — COMPLETED. Wave A6 (Finance Advanced) — COMPLETED. Wave A7 (Project Delivery Advanced + HSE Advanced) — COMPLETED.**
 
 ---
 
@@ -63,18 +63,18 @@ Git history and checkpoint names are preserved exactly as delivered.
 
 | Item | Value |
 |---|---|
-| Branch / commit | `master` @ `08e2ea5` (Wave A6.1 Finance Advanced read pages; Wave A6.2 write pages uncommitted at the time of writing) |
-| Migrations | 146 repository migration files (91 recorded at `c3fe17e`; Wave A6 adds fifteen `1795100000000`–`1795700000010`, Wave A6.1 `1795800000000`, Wave A6.2 `1795900000000`) |
-| Migration head | `1795900000000_wave-a6-2-finance-advanced-write-routes` |
+| Branch / commit | `master` @ `47dda03` (Wave A7 Project Delivery Advanced + HSE Advanced, PR #68) |
+| Migrations | 149 repository migration files (91 recorded at `c3fe17e`; Wave A6 adds fifteen `1795100000000`–`1795700000010`, Wave A6.1 `1795800000000`, Wave A6.2 `1795900000000`, Wave A7 `1796000000000`–`1796200000010`) |
+| Migration head | `1796200000010_wave-a7-dictionary-seed` |
 | Database ownership | WMS owns 36 tables; Procurement owns 12; 7 shared-master-data tables are consumed through read ports. No fresh whole-database table count was performed for this documentation reconciliation. |
-| Permissions | 197 migration-owned permissions, confirmed by `node scripts/validate-platform-boundaries.mjs` on 2026-10-06 (149 recorded at 7b66c65; rose to 197 through migrations added between 7b66c65 and c3fe17e plus Phase 0 Track A BN-01 discovery/remediation of 11 boundary-discipline findings; 0 duplicate codes) |
-| API tests | Handoff baseline at `7b66c65`: 586/586 PASS across 39 files. Not rerun during this reconciliation or during Track A (vitest unit suite timed out in the Track A sandbox — see `TRACK_A_EXECUTION_LOG.md` BN-03 — evidence gap, not a failure). |
+| Permissions | 235 migration-owned permissions, confirmed by CI GATE-3 on 2026-10-26 (run `40315268423`; 225 before Wave A7, +10 A7 permissions; 0 duplicate codes) |
+| API tests | CI GATE-6 on 2026-10-26 (run `40315268423`): **106 files, 1568 tests, 0 failures, 0 skipped**. The `7b66c65` handoff baseline of 586/586 across 39 files is historical and superseded. |
 | Browser smoke | Handoff baseline at `7b66c65`: PASS (10 journeys E2E smoke against API :4000 / Web :5173, browser console 0 errors). Not rerun during this reconciliation. |
-| Core / Full progress | 174 / 174 (100.0%) / 308 / 353 (87.3%) — Wave A6 (Finance Advanced, 21 pts) is now COMPLETED and earned; Wave A5.1 and Epic 2 Wave 2-3 are unweighted technical/foundational work; Phase 0 Track A hardening is also unweighted |
-| typecheck / lint / build | Track A (2026-10-06) confirms typecheck 0 errors and lint 0 errors (49 warnings, pre-existing, out of Track A scope) for both `apps/api` and `apps/web`, direct tool invocation. Build and `npm audit` not rerun — evidence gap, see `TRACK_A_EXECUTION_LOG.md` BN-03. |
-| Security | `npm audit --omit=dev` — last recorded 0 vulnerabilities at `7b66c65`; not rerun (no registry network access in Track A sandbox) |
+| Core / Full progress | 174 / 174 (100.0%) / 335 / 353 (94.9%) — Wave A7 (Project Delivery Advanced + HSE Advanced, 27 pts) is now COMPLETED and earned, following Wave A6 (Finance Advanced, 21 pts); Wave A5.1 and Epic 2 Wave 2-3 are unweighted technical/foundational work; Phase 0 Track A hardening is also unweighted |
+| typecheck / lint / build | CI run `40315268423` (2026-10-26): GATE-4 lint PASS, GATE-5 typecheck PASS (API and Web), GATE-7 production build PASS. |
+| Security | CI GATE-8 security audit PASS (2026-10-26). |
 | Launcher | PARTIAL — `db:up` environment-blocked (Docker daemon unreachable; native Windows `postgres.exe` owns 5432). Downstream steps re-inspected, launcher left unmodified. Not a full PASS. |
-| Platform boundary validation | 0 blocking findings (after Track A BN-01 fixed 11 discovered violations); 1 expected Manifest advisory (ADR-0014); 197 migration-owned permissions |
+| Platform boundary validation | CI GATE-3 (2026-10-26): 0 blocking findings, 1 expected Manifest advisory (ADR-0014), 235 migration-owned permissions |
 
 ---
 
@@ -209,7 +209,7 @@ Pilot/production readiness. **Not** business capability.
 | RPT.3 | Executive dashboard (cross-module) | 3 | COMPLETED |
 | RPT.4 | Stabilization | 1 | COMPLETED |
 
-## 9. Roadmap units — Advanced Capabilities (weight 179, 113 completed)
+## 9. Roadmap units — Advanced Capabilities (weight 179, 161 completed)
 
 | Module | Units (weight) | W | Done |
 |---|---|---:|---:|
@@ -218,11 +218,11 @@ Pilot/production readiness. **Not** business capability.
 | Survey & Assessment | **Survey-to-Action trigger→assignment (3) ✅** · **Outcome→management attention (3) ✅** · **Conditional/matrix (3) ✅** · **Weighted/section/NPS (2) ✅** · **Anonymous/public token (3) ✅** · **Multi-language (2) ✅** · **Analytics & benchmarking (3) ✅** | 19 | **19** |
 | Service Operations | **Vertical service packs (5) ✅** · Offline field PWA (5) · **Route/roster optimization (3) ✅** | 13 | **8** |
 | Workforce (HR) | **Attendance/shift/roster (5) ✅** · **Leave & overtime (3) ✅** · **Payroll+BPJS+PPh21 (5) ✅** · **Recruitment (3) ✅** · **Performance/competency/training/career (5) ✅** · **Manpower planning (3) ✅** | 24 | **24** |
-| Finance | GL/COA/journal (5) · AP/AR + aging (3) · Budgeting & cost center (3) · Bank reconciliation (2) · Fixed-asset accounting (3) · Tax/consolidation/statements (5) | 21 | 0 |
+| Finance | **GL/COA/journal (5) ✅** · **AP/AR + aging (3) ✅** · **Budgeting & cost center (3) ✅** · **Bank reconciliation (2) ✅** · **Fixed-asset accounting (3) ✅** · **Tax/consolidation/statements (5) ✅** | 21 | **21** |
 | Supply Chain | **Multi-warehouse/bin/batch/serial (5) ✅** · **Reservation/reorder/transfer/opname (3) ✅** · **Valuation + landed cost (3) ✅** · **RFQ/tender/bid (5) ✅** · **Supplier evaluation & contract purchasing (3) ✅** · **Spend analytics (3) ✅** | 22 | **22** |
 | Asset | **Preventive & corrective maintenance + work orders (5) ✅** · **Meter/spare parts/downtime (3) ✅** · **MTBF/MTTR + predictive (3) ✅** | 11 | **11** |
-| Project Delivery | WBS/dependencies/Gantt (5) · Resource loading + baseline (3) · Earned value + cost control + project accounting (5) | 13 | 0 |
-| HSE | Investigation + risk assessment JSA/HIRA (5) · Permit to work (3) · Inspection & audit (3) · Environmental monitoring + CAPA + indicators (3) | 14 | 0 |
+| Project Delivery | **WBS/dependencies/Gantt (5) ✅** · **Resource loading + baseline (3) ✅** · **Earned value + cost control + project accounting (5) ✅** | 13 | **13** |
+| HSE | **Investigation + risk assessment JSA/HIRA (5) ✅** · **Permit to work (3) ✅** · **Inspection & audit (3) ✅** · **Environmental monitoring + CAPA + indicators (3) ✅** | 14 | **14** |
 | Platform (cross-cutting) | API economy / partner surface (3) · AI readiness (5) · Marketplace & ecosystem (5) | 13 | 0 |
 | Reporting | **Self-service BI / warehouse (5) ✅** · **Predictive analytics (5) ✅** | 10 | **10** |
 
@@ -250,7 +250,9 @@ Strategy: **Business Core breadth → stabilization → Advanced depth** (not "a
 | ~~Wave A5~~ | Supply Chain Advanced | SCM-ADV-001…008 | 22 | BC-6 | **COMPLETED** |
 | ~~Wave A5.1~~ | SCM decomposition into WMS and Procurement | No new weighted unit | — | Wave A5 | **COMPLETED** |
 | ~~Wave A6~~ | Finance Advanced | FIN-ADV-001…008 | 21 | BC-8 | **COMPLETED** |
-| **Wave A7+** | Remaining Advanced capability waves | per module | 45 | respective Core | PLANNED / OPTIONAL |
+| ~~Wave A7~~ | Project Delivery Advanced + HSE Advanced | PRJ-ADV-001…008, HSE-ADV-001…007 | 27 | BC-10, BC-9 | **COMPLETED** |
+| **Wave A8** | Platform cross-cutting Advanced | API economy / partner surface, AI readiness, Marketplace & ecosystem | 13 | Platform Core | PLANNED / OPTIONAL, **not authorized** |
+| `SO-ADV-006` | Offline Field PWA (deferred from Wave A3) | SO-ADV-006 | 5 | BC-4 | **DEFERRED** — awaits dedicated ADR |
 
 ### Unweighted architecture / governance phases
 
@@ -284,6 +286,7 @@ Advanced waves are OPTIONAL per client and are excluded from *Core Product Readi
 
 | Version | Date | Change |
 |---|---|---|
+| v1.29 | 2026-10-26 | **Wave A7 (Project Delivery Advanced + HSE Advanced) delivered — weighted.** Both capability groups COMPLETED at full weight (+27 pts total): `PRJ-ADV-001/002/003` WBS decomposition, activity dependencies and critical path, Gantt read model (5); `PRJ-ADV-004/005` resource loading and levelling, baseline management and variance (3); `PRJ-ADV-006/007/008` earned value, project cost control, project accounting hand-off (5); `HSE-ADV-001/002` structured investigation methodology and JSA/HIRA risk matrices (5); `HSE-ADV-003` permit to work (3); `HSE-ADV-004` planned inspection and audit programmes (3); `HSE-ADV-005/006/007` environmental monitoring, formal CAPA, safety indicators (3). Advanced completed 134 → 161; Full numerator 308 → 335 (87.3% → 94.9%). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0% — pure earned progress, no scope added or reclassified. Build evidence: one squash merge `47dda03` (PR #68), absorbing branch commits `75ee56c` (build) and `0c0c84d` (dictionary seed repair), across three migrations `1796000000000`–`1796200000010`; 9 Project Delivery tables and 14 HSE tables; 10 new permissions; 61 new served routes catalogued. CI run `40315268423` green across all eight gates in 2m59s: GATE-1 install, GATE-2 migration, GATE-3 platform boundary (0 blocking, 1 advisory, 235 migration-owned permissions), GATE-4 lint, GATE-5 typecheck, GATE-6 unit test **106 files / 1568 tests / 0 failures / 0 skipped**, GATE-7 production build, GATE-8 security audit. Focused A7 integration 71/71; `dictionary-seed-parity.test.ts` 7/7. Three product defects found by the tests and fixed in the same merge: unbound permit creation returned 404 because `startPermitWorkflow` caught only `ConflictError` while a missing definition answers `NotFoundError`; `ratePerHours` scaled 10⁴× too small so every HSE-ADV-007 indicator was wrong by four orders of magnitude; and `ProjectAccountingEventInput.amount` was declared `number`, forcing a float step that ADR-0026 §5 forbids. The first CI run (`40312981087`) was red on GATE-6: the two schema migrations catalogued permissions and routes without extending `config_dictionary_process_seed` or `config_dictionary_api_resource_seed`, so a fresh tenant's dictionary would describe an application that no longer exists; repaired in `1796200000010` with the rename-chain UNION pattern. Boundaries held: ADR-0026 §1–§6 (Project owns project-cost truth, kernel is the sole GL writer, EV advisory, Advanced never affects Core, exact-decimal money, fail-closed Data Scope) and ADR-0027 §1–§8 (`hse_permits` carries no status column — lifecycle is the Workflow Engine's alone). Deliberate boundary: no Project Delivery Advanced UI and no HSE Advanced UI; no seeded `hse_permit_lifecycle`; no Core follow-up write path. Remaining 18 points: Wave A8 (13, not authorized) and `SO-ADV-006` (5, deferred). Track B remains HOLD; Release remains NO-GO. Evidence: [closure-evidence-wave-a7.md](../closure-evidence-wave-a7.md). |
 | v1.28 | 2026-10-26 | **Wave A6 (Finance Advanced) delivered — weighted.** Six capability groups COMPLETED at full weight (+21 pts total): `FIN-ADV-001` GL/COA/journal (5); `FIN-ADV-002` AP/AR and aging (3); `FIN-ADV-003` budgeting and cost center (3); `FIN-ADV-004` bank reconciliation (2); `FIN-ADV-005` fixed-asset accounting and depreciation (3); `FIN-ADV-006/007/008` tax, consolidation, and financial statements (5). Advanced completed 113 → 134; Full numerator 287 → 308 (81.3% → 87.3%). Denominator unchanged at 174 / 353 and Core Readiness unchanged at 100.0% — pure earned progress, no scope added or reclassified. Build evidence: seven work packages merged (`e54d76c` #42, `010ba93` #57, `009c8a4` #58, `0ed302c` #59, `f394209` #61, `7f87018` #62 tax/ADR-0019, `8bb062a` #63 consolidation/ADR-0022) across fifteen migrations `1795100000000`–`1795700000010`; focused integration 144/144 across the seven suites; 88 `/accounting/*` route registrations on 81 unique paths, all mapped to an existing Window; API typecheck PASS; platform-boundary validator PASS. UI evidence: Wave A6.1 read-only pages `/finance/accounting` and `/finance/statements` (`08e2ea5` #66, which absorbed the A6.1 terminology fix, migration `1795800000000`); Wave A6.2 write pages `/finance/journals`, `/finance/open-items`, `/finance/budgets`, `/finance/bank-recon`, `/finance/fixed-assets`, `/finance/tax` (migration `1795900000000`). Catalog: route window catalogue 79 rows, menu catalogue 65 rows, terminology allowlist 65 = 65, route-registry parity 8/8, menu seed parity 10/10, menu terminology 9/9, menu filter 5/5, both typechecks PASS, zero tenant menus with a NULL `window_id` and zero with no tree row. Boundaries held: Accounting Kernel remains the sole GL writer; money is a string in and out at two-decimal integer cents; every mutation reuses the existing `finance.accounting.*` permission family with no new permission and no `role_permissions` row; tenant isolation, Data Scope, and audit reuse existing paths. `FIN-ADV-007` consolidation and `FIN-ADV-008` financial statements remain read-only on `/finance/statements` by ADR-0022, which puts consolidation posting behind the kernel and the approval runtime. Waves A7–A8, `SO-ADV-006` (deferred), Phase 11G, Platform Builder, Module Manifest runtime, and Client Extensions remain unstarted. Track B remains HOLD; Release remains NO-GO. Evidence: [closure-evidence-wave-a6.md](../closure-evidence-wave-a6.md). |
 | v1.27 | 2026-10-06 | **Phase 0 Track A canonical reconciliation — unweighted.** Canonical runtime reference advances from `master @ 7b66c65` to committed baseline `c3fe17e` (Epic 2 Wave 2-3 merged), with current authorized Track A worktree evidence recorded separately in `TRACK_A_EXECUTION_LOG.md`. Repository migration inventory is 91; platform-boundary validation reports 0 blocking findings, 1 expected Module Manifest advisory (ADR-0014), and 197 migration-owned permissions after BN-01 remediated all 11 discovered boundary-discipline violations and BN-03 re-pinned the baseline. API 586/586 and browser smoke remain historical handoff evidence from `7b66c65`, not fresh Track A reruns; Track A unit-suite execution timed out in the sandbox and therefore remains an evidence gap, not a claimed failure. Typecheck and lint were freshly verified with 0 errors on 2026-10-06; build, PWA, audit, runtime migration, and browser smoke were not rerun. Core remains 174/174 (100.0%); Full remains 287/353 (81.3%); no roadmap unit, numerator, denominator, authorization, or release status changed. Track B remains HOLD; Release remains NO-GO. |
 | v1.26 | 2026-09-15 | **Wave A5.1 SCM decomposition completed and merged — unweighted.** Runtime baseline `master @ 7b66c65`. Supply Chain Advanced was split into explicit Warehouse Management (36 owned tables, 12 services, canonical `/wms/*`) and Procurement Management (12 owned tables, 5 services, canonical `/procurement/*`) bounded contexts, with 7 shared-master-data tables accessed through read ports. Legacy `/supply-chain/advanced/*` routes remain compatible with RFC-8594 deprecation headers. Three repository migrations advance the stream head to `1784000000000_wave-a5-1-stage-3-module-catalog`. Latest handoff evidence reports 586/586 API tests across 39 files, 149 migration-owned permissions, 0 boundary blockers and 1 expected advisory, typecheck/build/PWA/E2E PASS, lint 0 errors and 45 warnings, and browser console 0 errors. No fresh whole-database table count or runtime rerun is claimed in this documentation reconciliation. Core remains 174/174 (100.0%); Full remains 287/353 (81.3%); no roadmap unit, numerator, denominator, or authorization changed. Waves A6–A8, Phase 11G and deferred `SO-ADV-006` remain unstarted pending separate Founder authorization. |
@@ -325,7 +328,7 @@ Every roadmap unit traces to canonical PRD requirement IDs:
 | CUS.1–CUS.4 | `CUS-CORE-001`…`CUS-CORE-009` |
 | CMP.1–CMP.7 | `SQ-CORE-001`…`SQ-CORE-016` |
 | SRV.1–SRV.3 | `SUR-CORE-001`…`SUR-CORE-016` |
-| Advanced (delivered) | `SUR-ADV-001`…`SUR-ADV-007`, `CUS-ADV-001`, `CUS-ADV-002`, `SQ-ADV-001`…`SQ-ADV-004`, `RPT-ADV-001`, `RPT-ADV-002`, `PACK-001`…`PACK-004`, `SO-ADV-002`…`SO-ADV-005`, `AST-ADV-001`…`AST-ADV-007`, `HR-ADV-001`…`HR-ADV-009`, `SCM-ADV-001`…`SCM-ADV-008` |
+| Advanced (delivered) | `SUR-ADV-001`…`SUR-ADV-007`, `CUS-ADV-001`, `CUS-ADV-002`, `SQ-ADV-001`…`SQ-ADV-004`, `RPT-ADV-001`, `RPT-ADV-002`, `PACK-001`…`PACK-004`, `SO-ADV-002`…`SO-ADV-005`, `AST-ADV-001`…`AST-ADV-007`, `HR-ADV-001`…`HR-ADV-009`, `SCM-ADV-001`…`SCM-ADV-008`, `FIN-ADV-001`…`FIN-ADV-008`, `PRJ-ADV-001`…`PRJ-ADV-008`, `HSE-ADV-001`…`HSE-ADV-007` |
 | OPS.1–OPS.5 | `SO-CORE-001`…`SO-CORE-015` |
 | HR.1–HR.5 | `HR-CORE-001`…`HR-CORE-010` |
 | SCM.1–SCM.6 | `SCM-CORE-001`…`SCM-CORE-013` |

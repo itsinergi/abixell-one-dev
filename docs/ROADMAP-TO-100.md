@@ -3,14 +3,14 @@
 | Item | Value |
 |---|---|
 | Document type | Planning derivative from canonical roadmap |
-| Source baseline | `docs/canonical/product-roadmap.md` v1.28 and `docs/canonical/product-progress.md` v1.28 |
-| Measured at | `master` after Wave A6 closure, 2026-10-26 |
-| Current point | Full Approved Roadmap Progress: 87.3% (308 / 353 pts) |
+| Source baseline | `docs/canonical/product-roadmap.md` v1.29 and `docs/canonical/product-progress.md` v1.29 |
+| Measured at | `master` after Wave A7 closure, 2026-10-26 |
+| Current point | Full Approved Roadmap Progress: 94.9% (335 / 353 pts) |
 | Current Core Product Readiness | 100.0% (174 / 174 pts) |
 | Current Platform Hardening | 100.0% (16 / 16 pts) |
 | Goal | Full Approved Roadmap Progress: 100% (353 / 353 pts) |
 | Scope rule | No denominator change unless Founder approves new roadmap scope |
-| Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), Wave A4, Wave A5, and **Wave A6 are COMPLETED**. Wave A6 earns its full 21 of 21: all seven build units are merged and all six capability groups carry accepted closure evidence (UI via Waves A6.1 and A6.2). Waves A7–A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
+| Current authorization state | Phase H2, Phase 11F, Wave A1, Wave A2, Wave A3 (revised), Wave A4, Wave A5, Wave A6, and **Wave A7 are COMPLETED**. Wave A7 earns its full 27 of 27: both capability groups are merged as `47dda03` (PR #68) with CI green and closure evidence accepted. Wave A8 and Phase 11G remain PLANNED / OPTIONAL and require a separate explicit Founder directive. `SO-ADV-006` remains DEFERRED and requires a dedicated Founder architecture ADR. This document starts no implementation |
 | Design-only additions outside the denominator | **Epic 15 (Panel Admin)** in `docs/plans/CORE-ROADMAP.md` §4.15 — structure locked 2026-09-28; **design interview complete 2026-10-23 (15 decisions locked, all 6 open items closed)**; implementation not authorized. Design work only; moves no point in this document (see §14) |
 
 This document explains the remaining path from the current approved baseline to 100%. It does not replace the canonical roadmap. It is a sequencing guide for Founder decision-making and future implementation prompts. All future phases require a separate explicit Founder directive before implementation begins.
@@ -21,7 +21,7 @@ This document explains the remaining path from the current approved baseline to 
 Platform Core          total  41   completed  41
 Platform Hardening     total  16   completed  16
 Business Core          total 117   completed 117
-Advanced Capabilities  total 179   completed 134
+Advanced Capabilities  total 179   completed 161
 
 Core Product Readiness
   denominator = 41 + 117 + 16 = 174
@@ -30,8 +30,8 @@ Core Product Readiness
 
 Full Approved Roadmap
   denominator = 174 + 179 = 353
-  completed   = 174 + 134 = 308   (Advanced 6 + Wave A1 19 + Wave A2 23 + Wave A3 revised 19 + Wave A4 24 + Wave A5 22 + Wave A6 21)
-  308 / 353 = 87.3%
+  completed   = 174 + 161 = 335   (Advanced 6 + Wave A1 19 + Wave A2 23 + Wave A3 revised 19 + Wave A4 24 + Wave A5 22 + Wave A6 21 + Wave A7 27)
+  335 / 353 = 94.9%
 ```
 
 Remaining to 100%:
@@ -39,8 +39,8 @@ Remaining to 100%:
 | Layer | Remaining | Meaning |
 |---|---:|---|
 | Platform Hardening | 0 pts | Phase H2 production gate completed |
-| Advanced Capabilities | 45 pts | All Advanced backlog not yet delivered (deferred `SO-ADV-006` 5 pts + Wave A7 27 pts + Wave A8 13 pts) |
-| Total remaining | 45 pts | 353 - 308 |
+| Advanced Capabilities | 18 pts | All Advanced backlog not yet delivered (deferred `SO-ADV-006` 5 pts + Wave A8 13 pts) |
+| Total remaining | 18 pts | 353 - 335 |
 
 Phases 11A–11F are unweighted architecture/governance phases. They are recorded for
 traceability and move neither metric; the numbers above already reflect their closure.
@@ -62,8 +62,8 @@ the compact view. Both are derivative; `docs/canonical/product-progress.md` rema
 | Platform Core (PC-1…PC-13) | 41 | 41 | 100.0% |
 | Platform Hardening (PH-1…PH-8) | 16 | 16 | 100.0% |
 | Business Core (BC-1…BC-11) | 117 | 117 | 100.0% |
-| Advanced Capabilities (12 modules) | 179 | 134 | 74.9% |
-| **Full Approved Roadmap** | **353** | **308** | **87.3%** |
+| Advanced Capabilities (12 modules) | 179 | 161 | 89.9% |
+| **Full Approved Roadmap** | **353** | **335** | **94.9%** |
 
 Advanced Capabilities, 179 points across 12 modules:
 
@@ -77,36 +77,37 @@ Advanced Capabilities, 179 points across 12 modules:
 | Finance | 21 | 21 |
 | Supply Chain | 22 | 22 |
 | Asset | 11 | 11 |
-| Project Delivery | 13 | 0 |
-| HSE | 14 | 0 |
+| Project Delivery | 13 | 13 |
+| HSE | 14 | 14 |
 | Platform (cross-cutting) | 13 | 0 |
 | Reporting | 10 | 10 |
-| **Total** | **179** | **134** |
+| **Total** | **179** | **161** |
 
-The 45 remaining points:
+The 18 remaining points:
 
 | Wave | Pts | State |
 |---|---:|---|
-| Wave A7 — Project Delivery + HSE Advanced | 27 | Not authorized |
 | Wave A8 — Platform cross-cutting Advanced | 13 | Not authorized |
 | `SO-ADV-006` — Offline Field PWA | 5 | Deferred, awaits dedicated ADR |
 
-Wave A6's **built** and **earned** columns now agree. Merged code without closure
+Wave A7's **built** and **earned** columns now agree. Merged code without closure
 evidence earns 0 under the `COMPLETED = full weight` rule.
 
 | Unit | Pts | Built | Earned | Built by |
 |---|---:|---:|---:|---|
-| GL / COA / journal | 5 | 5 | 5 | `882bbdd` (#40 COA Builder); pages `08e2ea5` (#66) and migration `1795900000000` (`/finance/journals`) |
-| AP/AR + aging | 3 | 3 | 3 | `010ba93` (#57); page `/finance/open-items` (`1795900000000`) |
-| Budgeting & cost center | 3 | 3 | 3 | `009c8a4` (#58); page `/finance/budgets` (`1795900000000`) |
-| Bank reconciliation | 2 | 2 | 2 | `0ed302c` (#59); page `/finance/bank-recon` (`1795900000000`) |
-| Fixed-asset accounting & depreciation | 3 | 3 | 3 | `f394209` (#61); page `/finance/fixed-assets` (`1795900000000`) |
-| Tax / consolidation / financial statements | 5 | 5 | 5 | `7f87018` (#62 tax); `8bb062a` (#63 consolidation); page `/finance/tax` (`1795900000000`) |
-| **Total** | **21** | **21** | **21** | |
+| Project Delivery — WBS/dependencies/Gantt (PRJ-ADV-001/002/003) | 5 | 5 | 5 | `47dda03` (#68) |
+| Project Delivery — resource loading + baseline (PRJ-ADV-004/005) | 3 | 3 | 3 | `47dda03` (#68) |
+| Project Delivery — earned value + cost control + project accounting (PRJ-ADV-006/007/008) | 5 | 5 | 5 | `47dda03` (#68) |
+| HSE — investigation + JSA/HIRA (HSE-ADV-001/002) | 5 | 5 | 5 | `47dda03` (#68) |
+| HSE — permit to work (HSE-ADV-003) | 3 | 3 | 3 | `47dda03` (#68) |
+| HSE — inspection & audit (HSE-ADV-004) | 3 | 3 | 3 | `47dda03` (#68) |
+| HSE — environmental monitoring + CAPA + indicators (HSE-ADV-005/006/007) | 3 | 3 | 3 | `47dda03` (#68) |
+| **Total** | **27** | **27** | **27** | |
 
-Closing Wave A6 moved the headline to **308 / 353 = 87.3%**. `FIN-ADV-007`
-consolidation and `FIN-ADV-008` financial statements stay read-only on
-`/finance/statements` by ADR-0022 — that is the delivered boundary, not a gap.
+Closing Wave A7 moved the headline to **335 / 353 = 94.9%**. Wave A7 deliberately
+delivers no Project Delivery or HSE Advanced UI — the API, persistence, authorization,
+ledger, and verification surface is the delivered scope. Evidence:
+[closure-evidence-wave-a7.md](closure-evidence-wave-a7.md).
 
 ## 2. Recommended Phase Sequence
 
@@ -125,11 +126,11 @@ The recommended route is:
 | 3 | ~~Wave A3 revised~~ | Service Operations Advanced + Asset Advanced, excluding deferred SO-ADV-006 | 19 | 241 / 353 | 68.3% | 100.0% |
 | 4 | ~~Wave A4~~ | Workforce Advanced | 24 | 265 / 353 | 75.1% | 100.0% |
 | 5 | ~~Wave A5~~ | Supply Chain Advanced | 22 | 287 / 353 | 81.3% | 100.0% |
-| 6 | ~~Wave A6~~ **(COMPLETED — current baseline)** | Finance Advanced | 21 | **308 / 353** | **87.3%** | **100.0%** |
-| 7 | Wave A7 | Project Delivery Advanced + HSE Advanced | 27 | 335 / 353 | 94.9% | 100.0% |
+| 6 | ~~Wave A6~~ | Finance Advanced | 21 | 308 / 353 | 87.3% | 100.0% |
+| 7 | ~~Wave A7~~ **(COMPLETED — current baseline)** | Project Delivery Advanced + HSE Advanced | 27 | **335 / 353** | **94.9%** | **100.0%** |
 | 8 | Wave A8 | Platform cross-cutting Advanced | 13 | 348 / 353 | 98.6% | 100.0% |
 
-Every row after the current baseline is a planned scenario, not earned progress. Phase H2 and Waves A1–A6 are earned and complete; the current baseline is now row 6. Waves A7–A8 remain planned / optional and unauthorized. Delivering all planned Waves A7–A8 yields 348 / 353 = 98.6%. Reaching the full 353 / 353 (100.0%) requires completing the separately deferred `SO-ADV-006` (5 pts) following Founder approval and a dedicated ADR. No wave is started by this document.
+Every row after the current baseline is a planned scenario, not earned progress. Phase H2 and Waves A1–A7 are earned and complete; the current baseline is now row 7. Wave A8 remains planned / optional and unauthorized. Delivering Wave A8 yields 348 / 353 = 98.6%. Reaching the full 353 / 353 (100.0%) requires completing the separately deferred `SO-ADV-006` (5 pts) following Founder approval and a dedicated ADR. No wave is started by this document.
 
 ## 3. Phase H2 - Production Gate
 
@@ -350,7 +351,7 @@ Expected result:
 
 | Metric | After Wave A5 | After Wave A6 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 287 / 353 (81.3%) | 308 / 353 (87.3%) |
+| Full Approved Roadmap Progress | 287 / 353 (81.3%) | 308 / 353 (87.3%) ✅ earned |
 
 Recommended boundaries:
 
@@ -376,9 +377,13 @@ Approval alone creates no earned progress, scope expansion, or weight change.
 Wave A6 remained at 21 points through that approval; the wave reaches
 308 / 353 (87.3%) now that all six units carry closure evidence.
 
-## 10. Wave A7 - Project Delivery and HSE Advanced
+## 10. Wave A7 - Project Delivery and HSE Advanced — COMPLETED
 
-Wave A7 adds deeper project controls and HSE compliance depth.
+Wave A7 adds deeper project controls and HSE compliance depth. It is **built, merged, and
+earned**: `47dda03` (PR #68), CI run `40315268423` green across all eight gates with
+106 files / 1568 tests / 0 skipped, 71 focused A7 integration tests. Evidence:
+[closure-evidence-wave-a7.md](closure-evidence-wave-a7.md); scoring audit:
+[POINT-LEDGER.md](POINT-LEDGER.md) §7.2.
 
 | Area | Unit | Capability | Pts |
 |---|---|---|---:|
@@ -391,11 +396,11 @@ Wave A7 adds deeper project controls and HSE compliance depth.
 | HSE | HSE-ADV group | Environmental monitoring, CAPA, and indicators | 3 |
 | Total | Wave A7 |  | 27 |
 
-Expected result:
+Result (earned 2026-10-26):
 
 | Metric | After Wave A6 | After Wave A7 |
 |---|---:|---:|
-| Full Approved Roadmap Progress | 308 / 353 (87.3%) | 335 / 353 (94.9%) |
+| Full Approved Roadmap Progress | 308 / 353 (87.3%) | **335 / 353 (94.9%)** |
 
 Recommended boundaries:
 
@@ -432,15 +437,14 @@ Recommended boundaries:
 | Category | Remaining pts | Completion condition |
 |---|---:|---|
 | Phase H2 Production Gate | 0 | Completed; Platform Hardening is 16 / 16 |
-| Delivered Advanced waves (A1, A2, A3 revised, A4, A5) | 0 | Completed; Customer & Commercial + Service Quality (19), Survey + Reporting (23), Service Operations + Asset (19), Workforce (24), and Supply Chain (22) delivered |
-| Planned Advanced business-domain waves (A6–A7) | 48 | Finance (21), and Project Delivery + HSE (27) Advanced complete |
+| Delivered Advanced waves (A1, A2, A3 revised, A4, A5, A6, A7) | 0 | Completed; Customer & Commercial + Service Quality (19), Survey + Reporting (23), Service Operations + Asset (19), Workforce (24), Supply Chain (22), Finance (21), and Project Delivery + HSE (27) delivered |
 | Planned Platform cross-cutting Advanced (A8) | 13 | Partner API (3), AI readiness (5), and marketplace ecosystem (5) complete |
 | Deferred `SO-ADV-006` (Offline Field PWA) | 5 | Awaiting dedicated Founder architecture ADR, approval, implementation, and verification |
-| Total remaining Advanced | 66 | 48 (A6–A7) + 13 (A8) + 5 (SO-ADV-006); Full Approved Roadmap reaches 353 / 353 |
+| Total remaining Advanced | 18 | 13 (A8) + 5 (SO-ADV-006); Full Approved Roadmap reaches 353 / 353 |
 
 Unit-level ownership of every remaining point (and of every earned point): [POINT-LEDGER.md](POINT-LEDGER.md).
 
-After planned Waves A6–A8 (excluding deferred `SO-ADV-006`):
+After planned Wave A8 (excluding deferred `SO-ADV-006`):
 
 ```text
 Platform Core          41 / 41   100.0%
