@@ -113,11 +113,6 @@ export function FinanceJournalsPage() {
     return period ? `${period.periodCode} ${period.fiscalYearCode}` : id;
   };
 
-  const accountLabel = (id: string) => {
-    const account = accounts.find((a) => a.id === id);
-    return account ? `${account.accountCode} — ${account.accountName}` : id;
-  };
-
   function updateLine(index: number, patch: Partial<DraftLine>) {
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   }
