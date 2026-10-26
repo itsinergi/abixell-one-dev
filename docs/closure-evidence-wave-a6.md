@@ -16,7 +16,7 @@
 | A6-06a | Indonesia tax baseline | `7f87018` | #62 | `1795600000000`, `1795600000010` |
 | A6-06b | Consolidation | `8bb062a` | #63 | `1795700000000`, `1795700000010` |
 
-Migration head after Wave A6 closure: `1795700000010_wave-a6-06b-dictionary-seed`. The 15 migrations listed above are Wave A6's own. Wave A6.1 adds one more, `1795800000000_wave-a6-1-finance-advanced-routes`, which is now the head.
+Migration head after Wave A6 closure: `1795700000010_wave-a6-06b-dictionary-seed`. The 15 migrations listed above are Wave A6's own. Wave A6.1 adds `1795800000000_wave-a6-1-finance-advanced-routes` and Wave A6.2 adds `1795900000000_wave-a6-2-finance-advanced-write-routes`; the latter is now the head.
 
 Capabilities delivered per unit:
 
@@ -90,29 +90,69 @@ Deliberate details in `1795800000000`:
 - Existing tenants are backfilled by two scoped statements keyed on the two new codes, not by replaying `config_seed_menus_for_tenant()`. The dev database holds 2617 tenants and 165,243 `app_menus` rows, where the full replay does not finish. New tenants still seed complete, because both tenant triggers call the catalogue by name at execution time.
 - The terminology seed (`1787500000000`) wrote one key per menu code in the catalogue as it stood then, and `tests/menu-terminology.test.ts` asserts that the allowlist and the catalogue hold the same number of rows. That assertion is the point: a menu with no key would be a label no tenant could ever override, and a key with no menu would be a term pointing at nothing. So these two menus get `menu.<code>.name` and `menu.<code>.description` keys and their allowlist rows, and they are tenant-overridable exactly like every other menu. This was caught by CI on the first push, not by review: the first version of the migration extended the catalogue alone and the test failed on `expected 57 to be 59`. The same migration must extend both catalogues or neither.
 
+## Menu catalog entries (Wave A6.2)
+
+A6.1 left the mutation surface open, which is six of the six FIN-ADV write units. A6.2 adds one page per unit and the catalog rows that point at them.
+
+| Page | Path | Unit | Permissions | Menu code | Seq |
+|---|---|---|---|---|---|
+| Journals | `/finance/journals` | FIN-ADV-001 | `finance.accounting.read`, `.manage` | `nav-finance-finance-journals` | 60 |
+| Open Items | `/finance/open-items` | FIN-ADV-002 | `finance.accounting.read`, `.configure` | `nav-finance-finance-open-items` | 70 |
+| Budgets | `/finance/budgets` | FIN-ADV-003 | `finance.accounting.read`, `.configure` | `nav-finance-finance-budgets` | 80 |
+| Bank Reconciliation | `/finance/bank-recon` | FIN-ADV-004 | `finance.accounting.read`, `.configure` | `nav-finance-finance-bank-recon` | 90 |
+| Fixed Assets | `/finance/fixed-assets` | FIN-ADV-005 | `finance.accounting.read`, `.configure` | `nav-finance-finance-fixed-assets` | 100 |
+| Tax | `/finance/tax` | FIN-ADV-006 | `finance.accounting.read`, `.configure` | `nav-finance-finance-tax` | 110 |
+
+All six hang under the existing Finance folder (`nav-finance`), continuing after the A6.1 pair at 40 and 50, so the folder reads Transactions, Cashflow, Cash & Bank, Accounting, Financial Statements, Journals, Open Items, Budgets, Bank Reconciliation, Fixed Assets, Tax.
+
+Each permission pair is the one the service layer actually checks, not a broader one that happens to imply it: `finance.accounting.manage` for the kernel, `finance.accounting.configure` for open items, budgets, bank reconciliation, asset books, and tax. Every row also accepts `finance.accounting.read`, because every one of the six lists before it writes. No permission was introduced and no `role_permissions` row was written; these five were seeded by `1792000000000`.
+
+`FIN-ADV-007` (consolidation) and `FIN-ADV-008` (financial statements) stay read-only surfaces on `/finance/statements`. That is the boundary, not a gap: ADR-0022 puts consolidation posting behind the kernel with approval runtime ownership, and no page writes it.
+
+## Evidence (Wave A6.2)
+
+| Check | Result |
+|---|---|
+| Web typecheck (`apps/web`, `npx tsc -p apps/web/tsconfig.json --noEmit`) | PASS |
+| API typecheck (`apps/api`, `npx tsc -p apps/api/tsconfig.json --noEmit`) | PASS |
+| Route registry parity (`route-registry-parity.test.ts`) | PASS, 8/8 |
+| Menu seed parity (`menu-seed-parity.test.ts`) | PASS, 10/10 |
+| Menu terminology (`menu-terminology.test.ts`) | PASS, 9/9 |
+| Menu filter (`menu-filter.test.ts`) | PASS, 5/5 |
+| Route window catalogue after A6.2 | 79 rows (73 after A6.1, +6) |
+| Menu catalogue after A6.2 | 65 rows (59 after A6.1, +6) |
+| Terminology allowlist vs catalogue | equal, 65 = 65 |
+| Tenant backfill, new menus with NULL `window_id` | 0 |
+| Tenant backfill, new menus with no tree row | 0 |
+
 ## Deliberate boundary
 
-Finance Advanced screens were not part of Wave A6 API-first scope. Wave A6.1 answers that with two read-only pages, recorded above. What A6.1 still does not do: no mutation UI (period close, journal entry, elimination posting, budget setup, bank statement import, asset lifecycle), no per-page deep links into a single period or journal, and no consolidation group editing. Those remain open. Wave A6's own boundary is the API, persistence, authorization, ledger, and verification surface delivered by the seven build units.
+Finance Advanced screens were not part of Wave A6 API-first scope. A6.1 answers that with two read-only pages and A6.2 with six write pages, all recorded above. What remains open: no per-page deep links into a single period, journal, or asset; no consolidation group editing; no reporting surface for the nine `/accounting/*` analytics routes beyond what `/finance/statements` already reads. Wave A6's own boundary is the API, persistence, authorization, ledger, and verification surface delivered by the seven build units.
 
 ## Closure status
 
-Every A6 unit is merged to `master`. Documentation reconciliation landed as `a8e6ed5` (#64) and `00c9764` (#65). No A6 code remains uncommitted.
+Every A6 unit is merged to `master`. Documentation reconciliation landed as `a8e6ed5` (#64) and `00c9764` (#65). A6.1 landed as `08e2ea5` (#66) and its terminology gap as `9549709` (#67). A6.2 is uncommitted at the time of writing.
 
-**Kesimpulan Indonesia:** Seluruh tujuh unit Wave A6 (A6-01 sampai A6-06b) sudah digabung ke `master` dengan SHA dan nomor PR tercatat di atas. Total 144 tes integrasi terfokus lulus, 88 pendaftaran rute `/accounting/*` pada 81 path unik sudah punya Window, dan 15 berkas migrasi terpasang sampai kepala `1795700000010`. Wave A6.1 kemudian menambahkan dua halaman baca-saja, `/finance/accounting` dan `/finance/statements`, beserta entri menu katalognya lewat migrasi `1795800000000`; menu katalog yang dilayani naik dari 57 ke 59 baris dan katalog Window dari 71 ke 73 baris. Katalog istilah juga ikut diperluas: kunci `menu.<kode>.name` dan `.description` beserta baris allowlist-nya, karena uji `menu-terminology` menuntut jumlah baris allowlist sama dengan jumlah baris katalog; versi pertama migrasi hanya memperluas katalog dan CI menangkapnya dengan kegagalan `expected 57 to be 59`. Tiga uji lulus (27/27 gabungan) dan kedua typecheck bersih. Yang belum ada: antarmuka mutasi, tautan dalam ke satu periode atau jurnal, dan penyuntingan grup konsolidasi.
+**Kesimpulan Indonesia:** Seluruh tujuh unit Wave A6 (A6-01 sampai A6-06b) sudah digabung ke `master` dengan SHA dan nomor PR tercatat di atas. Total 144 tes integrasi terfokus lulus, 88 pendaftaran rute `/accounting/*` pada 81 path unik sudah punya Window, dan 15 berkas migrasi terpasang sampai kepala `1795700000010`. Wave A6.1 kemudian menambahkan dua halaman baca-saja, `/finance/accounting` dan `/finance/statements`, beserta entri menu katalognya lewat migrasi `1795800000000`; menu katalog yang dilayani naik dari 57 ke 59 baris dan katalog Window dari 71 ke 73 baris. Katalog istilah juga ikut diperluas: kunci `menu.<kode>.name` dan `.description` beserta baris allowlist-nya, karena uji `menu-terminology` menuntut jumlah baris allowlist sama dengan jumlah baris katalog; versi pertama migrasi hanya memperluas katalog dan CI menangkapnya dengan kegagalan `expected 57 to be 59`. Tiga uji lulus (27/27 gabungan) dan kedua typecheck bersih.
+
+Wave A6.2 kemudian menutup sisa antarmuka mutasi: enam halaman tulis, satu per unit FIN-ADV-001 sampai 006, di rute `/finance/journals`, `/finance/open-items`, `/finance/budgets`, `/finance/bank-recon`, `/finance/fixed-assets`, dan `/finance/tax`, beserta entri menu katalognya lewat migrasi `1795900000000`. Katalog menu yang dilayani naik dari 59 ke 65 baris dan katalog Window dari 73 ke 79 baris; allowlist istilah tetap sama jumlahnya dengan katalog (65 = 65). Setiap pasangan izin yang dicantumkan adalah izin yang benar-benar diperiksa lapisan layanan, bukan izin yang lebih luas: `finance.accounting.manage` untuk kernel, `finance.accounting.configure` untuk open item, anggaran, rekonsiliasi bank, buku aset, dan pajak. Tidak ada izin baru dan tidak ada baris `role_permissions` yang ditulis. Empat uji lulus (32/32) dan kedua typecheck bersih. Yang belum ada: tautan dalam ke satu periode, jurnal, atau aset; penyuntingan grup konsolidasi; dan antarmuka untuk sembilan rute analitik `/accounting/*` di luar apa yang sudah dibaca `/finance/statements`.
 
 ## For future agent
 
-Wave A6 API-first closure is complete and merged; the merged commits are the authority, not this document. Wave A6.1 is now partly built: two read-only pages exist and the catalog rows that point at them exist, but the mutation surface does not, so do not describe Finance Advanced as operational.
+Wave A6 API-first closure is complete and merged; the merged commits are the authority, not this document. A6.1 and A6.2 are both built: eight Finance Advanced pages exist and the catalog rows that point at them exist. The mutation surface is now present for the six write units; consolidation and statement editing are still read-only by design, so do not describe Finance Advanced as complete.
 
-When adding a Finance Advanced page, five artifacts must change together: `ROUTE_REGISTRY` in `apps/api/src/domain/configuration/route-registry.ts`, `routeRegistry.ts` in the web mirror, `App.tsx`, the route window seed, and the menu seed. The last two live in a migration that follows the snapshot pattern in `1795800000000`: rename the current canonical function to a dated name, then redefine the canonical name as that snapshot UNIONed with the new `VALUES` rows. Miss any one of the five and a parity test fails.
+When adding a Finance Advanced page, six artifacts must change together: `ROUTE_REGISTRY` in `apps/api/src/domain/configuration/route-registry.ts`, `routeRegistry.ts` in the web mirror, `App.tsx`, the route window seed, the menu seed, and the terminology keys plus allowlist rows. The middle two of those live in a migration that follows the snapshot pattern in `1795800000000`. Miss any one and a parity test fails.
 
-Three traps that cost time here:
+Four traps that cost time here:
 
+- **Each migration must snapshot the name its own predecessor published, under a name of its own.** A6.2 first renamed to `config_menu_seed_epic3` and `config_route_window_seed_epic4` — the names A6.1 itself had already taken — so both renames were silent no-ops and the migration re-UNIONed onto the epic-3 catalogue, dropping A6.1's two pages from the seed while their tenant rows stayed behind. The symptom was `catalogue: 63` where 65 was expected, and an allowlist count that no longer matched. Each migration gets a fresh suffix (`_a61` here); reusing a predecessor's snapshot name is the failure.
 - A page menu cannot precede its route window. `app_menus_summary_target_check` requires a non-summary menu to carry a `window_id`, and the seed resolves that by joining the route window code.
 - Do not backfill existing tenants by calling `config_seed_menus_for_tenant()`. It replays the whole catalogue once per tenant. The dev database has 2617 tenants, and the statement does not finish. Write two scoped INSERTs keyed on the new codes instead.
 - Adding a menu means adding its terminology key and allowlist row in the same migration. `tests/menu-terminology.test.ts` asserts `count(menu_terminology_allowlist where field='name') == count(config_menu_seed())`, and the description pair likewise against menus with a non-null description. Extend the catalogue alone and that test fails. The allowlist is seeded from `config_menu_seed()`, so a menu with no key is a label no tenant could override.
 
 `npm run migrate` is broken on this machine for an unrelated reason: node-pg-migrate cannot parse a Windows drive-letter path (`ParseError: D:\: Unexpected token, expected ","`). It fails from any working directory, so it is not a cwd problem. A short runner that `require`s the migration module, collects the strings passed to `pgm.sql()`, and executes them through `pg` works. Run it from the repository root as a scratch file and delete it afterwards; it is not part of the tree.
+
+A consequence worth knowing before the next migration: because `npm run migrate` never runs here, the dev database can sit at an older head than `master` and say nothing. When A6.2 was first applied, the dev database was still pre-A6.1, so the rename guard found no `_epic3`/`_epic4` snapshot to protect and A6.1's catalogue was simply absent. Check the actual catalogue (`SELECT count(*) FROM config_menu_seed()`) against the expected count from the ledger before trusting a parity result here. `pgmigrations` is not maintained by the scratch runner either, so the table understates the real head.
 
 ```js
 const { Client } = require("pg");
