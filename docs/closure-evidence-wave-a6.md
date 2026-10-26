@@ -131,7 +131,7 @@ Finance Advanced screens were not part of Wave A6 API-first scope. A6.1 answers 
 
 ## Closure status
 
-Every A6 unit is merged to `master`. Documentation reconciliation landed as `a8e6ed5` (#64) and `00c9764` (#65). A6.1 landed as `08e2ea5` (#66) and its terminology gap as `9549709` (#67). A6.2 is uncommitted at the time of writing.
+Every A6 unit is merged to `master`. Documentation reconciliation landed as `a8e6ed5` (#64) and `00c9764` (#65). A6.1 landed as `08e2ea5` (#66), which is the squash-merge of the pages commit `b3e741b` and the terminology fix `9549709` — that fix was authored on the A6.1 branch and never pushed as its own commit, so `9549709` is not reachable from `master` and only `08e2ea5` should be cited as the merged artifact. A6.2 lands as #67.
 
 **Kesimpulan Indonesia:** Seluruh tujuh unit Wave A6 (A6-01 sampai A6-06b) sudah digabung ke `master` dengan SHA dan nomor PR tercatat di atas. Total 144 tes integrasi terfokus lulus, 88 pendaftaran rute `/accounting/*` pada 81 path unik sudah punya Window, dan 15 berkas migrasi terpasang sampai kepala `1795700000010`. Wave A6.1 kemudian menambahkan dua halaman baca-saja, `/finance/accounting` dan `/finance/statements`, beserta entri menu katalognya lewat migrasi `1795800000000`; menu katalog yang dilayani naik dari 57 ke 59 baris dan katalog Window dari 71 ke 73 baris. Katalog istilah juga ikut diperluas: kunci `menu.<kode>.name` dan `.description` beserta baris allowlist-nya, karena uji `menu-terminology` menuntut jumlah baris allowlist sama dengan jumlah baris katalog; versi pertama migrasi hanya memperluas katalog dan CI menangkapnya dengan kegagalan `expected 57 to be 59`. Tiga uji lulus (27/27 gabungan) dan kedua typecheck bersih.
 

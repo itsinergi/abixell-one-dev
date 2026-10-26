@@ -155,7 +155,7 @@ Thirteen delivered capability groups, evidence per `product-progress.md` §5:
 
 Every Wave A6 unit is built and every unit now carries closure evidence: the API
 surface from the seven build units, the two read-only pages from A6.1 (`08e2ea5`,
-terminology fix `9549709`), and the six write pages from A6.2 (migration
+terminology fix absorbed into it), and the six write pages from A6.2 (migration
 `1795900000000`). Evidence lives in
 [closure-evidence-wave-a6.md](closure-evidence-wave-a6.md), with the A6.2 catalog and
 test results in its "Menu catalog entries (Wave A6.2)" and "Evidence (Wave A6.2)"
