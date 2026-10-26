@@ -88,7 +88,7 @@ Deliberate details in `1795800000000`:
 - No permission is introduced. `finance.accounting.read` and `finance.accounting.configure` already exist (`1792000000000`) and are what the kernel services actually check, so the client gate matches the server.
 - Both catalogues keep their prior version under a dated name (`config_route_window_seed_epic4`, `config_menu_seed_epic3`) and the canonical name is redefined as that snapshot UNIONed with the new rows. `UNION`, not `UNION ALL`, so a duplicate code cannot be silently absorbed by `ON CONFLICT DO NOTHING` and stay invisible.
 - Existing tenants are backfilled by two scoped statements keyed on the two new codes, not by replaying `config_seed_menus_for_tenant()`. The dev database holds 2617 tenants and 165,243 `app_menus` rows, where the full replay does not finish. New tenants still seed complete, because both tenant triggers call the catalogue by name at execution time.
-- The terminology seed (`1787500000000`) wrote one key per menu code as the catalogue stood then. These two menus get no terminology key and no allowlist entry, so no tenant can rename them yet. That is deliberate: which labels are tenant-overridable is a separate decision.
+- The terminology seed (`1787500000000`) wrote one key per menu code in the catalogue as it stood then, and `tests/menu-terminology.test.ts` asserts that the allowlist and the catalogue hold the same number of rows. That assertion is the point: a menu with no key would be a label no tenant could ever override, and a key with no menu would be a term pointing at nothing. So these two menus get `menu.<code>.name` and `menu.<code>.description` keys and their allowlist rows, and they are tenant-overridable exactly like every other menu. This was caught by CI on the first push, not by review: the first version of the migration extended the catalogue alone and the test failed on `expected 57 to be 59`. The same migration must extend both catalogues or neither.
 
 ## Deliberate boundary
 
@@ -98,7 +98,7 @@ Finance Advanced screens were not part of Wave A6 API-first scope. Wave A6.1 ans
 
 Every A6 unit is merged to `master`. Documentation reconciliation landed as `a8e6ed5` (#64) and `00c9764` (#65). No A6 code remains uncommitted.
 
-**Kesimpulan Indonesia:** Seluruh tujuh unit Wave A6 (A6-01 sampai A6-06b) sudah digabung ke `master` dengan SHA dan nomor PR tercatat di atas. Total 144 tes integrasi terfokus lulus, 88 pendaftaran rute `/accounting/*` pada 81 path unik sudah punya Window, dan 15 berkas migrasi terpasang sampai kepala `1795700000010`. Wave A6.1 kemudian menambahkan dua halaman baca-saja, `/finance/accounting` dan `/finance/statements`, beserta entri menu katalognya lewat migrasi `1795800000000`; menu katalog yang dilayani naik dari 57 ke 59 baris dan katalog Window dari 71 ke 73 baris. Dua uji paritas lulus (8/8 dan 10/10) dan kedua typecheck bersih. Yang belum ada: antarmuka mutasi, tautan dalam ke satu periode atau jurnal, dan penyuntingan grup konsolidasi.
+**Kesimpulan Indonesia:** Seluruh tujuh unit Wave A6 (A6-01 sampai A6-06b) sudah digabung ke `master` dengan SHA dan nomor PR tercatat di atas. Total 144 tes integrasi terfokus lulus, 88 pendaftaran rute `/accounting/*` pada 81 path unik sudah punya Window, dan 15 berkas migrasi terpasang sampai kepala `1795700000010`. Wave A6.1 kemudian menambahkan dua halaman baca-saja, `/finance/accounting` dan `/finance/statements`, beserta entri menu katalognya lewat migrasi `1795800000000`; menu katalog yang dilayani naik dari 57 ke 59 baris dan katalog Window dari 71 ke 73 baris. Katalog istilah juga ikut diperluas: kunci `menu.<kode>.name` dan `.description` beserta baris allowlist-nya, karena uji `menu-terminology` menuntut jumlah baris allowlist sama dengan jumlah baris katalog; versi pertama migrasi hanya memperluas katalog dan CI menangkapnya dengan kegagalan `expected 57 to be 59`. Tiga uji lulus (27/27 gabungan) dan kedua typecheck bersih. Yang belum ada: antarmuka mutasi, tautan dalam ke satu periode atau jurnal, dan penyuntingan grup konsolidasi.
 
 ## For future agent
 
@@ -106,10 +106,11 @@ Wave A6 API-first closure is complete and merged; the merged commits are the aut
 
 When adding a Finance Advanced page, five artifacts must change together: `ROUTE_REGISTRY` in `apps/api/src/domain/configuration/route-registry.ts`, `routeRegistry.ts` in the web mirror, `App.tsx`, the route window seed, and the menu seed. The last two live in a migration that follows the snapshot pattern in `1795800000000`: rename the current canonical function to a dated name, then redefine the canonical name as that snapshot UNIONed with the new `VALUES` rows. Miss any one of the five and a parity test fails.
 
-Two traps that cost time here:
+Three traps that cost time here:
 
 - A page menu cannot precede its route window. `app_menus_summary_target_check` requires a non-summary menu to carry a `window_id`, and the seed resolves that by joining the route window code.
 - Do not backfill existing tenants by calling `config_seed_menus_for_tenant()`. It replays the whole catalogue once per tenant. The dev database has 2617 tenants, and the statement does not finish. Write two scoped INSERTs keyed on the new codes instead.
+- Adding a menu means adding its terminology key and allowlist row in the same migration. `tests/menu-terminology.test.ts` asserts `count(menu_terminology_allowlist where field='name') == count(config_menu_seed())`, and the description pair likewise against menus with a non-null description. Extend the catalogue alone and that test fails. The allowlist is seeded from `config_menu_seed()`, so a menu with no key is a label no tenant could override.
 
 `npm run migrate` is broken on this machine for an unrelated reason: node-pg-migrate cannot parse a Windows drive-letter path (`ParseError: D:\: Unexpected token, expected ","`). It fails from any working directory, so it is not a cwd problem. A short runner that `require`s the migration module, collects the strings passed to `pgm.sql()`, and executes them through `pg` works. Run it from the repository root as a scratch file and delete it afterwards; it is not part of the tree.
 

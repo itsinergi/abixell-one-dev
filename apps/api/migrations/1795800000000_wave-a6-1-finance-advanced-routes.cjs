@@ -31,10 +31,20 @@
  * already exist (1792000000000) and are what the kernel services actually
  * check. No permission is introduced, and no `role_permissions` row is written.
  *
- * Terminology (1787500000000) seeded a terminology key per menu code from the
- * catalogue as it stood then. Menus added here get no key and no allowlist
- * entry, so a tenant cannot rename them yet. That is deliberate: adding a key
- * is a separate decision about which labels are tenant-overridable.
+ * Terminology (1787500000000) seeded one key per menu code in the catalogue as
+ * it stood then, and `menu-terminology.test.ts` asserts that the allowlist and
+ * the catalogue have the SAME number of rows, on purpose: a menu without a key
+ * would be a label no tenant could ever override, and a key without a menu
+ * would be a term pointing at nothing. A menu added here is a menu the
+ * catalogue now has, so it needs its key and its allowlist row or that test
+ * fails. Step 5 therefore seeds `menu.<code>.name` for both pages and
+ * `menu.<code>.description` for each, since both carry a description.
+ *
+ * That makes these two labels tenant-overridable. That is the intended
+ * default for every menu in this app, not a decision made here: the allowlist
+ * is core data derived from the catalogue, and opting a menu out would mean
+ * inventing an exclusion mechanism that does not exist. Which labels are
+ * overridable is answered by "all of them", in 1787500000000.
  */
 exports.shorthands = undefined;
 
@@ -209,6 +219,45 @@ exports.up = (pgm) => {
       CROSS JOIN config_menu_seed() s
      WHERE s.code IN ('nav-finance-finance-accounting', 'nav-finance-finance-statements')
     ON CONFLICT (tenant_id, menu_id) DO NOTHING;
+
+    -- 5. Terminology keys and their allowlist rows ---------------------------
+    --    Allowlist rows are core (one per menu code, no tenant_id), but the
+    --    keys themselves are read by the served tree through a join, so they
+    --    live here rather than in step 4's per-tenant loop.
+    --
+    --    The schema Registry bounds a description override at 240 characters
+    --    (1787500000000); both descriptions below are well inside that.
+    INSERT INTO terminology_keys (code, default_label, description)
+    SELECT 'menu.' || s.code || '.name',
+           s.name,
+           'Tenant label override for the menu ' || s.code || ' (Epic 3 Wave 3, step 11).'
+      FROM config_menu_seed() s
+     WHERE s.code IN ('nav-finance-finance-accounting', 'nav-finance-finance-statements')
+    ON CONFLICT (code) DO NOTHING;
+
+    INSERT INTO terminology_keys (code, default_label, description)
+    SELECT 'menu.' || s.code || '.description',
+           s.description,
+           'Tenant description override for the menu ' || s.code || ' (Epic 3 Wave 3, step 11).'
+      FROM config_menu_seed() s
+     WHERE s.code IN ('nav-finance-finance-accounting', 'nav-finance-finance-statements')
+       AND s.description IS NOT NULL
+    ON CONFLICT (code) DO NOTHING;
+
+    INSERT INTO menu_terminology_allowlist (menu_code, field, terminology_key_id)
+    SELECT s.code, 'name', tk.id
+      FROM config_menu_seed() s
+      JOIN terminology_keys tk ON tk.code = 'menu.' || s.code || '.name'
+     WHERE s.code IN ('nav-finance-finance-accounting', 'nav-finance-finance-statements')
+    ON CONFLICT (menu_code, field) DO NOTHING;
+
+    INSERT INTO menu_terminology_allowlist (menu_code, field, terminology_key_id)
+    SELECT s.code, 'description', tk.id
+      FROM config_menu_seed() s
+      JOIN terminology_keys tk ON tk.code = 'menu.' || s.code || '.description'
+     WHERE s.code IN ('nav-finance-finance-accounting', 'nav-finance-finance-statements')
+       AND s.description IS NOT NULL
+    ON CONFLICT (menu_code, field) DO NOTHING;
   `);
 };
 
@@ -217,6 +266,20 @@ exports.down = (pgm) => {
     -- Remove the rows this migration created before dropping the functions
     -- that produced them. Unscoped by tenant on purpose: the up migration
     -- seeds every tenant, so the teardown has to match it.
+    --
+    -- Allowlist first: it references the terminology keys, and Postgres
+    -- refuses to delete a referenced row while the reference is in place.
+    -- Deleting the keys then cascades to any tenant override set against one,
+    -- so a rollback cannot leave an override behind for a later re-apply to
+    -- pick back up.
+    DELETE FROM menu_terminology_allowlist
+     WHERE menu_code IN ('nav-finance-finance-accounting', 'nav-finance-finance-statements');
+    DELETE FROM terminology_keys
+     WHERE code IN ('menu.nav-finance-finance-accounting.name',
+                    'menu.nav-finance-finance-accounting.description',
+                    'menu.nav-finance-finance-statements.name',
+                    'menu.nav-finance-finance-statements.description');
+
     DELETE FROM app_menu_tree WHERE menu_id IN (
       SELECT id FROM app_menus
        WHERE code IN ('nav-finance-finance-accounting', 'nav-finance-finance-statements')
