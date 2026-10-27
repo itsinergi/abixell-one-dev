@@ -203,8 +203,17 @@ indicator rates off by 10⁴, and the accounting hand-off forcing a float).
 
 `PRJ-ADV-003` (Gantt) and `PRJ-ADV-008` (project accounting) carry no independent weight —
 they are earned with the units they belong to. The same holds for `HSE-ADV-002`,
-`HSE-ADV-006`, and `HSE-ADV-007`. Wave A7 delivers the API, persistence, authorization,
-ledger, and verification surface; it deliberately delivers no Advanced UI for either module.
+`HSE-ADV-006`, and `HSE-ADV-007`. Wave A7 as merged delivered the API, persistence,
+authorization, ledger, and verification surface with no Advanced UI for either module.
+
+**The A7 UI followed, and earns no points.** Five pages now open on routes the A7 API has
+been serving since `1796000000000` / `1796100000000`: Project Delivery `/project-delivery/advanced/planning`
+and `/project-delivery/advanced/cost-ev`, HSE `/hse/advanced/investigations`,
+`/hse/advanced/permits-audit`, and `/hse/advanced/monitoring-capa`. Catalogue half is
+migration `1796400000000_wave-a7-advanced-ui-routes.cjs`; no new permission and no
+`role_permissions` row, because the A7 schema migrations already catalogued the five
+permissions the menus name. The weight was earned on the API surface in §7.2; a client
+page is a view over it, so the 27 stays 27 and the headline stays 335 / 353.
 
 Closing A7 moved the headline to **335 / 353 = 94.9%**.
 

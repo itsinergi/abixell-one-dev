@@ -1961,6 +1961,101 @@ export const api = {
   updateProjectDeliveryMilestone: (token: string, id: string, body: UpdateProjectDeliveryMilestoneBody) =>
     request<ProjectDeliveryMilestone>(`/project-delivery/milestones/${id}`, { method: "PATCH", token, body }),
 
+  // --- Project Delivery Advanced (Wave A7) ------------------------------
+  projectDeliveryWbs: (token: string, projectId: string) =>
+    request<ProjectWbsNodeView[]>(`/project-delivery/advanced/${projectId}/wbs`, { token }),
+  createProjectDeliveryWbs: (
+    token: string,
+    projectId: string,
+    body: { parentId?: string | null; code: string; name: string; description?: string | null; sortOrder?: number },
+  ) => request<ProjectWbsNode>(`/project-delivery/advanced/${projectId}/wbs`, { method: "POST", token, body }),
+  updateProjectDeliveryWbs: (
+    token: string,
+    wbsNodeId: string,
+    body: Partial<{ code: string; name: string; description: string | null; sortOrder: number }>,
+  ) => request<ProjectWbsNode>(`/project-delivery/advanced/wbs/${wbsNodeId}`, { method: "PATCH", token, body }),
+  projectDeliverySchedule: (token: string, projectId: string) =>
+    request<ProjectSchedule>(`/project-delivery/advanced/${projectId}/schedule`, { token }),
+  projectDeliveryGantt: (token: string, projectId: string) =>
+    request<GanttRow[]>(`/project-delivery/advanced/${projectId}/gantt`, { token }),
+  projectDeliveryDependencies: (token: string, projectId: string) =>
+    request<ProjectActivityDependency[]>(`/project-delivery/advanced/${projectId}/dependencies`, { token }),
+  createProjectDeliveryDependency: (
+    token: string,
+    body: { projectId: string; fromActivityId: string; toActivityId: string; type: string; lagDays?: number },
+  ) => request<ProjectActivityDependency>("/project-delivery/advanced/dependencies", { method: "POST", token, body }),
+  deleteProjectDeliveryDependency: (token: string, dependencyId: string) =>
+    request<void>(`/project-delivery/advanced/dependencies/${dependencyId}`, { method: "DELETE", token }),
+  projectDeliveryResources: (token: string, activeOnly?: boolean) => {
+    const qs = activeOnly ? "?activeOnly=true" : "";
+    return request<ProjectResource[]>(`/project-delivery/advanced/resources${qs}`, { token });
+  },
+  createProjectDeliveryResource: (
+    token: string,
+    body: { code: string; name: string; type: string; baseAvailability: string; unitOfMeasure: string },
+  ) => request<ProjectResource>("/project-delivery/advanced/resources", { method: "POST", token, body }),
+  createProjectDeliveryResourceAssignment: (
+    token: string,
+    projectId: string,
+    body: { resourceId: string; activityId: string; allocatedQuantity: string; startDate: string; endDate: string },
+  ) =>
+    request<ProjectResourceAssignment>(`/project-delivery/advanced/${projectId}/resource-assignments`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  projectDeliveryResourceLoading: (token: string, projectId: string, from: string, to: string) =>
+    request<ResourceLoadingResult>(
+      `/project-delivery/advanced/${projectId}/resource-loading?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      { token },
+    ),
+  projectDeliveryBaselines: (token: string, projectId: string) =>
+    request<ProjectBaseline[]>(`/project-delivery/advanced/${projectId}/baselines`, { token }),
+  createProjectDeliveryBaseline: (token: string, projectId: string, body: { code: string; description?: string | null }) =>
+    request<ProjectBaseline>(`/project-delivery/advanced/${projectId}/baselines`, { method: "POST", token, body }),
+  approveProjectDeliveryBaseline: (token: string, baselineId: string) =>
+    request<ProjectBaseline>(`/project-delivery/advanced/baselines/${baselineId}/approve`, { method: "POST", token }),
+  projectDeliveryBaselineVariance: (token: string, projectId: string, asOfDate: string) =>
+    request<BaselineVarianceResult>(
+      `/project-delivery/advanced/${projectId}/baseline-variance?asOfDate=${encodeURIComponent(asOfDate)}`,
+      { token },
+    ),
+  projectDeliveryCostEntries: (token: string, projectId: string, asOfDate?: string) => {
+    const qs = asOfDate ? `?asOfDate=${encodeURIComponent(asOfDate)}` : "";
+    return request<ProjectCostEntry[]>(`/project-delivery/advanced/${projectId}/cost-entries${qs}`, { token });
+  },
+  createProjectDeliveryCostEntry: (
+    token: string,
+    projectId: string,
+    body: { activityId: string; entryType: string; amount: string; idempotencyKey: string; entryDate: string; note?: string | null },
+  ) => request<ProjectCostEntry>(`/project-delivery/advanced/${projectId}/cost-entries`, { method: "POST", token, body }),
+  reverseProjectDeliveryCostEntry: (token: string, entryId: string, body?: { note?: string | null }) =>
+    request<ProjectCostEntry>(`/project-delivery/advanced/cost-entries/${entryId}/reverse`, {
+      method: "POST",
+      token,
+      body: body ?? {},
+    }),
+  postProjectDeliveryCostEntry: (token: string, entryId: string) =>
+    request<ProjectCostEntry>(`/project-delivery/advanced/cost-entries/${entryId}/post`, { method: "POST", token }),
+  projectDeliveryCostPosition: (token: string, projectId: string, asOfDate: string) =>
+    request<ProjectCostPosition>(
+      `/project-delivery/advanced/${projectId}/cost-position?asOfDate=${encodeURIComponent(asOfDate)}`,
+      { token },
+    ),
+  projectDeliveryEarnedValue: (token: string, projectId: string, asOfDate: string) =>
+    request<EarnedValueResult>(
+      `/project-delivery/advanced/${projectId}/earned-value?asOfDate=${encodeURIComponent(asOfDate)}`,
+      { token },
+    ),
+  projectDeliveryEarnedValueSnapshots: (token: string, projectId: string) =>
+    request<ProjectEarnedValueSnapshot[]>(`/project-delivery/advanced/${projectId}/earned-value-snapshots`, { token }),
+  createProjectDeliveryEarnedValueSnapshot: (token: string, projectId: string, body: { snapshotDate: string }) =>
+    request<ProjectEarnedValueSnapshot>(`/project-delivery/advanced/${projectId}/earned-value-snapshots`, {
+      method: "POST",
+      token,
+      body,
+    }),
+
   // --- HSE (Phase 7) ---------------------------------------------------
   hseRecords: (token: string, query: HseRecordQuery = {}) => {
     const qs = new URLSearchParams();
@@ -1989,6 +2084,148 @@ export const api = {
     request<HseFollowUp>(`/hse/records/${recordId}/follow-ups`, { method: "POST", token, body }),
   completeHseFollowUp: (token: string, recordId: string, followUpId: string, body: CompleteHseFollowUpBody) =>
     request<HseFollowUp>(`/hse/records/${recordId}/follow-ups/${followUpId}/complete`, { method: "POST", token, body }),
+
+  // --- HSE Advanced (Wave A7) ------------------------------------------
+  hseAdvFrameworks: (token: string) =>
+    request<HseInvestigationFramework[]>("/hse/advanced/frameworks", { token }),
+  createHseAdvFramework: (token: string, body: CreateHseFrameworkBody) =>
+    request<HseInvestigationFramework>("/hse/advanced/frameworks", { method: "POST", token, body }),
+
+  hseAdvInvestigations: (token: string) =>
+    request<HseInvestigation[]>("/hse/advanced/investigations", { token }),
+  createHseAdvInvestigation: (token: string, recordId: string, body: CreateHseInvestigationBody) =>
+    request<HseInvestigation>(`/hse/advanced/records/${recordId}/investigations`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  hseAdvInvestigation: (token: string, id: string) =>
+    request<HseInvestigation>(`/hse/advanced/investigations/${id}`, { token }),
+  updateHseAdvInvestigation: (token: string, id: string, body: UpdateHseInvestigationBody) =>
+    request<HseInvestigation>(`/hse/advanced/investigations/${id}`, { method: "PATCH", token, body }),
+
+  hseAdvRiskMatrix: (token: string) =>
+    request<HseRiskMatrix | null>("/hse/advanced/risk-matrix", { token }),
+  createHseAdvRiskMatrix: (token: string, body: CreateHseRiskMatrixBody) =>
+    request<HseRiskMatrix>("/hse/advanced/risk-matrices", { method: "POST", token, body }),
+  hseAdvRiskAssessments: (token: string, query: { hseRecordId?: string; projectId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    }
+    return request<HseRiskAssessment[]>(
+      `/hse/advanced/risk-assessments${qs.toString() ? `?${qs}` : ""}`,
+      { token },
+    );
+  },
+  createHseAdvRiskAssessment: (token: string, body: CreateHseRiskAssessmentBody) =>
+    request<HseRiskAssessment>("/hse/advanced/risk-assessments", { method: "POST", token, body }),
+  hseAdvRiskAssessment: (token: string, id: string) =>
+    request<HseRiskAssessment>(`/hse/advanced/risk-assessments/${id}`, { token }),
+
+  hseAdvPermits: (token: string) => request<HsePermit[]>("/hse/advanced/permits", { token }),
+  createHseAdvPermit: (token: string, body: CreateHsePermitBody) =>
+    request<HsePermit>("/hse/advanced/permits", { method: "POST", token, body }),
+  hseAdvPermit: (token: string, id: string) =>
+    request<HsePermitDetail>(`/hse/advanced/permits/${id}`, { token }),
+  updateHseAdvPermit: (token: string, id: string, body: Partial<CreateHsePermitBody>) =>
+    request<HsePermit>(`/hse/advanced/permits/${id}`, { method: "PATCH", token, body }),
+  actOnHseAdvPermit: (token: string, id: string, actionCode: string, comment?: string | null) =>
+    request<HsePermitDetail>(`/hse/advanced/permits/${id}/act`, {
+      method: "POST",
+      token,
+      body: { actionCode, comment: comment ?? null },
+    }),
+  startHseAdvPermitLifecycle: (token: string, id: string) =>
+    request<HsePermit>(`/hse/advanced/permits/${id}/start-lifecycle`, { method: "POST", token }),
+
+  hseAdvProgrammes: (token: string) =>
+    request<HseAuditProgramme[]>("/hse/advanced/programmes", { token }),
+  createHseAdvProgramme: (token: string, body: CreateHseProgrammeBody) =>
+    request<HseAuditProgramme>("/hse/advanced/programmes", { method: "POST", token, body }),
+  hseAdvOccurrences: (token: string, programmeId: string) =>
+    request<HseAuditOccurrence[]>(`/hse/advanced/programmes/${programmeId}/occurrences`, { token }),
+  scheduleHseAdvOccurrence: (token: string, programmeId: string, scheduledFor: string) =>
+    request<HseAuditOccurrence>(`/hse/advanced/programmes/${programmeId}/occurrences`, {
+      method: "POST",
+      token,
+      body: { scheduledFor },
+    }),
+  completeHseAdvOccurrence: (
+    token: string,
+    occurrenceId: string,
+    body: { results: AuditResult[]; notes?: string | null },
+  ) =>
+    request<HseAuditOccurrence>(`/hse/advanced/occurrences/${occurrenceId}/complete`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  hseAdvFindings: (token: string, occurrenceId: string) =>
+    request<HseAuditFinding[]>(`/hse/advanced/occurrences/${occurrenceId}/findings`, { token }),
+  createHseAdvFinding: (
+    token: string,
+    occurrenceId: string,
+    body: { findingType?: AuditFindingType; checklistItemCode?: string | null; description: string },
+  ) =>
+    request<HseAuditFinding>(`/hse/advanced/occurrences/${occurrenceId}/findings`, {
+      method: "POST",
+      token,
+      body,
+    }),
+
+  hseAdvMonitoringPoints: (token: string) =>
+    request<HseMonitoringPoint[]>("/hse/advanced/monitoring-points", { token }),
+  createHseAdvMonitoringPoint: (token: string, body: CreateHseMonitoringPointBody) =>
+    request<HseMonitoringPoint>("/hse/advanced/monitoring-points", { method: "POST", token, body }),
+  hseAdvReadings: (token: string, pointId: string, limit = 50) =>
+    request<HseMonitoringReading[]>(
+      `/hse/advanced/monitoring-points/${pointId}/readings?limit=${limit}`,
+      { token },
+    ),
+  recordHseAdvReading: (
+    token: string,
+    pointId: string,
+    body: { measuredAt: string; value: string; note?: string | null },
+  ) =>
+    request<HseMonitoringReading>(`/hse/advanced/monitoring-points/${pointId}/readings`, {
+      method: "POST",
+      token,
+      body,
+    }),
+
+  hseAdvCapas: (token: string) => request<HseCapa[]>("/hse/advanced/capas", { token }),
+  createHseAdvCapa: (token: string, body: CreateHseCapaBody) =>
+    request<HseCapa>("/hse/advanced/capas", { method: "POST", token, body }),
+  hseAdvCapa: (token: string, id: string) => request<HseCapaDetail>(`/hse/advanced/capas/${id}`, { token }),
+  changeHseAdvCapaStatus: (
+    token: string,
+    id: string,
+    body: { status: CapaStatus; verificationNotes?: string | null },
+  ) =>
+    request<HseCapa>(`/hse/advanced/capas/${id}/status`, { method: "PATCH", token, body }),
+  addHseAdvCapaAction: (
+    token: string,
+    id: string,
+    body: { description: string; ownerUserId?: string | null; dueDate?: string | null },
+  ) =>
+    request<HseCapaAction>(`/hse/advanced/capas/${id}/actions`, { method: "POST", token, body }),
+  completeHseAdvCapaAction: (
+    token: string,
+    id: string,
+    actionId: string,
+    body: { completionNotes?: string | null },
+  ) =>
+    request<HseCapaAction>(`/hse/advanced/capas/${id}/actions/${actionId}/complete`, {
+      method: "POST",
+      token,
+      body,
+    }),
+
+  hseAdvIndicators: (token: string) =>
+    request<HseIndicatorSnapshot[]>("/hse/advanced/indicators", { token }),
+  computeHseAdvIndicator: (token: string, body: ComputeHseIndicatorBody) =>
+    request<HseIndicatorSnapshot>("/hse/advanced/indicators", { method: "POST", token, body }),
 
   // --- Business Admin Console (Phase 11C/11F) ---------------------------
   adminOverview: (token: string) => request<AdminOverview>("/admin/overview", { token }),
@@ -3402,6 +3639,211 @@ export type UpdateProjectDeliveryMilestoneBody = Partial<CreateProjectDeliveryMi
   achievementNote?: string | null;
 };
 
+// --- Project Delivery Advanced types (Phase 3) --------------------------
+
+// WBS (Work Breakdown Structure)
+export type ProjectWbsNode = {
+  id: string;
+  projectId: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type ProjectWbsNodeView = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  depth: number;
+  rolledUpCost: string; // money 2dp
+  activityCount: number;
+  children: ProjectWbsNodeView[];
+};
+
+// Dependencies and scheduling
+export type ProjectActivityDependency = {
+  id: string;
+  projectId: string;
+  fromActivityId: string;
+  toActivityId: string;
+  type: "FS" | "SS" | "FF" | "SF"; // Finish-Start, Start-Start, Finish-Finish, Start-Finish
+  lagDays: number;
+  createdAt: string;
+};
+
+export type ScheduleActivityResult = {
+  activityId: string;
+  code: string;
+  name: string;
+  plannedStart: string | null; // YYYY-MM-DD
+  plannedFinish: string | null; // YYYY-MM-DD
+  earlyStart: string | null;
+  earlyFinish: string | null;
+  lateStart: string | null;
+  lateFinish: string | null;
+  totalSlack: number; // days
+  isCritical: boolean;
+};
+
+export type ProjectSchedule = {
+  projectId: string;
+  activities: ScheduleActivityResult[];
+  projectFinish: string | null;
+  criticalPath: string[]; // activity IDs
+};
+
+export type GanttRow = {
+  activityId: string;
+  code: string;
+  name: string;
+  plannedStart: string | null;
+  plannedFinish: string | null;
+  actualStart: string | null;
+  actualFinish: string | null;
+  percentComplete: number;
+  wbsNodeId: string | null;
+};
+
+// Resources and loading
+export type ProjectResource = {
+  id: string;
+  code: string;
+  name: string;
+  type: "labor" | "equipment" | "material";
+  baseAvailability: string; // units per period, 4dp
+  unitOfMeasure: string;
+  createdAt: string;
+};
+
+export type ProjectResourceAssignment = {
+  id: string;
+  projectId: string;
+  resourceId: string;
+  activityId: string;
+  allocatedQuantity: string; // 4dp
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  createdAt: string;
+};
+
+export type ResourceOverallocation = {
+  resourceId: string;
+  resourceCode: string;
+  periodStart: string; // YYYY-MM-DD
+  periodEnd: string;
+  allocatedQuantity: string; // 4dp
+  availableQuantity: string; // 4dp
+};
+
+export type ResourceLoadingResult = {
+  projectId: string;
+  overallocations: ResourceOverallocation[];
+  isLevellable: boolean;
+};
+
+// Baselines and variance
+export type ProjectBaseline = {
+  id: string;
+  projectId: string;
+  code: string;
+  description: string | null;
+  status: "draft" | "approved" | "superseded";
+  approvedAt: string | null;
+  approvedByUserId: string | null;
+  createdAt: string;
+};
+
+export type ProjectBaselineLine = {
+  id: string;
+  baselineId: string;
+  activityId: string;
+  plannedCost: string; // money 2dp
+  plannedQuantity: string; // 4dp
+};
+
+export type BaselineVarianceResult = {
+  projectId: string;
+  baselineId: string;
+  asOfDate: string; // YYYY-MM-DD
+  activities: Array<{
+    activityId: string;
+    code: string;
+    name: string;
+    plannedCost: string;
+    actualCost: string;
+    variance: string; // actualCost - plannedCost
+    percentVariance: number;
+  }>;
+};
+
+// Cost entries and position
+export type ProjectCostEntry = {
+  id: string;
+  projectId: string;
+  activityId: string;
+  entryType: "actual" | "commitment" | "adjustment" | "reversal";
+  amount: string; // money 2dp
+  idempotencyKey: string;
+  entryDate: string; // YYYY-MM-DD
+  recordedByUserId: string;
+  recordedAt: string; // ISO timestamp
+  note: string | null;
+  postingStatus: "emitted" | "skipped_duplicate" | null;
+};
+
+export type ProjectCostPosition = {
+  projectId: string;
+  asOfDate: string; // YYYY-MM-DD
+  actualCost: string; // money 2dp
+  commitmentCost: string; // money 2dp
+  estimateToComplete: string; // money 2dp
+  estimateAtCompletion: string; // money 2dp
+  budgetAtCompletion: string; // money 2dp
+  costVariance: string; // money 2dp: estimateAtCompletion - budgetAtCompletion
+  costPerformanceIndex: number;
+};
+
+// Earned value
+export type ProjectEarnedValueSnapshot = {
+  id: string;
+  projectId: string;
+  snapshotDate: string; // YYYY-MM-DD
+  plannedValue: string; // money 2dp
+  earnedValue: string; // money 2dp
+  actualCost: string; // money 2dp
+  schedulePerformanceIndex: number;
+  costPerformanceIndex: number;
+};
+
+export type EarnedValueResult = {
+  projectId: string;
+  asOfDate: string; // YYYY-MM-DD
+  plannedValue: string; // money 2dp
+  earnedValue: string; // money 2dp
+  actualCost: string; // money 2dp
+  scheduleVariance: string; // money 2dp
+  costVariance: string; // money 2dp
+  schedulePerformanceIndex: number;
+  costPerformanceIndex: number;
+  budgetAtCompletion: string; // money 2dp
+  estimateAtCompletion: string; // money 2dp
+  estimateToComplete: string; // money 2dp
+  varianceAtCompletion: string; // money 2dp
+  activities: Array<{
+    activityId: string;
+    code: string;
+    name: string;
+    percentComplete: number;
+    plannedValue: string;
+    earnedValue: string;
+    actualCost: string;
+  }>;
+};
+
 // --- HSE types (Phase 7) -----------------------------------------------
 
 export type HseRecordType = "incident" | "observation";
@@ -3522,6 +3964,378 @@ export type CreateHseFollowUpBody = {
 
 export type CompleteHseFollowUpBody = {
   completionNotes?: string | null;
+};
+
+// --- HSE Advanced types (Wave A7) ---------------------------------------
+
+export type RiskAssessmentType = "jsa" | "hira";
+export type AuditProgrammeType = "inspection" | "audit";
+export type AuditFindingType = "observation" | "nonconformity" | "major_nonconformity";
+export type CapaActionType = "corrective" | "preventive";
+export type CapaStatus = "open" | "in_progress" | "verification" | "closed" | "cancelled";
+
+export type ContributingFactor = {
+  category: string;
+  description: string;
+  isRootCause: boolean;
+};
+
+export type RiskControl = {
+  description: string;
+  controlType: string | null;
+  residualLikelihood: number | null;
+  residualSeverity: number | null;
+};
+
+export type PermitIsolationCondition = {
+  conditionType: string;
+  description: string;
+  verifiedAt: string | null;
+};
+
+export type AuditChecklistItem = {
+  code: string;
+  question: string;
+  isMandatory: boolean;
+};
+
+export type AuditResult = {
+  itemCode: string;
+  result: string;
+  note: string | null;
+};
+
+export type RiskScalePoint = {
+  value: number;
+  label: string;
+};
+
+export type HseInvestigationFramework = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  causeCategories: string[];
+  version: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseInvestigation = {
+  id: string;
+  hseRecordId: string;
+  frameworkId: string;
+  frameworkCode: string;
+  frameworkVersion: number;
+  leadInvestigatorUserId: string | null;
+  startedAt: string;
+  concludedAt: string | null;
+  findings: string | null;
+  rootCause: string | null;
+  contributingFactors: ContributingFactor[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseRiskMatrix = {
+  id: string;
+  code: string;
+  name: string;
+  likelihoodScale: RiskScalePoint[];
+  severityScale: RiskScalePoint[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseRiskMatrixCell = {
+  id: string;
+  matrixId: string;
+  likelihood: number;
+  severity: number;
+  bandCode: string;
+  score: string;
+};
+
+export type HseRiskAssessment = {
+  id: string;
+  hseRecordId: string | null;
+  projectId: string | null;
+  assessmentType: RiskAssessmentType;
+  title: string;
+  taskDescription: string | null;
+  matrixId: string;
+  likelihood: number;
+  severity: number;
+  bandCode: string;
+  score: string;
+  controls: RiskControl[];
+  residualLikelihood: number | null;
+  residualSeverity: number | null;
+  residualBandCode: string | null;
+  residualScore: string | null;
+  assessedByUserId: string | null;
+  assessedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HsePermit = {
+  id: string;
+  permitNumber: string;
+  permitTypeCode: string;
+  title: string;
+  description: string | null;
+  organizationUnitId: string | null;
+  projectId: string | null;
+  siteId: string | null;
+  locationDetail: string | null;
+  validFrom: string;
+  validTo: string;
+  isolationConditions: PermitIsolationCondition[];
+  riskAssessmentId: string | null;
+  workflowInstanceId: string | null;
+  requestedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Lifecycle state lives in the Workflow Engine, never on the permit row (ADR-0027 §4). */
+export type HsePermitDetail = {
+  permit: HsePermit;
+  status: { stepCode: string | null; stepName: string | null; instanceStatus: string } | null;
+  availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type HseAuditProgramme = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  programmeType: AuditProgrammeType;
+  frequencyDays: number;
+  checklist: AuditChecklistItem[];
+  organizationUnitId: string | null;
+  siteId: string | null;
+  ownerUserId: string | null;
+  isActive: boolean;
+  lastScheduledFor: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseAuditOccurrence = {
+  id: string;
+  programmeId: string;
+  scheduledFor: string;
+  performedAt: string | null;
+  performedByUserId: string | null;
+  results: AuditResult[];
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseAuditFinding = {
+  id: string;
+  occurrenceId: string;
+  findingType: AuditFindingType;
+  checklistItemCode: string | null;
+  description: string;
+  createdAt: string;
+};
+
+export type HseMonitoringPoint = {
+  id: string;
+  code: string;
+  name: string;
+  parameterCode: string;
+  unit: string;
+  /** NUMERIC as text; null means that side is unbounded. */
+  thresholdMin: string | null;
+  thresholdMax: string | null;
+  organizationUnitId: string | null;
+  siteId: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseMonitoringReading = {
+  id: string;
+  pointId: string;
+  measuredAt: string;
+  /** NUMERIC as text. */
+  value: string;
+  isBreach: boolean;
+  recordedByUserId: string | null;
+  note: string | null;
+  createdAt: string;
+};
+
+export type HseCapa = {
+  id: string;
+  capaNumber: string;
+  title: string;
+  description: string | null;
+  hseRecordId: string | null;
+  investigationId: string | null;
+  auditFindingId: string | null;
+  monitoringReadingId: string | null;
+  coreFollowUpId: string | null;
+  rootCause: string | null;
+  actionType: CapaActionType;
+  status: CapaStatus;
+  ownerUserId: string | null;
+  dueDate: string | null;
+  verificationNotes: string | null;
+  verifiedAt: string | null;
+  verifiedByUserId: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseCapaAction = {
+  id: string;
+  capaId: string;
+  description: string;
+  ownerUserId: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  completionNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HseCapaDetail = {
+  capa: HseCapa;
+  actions: HseCapaAction[];
+};
+
+export type HseIndicatorSnapshot = {
+  id: string;
+  organizationUnitId: string | null;
+  windowStart: string;
+  windowEnd: string;
+  exposureHours: string | null;
+  nearMissCount: number;
+  observationCount: number;
+  inspectionCount: number;
+  capaOpenedCount: number;
+  capaClosedCount: number;
+  capaClosureRate: string | null;
+  permitCount: number;
+  incidentCount: number;
+  lostTimeIncidentCount: number;
+  lostDays: number;
+  incidentFrequencyRate: string | null;
+  severityRate: string | null;
+  createdAt: string;
+};
+
+export type CreateHseFrameworkBody = {
+  code: string;
+  name: string;
+  description?: string | null;
+  causeCategories?: string[];
+};
+
+export type CreateHseInvestigationBody = {
+  frameworkId: string;
+  leadInvestigatorUserId?: string | null;
+};
+
+export type UpdateHseInvestigationBody = {
+  leadInvestigatorUserId?: string | null;
+  findings?: string | null;
+  rootCause?: string | null;
+  contributingFactors?: ContributingFactor[];
+  concluded?: boolean;
+};
+
+export type CreateHseRiskMatrixBody = {
+  code: string;
+  name: string;
+  likelihoodScale: RiskScalePoint[];
+  severityScale: RiskScalePoint[];
+  cells: { likelihood: number; severity: number; bandCode: string; score: string }[];
+};
+
+export type CreateHseRiskAssessmentBody = {
+  hseRecordId?: string | null;
+  projectId?: string | null;
+  assessmentType: RiskAssessmentType;
+  title: string;
+  taskDescription?: string | null;
+  matrixId?: string;
+  likelihood: number;
+  severity: number;
+  controls?: RiskControl[];
+  residualLikelihood?: number | null;
+  residualSeverity?: number | null;
+};
+
+export type CreateHsePermitBody = {
+  permitTypeCode: string;
+  title: string;
+  description?: string | null;
+  organizationUnitId?: string | null;
+  projectId?: string | null;
+  siteId?: string | null;
+  locationDetail?: string | null;
+  validFrom: string;
+  validTo: string;
+  isolationConditions?: PermitIsolationCondition[];
+  riskAssessmentId?: string | null;
+};
+
+export type CreateHseProgrammeBody = {
+  code: string;
+  name: string;
+  description?: string | null;
+  programmeType?: AuditProgrammeType;
+  frequencyDays: number;
+  checklist?: AuditChecklistItem[];
+  organizationUnitId?: string | null;
+  siteId?: string | null;
+  ownerUserId?: string | null;
+};
+
+export type CreateHseMonitoringPointBody = {
+  code: string;
+  name: string;
+  parameterCode: string;
+  unit: string;
+  thresholdMin?: string | null;
+  thresholdMax?: string | null;
+  organizationUnitId?: string | null;
+  siteId?: string | null;
+};
+
+export type CreateHseCapaBody = {
+  title: string;
+  description?: string | null;
+  hseRecordId?: string | null;
+  investigationId?: string | null;
+  auditFindingId?: string | null;
+  monitoringReadingId?: string | null;
+  coreFollowUpId?: string | null;
+  rootCause?: string | null;
+  actionType?: CapaActionType;
+  ownerUserId?: string | null;
+  dueDate?: string | null;
+};
+
+export type ComputeHseIndicatorBody = {
+  windowStart: string;
+  windowEnd: string;
+  organizationUnitId?: string | null;
+  exposureHours?: string | null;
+  lostDays?: number;
+  nearMissCategoryCode?: string | null;
+  lostTimeSeverityCode?: string | null;
 };
 
 // --- Asset types (Phase 5) ---------------------------------------------

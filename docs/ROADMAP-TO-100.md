@@ -104,9 +104,11 @@ evidence earns 0 under the `COMPLETED = full weight` rule.
 | HSE — environmental monitoring + CAPA + indicators (HSE-ADV-005/006/007) | 3 | 3 | 3 | `47dda03` (#68) |
 | **Total** | **27** | **27** | **27** | |
 
-Closing Wave A7 moved the headline to **335 / 353 = 94.9%**. Wave A7 deliberately
-delivers no Project Delivery or HSE Advanced UI — the API, persistence, authorization,
-ledger, and verification surface is the delivered scope. Evidence:
+Closing Wave A7 moved the headline to **335 / 353 = 94.9%**. As merged, A7 delivered the
+API, persistence, authorization, ledger, and verification surface with no Advanced UI.
+The UI followed on 2026-10-27 — five pages catalogued by migration
+`1796400000000_wave-a7-advanced-ui-routes.cjs` — and earns nothing further, since the 27
+points were earned on the surface those pages view. Evidence:
 [closure-evidence-wave-a7.md](closure-evidence-wave-a7.md).
 
 ## 2. Recommended Phase Sequence

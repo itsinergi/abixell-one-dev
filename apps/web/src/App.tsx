@@ -63,8 +63,13 @@ import { FinancePeriodsPage } from "./modules/finance/FinancePeriodsPage";
 import { HseRegisterPage } from "./modules/hse/HseRegisterPage";
 import { HseReportPage } from "./modules/hse/HseReportPage";
 import { HseDetailPage } from "./modules/hse/HseDetailPage";
+import { HseAdvancedInvestigationsPage } from "./modules/hse/HseAdvancedInvestigationsPage";
+import { HseAdvancedPermitsAuditPage } from "./modules/hse/HseAdvancedPermitsAuditPage";
+import { HseAdvancedMonitoringCapaPage } from "./modules/hse/HseAdvancedMonitoringCapaPage";
 import { ProjectDeliveryPage } from "./modules/project-delivery/ProjectDeliveryPage";
 import { ProjectDeliveryDetailPage } from "./modules/project-delivery/ProjectDeliveryDetailPage";
+import { ProjectDeliveryAdvancedPlanningPage } from "./modules/project-delivery/ProjectDeliveryAdvancedPlanningPage";
+import { ProjectDeliveryAdvancedCostEVPage } from "./modules/project-delivery/ProjectDeliveryAdvancedCostEVPage";
 import { ReportingInsightPage } from "./modules/reporting-insight/ReportingInsightPage";
 import { AdminConsolePage } from "./pages/admin/console/AdminConsolePage";
 import { AdminRoleDefinitionPage } from "./pages/admin/console/AdminRoleDefinitionPage";
@@ -199,9 +204,19 @@ export default function App() {
           <Route path="hse" element={<HseRegisterPage />} />
           <Route path="hse/report" element={<HseReportPage />} />
           <Route path="hse/records/:recordId" element={<HseDetailPage />} />
+          {/* Wave A7 — HSE Advanced. Three screens on the routes the A7 API
+              already serves; the Advanced permissions gate them. */}
+          <Route path="hse/advanced/investigations" element={<HseAdvancedInvestigationsPage />} />
+          <Route path="hse/advanced/permits-audit" element={<HseAdvancedPermitsAuditPage />} />
+          <Route path="hse/advanced/monitoring-capa" element={<HseAdvancedMonitoringCapaPage />} />
           {/* Phase 8 — Project Delivery */}
           <Route path="project-delivery" element={<ProjectDeliveryPage />} />
           <Route path="project-delivery/:projectId" element={<ProjectDeliveryDetailPage />} />
+          {/* Wave A7 — Project Delivery Advanced. Declared after the detail
+              route so `/project-delivery/:projectId` never shadows them; the
+              segment counts differ anyway. */}
+          <Route path="project-delivery/advanced/planning" element={<ProjectDeliveryAdvancedPlanningPage />} />
+          <Route path="project-delivery/advanced/cost-ev" element={<ProjectDeliveryAdvancedCostEVPage />} />
           {/* Phase 9 — Reporting & Operational Insight */}
           <Route path="reporting" element={<ReportingInsightPage />} />
           {/* Phase 11C — Business Admin Console (read-only) */}
