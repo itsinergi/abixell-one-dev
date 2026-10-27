@@ -174,6 +174,8 @@ export const WINDOW_RULES: WindowRule[] = [
   { method: "*", apiPath: "/workforce/advanced/shifts", windowCode: "route:/workforce/planning" },
   { method: "*", apiPath: "/employees/:id", windowCode: "route:/employees/:employeeId" },
   { method: "*", apiPath: "/employees", windowCode: "route:/employees" },
+  { method: "*", apiPath: "/placements/:id", windowCode: "route:/employees" },
+  { method: "*", apiPath: "/placements", windowCode: "route:/employees" },
   { method: "*", apiPath: "/positions", windowCode: "route:/employees" },
 
   // --- supply_chain --------------------------------------------------------
