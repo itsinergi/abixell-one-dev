@@ -18,12 +18,23 @@
  *
  * Disabling FK enforcement also disables ON DELETE CASCADE, so the tenant rows
  * go and every child row stays. That is why the delete is followed by a sweep
- * that removes child rows whose tenant is gone. Without it each run leaves
- * orphans behind — app_windows alone contributes one row per registered route
- * per tenant, so the leak is large enough to distort row counts.
+ * that removes child rows whose parent is gone.
+ *
+ * The sweep walks the WHOLE foreign-key graph to a fixpoint, not just the edges
+ * that point at `tenants`. Sweeping one hop was the original bug: it cleared
+ * `tenant_id` children but left everything hanging off `roles`, `users`,
+ * `workflow_instances` and friends. On 2026-10-27 that had accumulated to
+ * 881,687 orphan rows, 726,069 of them in `role_permissions` (76 MB for what
+ * should have been ~527 grants). Each pass deletes rows whose parent is
+ * missing; passes repeat until one deletes nothing, because a row can only
+ * become an orphan after its own parent is swept.
+ *
+ * Rows reachable from a live tenant are never swept: the predicate is "my
+ * parent does not exist", and a live tenant's parent always does.
  *
  * Usage:
- *   npx tsx scripts/cleanup-test-tenants.ts
+ *   npx tsx scripts/cleanup-test-tenants.ts            # sweep, then report
+ *   npx tsx scripts/cleanup-test-tenants.ts --dry-run  # report only
  */
 
 import { Pool } from "pg";
@@ -44,27 +55,137 @@ const TEST_CODE_PATTERNS = [
   "ak-%", "akrev-%", "bp-%", "e5g%", "ec-%", "mt-%", "p4sod-%",
 ];
 
+type ForeignKey = {
+  /** Child table, schema-qualified and quoted. */
+  child: string;
+  /** Parent table, schema-qualified and quoted. */
+  parent: string;
+  /** Child columns, in FK order. */
+  childCols: string[];
+  /** Parent columns, in FK order. */
+  parentCols: string[];
+};
+
 /**
- * Tables holding a direct FK to tenants (no intermediate hop). Read from the
- * catalogue rather than hardcoded, so a new tenant-scoped table is swept
- * automatically instead of silently joining the orphan set.
+ * Every single- and multi-column foreign key in `public`, read from the
+ * catalogue so a new tenant-scoped table is swept automatically.
+ *
+ * FKs between two non-public tables are skipped: nothing outside `public` can
+ * hang off a tenant, and a cross-schema predicate would need permissions this
+ * script should not require.
  */
-async function tenantScopedTables(client: import("pg").PoolClient): Promise<string[]> {
-  const result = await client.query<{ tbl: string }>(
-    `SELECT DISTINCT c.relname AS tbl
+async function allForeignKeys(client: import("pg").PoolClient): Promise<ForeignKey[]> {
+  const { rows } = await client.query<{
+    child: string;
+    parent: string;
+    child_cols: string[];
+    parent_cols: string[];
+  }>(
+    `SELECT format('%I.%I', cn.nspname, c.relname)  AS child,
+            format('%I.%I', pn.nspname, p.relname)  AS parent,
+            array_agg(ca.attname::text ORDER BY k.ord) AS child_cols,
+            array_agg(pa.attname::text ORDER BY k.ord) AS parent_cols
        FROM pg_constraint con
-       JOIN pg_class c ON c.oid = con.conrelid
-       JOIN pg_class rt ON rt.oid = con.confrelid
-       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_class c   ON c.oid = con.conrelid
+       JOIN pg_namespace cn ON cn.oid = c.relnamespace
+       JOIN pg_class p   ON p.oid = con.confrelid
+       JOIN pg_namespace pn ON pn.oid = p.relnamespace
+       LEFT JOIN LATERAL unnest(con.conkey, con.confkey)
+              WITH ORDINALITY AS k(child_attnum, parent_attnum, ord) ON true
+       JOIN pg_attribute ca ON ca.attrelid = con.conrelid
+                           AND ca.attnum  = k.child_attnum
+       JOIN pg_attribute pa ON pa.attrelid = con.confrelid
+                           AND pa.attnum  = k.parent_attnum
       WHERE con.contype = 'f'
-        AND rt.relname = 'tenants'
-        AND n.nspname = 'public'
-      ORDER BY 1`,
+        AND cn.nspname = 'public'
+        AND pn.nspname = 'public'
+        AND p.relkind IN ('r', 'p')
+      GROUP BY con.oid, cn.nspname, c.relname, pn.nspname, p.relname
+      ORDER BY child, parent`,
   );
-  return result.rows.map((r) => r.tbl);
+  return rows.map((r) => ({
+    child: r.child,
+    parent: r.parent,
+    childCols: r.child_cols,
+    parentCols: r.parent_cols,
+  }));
+}
+
+/**
+ * One pass: delete every child row whose parent is missing.
+ *
+ * `IS NOT DISTINCT FROM` rather than `=`, so a nullable FK column matches the
+ * same way the FK constraint does. A row with any NULL in the key is skipped:
+ * Postgres does not enforce a partially-NULL FK, so those rows are not orphans
+ * and deleting them would destroy live data.
+ */
+async function sweepOnce(
+  client: import("pg").PoolClient,
+  fks: ForeignKey[],
+  dryRun: boolean,
+): Promise<number> {
+  let total = 0;
+  for (const fk of fks) {
+    const notNull = fk.childCols.map((c) => `x."${c}" IS NOT NULL`).join(" AND ");
+    const matches = fk.childCols
+      .map((c, i) => `p."${fk.parentCols[i]}" IS NOT DISTINCT FROM x."${c}"`)
+      .join(" AND ");
+    const sql = dryRun
+      ? `SELECT count(*)::int AS n FROM ${fk.child} x
+          WHERE ${notNull}
+            AND NOT EXISTS (SELECT 1 FROM ${fk.parent} p WHERE ${matches})`
+      : `DELETE FROM ${fk.child} x
+          WHERE ${notNull}
+            AND NOT EXISTS (SELECT 1 FROM ${fk.parent} p WHERE ${matches})`;
+    try {
+      const res = await client.query<{ n: number }>(sql);
+      const n = dryRun ? (res.rows[0]?.n ?? 0) : (res.rowCount ?? 0);
+      if (n > 0) {
+        total += n;
+        console.log(`  ${dryRun ? "would delete" : "deleted"} ${n} orphan row(s) from ${fk.child}`);
+      }
+    } catch (err) {
+      // A table can be locked or a trigger can refuse the delete; report and
+      // keep sweeping rather than aborting the whole run.
+      console.warn(`  skipped ${fk.child}: ${(err as Error).message}`);
+    }
+  }
+  return total;
+}
+
+/** Repeat passes until one deletes nothing: an orphan can only appear after
+ * its own parent was swept in an earlier pass. */
+async function sweepOrphans(
+  client: import("pg").PoolClient,
+  dryRun: boolean,
+): Promise<number> {
+  const fks = await allForeignKeys(client);
+  // A dry run cannot reach a fixpoint: nothing is deleted, so every pass finds
+  // the same rows. One pass is the honest answer — it is also what the real run
+  // would remove for rows orphaned today, before cascading removes the rest.
+  if (dryRun) {
+    const n = await sweepOnce(client, fks, true);
+    console.log(
+      `Dry run: ${n} orphan row(s) are orphaned right now; a real run also removes\n` +
+        `rows that only become orphaned after their own parent is swept.`,
+    );
+    return n;
+  }
+  let grand = 0;
+  for (let pass = 1; pass <= 12; pass++) {
+    const n = await sweepOnce(client, fks, dryRun);
+    grand += n;
+    if (n === 0) {
+      console.log(`Sweep settled after ${pass - 1} productive pass(es).`);
+      break;
+    }
+    console.log(`Pass ${pass}: ${n} row(s).`);
+  }
+  return grand;
 }
 
 async function cleanupTestTenants() {
+  const dryRun = process.argv.includes("--dry-run");
   const pool = new Pool({ connectionString: DATABASE_URL });
   const client = await pool.connect();
 
@@ -93,20 +214,34 @@ async function cleanupTestTenants() {
       // Session-local: disables FK enforcement and row triggers for this
       // transaction only. Reset automatically on COMMIT/ROLLBACK. Note this
       // also disables ON DELETE CASCADE, which is why the sweep below exists.
-      await client.query("SET LOCAL session_replication_role = replica");
-      const deleteResult = await client.query(
-        `DELETE FROM tenants WHERE code LIKE ANY($1)`,
-        [TEST_CODE_PATTERNS],
-      );
-      let swept = 0;
-      for (const table of await tenantScopedTables(client)) {
-        const res = await client.query(
-          `DELETE FROM "${table}" WHERE tenant_id NOT IN (SELECT id FROM tenants)`,
+      if (!dryRun) await client.query("SET LOCAL session_replication_role = replica");
+      const deleteResult = dryRun
+        ? await client.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM tenants WHERE code LIKE ANY($1)`,
+            [TEST_CODE_PATTERNS],
+          )
+        : await client.query(
+            `DELETE FROM tenants WHERE code LIKE ANY($1)`,
+            [TEST_CODE_PATTERNS],
+          );
+      const deleted = dryRun
+        ? (deleteResult.rows[0]?.n ?? 0)
+        : (deleteResult.rowCount ?? 0);
+
+      console.log(`\nSweeping orphan rows across every foreign-key edge...`);
+      const swept = await sweepOrphans(client, dryRun);
+
+      if (dryRun) {
+        await client.query("ROLLBACK");
+        console.log(
+          `\nDry run: would delete ${deleted} tenant(s) and ${swept} orphan row(s). Nothing was changed.`,
         );
-        swept += res.rowCount ?? 0;
+      } else {
+        await client.query("COMMIT");
+        console.log(
+          `\nDeleted ${deleted} tenant(s); swept ${swept} orphaned child row(s).`,
+        );
       }
-      await client.query("COMMIT");
-      console.log(`Deleted ${deleteResult.rowCount} tenant(s); swept ${swept} orphaned child row(s).`);
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;
