@@ -35,6 +35,7 @@ import {
   activateAllModules,
   sessionTokenFor,
   createInternalUser,
+  createReadOnlyRole,
   authHeader,
 } from "./helpers.js";
 
@@ -150,15 +151,30 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
     });
     leBId = (leBRes.json() as { id: string }).id;
 
+    // Legal Entities are created as draft; placement requires active.
+    for (const id of [leAId, leBId]) {
+      const act = await app.inject({
+        method: "POST",
+        url: `/legal-entities/${id}/status`,
+        headers: authHeader(adminToken),
+        payload: { status: "active" },
+      });
+      if (act.statusCode >= 300) throw new Error(`LE activate failed: ${act.statusCode} ${act.body}`);
+    }
+
+    const otherAdmin = await provisionFirstAdmin({
+      tenantId: otherTenantId,
+      email: `admin-other-${STAMP}@g2.test`,
+      password: "TestPass123!",
+    });
+    const otherAdminToken = await sessionTokenFor({
+      userId: otherAdmin.userId,
+      tenantId: otherTenantId,
+    });
     const otherLERes = await app.inject({
       method: "POST",
       url: "/legal-entities",
-      headers: authHeader(
-        await sessionTokenFor({ userId: (await pool.query(`SELECT id FROM users WHERE email = $1 AND tenant_id = $2`, [
-          `admin-${STAMP}@g2.test`,
-          otherTenantId,
-        ])).rows[0]?.id || "", tenantId: otherTenantId })
-      ),
+      headers: authHeader(otherAdminToken),
       payload: { code: "LE-OTHER", name: "Other Tenant LE" },
     });
     otherTenantLeId = (otherLERes.json() as { id: string }).id;
@@ -204,22 +220,7 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
     const otherOuRes = await app.inject({
       method: "POST",
       url: "/organization-units",
-      headers: authHeader(
-        await sessionTokenFor({
-          userId: (
-            await pool.query(
-              `SELECT u.id FROM users u
-               JOIN user_role_assignments ura ON ura.user_id = u.id
-               WHERE u.tenant_id = $1 AND ura.role_id = (
-                 SELECT id FROM roles WHERE tenant_id = $1 AND is_full_access = true LIMIT 1
-               )
-               LIMIT 1`,
-              [otherTenantId]
-            )
-          ).rows[0]?.id || "",
-          tenantId: otherTenantId,
-        })
-      ),
+      headers: authHeader(otherAdminToken),
       payload: {
         legalEntityId: otherTenantLeId,
         name: "Other Tenant OU",
@@ -251,20 +252,22 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
     bpIndividualId = (bpRes.json() as { id: string }).id;
 
     // Activate BP
-    await app.inject({
+    const bpAct = await app.inject({
       method: "POST",
       url: `/business-partners/${bpIndividualId}/activate`,
       headers: authHeader(adminToken),
       payload: {},
     });
+    if (bpAct.statusCode >= 300) throw new Error(`BP activate failed: ${bpAct.statusCode} ${bpAct.body}`);
 
     // Add employee role to BP
-    await app.inject({
+    const bpRole = await app.inject({
       method: "POST",
       url: `/business-partners/${bpIndividualId}/roles`,
       headers: authHeader(adminToken),
       payload: { roleType: "employee" },
     });
+    if (bpRole.statusCode >= 300) throw new Error(`BP role failed: ${bpRole.statusCode} ${bpRole.body}`);
 
     // Create Employee Profile (via SQL — no API yet)
     const epRes = await pool.query(
@@ -288,6 +291,10 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
       },
     });
     bpOrgId = (bpOrgRes.json() as { id: string }).id;
+
+    // Create roles with employee_profile.read permission
+    await createReadOnlyRole(tenantId, "VIEWER", ["employee_profile.read"]);
+    await createReadOnlyRole(tenantId, "VIEWER_B", ["employee_profile.read"]);
 
     // Create scoped users (OU-scoped viewers)
     const viewerRes = await createInternalUser(app, adminToken, {
@@ -459,14 +466,15 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
     });
 
     it("returns only placements within effective date range", async () => {
-      const yesterday = new Date(Date.now() - 86400000);
+      // Placements start at now-1d; probe 2 days back so it is strictly before.
+      const beforeStart = new Date(Date.now() - 2 * 86400000);
       const response = await app.inject({
         method: "GET",
         url: "/placements/active-at",
         headers: authHeader(adminToken),
         query: {
           employeeProfileId: epProfileId,
-          dateAt: yesterday.toISOString(),
+          dateAt: beforeStart.toISOString(),
         },
       });
       expect(response.statusCode).toBe(200);
@@ -509,7 +517,8 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
 
     it("rejects effective_to <= effective_from with 409", async () => {
       const now = new Date();
-      const pastDate = new Date(now.getTime() - 86400000);
+      // Primary starts at now-1d; 2 days back is strictly before effective_from.
+      const pastDate = new Date(now.getTime() - 2 * 86400000);
 
       const response = await app.inject({
         method: "POST",
@@ -791,15 +800,25 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
       expect(response.statusCode).toBe(200);
     });
 
-    it("user with sibling-OU scope cannot read 403", async () => {
-      // siblingToken is scoped to OU-B, but placements are in OU-Central (LE-A)
+    it("user with sibling-OU scope sees only the placement in their own OU/LE", async () => {
+      // siblingToken is scoped to OU-B (LE-B). The employee has placements in
+      // OU-Central (LE-A) — out of scope — AND one secondary in OU-B (LE-B,
+      // added by section 6) — in scope. listByEmployee filters per-row, so
+      // the LE-A rows drop out and the LE-B row survives: 200, not 403,
+      // because at least one row is in scope.
       const response = await app.inject({
         method: "GET",
         url: `/employees/${epProfileId}/placements`,
         headers: authHeader(siblingToken),
       });
-      // Out of scope: 403 or 404; if employee is in sibling OU, it's 404
-      expect([403, 404]).toContain(response.statusCode);
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as Array<{
+        organizationUnitId: string;
+        legalEntityId: string;
+      }>;
+      expect(body).toHaveLength(1);
+      expect(body[0]?.organizationUnitId).toBe(ouBCentralId);
+      expect(body[0]?.legalEntityId).toBe(leBId);
     });
 
     it("GET /placements/active-at filters by scope", async () => {
@@ -812,14 +831,16 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
           dateAt: new Date().toISOString(),
         },
       });
-      // Out of scope, returns empty
       expect(response.statusCode).toBe(200);
       const body = response.json() as {
         primary: { id: string } | null;
-        secondary: { id: string }[];
+        secondary: { id: string; legalEntityId: string }[];
       };
+      // Primary (OU-Central, LE-A) is out of scope.
       expect(body.primary).toBeNull();
-      expect(body.secondary).toHaveLength(0);
+      // The secondary created in section 6 (OU-B, LE-B) IS in scope.
+      expect(body.secondary).toHaveLength(1);
+      expect(body.secondary[0]?.legalEntityId).toBe(leBId);
     });
   });
 

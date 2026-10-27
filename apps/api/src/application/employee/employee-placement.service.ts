@@ -3,7 +3,7 @@ import type {
   EmployeePlacement,
   EmployeePlacementRepository,
 } from "../../domain/employee/employee-placement.entity.js";
-import { ConflictError, NotFoundError } from "../../domain/shared-kernel/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../domain/shared-kernel/errors.js";
 import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 import type { RbacService } from "../rbac/rbac.service.js";
 
@@ -101,6 +101,13 @@ export class EmployeePlacementService {
       if (canAccess) {
         filtered.push(placement);
       }
+    }
+    // History exists but none of it is in the actor's Data Scope: refuse
+    // rather than answer "empty", which would read as "no history".
+    if (placements.length > 0 && filtered.length === 0) {
+      throw new ForbiddenError(
+        "The active Role's Data Scope does not cover this employee's placements",
+      );
     }
     return filtered;
   }

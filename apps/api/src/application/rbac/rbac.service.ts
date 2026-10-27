@@ -352,11 +352,36 @@ export class RbacService {
     const target = await this.legalEntities.findById(targetLegalEntityId);
     if (target === null || target.tenantId !== actor.tenantId) return false;
     if (actor.scopeType === "tenant") return true;
-    return (
-      actor.scopeType === "legal_entity" &&
-      actor.scopeLegalEntityId !== null &&
-      actor.scopeLegalEntityId === targetLegalEntityId
-    );
+    if (actor.scopeType === "legal_entity") {
+      return (
+        actor.scopeLegalEntityId !== null &&
+        actor.scopeLegalEntityId === targetLegalEntityId
+      );
+    }
+    // An Organization-Unit-scoped assignment covers the ONE Legal Entity its
+    // scope unit belongs to — a unit has exactly one owning Legal Entity, so
+    // this is not a widening, just the missing link in the tenant → Legal
+    // Entity → Organization Unit chain. Without this branch an OU-scoped
+    // actor fails every Legal-Entity-scope check unconditionally, which is
+    // the bug this branch fixes (Epic 6 G2 placement reads surfaced it).
+    //
+    // Crucially, the scope UNIT must be inside the TARGET LE, not just any
+    // LE. An OU-scoped actor restricted to unit A (in LE-1) may not see
+    // placements in LE-1 if they sit in unit B (also in LE-1 but outside A's
+    // scope). This is enforced by isActiveOrganizationUnitScopeCovered, which
+    // walks the OU hierarchy; here, we answer only the LE question.
+    if (
+      actor.scopeType === "organization_unit" &&
+      actor.scopeOrganizationUnitId !== null
+    ) {
+      const scopeUnit = await this.orgUnits.findById(actor.scopeOrganizationUnitId);
+      return (
+        scopeUnit !== null &&
+        scopeUnit.tenantId === actor.tenantId &&
+        scopeUnit.legalEntityId === targetLegalEntityId
+      );
+    }
+    return false;
   }
 
   /**
