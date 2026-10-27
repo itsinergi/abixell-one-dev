@@ -7,8 +7,9 @@
  * - Cross-LE same-tenant allowed; Department reporting-only (no scope)
  * - Placement never participates in authorization
  *
- * Database Guard: REQUIRED isolated DB `abixell_one_epic6_g2` — refuses
- * production names, abixell_one_dev, and any other database.
+ * Database Guard: REQUIRED isolated DB `abixell_one_epic6_g2` (local) or
+ * `abixell_one_epic3_wave4` (CI) — refuses production names, abixell_one_dev,
+ * and any other database.
  *
  * Test Cases (10 groups):
  * 1. Eligibility / Create — primary/secondary 201; rejections
@@ -43,6 +44,9 @@ const STAMP = Date.now();
 const TENANT = `g2place-${STAMP}`;
 const OTHER_TENANT = `g2other-${STAMP}`;
 
+/** Isolated DBs: the local G2 DB, and the throwaway DB the CI service container creates. */
+const ALLOWED_DATABASES = ["abixell_one_epic6_g2", "abixell_one_epic3_wave4"];
+
 /** Database guard: assert isolated DB, refuse production. */
 async function assertIsolatedDatabase(): Promise<string> {
   const { rows } = await pool.query<{ database_name: string }>(
@@ -61,9 +65,9 @@ async function assertIsolatedDatabase(): Promise<string> {
       `Refusing to run Epic 6 G2 placement tests against shared dev database '${dbName}'`
     );
   }
-  if (dbName !== "abixell_one_epic6_g2") {
+  if (!ALLOWED_DATABASES.includes(dbName)) {
     throw new Error(
-      `Epic 6 G2 placement tests require database name 'abixell_one_epic6_g2', got '${dbName}'`
+      `Epic 6 G2 placement tests require one of [${ALLOWED_DATABASES.join(", ")}], got '${dbName}'`
     );
   }
   return dbName;
