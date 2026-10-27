@@ -144,6 +144,19 @@ Wave A7 delivers the API, persistence, authorization, ledger, and verification s
 
 These are the boundary, not gaps: the A7 units were scoped as capability depth, and A7's closure claim is over that depth.
 
+**Superseded 2026-10-27 — the first two bullets no longer hold.** The Advanced UI was
+built after closure: five pages over the same routes, catalogued by migration
+`1796400000000_wave-a7-advanced-ui-routes.cjs`. Project Delivery gained
+`/project-delivery/advanced/planning` (WBS, dependencies, resource loading, baseline
+variance) and `/project-delivery/advanced/cost-ev` (cost entries, cost position, earned
+value, snapshot history); HSE gained `/hse/advanced/investigations` (frameworks, root
+cause, risk matrix, JSA/HIRA), `/hse/advanced/permits-audit` (permits on the Workflow
+Engine, audit programmes, occurrences, findings), and `/hse/advanced/monitoring-capa`
+(threshold points, breach flags, CAPA, indicator snapshots). The Gantt is still not a
+rendered chart — `PRJ-ADV-003` remains a read model — and the last two bullets stand
+unchanged. This adds no weight: the 27 points were earned on the API surface, and a page
+that views it earns nothing further.
+
 ## Canonical reconciliation
 
 | Document | Before | After |

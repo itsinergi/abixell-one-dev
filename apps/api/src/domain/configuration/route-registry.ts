@@ -701,6 +701,33 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     permissions: ["hse.read"],
     parentPath: "/hse",
   },
+  {
+    path: "/hse/advanced/investigations",
+    name: "Investigations & Risk",
+    moduleCode: "hse",
+    status: "di_menu",
+    permissions: ["hse.advanced.read", "hse.advanced.manage", "hse.investigation.lead"],
+    parentPath: "/hse",
+    note: "Wave A7 HSE Advanced. Three segments deep, so it does not collide with `/hse/records/:recordId`. Concluding an investigation needs `hse.investigation.lead`, which the recorded-findings form surfaces as a server refusal.",
+  },
+  {
+    path: "/hse/advanced/permits-audit",
+    name: "Permits & Audit",
+    moduleCode: "hse",
+    status: "di_menu",
+    permissions: ["hse.advanced.read", "hse.advanced.manage", "hse.permit.request"],
+    parentPath: "/hse",
+    note: "Wave A7 HSE Advanced. The permit lifecycle is owned by the Workflow Engine (ADR-0027 §4); the page reads the instance status and offers only the actions the engine returns as available.",
+  },
+  {
+    path: "/hse/advanced/monitoring-capa",
+    name: "Monitoring & CAPA",
+    moduleCode: "hse",
+    status: "di_menu",
+    permissions: ["hse.advanced.read", "hse.advanced.manage", "hse.capa.verify"],
+    parentPath: "/hse",
+    note: "Wave A7 HSE Advanced. CAPA is separate from Core follow-up and anchors by reference (ADR-0027 §1); a breach flag is written at reading time.",
+  },
 
   // --- Project delivery (module: project_delivery) -------------------------
   {
@@ -717,6 +744,34 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     status: "tersembunyi",
     permissions: ["project_delivery.read", "project_delivery.manage"],
     parentPath: "/project-delivery",
+  },
+  {
+    path: "/project-delivery/advanced/planning",
+    name: "Planning & Scheduling",
+    moduleCode: "project_delivery",
+    status: "di_menu",
+    permissions: [
+      "project_delivery.advanced.read",
+      "project_delivery.advanced.manage",
+      "project_delivery.read",
+      "project_delivery.manage",
+    ],
+    parentPath: "/project-delivery",
+    note: "Wave A7 Project Delivery Advanced (PRJ-ADV-001…004). Three segments deep, so it does not collide with `/project-delivery/:projectId`, which matches two.",
+  },
+  {
+    path: "/project-delivery/advanced/cost-ev",
+    name: "Cost & Earned Value",
+    moduleCode: "project_delivery",
+    status: "di_menu",
+    permissions: [
+      "project_delivery.cost.read",
+      "project_delivery.cost.manage",
+      "project_delivery.advanced.read",
+      "project_delivery.advanced.manage",
+    ],
+    parentPath: "/project-delivery",
+    note: "Wave A7 Project Delivery Advanced (PRJ-ADV-005…008). Cost position and earned value move together, so one page serves both.",
   },
 
   // --- Reporting (module: reporting_insight) -------------------------------
