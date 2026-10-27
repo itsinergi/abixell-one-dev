@@ -909,7 +909,7 @@ Tidak ada pengalihan diam-diam ke Overview. API tetap melakukan pemeriksaan tera
 **Gelombang 3 — Modul sebagai plafon, dan penonaktifan yang nyata.**
 
 9. Menegakkan modul-aktif di layer API: create/update/action ditolak, baca arsip tetap boleh lewat jalur berizin.
-10. Membatasi penonaktifan modul hanya untuk super admin.
+10. Membatasi penonaktifan modul hanya untuk super admin. *(Diganti 2026-10-27 — lihat baris "Otoritas penonaktifan" di bawah: kewenangan berpindah ke RBAC `config.module.manage`/`config.manage`, tanpa kunci bootstrap.)*
 11. Penimpa label tenant dari daftar istilah yang diizinkan.
 
 **Gelombang 3 selesai 2026-09-26.** Yang dibangun, dan keputusan yang mengikat:
@@ -917,7 +917,7 @@ Tidak ada pengalihan diam-diam ke Overview. API tetap melakukan pemeriksaan tera
 | Bagian | Wujudnya |
 |---|---|
 | Penjaga API (§4.3 langkah 9) | `module-activity-plugin.ts` memasang pemeriksaan setelah autentikasi pada setiap route yang berubah-data. `module-enforcement.ts` memetakan route ke modul dan menolak `POST`/`PUT`/`PATCH`/`DELETE` modul bisnis nonaktif dengan 403: `Modul ini tidak aktif untuk tenant Anda.` GET tidak dipotong; data arsip tetap melalui izin route biasa. |
-| Otoritas penonaktifan (§4.3 langkah 10) | `PUT /config/modules/:code` wajib lulus RBAC `config.manage` **dan** `x-bootstrap-key` ADR-0004. Kunci platform tidak menggantikan actor atau izin tenant; tanpa actor maupun tanpa kunci responsnya 401. |
+| Otoritas penonaktifan (§4.3 langkah 10) | **Direvisi 2026-10-27.** Semula `PUT /config/modules/:code` wajib lulus RBAC `config.manage` **dan** `x-bootstrap-key` ADR-0004. Gerbang kunci bootstrap dicabut dari route ini karena membuat aktivasi/deaktivasi modul mustahil dilakukan dari UI Administration — browser tidak pernah memegang kredensial operator platform, dan §3.3 `dual-admin-console.md` melarang memakainya sebagai kredensial admin umum. Sekarang route hanya menuntut `app.authenticate` + salah satu dari `config.module.manage` (granular, Epic 15 keputusan #7) atau `config.manage` (legacy, agar assignment pra-Epic-15 tetap berjalan). Kunci bootstrap tetap wajib di `POST /tenants` dan pada tulis parameter level `S`. |
 | Pengecualian shell | `platform` dikecualikan secara eksplisit dari plafon modul. Shell dan Configuration harus dapat menyalakan modul pertama tenant baru; setiap halaman di dalamnya tetap memakai izin masing-masing. |
 | Terminologi menu (§4.3 langkah 11) | Migrasi `1787500000000_epic-3-menu-terminology.cjs` menanam allowlist Product Core dari `config_menu_seed()`. Query pohon menu mencapai override hanya lewat join allowlist; kunci terminologi lain boleh tersimpan tetapi tidak dapat mengubah navigasi. |
 | Batas dan audit | Label menu memakai Schema Registry `terminology.value` maksimal 60 karakter; deskripsi memakai `terminology.description_value` maksimal 240. Audit terminology menyimpan `previousValue` dan `value`; identitas, route, modul, serta izin menu tidak dapat ditimpa. |

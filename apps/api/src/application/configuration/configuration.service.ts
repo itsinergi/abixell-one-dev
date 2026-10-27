@@ -42,7 +42,9 @@ export class ConfigurationService {
   }
 
   async setModuleActivation(actor: ActorContext, moduleCode: string, isActive: boolean) {
-    await this.rbac.requirePermission(actor, "config.manage");
+    // Epic 15 Decision #7: granular `config.module.manage` is the preferred code;
+    // legacy `config.manage` still works so pre-Epic-15 assignments keep acting.
+    await this.rbac.requireAnyPermission(actor, ["config.module.manage", "config.manage"]);
     const status = await this.repo.setModuleActivation(
       actor.tenantId,
       moduleCode,

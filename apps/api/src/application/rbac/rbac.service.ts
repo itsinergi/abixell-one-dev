@@ -130,6 +130,26 @@ export class RbacService {
     }
   }
 
+  /** Same refusal rule as `requirePermission`, but ANY ONE of the listed codes
+   * suffices. Used where a legacy code and its granular successor both grant
+   * the same action (Epic 15 Decision #7). */
+  async requireAnyPermission(
+    actor: ActorContext,
+    permissionCodes: readonly string[],
+  ): Promise<void> {
+    if (actor.assignmentId === null) {
+      throw new ForbiddenError(
+        `No active Role in this session; switch to a Role that grants permission '${permissionCodes[0]}'`,
+      );
+    }
+    const permissions = await this.getActivePermissions(actor);
+    if (!permissionCodes.some((code) => permissions.has(code))) {
+      throw new ForbiddenError(
+        `Missing permission '${permissionCodes.join("' or '")}' in the active Role`,
+      );
+    }
+  }
+
   /** Requires one authorization-effective assignment to carry every listed
    * actual permission grant. Permissions from separate roles are not combined. */
   async requirePermissionsOnSameAssignment(

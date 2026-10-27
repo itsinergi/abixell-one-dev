@@ -18,18 +18,6 @@ import { authHeader, bootstrapTenant, createReadOnlyRole, login, provisionFirstA
 
 const TENANT_CODE = `test-0c-${Date.now()}`;
 
-/**
- * Epic 3 Wave 3 (§4.3 step 10): turning a module on or off is a platform
- * authority act, so `PUT /config/modules/:code` now needs the platform-operator
- * credential (ADR-0004) in addition to `config.manage`. Tests that only want to
- * reach the RBAC layer pass this; the tests that prove RBAC still bites pass it
- * too, on purpose — the credential is layered ON TOP of RBAC, never instead of it.
- */
-function bootstrapHeaders() {
-  const key = process.env.PLATFORM_BOOTSTRAP_KEY || "dev-only-change-me-bootstrap";
-  return { "x-bootstrap-key": key };
-}
-
 describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
   const app = buildApp();
   let tenantId: string;
@@ -103,7 +91,7 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     const response = await app.inject({
       method: "PUT",
       url: "/config/modules/customer_complaint",
-      headers: { ...authHeader(adminToken), ...bootstrapHeaders() },
+      headers: authHeader(adminToken),
       payload: { isActive: true },
     });
     expect(response.statusCode).toBe(200);
@@ -298,11 +286,8 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
     const writeResponse = await app.inject({
       method: "PUT",
       url: "/config/modules/survey_assessment",
-      // Deliberately carries the platform credential as well: this asserts
-      // that RBAC still bites UNDER it (ADR-0004's "no precedent for
-      // bypassing RBAC"). An auditor holding `config.read` fails on
-      // `config.manage` even when the platform operator's key is present.
-      headers: { ...authHeader(auditorLogin.body.accessToken), ...bootstrapHeaders() },
+      // An auditor holding only `config.read` is refused on the RBAC check.
+      headers: authHeader(auditorLogin.body.accessToken),
       payload: { isActive: true },
     });
     expect(writeResponse.statusCode).toBe(403);
@@ -314,6 +299,46 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
       [tenantId],
     );
     expect(row.rows).toHaveLength(0); // nothing was written despite the attempt
+  });
+
+  it("allows the granular config.module.manage alone to toggle a Module (Epic 15 Decision #7)", async () => {
+    await createReadOnlyRole(tenantId, "MODULE_OPERATOR", ["config.read", "config.module.manage"]);
+    const created = await app.inject({
+      method: "POST",
+      url: "/admin/users",
+      headers: authHeader(adminToken),
+      payload: {email: "operator@test-0c.local", fullName: "Module Operator", password: "OperatorPass123!", pairs: [{ roleCode: "MODULE_OPERATOR", scopeType: "tenant" as const }]},
+    });
+    expect(created.statusCode).toBe(201);
+
+    const operator = await login(app, TENANT_CODE, "operator@test-0c.local", "OperatorPass123!");
+    expect(operator.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/config/modules/warehouse_management",
+      headers: authHeader(operator.body.accessToken),
+      payload: { isActive: true },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const row = await pool.query(
+      `SELECT tma.is_active FROM tenant_module_activations tma
+       JOIN modules m ON m.id = tma.module_id
+       WHERE tma.tenant_id = $1 AND m.code = 'warehouse_management'`,
+      [tenantId],
+    );
+    expect(row.rows).toHaveLength(1);
+    expect(row.rows[0].is_active).toBe(true);
+
+    // Restore: later tests assert the tenant's exact active-module set.
+    const reset = await app.inject({
+      method: "PUT",
+      url: "/config/modules/warehouse_management",
+      headers: authHeader(adminToken),
+      payload: { isActive: false },
+    });
+    expect(reset.statusCode).toBe(200);
   });
 
   it("exposes only this tenant's active module codes without granting config.read", async () => {
@@ -347,7 +372,7 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
       const otherHeaders = authHeader(otherAdmin.body.accessToken);
       const activated = await app.inject({
         method: "PUT", url: "/config/modules/survey_assessment",
-        headers: { ...otherHeaders, ...bootstrapHeaders() },
+        headers: otherHeaders,
         payload: { isActive: true },
       });
       expect(activated.statusCode).toBe(200);
@@ -359,7 +384,7 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
 
       const disabled = await app.inject({
         method: "PUT", url: "/config/modules/customer_complaint",
-        headers: { ...authHeader(adminToken), ...bootstrapHeaders() },
+        headers: authHeader(adminToken),
         payload: { isActive: false },
       });
       expect(disabled.statusCode).toBe(200);
@@ -369,7 +394,7 @@ describe("Checkpoint 0C — Configuration & Metadata Foundation", () => {
       await pool.query(`DELETE FROM tenants WHERE id = $1`, [otherTenant.id]);
       await app.inject({
         method: "PUT", url: "/config/modules/customer_complaint",
-        headers: { ...authHeader(adminToken), ...bootstrapHeaders() },
+        headers: authHeader(adminToken),
         payload: { isActive: true },
       });
     }

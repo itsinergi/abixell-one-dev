@@ -12,20 +12,8 @@ async function post(url: string, token: string, payload: unknown) {
   return app.inject({ method: "POST", url, headers: authHeader(token), payload });
 }
 
-/**
- * The only PUTs this suite makes are Module Activations, which since Epic 3
- * Wave 3 (§4.3 step 10) require the platform-operator credential ON TOP of
- * RBAC — the bootstrap key is the codebase's representation of "otoritas
- * platform" (§4.4), per ADR-0004.
- */
 async function put(url: string, token: string, payload: unknown) {
-  const bootstrapKey = process.env.PLATFORM_BOOTSTRAP_KEY || "dev-only-change-me-bootstrap";
-  return app.inject({
-    method: "PUT",
-    url,
-    headers: { ...authHeader(token), "x-bootstrap-key": bootstrapKey },
-    payload,
-  });
+  return app.inject({ method: "PUT", url, headers: authHeader(token), payload });
 }
 
 async function get(url: string, token: string) {

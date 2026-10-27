@@ -27,6 +27,7 @@ import {
   bootstrapTenant,
   login,
   provisionFirstAdmin,
+  provisionInternalUser,
 } from "./integration/helpers.js";
 
 const RUN = Date.now();
@@ -63,14 +64,13 @@ describe("Epic 3 Wave 3 — module-active enforcement", () => {
     });
 
   /**
-   * Runs `body` with `code` activated, then restores the prior state. The
-   * activation call itself needs the platform-operator credential (step 10).
+   * Runs `body` with `code` activated, then restores the prior state.
    */
   async function withModule(code: string, isActive: boolean, body: () => Promise<void>) {
     const response = await app.inject({
       method: "PUT",
       url: `/config/modules/${code}`,
-      headers: { ...authHeader(adminToken), "x-bootstrap-key": bootstrapKey() },
+      headers: authHeader(adminToken),
       payload: { isActive },
     });
     expect(response.statusCode).toBe(200);
@@ -80,7 +80,7 @@ describe("Epic 3 Wave 3 — module-active enforcement", () => {
       await app.inject({
         method: "PUT",
         url: `/config/modules/${code}`,
-        headers: { ...authHeader(adminToken), "x-bootstrap-key": bootstrapKey() },
+        headers: authHeader(adminToken),
         payload: { isActive: !isActive },
       });
     }
@@ -210,42 +210,23 @@ describe("Epic 3 Wave 3 — module-active enforcement", () => {
       const response = await app.inject({
         method: "PUT",
         url: "/config/modules/hse",
-        headers: { ...authHeader(adminToken), "x-bootstrap-key": bootstrapKey() },
+        headers: authHeader(adminToken),
         payload: { isActive: false },
       });
       expect(response.statusCode).toBe(200);
     });
   });
 
-  describe("step 10 — only the platform authority may deactivate a module", () => {
-    it("refuses a Tenant Admin holding config.manage but no platform credential", async () => {
-      // `provisionFirstAdmin` grants every permission, so `config.manage` is
-      // held. Without the platform credential the request must stop at 401 —
-      // RBAC alone is deliberately not enough (§4.4 "otoritas platform").
+  describe("step 10 — module activation is an RBAC act, no platform credential", () => {
+    // Revised 2026-10-27 (CORE-ROADMAP §4.3 step 10): the bootstrap-key layer
+    // was removed because a browser cannot hold the platform-operator
+    // credential, which made the Administration toggle unusable. RBAC is now
+    // the whole gate, and these tests pin both halves of that.
+    it("accepts a Tenant Admin holding config.manage, with no platform credential", async () => {
       const response = await app.inject({
         method: "PUT",
         url: "/config/modules/hse",
         headers: authHeader(adminToken),
-        payload: { isActive: true },
-      });
-      expect(response.statusCode).toBe(401);
-    });
-
-    it("refuses the platform credential alone, with no valid actor", async () => {
-      const response = await app.inject({
-        method: "PUT",
-        url: "/config/modules/hse",
-        headers: { "x-bootstrap-key": bootstrapKey() },
-        payload: { isActive: true },
-      });
-      expect(response.statusCode).toBe(401);
-    });
-
-    it("accepts both together, and the change is real", async () => {
-      const response = await app.inject({
-        method: "PUT",
-        url: "/config/modules/hse",
-        headers: { ...authHeader(adminToken), "x-bootstrap-key": bootstrapKey() },
         payload: { isActive: true },
       });
       expect(response.statusCode).toBe(200);
@@ -256,9 +237,39 @@ describe("Epic 3 Wave 3 — module-active enforcement", () => {
       await app.inject({
         method: "PUT",
         url: "/config/modules/hse",
-        headers: { ...authHeader(adminToken), "x-bootstrap-key": bootstrapKey() },
+        headers: authHeader(adminToken),
         payload: { isActive: false },
       });
+    });
+
+    it("still refuses an actor with no module permission, key or no key", async () => {
+      await provisionInternalUser({
+        tenantId,
+        email: `mod-reader-${RUN}@example.test`,
+        password: "Module-Reader-1!",
+        roleCode: "MODULE_READER",
+        permissionCodes: ["config.read"],
+      });
+      const reader = await login(app, TENANT_CODE, `mod-reader-${RUN}@example.test`, "Module-Reader-1!");
+      expect(reader.statusCode).toBe(200);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: "/config/modules/hse",
+        headers: { ...authHeader(reader.body.accessToken), "x-bootstrap-key": bootstrapKey() },
+        payload: { isActive: true },
+      });
+      expect(response.statusCode).toBe(403);
+    });
+
+    it("refuses an unauthenticated caller", async () => {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/config/modules/hse",
+        headers: { "x-bootstrap-key": bootstrapKey() },
+        payload: { isActive: true },
+      });
+      expect(response.statusCode).toBe(401);
     });
   });
 });
