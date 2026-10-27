@@ -100,13 +100,28 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
   let disposalId: string;
   let warehouseTaskId: string;
 
-  const post = (url: string, token: string, payload?: Record<string, unknown>) =>
-    app.inject({
+  const post = async (url: string, token: string, payload?: Record<string, unknown>) => {
+    const response = await app.inject({
       method: "POST",
       url,
       headers: authHeader(token),
       ...(payload === undefined ? {} : { payload }),
     });
+    // Receiving now requires an issued PO. Keep this suite's many receiving
+    // fixtures explicit without changing tests that exercise other lifecycles.
+    if (url === "/purchase-orders" && response.statusCode === 201) {
+      const orderId = response.json().order.id as string;
+      const issue = await app.inject({
+        method: "POST",
+        url: `/purchase-orders/${orderId}/issue`,
+        headers: authHeader(token),
+      });
+      if (issue.statusCode !== 200) {
+        throw new Error(`Fixture PO issue failed: ${issue.statusCode}`);
+      }
+    }
+    return response;
+  };
 
   const get = (url: string, token: string) =>
     app.inject({
@@ -466,6 +481,64 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       address: "999 Remote St",
     });
     otherWarehouseId = otherWhRes.json().id;
+
+    // -----------------------------------------------------------------------
+    // 6. GL prerequisites for SCM stock movements
+    //
+    // Goods movements now emit accounting-ready events (ADR-0023) and the emit
+    // path fails closed: no legal entity or no open period means the stock
+    // movement is refused. Group 2 moves stock, so these rows must exist before
+    // any test runs — migrations only seed tenants that existed at migration
+    // time, and this tenant is created here at runtime.
+    // -----------------------------------------------------------------------
+    await pool.query(
+      `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status, created_by)
+       VALUES ($1, $2, 'FY2026', 'P-ANNUAL', 'Fiscal Year 2026', 'annual', '2026-01-01', '2026-12-31', 'open', $3)
+       ON CONFLICT (tenant_id, legal_entity_id, fiscal_year_code, period_code) DO NOTHING`,
+      [tenantId, legalEntityId, adminUserId],
+    );
+
+    const coaSeed = await pool.query(
+      `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
+       VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3)
+       ON CONFLICT (tenant_id, legal_entity_id, coa_version_code) DO NOTHING
+       RETURNING id`,
+      [tenantId, legalEntityId, adminUserId],
+    );
+    const coaSeedId =
+      coaSeed.rows[0]?.id ??
+      (
+        await pool.query(
+          `SELECT id FROM chart_of_accounts WHERE tenant_id = $1 AND legal_entity_id = $2 AND coa_version_code = 'FY2026'`,
+          [tenantId, legalEntityId],
+        )
+      ).rows[0].id;
+
+    await pool.query(
+      `INSERT INTO accounting_accounts (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance, is_active, created_by)
+       VALUES
+         ($1, $2, $3, '1301', 'Inventory', 'ASSET', 'debit', true, $4),
+         ($1, $2, $3, '5100', 'Harga Pokok Penjualan', 'EXPENSE', 'debit', true, $4),
+         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)
+       ON CONFLICT (tenant_id, legal_entity_id, coa_id, account_code) DO NOTHING`,
+      [tenantId, legalEntityId, coaSeedId, adminUserId],
+    );
+
+    await pool.query(
+      `INSERT INTO posting_rules (tenant_id, rule_code, rule_name, rule_version, trigger_event_type, accounting_formula, requires_approval, effective_date, is_active, created_by, updated_by)
+       VALUES
+         ($1, 'RULE_SCM_GOODS_ISSUED', 'SCM Goods Issued', 'v1', 'inventory.goods_issued',
+          '[{"accountCode":"5100","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"1301","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+          false, '2026-01-01'::date, true, $2, $2),
+         ($1, 'RULE_SCM_GOODS_RECEIVED', 'SCM Goods Received', 'v1', 'inventory.goods_received',
+          '[{"accountCode":"1301","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"5100","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+          false, '2026-01-01'::date, true, $2, $2),
+         ($1, 'RULE_SCM_STOCK_ADJUSTED', 'SCM Stock Adjusted', 'v1', 'inventory.adjusted',
+          '[{"accountCode":"5100","side":"debit","amountExpression":"AMOUNT"},{"accountCode":"1301","side":"credit","amountExpression":"AMOUNT"}]'::jsonb,
+          false, '2026-01-01'::date, true, $2, $2)
+       ON CONFLICT (tenant_id, rule_code, rule_version) DO NOTHING`,
+      [tenantId, adminUserId],
+    );
   });
 
   afterAll(async () => {
@@ -628,10 +701,36 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       expect(fulRes.statusCode).toBe(200);
       expect(fulRes.json().status).toBe("fulfilled");
 
-      // Verify balance: reserved returns to 0
+      // Verify balance: reserved returns to 0 and the goods actually left
       const balRes = await get(`/supply-chain/advanced/balances?warehouseId=${mainWarehouseId}&itemId=${itemAlphaId}`, adminToken);
       const bal = balRes.json().find((b: { warehouseId: string }) => b.warehouseId === mainWarehouseId);
       expect(bal.reservedQuantity).toBe(0);
+      expect(bal.onHandQuantity).toBe(8);
+
+      // Fulfilment is a real issue, not just a counter reset: one `out` movement
+      const fulfillMovements = await pool.query(
+        `SELECT movement_type, quantity FROM scm_advanced_stock_movements
+          WHERE tenant_id = $1 AND reference_type = 'scm_stock_reservation' AND reference_id = $2
+          ORDER BY occurred_at`,
+        [tenantId, reservationId],
+      );
+      expect(fulfillMovements.rows.map((r) => `${r.movement_type}:${r.quantity}`)).toEqual(["out:2.0000"]);
+
+      // ...and Finance can see it: the movement carries an accounting-ready
+      // event written in the same transaction (ADR-0023).
+      const issueEvent = await pool.query(
+        `SELECT event_type, source_document_type, amount, outbox_state, payload
+           FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND source_document_type = 'scm_stock_reservation' AND source_document_id = $2`,
+        [tenantId, reservationId],
+      );
+      expect(issueEvent.rows).toHaveLength(1);
+      expect(issueEvent.rows[0]).toMatchObject({
+        event_type: "inventory.goods_issued",
+        outbox_state: "pending",
+      });
+      expect(issueEvent.rows[0].payload.legalEntityId).toBe(legalEntityId);
+      expect(issueEvent.rows[0].payload.periodId).toBeTruthy();
     });
 
     it("configures dynamic reorder threshold policy and verifies alert generation", async () => {
@@ -693,6 +792,22 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       expect(shipRes.statusCode).toBe(200);
       expect(shipRes.json().lines[0].quantityShipped).toBe(2);
 
+      // Shipping is a real move: source bin -2, destination held in transit with
+      // NO location, so the goods cannot be picked before the receiver accepts.
+      const position = (r: { warehouse_id: string; location_id: string | null; stock_condition: string; quantity: string }) =>
+        `${r.warehouse_id === mainWarehouseId ? "main" : "dest"}/${r.location_id === binMainA1Id ? "A1" : r.location_id === binSecB1Id ? "B1" : r.location_id === null ? "null" : "other"}/${r.stock_condition}:${r.quantity}`;
+
+      const afterShip = await pool.query(
+        `SELECT warehouse_id, location_id, stock_condition, quantity
+           FROM scm_advanced_stock_balances
+          WHERE tenant_id = $1 AND item_id = $2 AND quantity > 0`,
+        [tenantId, itemAlphaId],
+      );
+      expect(afterShip.rows.map(position).sort()).toEqual([
+        "dest/null/in_transit:2.0000",
+        "main/A1/unrestricted:6.0000",
+      ]);
+
       // Record receipt
       const recRes = await post("/supply-chain/advanced/transfers/receipts", adminToken, {
         transferId,
@@ -700,6 +815,70 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       });
       expect(recRes.statusCode).toBe(200);
       expect(recRes.json().lines[0].quantityReceived).toBe(2);
+      expect(recRes.json().transfer.status).toBe("received");
+
+      // In transit is drained; the goods now sit in the destination bin.
+      const afterReceipt = await pool.query(
+        `SELECT warehouse_id, location_id, stock_condition, quantity
+           FROM scm_advanced_stock_balances
+          WHERE tenant_id = $1 AND item_id = $2 AND quantity > 0`,
+        [tenantId, itemAlphaId],
+      );
+      expect(afterReceipt.rows.map(position).sort()).toEqual([
+        "dest/B1/unrestricted:2.0000",
+        "main/A1/unrestricted:6.0000",
+      ]);
+    });
+
+    it("returns a shipped transfer to draft by pulling in-transit stock back", async () => {
+      // Second transfer, shipped but never accepted by the receiver.
+      const trfRes = await post("/supply-chain/advanced/transfers", adminToken, {
+        fromWarehouseId: mainWarehouseId,
+        toWarehouseId: secondaryWarehouseId,
+        lines: [
+          {
+            itemId: itemAlphaId,
+            quantityRequested: 3,
+            fromLocationId: binMainA1Id,
+            toLocationId: binSecB1Id,
+          },
+        ],
+      });
+      expect(trfRes.statusCode).toBe(201);
+      const revertId = trfRes.json().transfer.id;
+
+      const approve = await post(`/supply-chain/advanced/transfers/${revertId}/act`, adminToken, {
+        actionCode: "approve",
+      });
+      expect(approve.statusCode).toBe(200);
+      const revertLineId = approve.json().lines[0].id;
+
+      const ship = await post("/supply-chain/advanced/transfers/shipments", adminToken, {
+        transferId: revertId,
+        lineShipments: [{ lineId: revertLineId, quantityShipped: 3 }],
+      });
+      expect(ship.statusCode).toBe(200);
+      expect(ship.json().transfer.status).toBe("in_transit");
+
+      const backToDraft = await post(`/supply-chain/advanced/transfers/${revertId}/return-to-draft`, adminToken, {
+        comment: "Receiver rejected the delivery",
+      });
+      expect(backToDraft.statusCode).toBe(200);
+      expect(backToDraft.json().transfer.status).toBe("draft");
+      expect(backToDraft.json().lines[0].quantityShipped).toBe(0);
+
+      // Nothing was acknowledged, so the goods are back where they started and
+      // no stock is left stranded in transit.
+      const balances = await pool.query(
+        `SELECT SUM(quantity)::text AS qty FROM scm_advanced_stock_balances
+          WHERE tenant_id = $1 AND item_id = $2 AND stock_condition = 'in_transit'`,
+        [tenantId, itemAlphaId],
+      );
+      expect(Number(balances.rows[0].qty ?? 0)).toBe(0);
+
+      const source = await get(`/supply-chain/advanced/balances?warehouseId=${mainWarehouseId}&itemId=${itemAlphaId}`, adminToken);
+      const sourceBal = source.json().find((b: { locationId: string }) => b.locationId === binMainA1Id);
+      expect(sourceBal.onHandQuantity).toBe(6);
     });
 
     it("initiates, records counts, and reconciles stock opname cycle", async () => {
@@ -728,7 +907,43 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
         comment: "Discrepancy verified and write-off approved",
       });
       expect(actRes.statusCode).toBe(200);
-      expect(actRes.json().opname.status).toBe("completed");
+      expect(actRes.json().opname.status).toBe("adjusted");
+
+      // The count is now the ledger's truth: system 8, physical 7 -> one unit out
+      // of the bin, and the line is linked to the movement that did it.
+      const adjustedLine = actRes.json().lines[0];
+      expect(adjustedLine.adjustmentMovementId).toBeTruthy();
+
+      const opnameMovement = await pool.query(
+        `SELECT movement_type, quantity, location_id FROM scm_advanced_stock_movements
+          WHERE tenant_id = $1 AND reference_type = 'scm_stock_opname' AND reference_id = $2`,
+        [tenantId, opnameId],
+      );
+      expect(opnameMovement.rows).toHaveLength(1);
+      expect(opnameMovement.rows[0]).toMatchObject({
+        movement_type: "opname_out",
+        quantity: "1.0000",
+        location_id: binMainA1Id,
+      });
+
+      const afterOpname = await get(`/supply-chain/advanced/balances?warehouseId=${mainWarehouseId}&itemId=${itemAlphaId}`, adminToken);
+      const binA1 = afterOpname.json().find((b: { locationId: string }) => b.locationId === binMainA1Id);
+      expect(binA1.onHandQuantity).toBe(5);
+
+      // Shrinkage emits `inventory.adjusted` (not `goods_received`): the two
+      // variances need opposite journal sides and a posting rule is chosen by
+      // event type alone.
+      const opnameEvent = await pool.query(
+        `SELECT event_type, quantity, outbox_state FROM scm_accounting_ready_events
+          WHERE tenant_id = $1 AND source_document_type = 'scm_stock_opname' AND source_document_id = $2`,
+        [tenantId, opnameId],
+      );
+      expect(opnameEvent.rows).toHaveLength(1);
+      expect(opnameEvent.rows[0]).toMatchObject({
+        event_type: "inventory.adjusted",
+        quantity: "1.0000",
+        outbox_state: "pending",
+      });
     });
   });
 
@@ -772,28 +987,40 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       // WP-WMS-02: Seed GL prerequisites (accounts, period, rule) for tenant created at test runtime.
       // The migration only seeds tenants existing at migration time; test-created tenants need manual seeding.
 
-      // Create open accounting period covering today (2026-10-11)
+      // Create open accounting period covering today (2026-10-11). The yearly
+      // period is already seeded in beforeAll; this monthly one narrows the
+      // lookup, which orders by date_from DESC.
       const periodResult = await pool.query(
         `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status, created_by)
-         VALUES ($1, $2, 'FY2026', 'P-10', 'October 2026', 'monthly', '2026-10-01', '2026-10-31', 'open', $3) RETURNING id`,
+         VALUES ($1, $2, 'FY2026', 'P-10', 'October 2026', 'monthly', '2026-10-01', '2026-10-31', 'open', $3)
+         ON CONFLICT (tenant_id, legal_entity_id, fiscal_year_code, period_code) DO NOTHING
+         RETURNING id`,
         [tenantId, legalEntityId, adminUserId],
       );
-      const periodId = periodResult.rows[0].id;
+      const periodId =
+        periodResult.rows[0]?.id ??
+        (
+          await pool.query(
+            `SELECT id FROM accounting_periods WHERE tenant_id = $1 AND legal_entity_id = $2 AND fiscal_year_code = 'FY2026' AND period_code = 'P-10'`,
+            [tenantId, legalEntityId],
+          )
+        ).rows[0].id;
 
-      // Create chart of accounts
-      const coaResult = await pool.query(
-        `INSERT INTO chart_of_accounts (tenant_id, legal_entity_id, coa_version_code, coa_version_date, is_active, created_by)
-         VALUES ($1, $2, 'FY2026', '2026-01-01', true, $3) RETURNING id`,
-        [tenantId, legalEntityId, adminUserId],
-      );
-      const coaId = coaResult.rows[0].id;
+      // Chart of accounts and accounts are seeded in beforeAll; resolve them.
+      const coaId = (
+        await pool.query(
+          `SELECT id FROM chart_of_accounts WHERE tenant_id = $1 AND legal_entity_id = $2 AND coa_version_code = 'FY2026'`,
+          [tenantId, legalEntityId],
+        )
+      ).rows[0].id;
 
       // Seed accounts 1301 (ASSET/debit) and 2401 (LIABILITY/credit) per RULE_LANDED_COST_APPLIED formula
       await pool.query(
         `INSERT INTO accounting_accounts (tenant_id, legal_entity_id, coa_id, account_code, account_name, account_class, normal_balance, is_active, created_by)
          VALUES
          ($1, $2, $3, '1301', 'Inventory', 'ASSET', 'debit', true, $4),
-         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)`,
+         ($1, $2, $3, '2401', 'Accrued Freight', 'LIABILITY', 'credit', true, $4)
+         ON CONFLICT (tenant_id, legal_entity_id, coa_id, account_code) DO NOTHING`,
         [tenantId, legalEntityId, coaId, adminUserId],
       );
 
@@ -929,6 +1156,11 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       });
       expect(recPartialRes.statusCode).toBe(201);
       const recPartialLineId = recPartialRes.json().lines[0].id;
+      const receivedPoLine = await pool.query(
+        `SELECT quantity_received FROM purchase_order_lines WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, poPartialLineId],
+      );
+      expect(Number(receivedPoLine.rows[0].quantity_received)).toBe(20);
 
       // Partial inspection: accept 10, reject 5, quarantine 3 (total 18 of 20)
       const inspPartialRes = await post("/supply-chain/advanced/inspections", adminToken, {
@@ -957,6 +1189,45 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       expect(lineData.quantityReceived - (lineData.quantityAccepted + lineData.quantityRejected + lineData.quantityQuarantined)).toBe(2);
     });
 
+    it("GAP-6: hard-block WMS over-receipt", async () => {
+      const poRes = await post("/purchase-orders", adminToken, {
+        supplierCode: "SUP-ACME",
+        orderDate: new Date().toISOString().slice(0, 10),
+        currency: "IDR",
+        lines: [{ itemCode: "ITM-SRV-01", quantity: 5, unitPrice: 10000000 }],
+      });
+      const poId = poRes.json().order.id;
+      const poLineId = poRes.json().lines[0].id;
+      const receipt = (quantityReceived: number) =>
+        post("/supply-chain/advanced/receiving-records", adminToken, {
+          idempotencyKey: `rec-over-receipt-${quantityReceived}-${Date.now()}`,
+          purchaseOrderId: poId,
+          supplierId: supplierAcmeId,
+          warehouseId: secondaryWarehouseId,
+          lines: [{
+            purchaseOrderLineId: poLineId,
+            itemId: itemAlphaId,
+            warehouseId: secondaryWarehouseId,
+            stockCondition: "quality_hold",
+            ownerType: "own",
+            quantityReceived,
+            unitCost: 10000000,
+            currency: "IDR",
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: {},
+            inspectionRequired: true,
+            sortOrder: 1,
+          }],
+        });
+
+      expect((await receipt(6)).statusCode).toBe(409);
+      const unchanged = await pool.query(
+        `SELECT quantity_received FROM purchase_order_lines WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, poLineId],
+      );
+      expect(Number(unchanged.rows[0].quantity_received)).toBe(0);
+    });
+
     it("WP-WMS-01: over-disposition rejection — quantity_rejected > quantity_received", async () => {
       // Create PO + receiving for over-disposition test
       const poOverRes = await post("/purchase-orders", adminToken, {
@@ -976,7 +1247,7 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
         lines: [
           {
             purchaseOrderLineId: poOverLineId,
-            itemId: itemBetaId,
+            itemId: itemAlphaId,
             warehouseId: secondaryWarehouseId,
             stockCondition: "quality_hold",
             ownerType: "own",
@@ -1261,6 +1532,47 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       );
       expect(eventAfter.rows[0].outbox_state).toBe("published");
       expect(eventAfter.rows[0].reconciliation_state).toBe("matched");
+
+      // The stock-movement events raised back in Group 2 were pending too, and
+      // this same pass consumes them: goods issued on reservation fulfilment,
+      // shrinkage on opname. Both must reach a posted journal, not just sit in
+      // the outbox.
+      const movementEvents = await pool.query(
+        `SELECT e.event_type, e.outbox_state, e.reconciliation_state,
+                jh.id AS journal_header_id
+           FROM scm_accounting_ready_events e
+           LEFT JOIN journal_headers jh
+             ON jh.tenant_id = e.tenant_id AND jh.idempotency_key = e.idempotency_key
+          WHERE e.tenant_id = $1
+            AND e.event_type IN ('inventory.goods_issued', 'inventory.adjusted')
+          ORDER BY e.event_type`,
+        [tenantId],
+      );
+      expect(movementEvents.rows.map((r) => r.event_type)).toEqual([
+        "inventory.adjusted",
+        "inventory.goods_issued",
+      ]);
+      for (const row of movementEvents.rows) {
+        expect(row.outbox_state).toBe("published");
+        expect(row.reconciliation_state).toBe("matched");
+        expect(row.journal_header_id).toBeTruthy();
+      }
+
+      // Goods issued is a real issue of value: Dr 5100 / Cr 1301.
+      const issuedLegs = await pool.query(
+        `SELECT aa.account_code, jl.debit, jl.credit
+           FROM journal_lines jl
+           JOIN accounting_accounts aa ON aa.id = jl.account_id
+           JOIN journal_headers jh ON jh.id = jl.journal_header_id
+          WHERE jh.tenant_id = $1 AND jh.idempotency_key LIKE 'reservation-fulfil:%'
+          ORDER BY aa.account_code`,
+        [tenantId],
+      );
+      expect(issuedLegs.rows.map((r) => r.account_code)).toEqual(["1301", "5100"]);
+      expect(Number(issuedLegs.rows[0].credit)).toBeGreaterThan(0);
+      expect(Number(issuedLegs.rows[0].debit)).toBe(0);
+      expect(Number(issuedLegs.rows[1].debit)).toBeGreaterThan(0);
+      expect(Number(issuedLegs.rows[1].credit)).toBe(0);
 
       // === Journal reconciles: header idempotency key + 2 lines (1301 debit / 2401 credit) ===
       const headerRow = await pool.query(
@@ -1645,6 +1957,60 @@ describe("Wave A5 — Supply Chain Advanced Integration Suite", () => {
       const getRtvRes = await get(`/supply-chain/advanced/returns-to-vendor/${returnToVendorId}`, adminToken);
       expect(getRtvRes.statusCode).toBe(200);
       expect(getRtvRes.json().returnToVendor.id).toBe(returnToVendorId);
+
+      // The return consumes the receiving line's returned quantity, which is
+      // what later removes the supply from payment eligibility.
+      const recAfter = await get(`/supply-chain/advanced/receiving-records/${receivingRecordId}`, adminToken);
+      const lineAfter = recAfter.json().lines.find((l: { id: string }) => l.id === receivingLineId);
+      expect(lineAfter.quantityReturned).toBe(2);
+      expect(recAfter.json().receiving.status).not.toBe("reversed");
+    });
+
+    it("caps return to vendor at the still-returnable received quantity", async () => {
+      // 10 received, 2 already returned → 8 returnable. Asking for 9 must fail
+      // instead of quietly overdrawing the line.
+      const overReturn = await post("/supply-chain/advanced/returns-to-vendor", adminToken, {
+        idempotencyKey: `rtv-over-${Date.now()}`,
+        supplierId: supplierAcmeId,
+        purchaseOrderId,
+        warehouseId: mainWarehouseId,
+        reason: "Over-return attempt",
+        lines: [
+          {
+            receivingLineId,
+            itemId: itemAlphaId,
+            warehouseId: mainWarehouseId,
+            locationId: binMainA1Id,
+            stockCondition: "rejected",
+            ownerType: "own",
+            quantity: 9,
+            sortOrder: 1,
+          },
+        ],
+      });
+      expect(overReturn.statusCode).toBe(409);
+
+      const recAfter = await get(`/supply-chain/advanced/receiving-records/${receivingRecordId}`, adminToken);
+      const lineAfter = recAfter.json().lines.find((l: { id: string }) => l.id === receivingLineId);
+      expect(lineAfter.quantityReturned).toBe(2);
+    });
+
+    it("keeps a vendor complaint separate from the physical return", async () => {
+      // A complaint records the business case and moves nothing. If it also
+      // reduced the returnable quantity, the goods could never be shipped back.
+      const complaint = await post("/supply-chain/advanced/discrepancies", adminToken, {
+        receivingLineId,
+        discrepancyType: "quality",
+        quantity: 2,
+        description: "OEM firmware build is two revisions behind the agreed spec",
+      });
+      expect(complaint.statusCode).toBe(201);
+      expect(complaint.json().status).toBe("open");
+
+      const recAfter = await get(`/supply-chain/advanced/receiving-records/${receivingRecordId}`, adminToken);
+      const lineAfter = recAfter.json().lines.find((l: { id: string }) => l.id === receivingLineId);
+      expect(lineAfter.quantityReturned).toBe(2);
+      expect(lineAfter.quantityAccepted).toBe(8);
     });
 
     it("creates, queries, and transitions immutable accounting-ready events", async () => {

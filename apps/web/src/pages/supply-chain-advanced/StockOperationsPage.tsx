@@ -32,6 +32,7 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort } from "../../shared/format";
+import { ReceivingQualityPanel } from "./ReceivingQualityPanel";
 
 function label(v: string) {
   return v.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
@@ -44,7 +45,7 @@ export function StockOperationsPage() {
 
   const canManage = permissions.includes(PERMISSIONS.supplyChainInventoryManage);
 
-  const [tab, setTab] = useState<"alerts" | "policies" | "reservations" | "transfers" | "opnames">("alerts");
+  const [tab, setTab] = useState<"alerts" | "policies" | "reservations" | "transfers" | "opnames" | "receiving">("alerts");
   const [items, setItems] = useState<ScmItem[]>([]);
   const [warehouses, setWarehouses] = useState<ScmWarehouse[]>([]);
   const [alerts, setAlerts] = useState<ScmReorderAlert[]>([]);
@@ -356,12 +357,13 @@ export function StockOperationsPage() {
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="success">{notice}</Alert>}
 
-      <div className="flex gap-2 border-b border-slate-200 pb-2">
+      <div className="flex flex-wrap gap-2 border-b border-line pb-2">
         <Button variant={tab === "alerts" ? "primary" : "secondary"} onClick={() => { setTab("alerts"); setSelectedTransfer(null); setSelectedOpname(null); }}>Reorder Alerts ({alerts.length})</Button>
         <Button variant={tab === "policies" ? "primary" : "secondary"} onClick={() => { setTab("policies"); setSelectedTransfer(null); setSelectedOpname(null); }}>Reorder Policies</Button>
         <Button variant={tab === "reservations" ? "primary" : "secondary"} onClick={() => { setTab("reservations"); setSelectedTransfer(null); setSelectedOpname(null); }}>Stock Reservations</Button>
         <Button variant={tab === "transfers" ? "primary" : "secondary"} onClick={() => { setTab("transfers"); setSelectedOpname(null); }}>Stock Transfers</Button>
         <Button variant={tab === "opnames" ? "primary" : "secondary"} onClick={() => { setTab("opnames"); setSelectedTransfer(null); }}>Stock Opname</Button>
+        <Button variant={tab === "receiving" ? "primary" : "secondary"} onClick={() => { setTab("receiving"); setSelectedTransfer(null); setSelectedOpname(null); }}>Receiving & Quality</Button>
       </div>
 
       {loading ? (
@@ -516,6 +518,8 @@ export function StockOperationsPage() {
             </Card>
           )}
         </div>
+      ) : tab === "receiving" ? (
+        <ReceivingQualityPanel />
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

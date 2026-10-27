@@ -71,6 +71,14 @@ export class TransferOpnameService {
     return this.delegate.recordStockTransferReceipt(actor, input);
   }
 
+  async returnStockTransferToDraft(
+    actor: ActorContext,
+    transferId: string,
+    comment?: string,
+  ): Promise<StockTransferDetailView> {
+    return this.delegate.returnStockTransferToDraft(actor, transferId, comment);
+  }
+
   async createStockOpname(
     actor: ActorContext,
     input: Omit<CreateScmStockOpnameInput, "createdBy" | "opnameNumber"> & { opnameNumber?: string },

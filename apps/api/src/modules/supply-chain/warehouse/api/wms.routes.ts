@@ -677,6 +677,11 @@ export function registerWmsRoutes(app: FastifyInstance, deps: WmsRouteDeps, pref
     const body = recordTransferReceiptSchema.parse(req.body);
     return reply.send(await deps.wms.transferOpname.recordStockTransferReceipt(req.actor!, body));
   });
+  app.post(route(prefix, "/transfers/:id/return-to-draft"), { preHandler: app.authenticate }, async (req, reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const body = actionSchema.partial().parse(req.body ?? {});
+    return reply.send(await deps.wms.transferOpname.returnStockTransferToDraft(req.actor!, id, body.comment ?? undefined));
+  });
   app.post(route(prefix, "/opnames"), { preHandler: app.authenticate }, async (req, reply) => {
     const body = createStockOpnameSchema.parse(req.body);
     return reply.status(201).send(await deps.wms.transferOpname.createStockOpname(req.actor!, body));

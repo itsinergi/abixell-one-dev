@@ -2199,3 +2199,115 @@ capabilities card no longer claims every section is read only.
   an old name is just another rename, and both events stay.
 - The dev database reported 36 tenants and 1703 audit rows before and after
   this work; it was migrated and synced, never reset or reseeded.
+
+---
+
+# Implementation Notes — SCM Receiving Chain (GAP #7, #8, #9)
+
+**Tanggal:** 2026-10-25. Audit implementasi rantai penerimaan barang:
+permintaan → issued, WMS/inventory/transfer, dan purchasing → warehouse
+receipt. Tiga celah ditemukan dan ditutup.
+
+## What was already correct
+
+- **Receiving books the PO atomically.** `createReceivingRecord` raises
+  `quantity_received` on the purchase-order line inside the same transaction
+  that writes the stock movement, guarded by
+  `quantity_received + $3 <= quantity_ordered` plus `issued_at IS NOT NULL`
+  and `cancelled_at IS NULL`. Over-receipt is refused, not clamped; receiving
+  against a draft or cancelled PO is refused outright (`2d7ab73`).
+- **Inspection is a ledger event.** Receiving parks the whole quantity in
+  `quality_hold`; the inspection document, the release movements, the
+  receiving-line projection, the receiving status, and the accepted FIFO layer
+  are written in one transaction.
+- **Reversal is compensating.** `createReceiptReversal` locks the header,
+  computes the reversible quantity, writes a `receipt_reversal_out` movement
+  and raises `quantity_reversed`. Receiving history stays immutable.
+- **A discrepancy record moves no stock.** Complaints and returns are two
+  different things, and the code already treated them that way.
+
+## GAP #8 — payment eligibility was checked but never produced
+
+`createPaymentBatch` re-checked `invoiced qty <= accepted-eligible qty` at
+transaction time, where accepted-eligible is
+`quantity_accepted - quantity_returned - quantity_reversed`. That check was
+correct but inert: nothing in the return path ever raised
+`quantity_returned`, so in production the recheck always passed. The test that
+covered it set the column by hand, which is why it stayed green.
+
+Vendor invoice creation got the same guard, so an invoice cannot be raised for
+more than the accepted-eligible quantity in the first place.
+
+## GAP #7 — a return did not consume the returnable quantity
+
+`createReturnToVendor` wrote the stock movement and the return document but
+never touched `quantity_returned`. Goods could therefore be shipped back to the
+vendor and still be paid for.
+
+Fixed with an atomic consume inside the return transaction, capped at
+`quantity_received - quantity_returned - quantity_reversed`:
+
+```sql
+UPDATE scm_receiving_lines
+   SET quantity_returned = quantity_returned + $3
+ WHERE tenant_id = $1 AND id = $2 AND receiving_record_id IS NOT NULL
+   AND quantity_received - quantity_returned - quantity_reversed >= $3
+RETURNING id
+```
+
+The cap is the **physically received** quantity, not the accepted one:
+rejected and quarantined goods are exactly what gets sent back before any
+inspection outcome exists. A return above the cap is a `409`, not a silent
+overdraw.
+
+## GAP #9 — the chain had no surface
+
+`apps/web/src/lib/api.ts` held no method for receiving records, inspections,
+discrepancies, returns-to-vendor, receipt reversals, or replacements, and no
+page rendered them. An operator could record a receipt through the API and then
+had no way to see what arrived, what inspection released, or what could still be
+paid.
+
+Added a **Receiving & Quality** tab inside the existing Stock Operations page
+(`/wms/operations`) rather than a new route. The page already owns the
+`supply_chain.inventory.read` / `.manage` permission the chain needs, and a new
+route would have required a menu migration plus a re-run of the seed-parity
+test for a view that belongs to the same job.
+
+The line table carries the whole story per line — received, accepted, rejected,
+quarantined, returned, reversed — and ends with **payment eligible**, derived as
+`accepted - returned - reversed`. That is the same expression the payment batch
+re-checks inside its transaction, so the screen and the server cannot disagree
+about what is payable. Nothing is stored.
+
+Three actions, kept deliberately apart: record inspection, raise a complaint,
+return to vendor. A complaint records the business case and moves nothing; a
+return ships goods back and consumes the line's returnable quantity.
+
+## Verification
+
+- `apps/api/tests/integration/wave-a5-integration.test.ts` — 13 suites / 60
+  tests green, including the new cases: a return raises `quantity_returned`, an
+  over-return is refused with `409` and leaves the line untouched, and a
+  complaint changes neither `quantityReturned` nor `quantityAccepted`.
+- `apps/api/tests/integration/ap-payment-wp-pro-03.test.ts` — 2 suites / 12
+  tests green, including the case where a return makes an invoice ineligible.
+- `npx tsc --noEmit -p tsconfig.json` in `apps/web`: 15 errors before the
+  change, 15 after, none in the touched files. They are pre-existing React 19
+  `RefObject` mismatches in files this work did not open.
+- `npx eslint` on the three touched files: no issues.
+- Endpoints smoke-tested against the running API with a demo-gs admin session:
+  `GET /wms/receiving-records`, `/wms/discrepancies?status=open`, and
+  `/wms/returns-to-vendor` all return `200`.
+
+## Known limitations
+
+- The UI shows the chain read-and-act, but does not yet let an operator record a
+  new receipt from the browser — receiving is still driven from the purchase
+  order side. The panel opens an existing receipt and works from there.
+- Receipt reversals and replacement deliveries have client methods but no
+  screen yet; they were out of scope for closing GAP #9.
+- Browser verification was blocked (the preview pane could not be started in
+  this session), so the panel is proven by typecheck, lint, module transform
+  through Vite, and the endpoint smoke test above — not by a rendered
+  screenshot.

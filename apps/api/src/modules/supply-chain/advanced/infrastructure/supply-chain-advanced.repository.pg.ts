@@ -1043,6 +1043,7 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     reservationId: string,
     status: ScmReservationStatus,
     timestamp: Date,
+    createdBy: string | null = null,
   ): Promise<ScmStockReservation | null> {
     return this.inTransaction(async (client) => {
       const resRes = await client.query(
@@ -1053,7 +1054,9 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       const reservation = toStockReservation(resRes.rows[0]!);
 
       if (reservation.status === "active" && (status === "cancelled" || status === "expired" || status === "fulfilled")) {
-        // Release reserved_qty on balance
+        // Release reserved_qty on balance FIRST: fulfilling issues the goods,
+        // and the ledger refuses any reduction that would drop the balance
+        // below what is still reserved.
         await client.query(
           `UPDATE scm_advanced_stock_balances
               SET reserved_qty = GREATEST(0, reserved_qty - $1), updated_at = now()
@@ -1070,6 +1073,73 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
             reservation.locationId,
             reservation.batchId,
           ],
+        );
+      }
+
+      // Fulfilling a reservation issues the goods for real: the stock leaves
+      // the warehouse, not just the reserved bucket.
+      if (reservation.status === "active" && status === "fulfilled") {
+        const context = await this.resolveAccountingContextTx(
+          client,
+          tenantId,
+          reservation.warehouseId,
+          timestamp,
+        );
+        const unitCost = await this.resolveUnitCostTx(
+          client,
+          tenantId,
+          reservation.itemId,
+          reservation.warehouseId,
+        );
+        const preallocatedEventId = crypto.randomUUID();
+
+        const issued = await this.recordMovementTx(client, tenantId, {
+          itemId: reservation.itemId,
+          warehouseId: reservation.warehouseId,
+          locationId: reservation.locationId,
+          batchId: reservation.batchId,
+          stockCondition: "unrestricted",
+          ownerType: "own",
+          ownerPartyId: null,
+          movementType: "out",
+          quantity: reservation.quantity,
+          unitCost,
+          totalCost: multiplyQuantityCost(reservation.quantity, unitCost),
+          referenceType: "scm_stock_reservation",
+          referenceId: reservation.id,
+          referenceNumber: reservation.reservationNumber,
+          accountingReadyEventId: preallocatedEventId,
+          notes: `Issued for reservation ${reservation.reservationNumber} (${reservation.reservedForType})`,
+          occurredAt: timestamp,
+          createdBy,
+        });
+
+        await this.createAccountingReadyEventTx(
+          client,
+          tenantId,
+          {
+            eventType: "inventory.goods_issued",
+            sourceDocumentType: "scm_stock_reservation",
+            sourceDocumentId: reservation.id,
+            sourceMovementId: issued.movement.id,
+            effectiveAt: timestamp,
+            amount: multiplyQuantityCost(reservation.quantity, unitCost),
+            quantity: reservation.quantity,
+            unitCost,
+            accountAssignmentType: "expense",
+            accountAssignmentDimensions: { legalEntityId: context.legalEntityId },
+            idempotencyKey: `reservation-fulfil:${reservation.id}`,
+            payload: {
+              legalEntityId: context.legalEntityId,
+              periodId: context.periodId,
+              reservationNumber: reservation.reservationNumber,
+              reservedForType: reservation.reservedForType,
+              reservedForId: reservation.reservedForId,
+              warehouseId: reservation.warehouseId,
+            },
+            createdBy,
+          },
+          preallocatedEventId,
         );
       }
 
@@ -1240,16 +1310,70 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     input: RecordScmStockTransferShipmentInput,
   ): Promise<ScmStockTransferLine[]> {
     return this.inTransaction(async (client) => {
+      const trRes = await client.query(
+        `SELECT * FROM scm_stock_transfers WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, input.transferId],
+      );
+      if (!trRes.rows[0]) throw new NotFoundError("ScmStockTransfer", input.transferId);
+      const transfer = toStockTransfer(trRes.rows[0]);
+
       const updatedLines: ScmStockTransferLine[] = [];
       for (const item of input.lineShipments) {
+        if (item.quantityShipped <= 0) continue;
         const r = await client.query(
           `UPDATE scm_stock_transfer_lines
               SET quantity_shipped = quantity_shipped + $3
             WHERE tenant_id = $1 AND id = $2 AND transfer_id = $4
+              AND quantity_shipped + $3 <= quantity_requested
             RETURNING *`,
           [tenantId, item.lineId, item.quantityShipped, input.transferId],
         );
-        if (r.rows[0]) updatedLines.push(toStockTransferLine(r.rows[0]));
+        if (!r.rows[0]) {
+          throw new ConflictError(
+            `Transfer line ${item.lineId} cannot ship ${item.quantityShipped}: it would exceed the requested quantity, or the line does not belong to this transfer`,
+          );
+        }
+        const line = toStockTransferLine(r.rows[0]);
+
+        // Goods leave the source warehouse's unrestricted stock.
+        await this.recordMovementTx(client, tenantId, {
+          itemId: line.itemId,
+          warehouseId: transfer.fromWarehouseId,
+          locationId: line.fromLocationId,
+          batchId: line.batchId,
+          stockCondition: "unrestricted",
+          ownerType: "own",
+          ownerPartyId: null,
+          movementType: "transfer_out",
+          quantity: item.quantityShipped,
+          referenceType: "scm_stock_transfer",
+          referenceId: transfer.id,
+          referenceNumber: transfer.transferNumber,
+          notes: `Shipped on transfer ${transfer.transferNumber}`,
+          createdBy: input.createdBy ?? null,
+        });
+
+        // They land in an in-transit position at the destination warehouse with
+        // NO bin/locator: the receiver has not acknowledged them yet, so they
+        // must not be pickable from any location.
+        await this.recordMovementTx(client, tenantId, {
+          itemId: line.itemId,
+          warehouseId: transfer.toWarehouseId,
+          locationId: null,
+          batchId: line.batchId,
+          stockCondition: "in_transit",
+          ownerType: "own",
+          ownerPartyId: null,
+          movementType: "transfer_in",
+          quantity: item.quantityShipped,
+          referenceType: "scm_stock_transfer",
+          referenceId: transfer.id,
+          referenceNumber: transfer.transferNumber,
+          notes: `In transit on transfer ${transfer.transferNumber}`,
+          createdBy: input.createdBy ?? null,
+        });
+
+        updatedLines.push(line);
       }
 
       await client.query(
@@ -1268,23 +1392,180 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     input: RecordScmStockTransferReceiptInput,
   ): Promise<ScmStockTransferLine[]> {
     return this.inTransaction(async (client) => {
+      const trRes = await client.query(
+        `SELECT * FROM scm_stock_transfers WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, input.transferId],
+      );
+      if (!trRes.rows[0]) throw new NotFoundError("ScmStockTransfer", input.transferId);
+      const transfer = toStockTransfer(trRes.rows[0]);
+
       const updatedLines: ScmStockTransferLine[] = [];
       for (const item of input.lineReceipts) {
+        if (item.quantityReceived <= 0) continue;
+        // Partial receipt is allowed per line; a line can never receive more
+        // than was actually shipped.
         const r = await client.query(
           `UPDATE scm_stock_transfer_lines
               SET quantity_received = quantity_received + $3
             WHERE tenant_id = $1 AND id = $2 AND transfer_id = $4
+              AND quantity_received + $3 <= quantity_shipped
             RETURNING *`,
           [tenantId, item.lineId, item.quantityReceived, input.transferId],
         );
-        if (r.rows[0]) updatedLines.push(toStockTransferLine(r.rows[0]));
+        if (!r.rows[0]) {
+          throw new ConflictError(
+            `Transfer line ${item.lineId} cannot receive ${item.quantityReceived}: it would exceed the shipped quantity, or the line does not belong to this transfer`,
+          );
+        }
+        const line = toStockTransferLine(r.rows[0]);
+
+        // Goods leave the in-transit position...
+        await this.recordMovementTx(client, tenantId, {
+          itemId: line.itemId,
+          warehouseId: transfer.toWarehouseId,
+          locationId: null,
+          batchId: line.batchId,
+          stockCondition: "in_transit",
+          ownerType: "own",
+          ownerPartyId: null,
+          movementType: "transfer_out",
+          quantity: item.quantityReceived,
+          referenceType: "scm_stock_transfer",
+          referenceId: transfer.id,
+          referenceNumber: transfer.transferNumber,
+          notes: `Received from transit on transfer ${transfer.transferNumber}`,
+          createdBy: input.createdBy ?? null,
+        });
+
+        // ...and become pickable unrestricted stock in the destination bin.
+        await this.recordMovementTx(client, tenantId, {
+          itemId: line.itemId,
+          warehouseId: transfer.toWarehouseId,
+          locationId: line.toLocationId,
+          batchId: line.batchId,
+          stockCondition: "unrestricted",
+          ownerType: "own",
+          ownerPartyId: null,
+          movementType: "transfer_in",
+          quantity: item.quantityReceived,
+          referenceType: "scm_stock_transfer",
+          referenceId: transfer.id,
+          referenceNumber: transfer.transferNumber,
+          notes: `Received on transfer ${transfer.transferNumber}`,
+          createdBy: input.createdBy ?? null,
+        });
+
+        updatedLines.push(line);
+      }
+
+      // Only close the transfer when every shipped quantity has been received.
+      const pendingRes = await client.query(
+        `SELECT COUNT(*)::int AS pending
+           FROM scm_stock_transfer_lines
+          WHERE tenant_id = $1 AND transfer_id = $2 AND quantity_received < quantity_shipped`,
+        [tenantId, input.transferId],
+      );
+      const stillPending = num(pendingRes.rows[0]?.pending) > 0;
+
+      await client.query(
+        `UPDATE scm_stock_transfers
+            SET status = $3, received_at = CASE WHEN $3 = 'received' THEN now() ELSE received_at END,
+                updated_at = now()
+          WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, input.transferId, stillPending ? "in_transit" : "received"],
+      );
+
+      return updatedLines;
+    });
+  }
+
+  /**
+   * Returns an in-transit transfer to draft so the sender can revise it.
+   *
+   * Only the portion that is still in transit is pulled back to the source
+   * warehouse; anything the receiver already accepted stays acknowledged in
+   * the destination bin. The doc's shipped quantity is reset to the received
+   * quantity, so a later re-shipment starts from what has not been accepted.
+   */
+  async revertStockTransferToDraft(
+    tenantId: string,
+    transferId: string,
+    createdBy: string | null,
+  ): Promise<ScmStockTransferLine[]> {
+    return this.inTransaction(async (client) => {
+      const trRes = await client.query(
+        `SELECT * FROM scm_stock_transfers WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, transferId],
+      );
+      if (!trRes.rows[0]) throw new NotFoundError("ScmStockTransfer", transferId);
+      const transfer = toStockTransfer(trRes.rows[0]);
+      if (transfer.status !== "in_transit") {
+        throw new ConflictError(
+          `Only an in-transit transfer can be returned to draft; current status is ${transfer.status}`,
+        );
+      }
+
+      const linesRes = await client.query(
+        `SELECT * FROM scm_stock_transfer_lines WHERE tenant_id = $1 AND transfer_id = $2 ORDER BY sort_order`,
+        [tenantId, transferId],
+      );
+
+      const updatedLines: ScmStockTransferLine[] = [];
+      for (const row of linesRes.rows) {
+        const line = toStockTransferLine(row);
+        const inTransit = line.quantityShipped - line.quantityReceived;
+
+        if (inTransit > 0) {
+          await this.recordMovementTx(client, tenantId, {
+            itemId: line.itemId,
+            warehouseId: transfer.toWarehouseId,
+            locationId: null,
+            batchId: line.batchId,
+            stockCondition: "in_transit",
+            ownerType: "own",
+            ownerPartyId: null,
+            movementType: "transfer_out",
+            quantity: inTransit,
+            referenceType: "scm_stock_transfer",
+            referenceId: transfer.id,
+            referenceNumber: transfer.transferNumber,
+            notes: `Pulled back from transit for revision on transfer ${transfer.transferNumber}`,
+            createdBy,
+          });
+
+          await this.recordMovementTx(client, tenantId, {
+            itemId: line.itemId,
+            warehouseId: transfer.fromWarehouseId,
+            locationId: line.fromLocationId,
+            batchId: line.batchId,
+            stockCondition: "unrestricted",
+            ownerType: "own",
+            ownerPartyId: null,
+            movementType: "transfer_in",
+            quantity: inTransit,
+            referenceType: "scm_stock_transfer",
+            referenceId: transfer.id,
+            referenceNumber: transfer.transferNumber,
+            notes: `Returned to source for revision on transfer ${transfer.transferNumber}`,
+            createdBy,
+          });
+        }
+
+        const upRes = await client.query(
+          `UPDATE scm_stock_transfer_lines
+              SET quantity_shipped = quantity_received
+            WHERE tenant_id = $1 AND id = $2
+            RETURNING *`,
+          [tenantId, line.id],
+        );
+        updatedLines.push(toStockTransferLine(upRes.rows[0]!));
       }
 
       await client.query(
         `UPDATE scm_stock_transfers
-            SET status = 'received', received_at = now(), updated_at = now()
+            SET status = 'draft', shipped_at = NULL, updated_at = now(), updated_by = $3
           WHERE tenant_id = $1 AND id = $2`,
-        [tenantId, input.transferId],
+        [tenantId, transferId, createdBy],
       );
 
       return updatedLines;
@@ -1464,6 +1745,161 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       [tenantId, lineId, adjustmentMovementId],
     );
     return r.rows[0] ? toStockOpnameLine(r.rows[0]) : null;
+  }
+
+  /**
+   * Posts every counted variance as a real stock adjustment and marks the
+   * opname `adjusted` — one transaction, so the ledger and the document can
+   * never disagree about whether the count was applied.
+   *
+   * Idempotent by construction: a line that already has an
+   * `adjustment_movement_id` is skipped, so re-running never double-counts.
+   * Lines with no physical count, or no variance, are left alone.
+   */
+  async applyStockOpnameAdjustments(
+    tenantId: string,
+    opnameId: string,
+    createdBy: string | null,
+  ): Promise<ScmStockOpnameLine[]> {
+    return this.inTransaction(async (client) => {
+      const opRes = await client.query(
+        `SELECT * FROM scm_stock_opnames WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, opnameId],
+      );
+      if (!opRes.rows[0]) throw new NotFoundError("ScmStockOpname", opnameId);
+      const opname = toStockOpname(opRes.rows[0]);
+
+      const linesRes = await client.query(
+        `SELECT * FROM scm_stock_opname_lines
+          WHERE tenant_id = $1 AND opname_id = $2
+          ORDER BY sort_order
+          FOR UPDATE`,
+        [tenantId, opnameId],
+      );
+
+      const updated: ScmStockOpnameLine[] = [];
+      for (const row of linesRes.rows) {
+        const line = toStockOpnameLine(row);
+        if (line.adjustmentMovementId || line.physicalQuantity === null) continue;
+
+        const variance = num(line.physicalQuantity) - num(line.systemQuantity);
+        if (variance === 0) continue;
+
+        // A line counted at warehouse level carries no bin. Posting it against a
+        // null-location bucket would miss the stock that actually sits in a bin,
+        // so resolve the one position holding it. Ambiguous counts are refused
+        // rather than guessed.
+        let locationId = line.locationId;
+        let batchId = line.batchId;
+        if (!locationId) {
+          const posRes = await client.query(
+            `SELECT location_id, batch_id FROM scm_advanced_stock_balances
+              WHERE tenant_id = $1 AND item_id = $2 AND warehouse_id = $3
+                AND quantity > 0
+                AND stock_condition = 'unrestricted' AND owner_type = 'own'
+                AND owner_party_id IS NULL
+                AND (location_id IS NOT NULL OR batch_id IS NOT NULL)`,
+            [tenantId, line.itemId, opname.warehouseId],
+          );
+          if (posRes.rows.length === 1) {
+            locationId = posRes.rows[0]!.location_id;
+            batchId = posRes.rows[0]!.batch_id;
+          } else if (posRes.rows.length > 1) {
+            throw new ValidationError(
+              `Opname line ${line.id} has no storage location but item ${line.itemId} is held in ${posRes.rows.length} positions; count per bin instead`,
+            );
+          }
+        }
+
+        const context = await this.resolveAccountingContextTx(
+          client,
+          tenantId,
+          opname.warehouseId,
+          opname.completedAt ?? new Date(),
+        );
+        const unitCost = await this.resolveUnitCostTx(
+          client,
+          tenantId,
+          line.itemId,
+          opname.warehouseId,
+        );
+        const varianceQty = Math.abs(variance);
+        const amount = multiplyQuantityCost(varianceQty, unitCost);
+        const preallocatedEventId = crypto.randomUUID();
+
+        const movement = await this.recordMovementTx(client, tenantId, {
+          itemId: line.itemId,
+          warehouseId: opname.warehouseId,
+          locationId,
+          batchId,
+          stockCondition: "unrestricted",
+          ownerType: "own",
+          ownerPartyId: null,
+          movementType: variance > 0 ? "opname_in" : "opname_out",
+          quantity: varianceQty,
+          unitCost,
+          totalCost: amount,
+          referenceType: "scm_stock_opname",
+          referenceId: opname.id,
+          referenceNumber: opname.opnameNumber,
+          accountingReadyEventId: preallocatedEventId,
+          notes: `Opname adjustment on ${opname.opnameNumber}: system ${line.systemQuantity}, physical ${line.physicalQuantity}`,
+          createdBy,
+        });
+
+        // Surplus and shrinkage need opposite journal sides, and a posting rule
+        // is chosen by event type alone (amountExpression only knows a positive
+        // AMOUNT). They therefore emit different event types.
+        await this.createAccountingReadyEventTx(
+          client,
+          tenantId,
+          {
+            eventType: variance > 0 ? "inventory.goods_received" : "inventory.adjusted",
+            sourceDocumentType: "scm_stock_opname",
+            sourceDocumentId: opname.id,
+            sourceDocumentLineId: line.id,
+            sourceMovementId: movement.movement.id,
+            effectiveAt: opname.completedAt ?? new Date(),
+            amount,
+            quantity: varianceQty,
+            unitCost,
+            accountAssignmentType: "stock",
+            accountAssignmentDimensions: { legalEntityId: context.legalEntityId },
+            idempotencyKey: `opname-adjust:${line.id}`,
+            payload: {
+              legalEntityId: context.legalEntityId,
+              periodId: context.periodId,
+              opnameNumber: opname.opnameNumber,
+              warehouseId: opname.warehouseId,
+              systemQuantity: num(line.systemQuantity),
+              physicalQuantity: num(line.physicalQuantity),
+              variance,
+            },
+            createdBy,
+          },
+          preallocatedEventId,
+        );
+
+        const linkRes = await client.query(
+          `UPDATE scm_stock_opname_lines
+              SET adjustment_movement_id = $3
+            WHERE tenant_id = $1 AND id = $2
+            RETURNING *`,
+          [tenantId, line.id, movement.movement.id],
+        );
+        updated.push(toStockOpnameLine(linkRes.rows[0]!));
+      }
+
+      await client.query(
+        `UPDATE scm_stock_opnames
+            SET status = 'adjusted', completed_at = COALESCE(completed_at, now()),
+                completed_by = COALESCE(completed_by, $3), updated_at = now(), updated_by = $3
+          WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, opnameId, createdBy],
+      );
+
+      return updated;
+    });
   }
 
   async findStockOpnameById(
@@ -2614,6 +3050,31 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       const lines: ScmReceivingLine[] = [];
       let sort = 0;
       for (const line of input.lines) {
+        // Receiving is a PO hand-off: only an issued, non-cancelled line may
+        // advance, and the guard lives inside the locked UPDATE so concurrent
+        // receipts cannot jointly exceed the ordered quantity.
+        const poLineRes = await client.query(
+          `UPDATE purchase_order_lines pol
+              SET quantity_received = pol.quantity_received + $3
+             FROM purchase_orders po
+            WHERE pol.tenant_id = $1
+              AND pol.id = $2
+              AND pol.purchase_order_id = $4
+              AND pol.item_id = $5
+              AND po.id = pol.purchase_order_id
+              AND po.tenant_id = pol.tenant_id
+              AND po.issued_at IS NOT NULL
+              AND po.cancelled_at IS NULL
+              AND pol.quantity_received + $3 <= pol.quantity_ordered
+            RETURNING pol.id`,
+          [tenantId, line.purchaseOrderLineId, line.quantityReceived, input.purchaseOrderId, line.itemId],
+        );
+        if (!poLineRes.rows[0]) {
+          throw new ConflictError(
+            `Receiving line ${line.purchaseOrderLineId} is not issued, mismatched, cancelled, or exceeds the ordered quantity`,
+          );
+        }
+
         const lRes = await client.query(
           `INSERT INTO scm_receiving_lines (
              tenant_id, receiving_record_id, purchase_order_line_id, item_id,
@@ -3215,6 +3676,92 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
     return this.inTransaction((client) => this.createAccountingReadyEventTx(client, tenantId, input));
   }
 
+  /**
+   * Resolves the accounting context an event needs, or refuses the operation.
+   *
+   * The Accounting consumer posts every event into exactly one legal entity and
+   * one open period, so a goods movement that cannot name both would post to
+   * nowhere. Fail closed: the caller's whole transaction rolls back rather than
+   * moving stock that Finance can never see.
+   */
+  private async resolveAccountingContextTx(
+    client: PoolClient,
+    tenantId: string,
+    warehouseId: string,
+    effectiveAt: Date,
+  ): Promise<{ legalEntityId: string; periodId: string }> {
+    const leRes = await client.query(
+      `SELECT ou.legal_entity_id
+         FROM scm_warehouses w
+         JOIN organization_units ou
+           ON ou.tenant_id = w.tenant_id AND ou.id = w.organization_unit_id
+        WHERE w.tenant_id = $1 AND w.id = $2 AND ou.legal_entity_id IS NOT NULL`,
+      [tenantId, warehouseId],
+    );
+    const legalEntityId: string | undefined = leRes.rows[0]?.legal_entity_id;
+    if (!legalEntityId) {
+      throw new ValidationError(
+        `Warehouse ${warehouseId} has no legal entity through its organization unit; cannot emit an accounting event`,
+      );
+    }
+
+    const periodRes = await client.query(
+      `SELECT id FROM accounting_periods
+        WHERE tenant_id = $1 AND legal_entity_id = $2 AND status = 'open'
+          AND date_from <= $3::date AND date_to >= $3::date
+        ORDER BY date_from DESC
+        LIMIT 1`,
+      [tenantId, legalEntityId, effectiveAt.toISOString().slice(0, 10)],
+    );
+    const periodId: string | undefined = periodRes.rows[0]?.id;
+    if (!periodId) {
+      throw new ConflictError(
+        `No open accounting period for ${effectiveAt.toISOString().slice(0, 10)} in legal entity ${legalEntityId}`,
+      );
+    }
+    return { legalEntityId, periodId };
+  }
+
+  /**
+   * Weighted-average unit cost of the item in that warehouse.
+   *
+   * Layers are the authority. Stock can also arrive without one — a raw
+   * `POST /movements` carries its own unit cost and mints no layer — so fall
+   * back to the most recent inbound movement's cost rather than valuing the
+   * issue at zero and posting a nil journal.
+   *
+   * ponytail: layers are keyed by (item, warehouse), not by bin/condition, so
+   * every movement in a warehouse shares one cost. Add position-level costing
+   * when tenants start needing it.
+   */
+  private async resolveUnitCostTx(
+    client: PoolClient,
+    tenantId: string,
+    itemId: string,
+    warehouseId: string,
+  ): Promise<number> {
+    const r = await client.query(
+      `SELECT SUM(remaining_quantity * effective_unit_cost) / NULLIF(SUM(remaining_quantity), 0) AS avg_cost
+         FROM scm_valuation_layers
+        WHERE tenant_id = $1 AND item_id = $2 AND warehouse_id = $3 AND remaining_quantity > 0`,
+      [tenantId, itemId, warehouseId],
+    );
+    const layerCost = numOrNull(r.rows[0]?.avg_cost);
+    if (layerCost !== null && layerCost > 0) return layerCost;
+
+    const lastIn = await client.query(
+      `SELECT unit_cost
+         FROM scm_advanced_stock_movements
+        WHERE tenant_id = $1 AND item_id = $2 AND warehouse_id = $3
+          AND movement_type IN ('in', 'transfer_in', 'adjustment_in', 'opname_in')
+          AND unit_cost IS NOT NULL AND unit_cost > 0
+        ORDER BY occurred_at DESC, created_at DESC
+        LIMIT 1`,
+      [tenantId, itemId, warehouseId],
+    );
+    return num(lastIn.rows[0]?.unit_cost);
+  }
+
   private async createAccountingReadyEventTx(
     client: PoolClient,
     tenantId: string,
@@ -3405,6 +3952,79 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       const lines: ScmReturnToVendorLine[] = [];
       let sort = 0;
       for (const line of input.lines) {
+        const stockCondition = line.stockCondition ?? "unrestricted";
+        const ownerType = line.ownerType ?? "own";
+        const ownerPartyId = line.ownerPartyId ?? null;
+
+        // A return against a receiving line consumes that line's returned
+        // quantity, atomically. This is what makes the supply ineligible for
+        // payment later: accepted-eligible qty is
+        // quantity_accepted - quantity_returned - quantity_reversed, so a
+        // return that is not recorded here would leave the vendor invoice
+        // looking payable. The cap is the physically received quantity, not
+        // the accepted one — rejected and quarantined goods are exactly what
+        // gets sent back before any inspection outcome exists.
+        if (line.receivingLineId) {
+          const capRes = await client.query(
+            `UPDATE scm_receiving_lines
+                SET quantity_returned = quantity_returned + $3
+              WHERE tenant_id = $1
+                AND id = $2
+                AND receiving_record_id IS NOT NULL
+                AND quantity_received - quantity_returned - quantity_reversed >= $3
+              RETURNING id`,
+            [tenantId, line.receivingLineId, line.quantity],
+          );
+          if (!capRes.rows[0]) {
+            throw new ConflictError(
+              `Return quantity ${line.quantity} for receiving line ${line.receivingLineId} exceeds the still-returnable quantity`,
+            );
+          }
+        }
+
+        // Returning goods to the supplier is a real goods-out: the stock
+        // leaves the exact position it was sitting in. The ledger refuses a
+        // negative balance, so a return of stock that is not there fails here
+        // rather than silently corrupting the position.
+        const movement = await this.recordMovementTx(client, tenantId, {
+          itemId: line.itemId,
+          warehouseId: line.warehouseId,
+          locationId: line.locationId ?? null,
+          batchId: line.batchId ?? null,
+          stockCondition,
+          ownerType,
+          ownerPartyId,
+          movementType: "return_to_vendor_out",
+          quantity: line.quantity,
+          referenceType: "scm_return_to_vendor",
+          referenceId: returnToVendor.id,
+          referenceNumber: returnToVendor.returnNumber,
+          notes: line.notes ?? `Returned to vendor on ${returnToVendor.returnNumber}`,
+          occurredAt: input.returnedAt,
+          createdBy: input.createdBy ?? null,
+        });
+
+        // ADR-0023: SCM never writes GL journals — it emits an accounting-ready
+        // event and the Accounting consumer posts it.
+        const event = await this.createAccountingReadyEventTx(client, tenantId, {
+          eventType: "inventory.returned_to_vendor",
+          sourceDocumentType: "scm_return_to_vendor",
+          sourceDocumentId: returnToVendor.id,
+          sourceDocumentLineId: line.receivingLineId ?? null,
+          sourceMovementId: movement.movement.id,
+          effectiveAt: input.returnedAt ?? new Date(),
+          quantity: line.quantity,
+          idempotencyKey: `${input.idempotencyKey}:line:${sort}`,
+          payload: {
+            returnNumber: returnToVendor.returnNumber,
+            supplierId: input.supplierId,
+            purchaseOrderId: input.purchaseOrderId ?? null,
+            reason: input.reason,
+            receivingLineId: line.receivingLineId ?? null,
+          },
+          createdBy: input.createdBy ?? null,
+        });
+
         const lRes = await client.query(
           `INSERT INTO scm_return_to_vendor_lines (
              tenant_id, return_to_vendor_id, receiving_line_id, item_id,
@@ -3424,12 +4044,12 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
             line.warehouseId,
             line.locationId ?? null,
             line.batchId ?? null,
-            line.stockCondition ?? "unrestricted",
-            line.ownerType ?? "own",
-            line.ownerPartyId ?? null,
+            stockCondition,
+            ownerType,
+            ownerPartyId,
             line.quantity,
-            line.movementId ?? null,
-            line.accountingReadyEventId ?? null,
+            movement.movement.id,
+            event.id,
             line.notes ?? null,
             line.sortOrder ?? sort++,
           ],
@@ -4650,6 +5270,39 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
         }
       }
 
+      // Recheck accepted eligibility at payment time. Approval can predate a
+      // return or receipt reversal, so invoice status alone is insufficient.
+      const eligibilityRes = await client.query(
+        `SELECT vil.vendor_invoice_id,
+                vil.purchase_order_line_id,
+                SUM(vil.quantity_invoiced) AS invoiced_qty,
+                COALESCE((
+                  SELECT SUM(sl.quantity_accepted - sl.quantity_returned - sl.quantity_reversed)
+                    FROM scm_receiving_lines sl
+                    JOIN scm_receiving_records sr
+                      ON sr.id = sl.receiving_record_id AND sr.tenant_id = sl.tenant_id
+                   WHERE sl.tenant_id = vil.tenant_id
+                     AND sr.purchase_order_id = vi.purchase_order_id
+                     AND sl.purchase_order_line_id = vil.purchase_order_line_id
+                ), 0) AS eligible_qty
+           FROM scm_vendor_invoice_lines vil
+           JOIN scm_vendor_invoices vi
+             ON vi.id = vil.vendor_invoice_id AND vi.tenant_id = vil.tenant_id
+          WHERE vil.tenant_id = $1
+            AND vil.vendor_invoice_id = ANY($2::uuid[])
+          GROUP BY vil.tenant_id, vil.vendor_invoice_id, vil.purchase_order_line_id, vi.purchase_order_id`,
+        [tenantId, invoiceIds],
+      );
+      for (const row of eligibilityRes.rows) {
+        const invoicedQty = num(row.invoiced_qty);
+        const eligibleQty = num(row.eligible_qty);
+        if (invoicedQty > eligibleQty) {
+          throw new ConflictError(
+            `Vendor invoice ${row.vendor_invoice_id} is no longer payment-eligible: invoiced qty ${invoicedQty} exceeds accepted-eligible qty ${eligibleQty}`,
+          );
+        }
+      }
+
       // Check for duplicates within this batch
       const uniqueIds = new Set(invoiceIds);
       if (uniqueIds.size !== invoiceIds.length) {
@@ -5587,6 +6240,109 @@ export class PgSupplyChainAdvancedRepository implements SupplyChainAdvancedRepos
       }
 
       return { task, items };
+    });
+  }
+
+  /**
+   * Executes the physical move a completed warehouse task represents.
+   *
+   * Only task types that actually relocate or issue goods post movements:
+   * putaway/replenishment (no source → into a bin), relocation (bin → bin),
+   * pick (bin → out of the warehouse). `pack` and `cycle_count` are pure
+   * paperwork — they change no quantity — so they are skipped.
+   *
+   * Idempotent: items already carrying a `movement_id` are not moved twice.
+   */
+  async applyWarehouseTaskMovements(
+    tenantId: string,
+    taskId: string,
+    createdBy: string | null,
+  ): Promise<ScmWarehouseTaskItem[]> {
+    return this.inTransaction(async (client) => {
+      const taskRes = await client.query(
+        `SELECT * FROM scm_warehouse_tasks WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, taskId],
+      );
+      if (!taskRes.rows[0]) throw new NotFoundError("ScmWarehouseTask", taskId);
+      const task = toWarehouseTask(taskRes.rows[0]);
+      if (task.taskType === "pack" || task.taskType === "cycle_count") return [];
+
+      const itemsRes = await client.query(
+        `SELECT * FROM scm_warehouse_task_items
+          WHERE tenant_id = $1 AND warehouse_task_id = $2
+          ORDER BY sort_order
+          FOR UPDATE`,
+        [tenantId, taskId],
+      );
+
+      const updated: ScmWarehouseTaskItem[] = [];
+      for (const row of itemsRes.rows) {
+        const item = toWarehouseTaskItem(row);
+        if (item.movementId || item.status === "skipped") continue;
+        const quantity = num(item.actualQuantity ?? item.expectedQuantity);
+        if (quantity <= 0) continue;
+
+        const base = {
+          itemId: item.itemId,
+          warehouseId: task.warehouseId,
+          batchId: item.batchId,
+          serialId: item.serialId,
+          stockCondition: "unrestricted" as const,
+          ownerType: "own" as const,
+          ownerPartyId: null,
+          quantity,
+          referenceType: "scm_warehouse_task",
+          referenceId: task.id,
+          referenceNumber: task.taskNumber,
+          createdBy,
+        };
+
+        // pick issues goods out of the warehouse; putaway and replenishment
+        // land goods into a bin; relocation moves them between bins.
+        let movementId: string;
+        if (task.taskType === "pick") {
+          const m = await this.recordMovementTx(client, tenantId, {
+            ...base,
+            locationId: item.fromLocationId,
+            movementType: "out",
+            notes: `Pick task ${task.taskNumber} issued from bin`,
+          });
+          movementId = m.movement.id;
+        } else if (task.taskType === "relocation") {
+          await this.recordMovementTx(client, tenantId, {
+            ...base,
+            locationId: item.fromLocationId,
+            movementType: "transfer_out",
+            notes: `Relocation task ${task.taskNumber} out of source bin`,
+          });
+          const m = await this.recordMovementTx(client, tenantId, {
+            ...base,
+            locationId: item.toLocationId,
+            movementType: "transfer_in",
+            notes: `Relocation task ${task.taskNumber} into destination bin`,
+          });
+          movementId = m.movement.id;
+        } else {
+          const m = await this.recordMovementTx(client, tenantId, {
+            ...base,
+            locationId: item.toLocationId,
+            movementType: "in",
+            notes: `${task.taskType} task ${task.taskNumber} into destination bin`,
+          });
+          movementId = m.movement.id;
+        }
+
+        const linkRes = await client.query(
+          `UPDATE scm_warehouse_task_items
+              SET movement_id = $3, actual_quantity = $4, status = 'completed'
+            WHERE tenant_id = $1 AND id = $2
+            RETURNING *`,
+          [tenantId, item.id, movementId, quantity],
+        );
+        updated.push(toWarehouseTaskItem(linkRes.rows[0]!));
+      }
+
+      return updated;
     });
   }
 
