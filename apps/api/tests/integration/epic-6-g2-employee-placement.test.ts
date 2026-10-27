@@ -734,8 +734,12 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
     });
 
     it("no audit row on rejected mutation", async () => {
+      // Scoped to this suite's tenant: two other suites share the CI database
+      // and write audit_log rows in parallel, so a table-wide count races.
       const countBefore = (
-        await pool.query(`SELECT COUNT(*) FROM audit_log`)
+        await pool.query(`SELECT COUNT(*) FROM audit_log WHERE tenant_id = $1`, [
+          tenantId,
+        ])
       ).rows[0].count;
 
       // Attempt rejected mutation (missing required field)
@@ -754,7 +758,9 @@ describe("Epic 6 G2 — Employee Placement (§4.6)", () => {
       });
 
       const countAfter = (
-        await pool.query(`SELECT COUNT(*) FROM audit_log`)
+        await pool.query(`SELECT COUNT(*) FROM audit_log WHERE tenant_id = $1`, [
+          tenantId,
+        ])
       ).rows[0].count;
       expect(countAfter).toBe(countBefore); // No new audit row
     });
