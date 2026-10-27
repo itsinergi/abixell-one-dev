@@ -114,7 +114,9 @@ export type MyRoleAssignment = {
   roleId: string;
   roleCode: string;
   roleName: string;
-  scopeType: "tenant" | "organization_unit" | "customer";
+  scopeType: "tenant" | "legal_entity" | "organization_unit" | "customer";
+  scopeLegalEntityId: string | null;
+  scopeLegalEntityName: string | null;
   scopeOrganizationUnitId: string | null;
   scopeOrganizationUnitName: string | null;
   scopeCustomerId: string | null;

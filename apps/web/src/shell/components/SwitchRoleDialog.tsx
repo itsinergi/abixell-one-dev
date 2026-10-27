@@ -19,6 +19,8 @@ function scopeLabel(assignment: MyRoleAssignment): string {
   switch (assignment.scopeType) {
     case "tenant":
       return "All sites (tenant-wide)";
+    case "legal_entity":
+      return assignment.scopeLegalEntityName ?? "Legal entity";
     case "customer":
       return assignment.scopeCustomerName ?? "Customer";
     default:

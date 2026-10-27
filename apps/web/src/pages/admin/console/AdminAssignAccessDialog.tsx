@@ -41,6 +41,7 @@ type Step =
 
 const SCOPE_LABELS: Record<string, string> = {
   tenant: "Tenant-wide",
+  legal_entity: "Legal entity",
   organization_unit: "Organization unit",
   customer: "Customer",
 };
