@@ -21,6 +21,7 @@ import { registerDepartmentRoutes } from "./interfaces/http/routes/departments.j
 import { registerBusinessPartnerRoutes } from "./interfaces/http/routes/business-partners.js";
 import { registerSodRoutes } from "./interfaces/http/routes/sod.js";
 import { registerRuleRegistryRoutes } from "./interfaces/http/routes/rule-registry.js";
+import { registerEmployeePlacementRoutes } from "./interfaces/http/routes/employee-placements.js";
 import { registerUserRoutes } from "./interfaces/http/routes/users.js";
 import { registerAuditRoutes } from "./interfaces/http/routes/audit.js";
 import { registerConfigurationRoutes } from "./interfaces/http/routes/config.js";
@@ -191,6 +192,8 @@ export function buildApp(): FastifyInstance {
     // WP-APR-03 / WP-APR-02 — SoD governance + central rule registry surfaces.
     registerSodRoutes(scoped, container);
     registerRuleRegistryRoutes(scoped, container);
+    // Epic 6 Gelombang 2 — BP-native, effective-dated employee placement.
+    registerEmployeePlacementRoutes(scoped, container);
     registerUserRoutes(scoped, container);
     registerAuditRoutes(scoped, container);
     registerConfigurationRoutes(scoped, container);

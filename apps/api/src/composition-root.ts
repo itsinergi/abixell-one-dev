@@ -5,6 +5,7 @@ import { PgOrganizationUnitRepository } from "./infrastructure/persistence/repos
 import { PgOrganizationUnitHierarchyRepository } from "./infrastructure/persistence/repositories/organization-unit-hierarchy.repository.pg.js";
 import { PgDepartmentRepository } from "./infrastructure/persistence/repositories/department.repository.pg.js";
 import { PgBusinessPartnerRepository } from "./infrastructure/persistence/repositories/business-partner.repository.pg.js";
+import { PgEmployeePlacementRepository } from "./infrastructure/persistence/repositories/employee-placement.repository.pg.js";
 import { PgUserRepository } from "./infrastructure/persistence/repositories/user.repository.pg.js";
 import { PgRbacRepository } from "./infrastructure/persistence/repositories/rbac.repository.pg.js";
 import { PgAuditLogRepository } from "./infrastructure/persistence/repositories/audit-log.repository.pg.js";
@@ -48,6 +49,7 @@ import { OrganizationUnitService } from "./application/organization-unit/organiz
 import { OrganizationUnitHierarchyService } from "./application/organization-unit/organization-unit-hierarchy.service.js";
 import { DepartmentService } from "./application/department/department.service.js";
 import { BusinessPartnerService } from "./application/business-partner/business-partner.service.js";
+import { EmployeePlacementService } from "./application/employee/employee-placement.service.js";
 import { UserService } from "./application/identity/user.service.js";
 import { AuthService } from "./application/identity/auth.service.js";
 import { ConfigurationService } from "./application/configuration/configuration.service.js";
@@ -197,6 +199,10 @@ export function buildContainer() {
   // domain/business-partner/business-partner.entity.ts), same posture as
   // `departmentRepo` above.
   const businessPartnerRepo = new PgBusinessPartnerRepository(pool);
+  // Epic 6 Gelombang 2 — effective-dated employee placement over BP-native
+  // employee identity. This repository owns placement history and never writes
+  // legacy Workforce `employees` / `employee_assignments` tables (Option B).
+  const employeePlacementRepo = new PgEmployeePlacementRepository(pool);
   const userRepo = new PgUserRepository(pool);
   const rbacRepo = new PgRbacRepository(pool);
   const auditRepo = new PgAuditLogRepository(pool);
@@ -923,6 +929,7 @@ export function buildContainer() {
     // WP-APR-03 / WP-APR-02 — SoD governance surface and central rule registry.
     sod: new SodService(new PgSodRepository(pool), rbac),
     ruleRegistry: new RuleRegistryService(ruleRegistryRepo, rbac),
+    employeePlacement: new EmployeePlacementService(employeePlacementRepo, rbac),
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
     auth: new AuthService(pool, tenantRepo, userRepo, audit),
     configuration,
