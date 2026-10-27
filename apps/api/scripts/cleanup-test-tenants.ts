@@ -1,7 +1,9 @@
 /**
  * Cleanup Test Tenants
  *
- * Removes tenant records left over from vitest runs (code LIKE 'test-%').
+ * Removes tenant records left over from vitest runs, matched against the
+ * fixture-code prefixes every suite actually uses (see TEST_CODE_PATTERNS
+ * below — 'test-%' alone misses most of them, e.g. 'wave-%', 't11fl-%').
  * Shows every match before deleting anything.
  *
  * A plain `DELETE FROM tenants WHERE code LIKE 'test-%'` can fail two ways:
@@ -35,7 +37,12 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-const TEST_CODE_PATTERN = "test-%";
+// Prefixes the vitest suites create tenants under. Real tenants (demo-gs,
+// UNIT-CAT-PILOT-01) match none of these.
+const TEST_CODE_PATTERNS = [
+  "test-%", "mf-%", "svc-%", "wave-%", "t11fl-%", "ep2w23-%", "tahap-%",
+  "ak-%", "akrev-%", "bp-%", "e5g%", "ec-%", "mt-%", "p4sod-%",
+];
 
 /**
  * Tables holding a direct FK to tenants (no intermediate hop). Read from the
@@ -63,8 +70,8 @@ async function cleanupTestTenants() {
 
   try {
     const findResult = await client.query(
-      `SELECT id, code, name, created_at FROM tenants WHERE code LIKE $1 ORDER BY created_at DESC`,
-      [TEST_CODE_PATTERN],
+      `SELECT id, code, name, created_at FROM tenants WHERE code LIKE ANY($1) ORDER BY created_at DESC`,
+      [TEST_CODE_PATTERNS],
     );
 
     const testTenants = findResult.rows;
@@ -88,8 +95,8 @@ async function cleanupTestTenants() {
       // also disables ON DELETE CASCADE, which is why the sweep below exists.
       await client.query("SET LOCAL session_replication_role = replica");
       const deleteResult = await client.query(
-        `DELETE FROM tenants WHERE code LIKE $1`,
-        [TEST_CODE_PATTERN],
+        `DELETE FROM tenants WHERE code LIKE ANY($1)`,
+        [TEST_CODE_PATTERNS],
       );
       let swept = 0;
       for (const table of await tenantScopedTables(client)) {
