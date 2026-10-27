@@ -39,6 +39,11 @@ function stateLabel(assignment: AdminRoleAssignmentSummary): string {
 
 function scopeLabel(assignment: AdminRoleAssignmentSummary): string {
   if (assignment.scopeType === "tenant") return "Tenant-wide";
+  if (assignment.scopeType === "legal_entity") {
+    return assignment.scopeState === "available"
+      ? assignment.scopeLegalEntityName ?? "Unavailable legal entity"
+      : "Unavailable legal entity";
+  }
   if (assignment.scopeType === "organization_unit") {
     return assignment.scopeState === "available"
       ? assignment.scopeOrganizationUnitName ?? "Unavailable organization unit"
