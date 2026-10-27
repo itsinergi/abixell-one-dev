@@ -7,6 +7,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -801,7 +802,13 @@ function defaultStateRoot() {
       "AbixellOne/deployments",
     );
   }
-  return "/var/lock/abixell-one";
+  // Persistent per-user location. /var/lock is tmpfs on systemd hosts, so
+  // last-success.json would vanish on reboot and the pre-migration backup
+  // gate would fail closed. No root needed: the deploy user owns this path.
+  return resolve(
+    process.env.XDG_STATE_HOME ?? resolve(homedir(), ".local/state"),
+    "abixell-one",
+  );
 }
 
 function safeProjectName(value) {

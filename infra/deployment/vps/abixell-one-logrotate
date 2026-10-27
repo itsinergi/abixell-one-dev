@@ -8,7 +8,7 @@
 #     /etc/logrotate.d/abixell-one
 #
 
-/var/lock/abixell-one/*/deploy-audit.log {
+/home/deploy/.local/state/abixell-one/*/deploy-audit.log {
     size 100M
     rotate 12
     compress

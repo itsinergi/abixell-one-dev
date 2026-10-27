@@ -72,7 +72,7 @@ readonly WAL_ROOT POSTGRES_USER_NAME COMPOSE_PROJECT_NAME
 readonly BACKUP_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 readonly BACKUP_DIR="$WAL_ROOT/base/$BACKUP_TS"
 readonly BACKUP_TAR="$BACKUP_DIR/base.tar.gz"
-readonly DEPLOY_AUDIT_LOG="/var/lock/abixell-one/${COMPOSE_PROJECT_NAME}/deploy-audit.log"
+readonly DEPLOY_AUDIT_LOG="/home/deploy/.local/state/abixell-one/${COMPOSE_PROJECT_NAME}/deploy-audit.log"
 
 if [[ -e "$BACKUP_DIR" ]]; then
   echo "ERROR: Backup directory already exists: $BACKUP_DIR" >&2

@@ -26,7 +26,7 @@
 # Fixed paths (do not parameterize):
 #   PROTECTED_CONF  = /protected/staging.conf (read-only; read for
 #                     WAL_ROOT, POSTGRES_IMAGE, POSTGRES_USER)
-#   DEPLOY_AUDIT_LOG = /var/lock/abixell-one/<COMPOSE_PROJECT_NAME>/deploy-audit.log
+#   DEPLOY_AUDIT_LOG = /home/deploy/.local/state/abixell-one/<COMPOSE_PROJECT_NAME>/deploy-audit.log
 #   Base backups     = $WAL_ROOT/base/<UTC-compact-ts>/base.tar.gz
 #                       (produced by abixell-pitr-basebackup)
 #
@@ -103,7 +103,7 @@ done
 
 readonly WAL_ROOT POSTGRES_IMAGE POSTGRES_USER_NAME POSTGRES_DB_NAME COMPOSE_PROJECT_NAME
 readonly BASE_BACKUP_ROOT="$WAL_ROOT/base"
-readonly DEPLOY_AUDIT_LOG="/var/lock/abixell-one/${COMPOSE_PROJECT_NAME}/deploy-audit.log"
+readonly DEPLOY_AUDIT_LOG="/home/deploy/.local/state/abixell-one/${COMPOSE_PROJECT_NAME}/deploy-audit.log"
 
 readonly RECOVERY_PGDATA="/tmp/abixell-pitr-recovery-$$"
 readonly RECOVERY_CONTAINER="abixell-pitr-recovery-$$"
