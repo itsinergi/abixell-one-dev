@@ -1,98 +1,112 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "./shell/layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
-import { RoleSiteSelectionPage } from "./pages/RoleSiteSelectionPage";
-import { OverviewPage } from "./pages/OverviewPage";
-import { PanelAdminPage } from "./pages/admin/panel/PanelAdminPage";
-import { ComplaintsListPage } from "./pages/complaints/ComplaintsListPage";
-import { ComplaintCreatePage } from "./pages/complaints/ComplaintCreatePage";
-import { ComplaintDetailPage } from "./pages/complaints/ComplaintDetailPage";
-import { OperationalQueuePage } from "./pages/operational/OperationalQueuePage";
-import { OperationalDetailPage } from "./pages/operational/OperationalDetailPage";
-import { VerificationQueuePage } from "./pages/verification/VerificationQueuePage";
-import { VerificationDetailPage } from "./pages/verification/VerificationDetailPage";
-import { ManagementDashboardPage } from "./pages/management/ManagementDashboardPage";
-import { ComplaintConfigPage } from "./pages/admin/ComplaintConfigPage";
-import { SurveyListPage } from "./pages/survey/SurveyListPage";
-import { SurveyDetailPage } from "./pages/survey/SurveyDetailPage";
-import { MySurveysPage } from "./pages/survey/MySurveysPage";
-import { MySurveyDetailPage } from "./pages/survey/MySurveyDetailPage";
-import { PublicSurveyPage } from "./pages/survey/PublicSurveyPage";
-import { WorkOrderQueuePage } from "./modules/service-operations/WorkOrderQueuePage";
-import { WorkOrderDetailPage } from "./modules/service-operations/WorkOrderDetailPage";
-import { MyWorkPage } from "./modules/service-operations/MyWorkPage";
-import { MyWorkDetailPage } from "./modules/service-operations/MyWorkDetailPage";
-import { ServiceDefinitionsPage } from "./modules/service-operations/ServiceDefinitionsPage";
-import { CustomerCommercialPage } from "./modules/customer-commercial/CustomerCommercialPage";
-import { SalesPipelinePage } from "./pages/sales/SalesPipelinePage";
-import { ServiceQualityPage } from "./pages/service-quality/ServiceQualityPage";
-import { EmployeesPage } from "./modules/workforce/EmployeesPage";
-import { EmployeeDetailPage } from "./modules/workforce/EmployeeDetailPage";
-import { WorkforceAttendancePage } from "./pages/workforce-advanced/WorkforceAttendancePage";
-import { WorkforceLeaveOvertimePage } from "./pages/workforce-advanced/WorkforceLeaveOvertimePage";
-import { WorkforcePayrollPage } from "./pages/workforce-advanced/WorkforcePayrollPage";
-import { WorkforceRecruitmentPage } from "./pages/workforce-advanced/WorkforceRecruitmentPage";
-import { WorkforcePerformancePage } from "./pages/workforce-advanced/WorkforcePerformancePage";
-import { WorkforcePlanningPage } from "./pages/workforce-advanced/WorkforcePlanningPage";
-import { ItemsPage } from "./modules/supply-chain/ItemsPage";
-import { SuppliersPage } from "./modules/supply-chain/SuppliersPage";
-import { PurchasingPage } from "./modules/supply-chain/PurchasingPage";
-import { WarehousesPage, StockOperationsPage, ValuationPage } from "./pages/wms";
-import { ProcurementPage, SupplierContractsPage, SpendAnalyticsPage } from "./pages/procurement";
-import { AssetsPage } from "./modules/asset/AssetsPage";
-import { AssetDetailPage } from "./modules/asset/AssetDetailPage";
-import { ServicePacksPage } from "./pages/service-operations/ServicePacksPage";
-import { ServiceOptimizationPage } from "./pages/service-operations/ServiceOptimizationPage";
-import { ServiceOptimizationDetailPage } from "./pages/service-operations/ServiceOptimizationDetailPage";
-import { AssetMaintenancePage } from "./pages/asset-advanced/AssetMaintenancePage";
-import { AssetMaintenanceWorkOrderDetailPage } from "./pages/asset-advanced/AssetMaintenanceWorkOrderDetailPage";
-import { AssetPerformancePage } from "./pages/asset-advanced/AssetPerformancePage";
-import { FinanceAccountsPage } from "./modules/finance/FinanceAccountsPage";
-import { FinanceTransactionsPage } from "./modules/finance/FinanceTransactionsPage";
-import { FinanceTransactionDetailPage } from "./modules/finance/FinanceTransactionDetailPage";
-import { CashflowPage } from "./modules/finance/CashflowPage";
-import { AccountingPage } from "./modules/finance/AccountingPage";
-import { FinancialStatementsPage } from "./modules/finance/FinancialStatementsPage";
-import { FinanceJournalsPage } from "./modules/finance/FinanceJournalsPage";
-import { FinanceOpenItemsPage } from "./modules/finance/FinanceOpenItemsPage";
-import { FinanceBudgetsPage } from "./modules/finance/FinanceBudgetsPage";
-import { FinanceBankReconPage } from "./modules/finance/FinanceBankReconPage";
-import { FinanceAssetsPage } from "./modules/finance/FinanceAssetsPage";
-import { FinanceTaxPage } from "./modules/finance/FinanceTaxPage";
-import { FinancePeriodsPage } from "./modules/finance/FinancePeriodsPage";
-import { HseRegisterPage } from "./modules/hse/HseRegisterPage";
-import { HseReportPage } from "./modules/hse/HseReportPage";
-import { HseDetailPage } from "./modules/hse/HseDetailPage";
-import { HseAdvancedInvestigationsPage } from "./modules/hse/HseAdvancedInvestigationsPage";
-import { HseAdvancedPermitsAuditPage } from "./modules/hse/HseAdvancedPermitsAuditPage";
-import { HseAdvancedMonitoringCapaPage } from "./modules/hse/HseAdvancedMonitoringCapaPage";
-import { ProjectDeliveryPage } from "./modules/project-delivery/ProjectDeliveryPage";
-import { ProjectDeliveryDetailPage } from "./modules/project-delivery/ProjectDeliveryDetailPage";
-import { ProjectDeliveryAdvancedPlanningPage } from "./modules/project-delivery/ProjectDeliveryAdvancedPlanningPage";
-import { ProjectDeliveryAdvancedCostEVPage } from "./modules/project-delivery/ProjectDeliveryAdvancedCostEVPage";
-import { ReportingInsightPage } from "./modules/reporting-insight/ReportingInsightPage";
-import { AdminConsolePage } from "./pages/admin/console/AdminConsolePage";
-import { AdminRoleDefinitionPage } from "./pages/admin/console/AdminRoleDefinitionPage";
-import { ProfilePage } from "./pages/ProfilePage";
 import { useAuth } from "./auth/AuthContext";
+
+// Page modules are code-split (IMP-009): each route's chunk loads on first
+// navigation, so the initial bundle carries only the shell and the login entry.
+// Named exports are re-mapped to the default shape React.lazy expects.
+const RoleSiteSelectionPage = lazy(() => import("./pages/RoleSiteSelectionPage").then((m) => ({ default: m.RoleSiteSelectionPage })));
+const OverviewPage = lazy(() => import("./pages/OverviewPage").then((m) => ({ default: m.OverviewPage })));
+const PanelAdminPage = lazy(() => import("./pages/admin/panel/PanelAdminPage").then((m) => ({ default: m.PanelAdminPage })));
+const ComplaintsListPage = lazy(() => import("./pages/complaints/ComplaintsListPage").then((m) => ({ default: m.ComplaintsListPage })));
+const ComplaintCreatePage = lazy(() => import("./pages/complaints/ComplaintCreatePage").then((m) => ({ default: m.ComplaintCreatePage })));
+const ComplaintDetailPage = lazy(() => import("./pages/complaints/ComplaintDetailPage").then((m) => ({ default: m.ComplaintDetailPage })));
+const OperationalQueuePage = lazy(() => import("./pages/operational/OperationalQueuePage").then((m) => ({ default: m.OperationalQueuePage })));
+const OperationalDetailPage = lazy(() => import("./pages/operational/OperationalDetailPage").then((m) => ({ default: m.OperationalDetailPage })));
+const VerificationQueuePage = lazy(() => import("./pages/verification/VerificationQueuePage").then((m) => ({ default: m.VerificationQueuePage })));
+const VerificationDetailPage = lazy(() => import("./pages/verification/VerificationDetailPage").then((m) => ({ default: m.VerificationDetailPage })));
+const ManagementDashboardPage = lazy(() => import("./pages/management/ManagementDashboardPage").then((m) => ({ default: m.ManagementDashboardPage })));
+const ComplaintConfigPage = lazy(() => import("./pages/admin/ComplaintConfigPage").then((m) => ({ default: m.ComplaintConfigPage })));
+const SurveyListPage = lazy(() => import("./pages/survey/SurveyListPage").then((m) => ({ default: m.SurveyListPage })));
+const SurveyDetailPage = lazy(() => import("./pages/survey/SurveyDetailPage").then((m) => ({ default: m.SurveyDetailPage })));
+const MySurveysPage = lazy(() => import("./pages/survey/MySurveysPage").then((m) => ({ default: m.MySurveysPage })));
+const MySurveyDetailPage = lazy(() => import("./pages/survey/MySurveyDetailPage").then((m) => ({ default: m.MySurveyDetailPage })));
+const PublicSurveyPage = lazy(() => import("./pages/survey/PublicSurveyPage").then((m) => ({ default: m.PublicSurveyPage })));
+const WorkOrderQueuePage = lazy(() => import("./modules/service-operations/WorkOrderQueuePage").then((m) => ({ default: m.WorkOrderQueuePage })));
+const WorkOrderDetailPage = lazy(() => import("./modules/service-operations/WorkOrderDetailPage").then((m) => ({ default: m.WorkOrderDetailPage })));
+const MyWorkPage = lazy(() => import("./modules/service-operations/MyWorkPage").then((m) => ({ default: m.MyWorkPage })));
+const MyWorkDetailPage = lazy(() => import("./modules/service-operations/MyWorkDetailPage").then((m) => ({ default: m.MyWorkDetailPage })));
+const ServiceDefinitionsPage = lazy(() => import("./modules/service-operations/ServiceDefinitionsPage").then((m) => ({ default: m.ServiceDefinitionsPage })));
+const CustomerCommercialPage = lazy(() => import("./modules/customer-commercial/CustomerCommercialPage").then((m) => ({ default: m.CustomerCommercialPage })));
+const SalesPipelinePage = lazy(() => import("./pages/sales/SalesPipelinePage").then((m) => ({ default: m.SalesPipelinePage })));
+const ServiceQualityPage = lazy(() => import("./pages/service-quality/ServiceQualityPage").then((m) => ({ default: m.ServiceQualityPage })));
+const EmployeesPage = lazy(() => import("./modules/workforce/EmployeesPage").then((m) => ({ default: m.EmployeesPage })));
+const EmployeeDetailPage = lazy(() => import("./modules/workforce/EmployeeDetailPage").then((m) => ({ default: m.EmployeeDetailPage })));
+const WorkforceAttendancePage = lazy(() => import("./pages/workforce-advanced/WorkforceAttendancePage").then((m) => ({ default: m.WorkforceAttendancePage })));
+const WorkforceLeaveOvertimePage = lazy(() => import("./pages/workforce-advanced/WorkforceLeaveOvertimePage").then((m) => ({ default: m.WorkforceLeaveOvertimePage })));
+const WorkforcePayrollPage = lazy(() => import("./pages/workforce-advanced/WorkforcePayrollPage").then((m) => ({ default: m.WorkforcePayrollPage })));
+const WorkforceRecruitmentPage = lazy(() => import("./pages/workforce-advanced/WorkforceRecruitmentPage").then((m) => ({ default: m.WorkforceRecruitmentPage })));
+const WorkforcePerformancePage = lazy(() => import("./pages/workforce-advanced/WorkforcePerformancePage").then((m) => ({ default: m.WorkforcePerformancePage })));
+const WorkforcePlanningPage = lazy(() => import("./pages/workforce-advanced/WorkforcePlanningPage").then((m) => ({ default: m.WorkforcePlanningPage })));
+const ItemsPage = lazy(() => import("./modules/supply-chain/ItemsPage").then((m) => ({ default: m.ItemsPage })));
+const SuppliersPage = lazy(() => import("./modules/supply-chain/SuppliersPage").then((m) => ({ default: m.SuppliersPage })));
+const PurchasingPage = lazy(() => import("./modules/supply-chain/PurchasingPage").then((m) => ({ default: m.PurchasingPage })));
+const WarehousesPage = lazy(() => import("./pages/wms").then((m) => ({ default: m.WarehousesPage })));
+const StockOperationsPage = lazy(() => import("./pages/wms").then((m) => ({ default: m.StockOperationsPage })));
+const ValuationPage = lazy(() => import("./pages/wms").then((m) => ({ default: m.ValuationPage })));
+const ProcurementPage = lazy(() => import("./pages/procurement").then((m) => ({ default: m.ProcurementPage })));
+const SupplierContractsPage = lazy(() => import("./pages/procurement").then((m) => ({ default: m.SupplierContractsPage })));
+const SpendAnalyticsPage = lazy(() => import("./pages/procurement").then((m) => ({ default: m.SpendAnalyticsPage })));
+const AssetsPage = lazy(() => import("./modules/asset/AssetsPage").then((m) => ({ default: m.AssetsPage })));
+const AssetDetailPage = lazy(() => import("./modules/asset/AssetDetailPage").then((m) => ({ default: m.AssetDetailPage })));
+const ServicePacksPage = lazy(() => import("./pages/service-operations/ServicePacksPage").then((m) => ({ default: m.ServicePacksPage })));
+const ServiceOptimizationPage = lazy(() => import("./pages/service-operations/ServiceOptimizationPage").then((m) => ({ default: m.ServiceOptimizationPage })));
+const ServiceOptimizationDetailPage = lazy(() => import("./pages/service-operations/ServiceOptimizationDetailPage").then((m) => ({ default: m.ServiceOptimizationDetailPage })));
+const AssetMaintenancePage = lazy(() => import("./pages/asset-advanced/AssetMaintenancePage").then((m) => ({ default: m.AssetMaintenancePage })));
+const AssetMaintenanceWorkOrderDetailPage = lazy(() => import("./pages/asset-advanced/AssetMaintenanceWorkOrderDetailPage").then((m) => ({ default: m.AssetMaintenanceWorkOrderDetailPage })));
+const AssetPerformancePage = lazy(() => import("./pages/asset-advanced/AssetPerformancePage").then((m) => ({ default: m.AssetPerformancePage })));
+const FinanceAccountsPage = lazy(() => import("./modules/finance/FinanceAccountsPage").then((m) => ({ default: m.FinanceAccountsPage })));
+const FinanceTransactionsPage = lazy(() => import("./modules/finance/FinanceTransactionsPage").then((m) => ({ default: m.FinanceTransactionsPage })));
+const FinanceTransactionDetailPage = lazy(() => import("./modules/finance/FinanceTransactionDetailPage").then((m) => ({ default: m.FinanceTransactionDetailPage })));
+const CashflowPage = lazy(() => import("./modules/finance/CashflowPage").then((m) => ({ default: m.CashflowPage })));
+const AccountingPage = lazy(() => import("./modules/finance/AccountingPage").then((m) => ({ default: m.AccountingPage })));
+const FinancialStatementsPage = lazy(() => import("./modules/finance/FinancialStatementsPage").then((m) => ({ default: m.FinancialStatementsPage })));
+const FinanceJournalsPage = lazy(() => import("./modules/finance/FinanceJournalsPage").then((m) => ({ default: m.FinanceJournalsPage })));
+const FinanceOpenItemsPage = lazy(() => import("./modules/finance/FinanceOpenItemsPage").then((m) => ({ default: m.FinanceOpenItemsPage })));
+const FinanceBudgetsPage = lazy(() => import("./modules/finance/FinanceBudgetsPage").then((m) => ({ default: m.FinanceBudgetsPage })));
+const FinanceBankReconPage = lazy(() => import("./modules/finance/FinanceBankReconPage").then((m) => ({ default: m.FinanceBankReconPage })));
+const FinanceAssetsPage = lazy(() => import("./modules/finance/FinanceAssetsPage").then((m) => ({ default: m.FinanceAssetsPage })));
+const FinanceTaxPage = lazy(() => import("./modules/finance/FinanceTaxPage").then((m) => ({ default: m.FinanceTaxPage })));
+const FinancePeriodsPage = lazy(() => import("./modules/finance/FinancePeriodsPage").then((m) => ({ default: m.FinancePeriodsPage })));
+const HseRegisterPage = lazy(() => import("./modules/hse/HseRegisterPage").then((m) => ({ default: m.HseRegisterPage })));
+const HseReportPage = lazy(() => import("./modules/hse/HseReportPage").then((m) => ({ default: m.HseReportPage })));
+const HseDetailPage = lazy(() => import("./modules/hse/HseDetailPage").then((m) => ({ default: m.HseDetailPage })));
+const HseAdvancedInvestigationsPage = lazy(() => import("./modules/hse/HseAdvancedInvestigationsPage").then((m) => ({ default: m.HseAdvancedInvestigationsPage })));
+const HseAdvancedPermitsAuditPage = lazy(() => import("./modules/hse/HseAdvancedPermitsAuditPage").then((m) => ({ default: m.HseAdvancedPermitsAuditPage })));
+const HseAdvancedMonitoringCapaPage = lazy(() => import("./modules/hse/HseAdvancedMonitoringCapaPage").then((m) => ({ default: m.HseAdvancedMonitoringCapaPage })));
+const ProjectDeliveryPage = lazy(() => import("./modules/project-delivery/ProjectDeliveryPage").then((m) => ({ default: m.ProjectDeliveryPage })));
+const ProjectDeliveryDetailPage = lazy(() => import("./modules/project-delivery/ProjectDeliveryDetailPage").then((m) => ({ default: m.ProjectDeliveryDetailPage })));
+const ProjectDeliveryAdvancedPlanningPage = lazy(() => import("./modules/project-delivery/ProjectDeliveryAdvancedPlanningPage").then((m) => ({ default: m.ProjectDeliveryAdvancedPlanningPage })));
+const ProjectDeliveryAdvancedCostEVPage = lazy(() => import("./modules/project-delivery/ProjectDeliveryAdvancedCostEVPage").then((m) => ({ default: m.ProjectDeliveryAdvancedCostEVPage })));
+const ReportingInsightPage = lazy(() => import("./modules/reporting-insight/ReportingInsightPage").then((m) => ({ default: m.ReportingInsightPage })));
+const AdminConsolePage = lazy(() => import("./pages/admin/console/AdminConsolePage").then((m) => ({ default: m.AdminConsolePage })));
+const AdminRoleDefinitionPage = lazy(() => import("./pages/admin/console/AdminRoleDefinitionPage").then((m) => ({ default: m.AdminRoleDefinitionPage })));
+const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+
+const pageFallback = (
+  <div className="flex min-h-screen items-center justify-center text-sm text-ink-dim">
+    Loading…
+  </div>
+);
 
 /**
  * Route protection as a layout route: waits for AuthProvider to finish
  * validating/refreshing a persisted session before deciding to redirect
  * (Checkpoint 0F) — otherwise a returning user with a valid session would
  * flash through /login on every reload. Nested routes render via <Outlet/>.
+ * The Suspense boundary covers the lazy-loaded page modules below.
  */
 function ProtectedLayout() {
   const { session, initializing } = useAuth();
-  if (initializing) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-ink-dim">
-        Loading…
-      </div>
-    );
-  }
+  if (initializing) return pageFallback;
   if (!session) return <Navigate to="/login" replace />;
-  return <Outlet />;
+  return (
+    <Suspense fallback={pageFallback}>
+      <Outlet />
+    </Suspense>
+  );
 }
 
 /**
@@ -107,8 +121,16 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       {/* Wave A2 / SUR-ADV-005 — token-governed public route, intentionally
-          outside authentication and the internal workspace shell. */}
-      <Route path="/public/surveys/:token" element={<PublicSurveyPage />} />
+          outside authentication and the internal workspace shell. Its own
+          Suspense boundary covers the lazy-loaded page module. */}
+      <Route
+        path="/public/surveys/:token"
+        element={
+          <Suspense fallback={pageFallback}>
+            <PublicSurveyPage />
+          </Suspense>
+        }
+      />
       <Route element={<ProtectedLayout />}>
         {/* Post-login work-context picker — authenticated but deliberately
             outside the shell: the shell's navigation is what the choice
