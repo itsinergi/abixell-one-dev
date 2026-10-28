@@ -4791,6 +4791,36 @@ Wawancara desain Epic 15 dilakukan 2026-10-23. Lima belas keputusan terkunci; se
 - Tidak ada migration, perubahan backend, atau commit implementasi yang diberi persetujuan oleh bagian ini — wawancara mengunci desain, bukan eksekusi.
 - Rekonsiliasi dengan kontrak CFG-010/CFG-015 (masih PARTIAL di PRD) dilakukan saat eksekusi; keputusan #4 (template role + role custom) menutup ruang CFG-010, keputusan #11 (ambang workflow lokal) menutup ruang CFG-015.
 
+#### Putaran 7 — Kontrak registrasi konfigurasi modul (Opsi A, 2026-10-28)
+
+Keputusan #12 (§4.15) menetapkan bahwa Module Config tidak hardcode, melainkan dibaca dari registry modul dengan kontrak registrasi yang sama dengan document types (§4.8 keputusan #22). Eksekusi kontrak ini ditunda hingga open item #5 terselesaikan.
+
+Pertanyaan terbuka: **Bagaimana modul mendeklarasikan parameter konfigurasinya ke Panel Admin?**
+
+Dua opsi tersedia:
+
+- **Opsi A: Manifest kode.** Tiap modul mendeklarasikan parameternya lewat interface kode (`ModuleConfigManifest`) yang dijalankan saat bootstrap. Kontrak registrasi diimplementasikan sebagai kode yang dibaca dari setiap modul, bukan tabel migrasi. Parameter lahir bersama konsumennya; tidak ada lagging antara kebutuhan module dan katalog.
+- **Opsi B: Seed via migrasi.** Tetap seperti sekarang: migration menambahkan baris ke `app_parameters`. Memerlukan koordinasi migrasi per modul; opsi B adalah status quo dan membiarkan bootstrap key terbuka.
+
+**Diputuskan 2026-10-28: Opsi A.** Alasan: Parameter lahir bersama kode dan konsumennya, tidak perlu migrasi terpisah, tidak ada tabel hidup lebih lama dari kode yang menggunakannya.
+
+**Langkah eksekusi Opsi A:**
+
+1. **Tulis kontrak registrasi** di `apps/api/src/domain/configuration/module-config.entity.ts`:
+   - `ModuleConfigManifest` interface: `moduleCode`, `parameters[]`, `version`.
+   - `ModuleConfigRegistry` interface: `register(manifest)`, `getManifest(moduleCode)`, `getAllManifests()`.
+   
+2. **Buat bootstrap loader** (boot order: setelah migrasi, sebelum routes):
+   - Setiap modul export `MANIFEST: ModuleConfigManifest`.
+   - Boot loader iterasi modul, baca MANIFEST, upsert ke `app_parameters` (ON CONFLICT DO NOTHING).
+   - Migrasi `1791000000000` (Epic 2 Wave 3) tetap berfungsi sebagai fallback untuk seed awal; MANIFEST tidak overwrite versi yang sudah aktif.
+
+3. **Parameter tanpa konsumen: pasang konsumen atau hapus.** Survei 2026-10-28: tiga parameter `document.*` (`document.backdate.max_days`, `document.numbering.pattern_policy`, `document.attachment.reference_required`) tidak dibaca kode mana pun di `apps/api/src`; hanya migrasi `1791000000000` dan test `epic-2-wave-2-3-configuration.test.ts` yang menyebutnya. Batas upload 20 MB di `document.service.ts` juga masih konstanta, bukan parameter. Keputusan per parameter belum diambil, dan penghapusan dari seed memerlukan migrasi baru serta penyesuaian test itu, jadi menunggu persetujuan terpisah. Aturan yang mengikat: parameter tanpa konsumen tidak boleh tampil di UI per-modul sebagai pengaturan aktif.
+
+4. **UI per-modul memakai layar parameter yang sudah ada.** `ConfigurationPanel` (section `system`) saat ini menampilkan seluruh katalog parameter tanpa pengelompokan. Pekerjaan UI: tambah filter `moduleCode` dan satu halaman daftar modul sesuai keputusan #12. Komponen baru tidak diperlukan.
+
+**Status open item #5 (Module Config):** kontrak registrasi diputuskan (Opsi A); implementasi loader dan manifest belum dibangun.
+
 ---
 
 ## 5. Koreksi terhadap Riset
