@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { api, ApiError, type AppParameter, type EffectiveParameterValue } from "../lib/api";
 import { OverlayDialog } from "../shell/components/OverlayDialog";
 import {
@@ -104,6 +105,12 @@ export function ConfigurationPanel({
 
   const [scopeId, setScopeId] = useState("");
   const [typeCode, setTypeCode] = useState("");
+  // Epic 15 Decision #12: one list of modules, click for that module's detail.
+  const [detailModuleCode, setDetailModuleCode] = useState<string | null>(null);
+  const detailModule = modules.data?.find((row) => row.moduleCode === detailModuleCode);
+  const detailParameters = (parameters.data ?? []).filter(
+    (row) => row.moduleCode === detailModuleCode,
+  );
   const selectedScope = orgUnits.find((unit) => unit.id === scopeId);
   const selectedType = types.data?.find((type) => type.code === typeCode) ?? types.data?.[0];
   const effectiveScopeId = selectedScope?.id ?? "";
@@ -328,17 +335,29 @@ export function ConfigurationPanel({
     },
     {
       header: "Aksi",
-      cell: (row) =>
-        canManage && (
+      cell: (row) => (
+        <div className="flex flex-wrap gap-2">
           <Button
-            variant="ghost"
-            onClick={(event) =>
-              open({ kind: "module", row, next: !row.isActive }, event.currentTarget)
+            variant="secondary"
+            aria-pressed={detailModuleCode === row.moduleCode}
+            onClick={() =>
+              setDetailModuleCode(detailModuleCode === row.moduleCode ? null : row.moduleCode)
             }
           >
-            {row.isActive ? "Nonaktifkan" : "Aktifkan"}
+            {detailModuleCode === row.moduleCode ? "Tutup detail" : "Lihat konfigurasi"}
           </Button>
-        ),
+          {canManage && (
+            <Button
+              variant="ghost"
+              onClick={(event) =>
+                open({ kind: "module", row, next: !row.isActive }, event.currentTarget)
+              }
+            >
+              {row.isActive ? "Nonaktifkan" : "Aktifkan"}
+            </Button>
+          )}
+        </div>
+      ),
     },
   ];
 
@@ -482,6 +501,45 @@ export function ConfigurationPanel({
               <DataTable columns={moduleColumns} rows={modules.data ?? []} keyOf={(row) => row.moduleId} />
             </AdminSectionState>
           </Panel>
+
+          {detailModule && (
+            <Panel
+              title={`Konfigurasi ${detailModule.moduleName}`}
+              count={detailParameters.length}
+              action={
+                <StatusPill tone={detailModule.isActive ? "success" : "neutral"}>
+                  {detailModule.isActive ? "Aktif" : "Nonaktif"}
+                </StatusPill>
+              }
+            >
+              {!detailModule.isActive && (
+                <Alert tone="warning">
+                  Module ini nonaktif untuk tenant. Aktifkan lebih dulu agar pengaturannya berlaku.
+                </Alert>
+              )}
+              {detailModule.moduleCode === "customer_complaint" && (
+                <p className="mb-3 text-sm">
+                  Kategori, SLA, dan eskalasi dikelola di{" "}
+                  <Link className="underline" to="/administration/complaints">
+                    Konfigurasi keluhan
+                  </Link>
+                  .
+                </p>
+              )}
+              {detailParameters.length === 0 ? (
+                <p className="text-sm text-ink-dim">
+                  Module ini belum mendeklarasikan parameter. Pengaturannya muncul di sini setelah
+                  module mendaftarkannya.
+                </p>
+              ) : (
+                <DataTable
+                  columns={parameterColumns}
+                  rows={detailParameters}
+                  keyOf={(row) => row.id}
+                />
+              )}
+            </Panel>
+          )}
 
           <Panel title="Feature flag" count={flags.data?.length}>
             <Field
