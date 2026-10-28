@@ -123,6 +123,91 @@ export type MyRoleAssignment = {
   scopeCustomerName: string | null;
 };
 
+/* ---- Organization master types (Epic 5 Gelombang 1/2) ------------------- */
+
+/** A Legal Entity's full representation — the create/update/list routes all
+ *  return every column, so the client type mirrors the domain entity rather
+ *  than the subset the old narrow type kept. */
+export type LegalEntityRow = {
+  id: string;
+  name: string;
+  registrationNo: string | null;
+  displayName: string | null;
+  country: string | null;
+  timezone: string | null;
+  baseCurrency: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  isActive: boolean;
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
+};
+
+/** `Department` organises people; it is not an authorization scope. */
+export type DepartmentRow = {
+  id: string;
+  parentDepartmentId: string | null;
+  name: string;
+  code: string | null;
+  isActive: boolean;
+};
+
+/** Ladder level of a layered parameter value (ADR-0006). `S` is written only
+ *  with platform authority, never from this client. */
+export type ParameterLevel = "S" | "C" | "O";
+
+export type AppParameter = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  moduleCode: string;
+  parameterType: "boolean" | "integer" | "decimal" | "string" | "json";
+  schemaArea: string;
+  schemaKey: string;
+  defaultValue: unknown;
+  allowedLevels: ParameterLevel[];
+  orgOverrideAllowed: boolean;
+  isGuardrail: boolean;
+  isActive: boolean;
+};
+
+export type EffectiveParameterValue = {
+  code: string;
+  value: unknown;
+  sourceLevel: ParameterLevel | "product_default";
+};
+
+export type OrganizationUnitChangeRequest = {
+  id: string;
+  organizationUnitId: string;
+  requestedAction: "move" | "tombstone";
+  proposedParentOrganizationUnitId: string | null;
+  requestedReplacementOrganizationUnitId: string | null;
+  requestedEffectiveFrom: string;
+  reason: string;
+  status: "draft" | "pending_review" | "published" | "rejected" | "cancelled";
+  proposedByUserId: string;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  reviewReason: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+};
+
+export type HierarchyHistoryEntry = {
+  id: string;
+  organizationUnitId: string;
+  parentOrganizationUnitId: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  reason: string;
+  changeRequestId: string | null;
+};
+
 export const api = {
   login: (payload: {
     email: string;
@@ -197,13 +282,36 @@ export const api = {
       scopeCustomerId: string | null;
     }>("/auth/switch-role", { method: "POST", token, body: { assignmentId } }),
 
+  // The profile columns are nullable and mean "not configured" — never an
+  // invented default (Epic 5 Gelombang 1 §4.5).
   tenant: (token: string) =>
-    request<{ id: string; code: string; name: string; status: string }>("/tenants/me", {
+    request<{
+      id: string;
+      code: string;
+      name: string;
+      status: string;
+      defaultTimezone: string | null;
+      defaultLocale: string | null;
+      defaultCurrency: string | null;
+      contactAdminName: string | null;
+      contactAdminEmail: string | null;
+      contactAdminPhone: string | null;
+    }>("/tenants/me", {
       token,
     }),
 
-  updateTenantName: (token: string, payload: { name: string }) =>
-    request<{ name: string }>("/tenants/me", { method: "PATCH", token, body: payload }),
+  updateTenantName: (
+    token: string,
+    payload: {
+      name: string;
+      defaultTimezone?: string | null;
+      defaultLocale?: string | null;
+      defaultCurrency?: string | null;
+      contactAdminName?: string | null;
+      contactAdminEmail?: string | null;
+      contactAdminPhone?: string | null;
+    },
+  ) => request<{ name: string }>("/tenants/me", { method: "PATCH", token, body: payload }),
 
   organizationUnits: (token: string) =>
     request<
@@ -225,21 +333,21 @@ export const api = {
   ) => request("/organization-units", { method: "POST", token, body: payload }),
 
   legalEntities: (token: string) =>
-    request<
-      Array<{
-        id: string;
-        name: string;
-        registrationNo: string | null;
-        isActive: boolean;
-        deactivatedAt: string | null;
-        deactivatedBy: string | null;
-      }>
-    >("/legal-entities", { token }),
+    request<LegalEntityRow[]>("/legal-entities", { token }),
 
   createLegalEntity: (
     token: string,
-    payload: { name: string; registrationNo?: string | null },
-  ) => request("/legal-entities", { method: "POST", token, body: payload }),
+    payload: {
+      name: string;
+      registrationNo?: string | null;
+      displayName?: string | null;
+      country?: string | null;
+      timezone?: string | null;
+      baseCurrency?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    },
+  ) => request<LegalEntityRow>("/legal-entities", { method: "POST", token, body: payload }),
 
   users: (token: string) =>
     request<
@@ -361,16 +469,17 @@ export const api = {
   updateLegalEntity: (
     token: string,
     id: string,
-    payload: { name: string; registrationNo?: string | null },
-  ) =>
-    request<{
-      id: string;
+    payload: {
       name: string;
-      registrationNo: string | null;
-      isActive: boolean;
-      deactivatedAt: string | null;
-      deactivatedBy: string | null;
-    }>(`/legal-entities/${id}`, { method: "PATCH", token, body: payload }),
+      registrationNo?: string | null;
+      displayName?: string | null;
+      country?: string | null;
+      timezone?: string | null;
+      baseCurrency?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    },
+  ) => request<LegalEntityRow>(`/legal-entities/${id}`, { method: "PATCH", token, body: payload }),
 
   activateLegalEntity: (token: string, id: string) =>
     request(`/legal-entities/${id}/activate`, { method: "POST", token }),
@@ -399,6 +508,104 @@ export const api = {
       method: "POST",
       token,
     }),
+
+  // --- Layered parameters (ADR-0006) ---
+  configParameters: (token: string) =>
+    request<AppParameter[]>("/config/parameters", { token }),
+
+  configParameterEffective: (token: string, code: string, organizationUnitId?: string) =>
+    request<EffectiveParameterValue>(
+      `/config/parameters/${encodeURIComponent(code)}/effective${queryString({ organizationUnitId })}`,
+      { token },
+    ),
+
+  /** `level: "S"` is deliberately absent from the type: System values carry
+   *  platform authority that this client never holds, so offering the write
+   *  would only produce a 401. */
+  setConfigParameterValue: (
+    token: string,
+    code: string,
+    payload: { level: "C" | "O"; value: unknown; organizationUnitId?: string },
+  ) =>
+    request(`/config/parameters/${encodeURIComponent(code)}/values`, {
+      method: "PUT",
+      token,
+      body: payload,
+    }),
+
+  // --- Departments ---
+  departments: (token: string) => request<DepartmentRow[]>("/departments", { token }),
+
+  createDepartment: (
+    token: string,
+    payload: { name: string; code?: string | null; parentDepartmentId?: string | null },
+  ) => request<DepartmentRow>("/departments", { method: "POST", token, body: payload }),
+
+  updateDepartment: (
+    token: string,
+    id: string,
+    payload: { name?: string; code?: string | null; parentDepartmentId?: string | null },
+  ) => request<DepartmentRow>(`/departments/${id}`, { method: "PATCH", token, body: payload }),
+
+  setDepartmentActive: (token: string, id: string, isActive: boolean) =>
+    request<DepartmentRow>(`/departments/${id}/${isActive ? "activate" : "deactivate"}`, {
+      method: "POST",
+      token,
+    }),
+
+  // --- Organization Unit change requests (Epic 5 Gelombang 2) ---
+  organizationUnitChangeRequests: (
+    token: string,
+    filter: { organizationUnitId?: string; status?: string } = {},
+  ) =>
+    request<OrganizationUnitChangeRequest[]>(
+      `/organization-unit-change-requests${queryString(filter)}`,
+      { token },
+    ),
+
+  organizationUnitHierarchy: (token: string, id: string, at?: string) =>
+    request<HierarchyHistoryEntry[]>(
+      `/organization-units/${id}/hierarchy${queryString({ at })}`,
+      { token },
+    ),
+
+  /** `requestedEffectiveFrom` must carry an offset — a bare date is refused,
+   *  because a business date without a zone is ambiguous for this tenant. */
+  createOrganizationUnitChangeRequest: (
+    token: string,
+    unitId: string,
+    payload: {
+      requestedAction: "move" | "tombstone";
+      proposedParentOrganizationUnitId?: string | null;
+      requestedReplacementOrganizationUnitId?: string | null;
+      requestedEffectiveFrom: string;
+      reason: string;
+      submitForReview?: boolean;
+    },
+  ) =>
+    request<OrganizationUnitChangeRequest>(`/organization-units/${unitId}/change-requests`, {
+      method: "POST",
+      token,
+      body: payload,
+    }),
+
+  publishOrganizationUnitChangeRequest: (token: string, id: string) =>
+    request<OrganizationUnitChangeRequest>(
+      `/organization-unit-change-requests/${id}/publish`,
+      { method: "POST", token },
+    ),
+
+  rejectOrganizationUnitChangeRequest: (token: string, id: string, reviewReason: string) =>
+    request<OrganizationUnitChangeRequest>(
+      `/organization-unit-change-requests/${id}/reject`,
+      { method: "POST", token, body: { reviewReason } },
+    ),
+
+  cancelOrganizationUnitChangeRequest: (token: string, id: string) =>
+    request<OrganizationUnitChangeRequest>(
+      `/organization-unit-change-requests/${id}/cancel`,
+      { method: "POST", token },
+    ),
 
   recentAuditLog: (token: string) =>
     request<
