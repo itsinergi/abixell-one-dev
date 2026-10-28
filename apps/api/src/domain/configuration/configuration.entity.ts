@@ -107,6 +107,10 @@ export interface AppParameter {
   orgOverrideAllowed: boolean;
   isGuardrail: boolean;
   isActive: boolean;
+  /** §4.15 Putaran 7 — false when no code reads this parameter yet (manifest
+   * `inUse: false`). Absent for a parameter whose manifest does not say either
+   * way, which the UI should treat the same as true. */
+  inUse?: boolean;
 }
 
 export type ParameterLevel = "S" | "C" | "O";

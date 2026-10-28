@@ -6,8 +6,13 @@ import type { DocumentRecord, DocumentRepository } from "../../domain/document/d
 import type { LocalFileStorage } from "../../infrastructure/storage/local-file-storage.js";
 import type { EventBus } from "../event/event-bus.js";
 import type { EntityAuthorizationResolverRegistry } from "./entity-authorization-resolver.js";
+import type { ParameterReader } from "../../domain/configuration/parameter-reader.js";
 
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB — Phase 0 fixed cap, not yet Tenant Configuration.
+// §4.15 Putaran 7 — "platform.document.max_upload_mb" (ModuleConfigManifest,
+// PLATFORM_MANIFEST). This is the value an unconfigured tenant resolves to:
+// a missing `reader` (e.g. a test constructing the service directly) or a
+// missing parameter both fall back to the same 20 MB Phase 0 cap.
+const DEFAULT_MAX_UPLOAD_MB = 20;
 
 /**
  * Document / File Service (Checkpoint 0E), per
@@ -37,6 +42,7 @@ export class DocumentService {
     private readonly rbac: RbacService,
     private readonly eventBus: EventBus,
     private readonly resolvers: EntityAuthorizationResolverRegistry = new Map(),
+    private readonly parameters?: ParameterReader,
   ) {}
 
   private async authorizeEntity(
@@ -63,8 +69,16 @@ export class DocumentService {
     input: { entityType: string; entityId: string; fileName: string; mimeType: string; buffer: Buffer },
   ): Promise<DocumentRecord> {
     await this.authorizeEntity(actor, input.entityType, input.entityId, "document.manage");
-    if (input.buffer.length > MAX_UPLOAD_BYTES) {
-      throw new Error(`File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB Phase 0 upload cap`);
+    const maxUploadMb = this.parameters
+      ? await this.parameters.getInteger(
+          actor.tenantId,
+          "platform.document.max_upload_mb",
+          DEFAULT_MAX_UPLOAD_MB,
+        )
+      : DEFAULT_MAX_UPLOAD_MB;
+    const maxUploadBytes = maxUploadMb * 1024 * 1024;
+    if (input.buffer.length > maxUploadBytes) {
+      throw new Error(`File exceeds the ${maxUploadMb}MB upload cap`);
     }
 
     const { storagePath, checksum } = await this.storage.save(actor.tenantId, input.fileName, input.buffer);

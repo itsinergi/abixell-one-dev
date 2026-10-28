@@ -5,6 +5,7 @@ import type {
 } from "../../domain/complaint/complaint-dashboard.entity.js";
 import type { CustomerService } from "../customer/customer.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
+import type { ParameterReader } from "../../domain/configuration/parameter-reader.js";
 
 /** Documented KPI semantics (section 6/9):
  *  - "Critical" = the severity code below (matches the seeded/reference
@@ -16,6 +17,9 @@ import type { RbacService } from "../rbac/rbac.service.js";
  *    (`submitted_at::date = today`) in the database/server timezone
  *    convention (tenant timezone is not modeled — see technical debt). */
 export const CRITICAL_SEVERITY_CODE = "critical";
+// §4.15 Putaran 7 — "customer_complaint.dashboard.default_period_days".
+// Fallback for an unconfigured tenant and for tests constructing the service
+// directly (no `parameters` reader).
 const DEFAULT_PERIOD_DAYS = 30;
 const ACTION_CENTER_LIMIT = 25;
 const BREAKDOWN_LIMIT = 20;
@@ -46,6 +50,7 @@ export class ComplaintDashboardService {
     private readonly repo: ComplaintDashboardRepository,
     private readonly customers: CustomerService,
     private readonly rbac: RbacService,
+    private readonly parameters?: ParameterReader,
   ) {}
 
   async getDashboard(actor: ActorContext, request: DashboardRequest): Promise<DashboardResult> {
@@ -53,9 +58,16 @@ export class ComplaintDashboardService {
 
     const now = new Date();
     const to = request.to ? new Date(request.to) : now;
+    const defaultPeriodDays = this.parameters
+      ? await this.parameters.getInteger(
+          actor.tenantId,
+          "customer_complaint.dashboard.default_period_days",
+          DEFAULT_PERIOD_DAYS,
+        )
+      : DEFAULT_PERIOD_DAYS;
     const from = request.from
       ? new Date(request.from)
-      : new Date(to.getTime() - DEFAULT_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+      : new Date(to.getTime() - defaultPeriodDays * 24 * 60 * 60 * 1000);
 
     const customerIds = await this.customers.listScopedCustomerIds(actor);
 

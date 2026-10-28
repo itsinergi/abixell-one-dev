@@ -171,6 +171,9 @@ export type AppParameter = {
   orgOverrideAllowed: boolean;
   isGuardrail: boolean;
   isActive: boolean;
+  /** false = declared in the catalogue but no code reads it yet (§4.15
+   * Putaran 7). Absent on an older server build is read as "in use". */
+  inUse?: boolean;
 };
 
 export type EffectiveParameterValue = {

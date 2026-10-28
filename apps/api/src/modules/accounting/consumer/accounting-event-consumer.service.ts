@@ -21,7 +21,11 @@ import type {
   AccountingKernelRepository,
 } from "../kernel/domain/accounting-kernel.entity.js";
 import { NotFoundError, ConflictError, ValidationError } from "../../../domain/shared-kernel/errors.js";
+import type { ParameterReader } from "../../../domain/configuration/parameter-reader.js";
 
+// §4.15 Putaran 7 — "finance.accounting.max_posting_attempts". This is the
+// fallback an unconfigured tenant (and every test that constructs the service
+// directly, with no `parameters` reader) resolves to.
 const MAX_POSTING_ATTEMPTS = 5;
 const BATCH_SIZE = 50; // Claim up to 50 pending events per sweep
 
@@ -121,6 +125,7 @@ export class AccountingEventConsumerService {
     private readonly kernel: ConsumerKernelPort,
     private readonly eventPort: ConsumerOutboxPort,
     private readonly kernelRepo: AccountingKernelRepository,
+    private readonly parameters?: ParameterReader,
   ) {}
 
   /**
@@ -219,9 +224,16 @@ export class AccountingEventConsumerService {
       tenantId,
       idempotencyKey,
     );
+    const maxAttempts = this.parameters
+      ? await this.parameters.getInteger(
+          tenantId,
+          "finance.accounting.max_posting_attempts",
+          MAX_POSTING_ATTEMPTS,
+        )
+      : MAX_POSTING_ATTEMPTS;
     if (
       existingKey &&
-      existingKey.postingAttemptCount >= MAX_POSTING_ATTEMPTS
+      existingKey.postingAttemptCount >= maxAttempts
     ) {
       // Terminal failure: already exceeded max attempts.
       await this.eventPort.updateEventState(tenantId, {
@@ -232,7 +244,7 @@ export class AccountingEventConsumerService {
         occurredBy: null,
       });
       throw new ConflictError(
-        `Event exceeded max posting attempts (${MAX_POSTING_ATTEMPTS})`,
+        `Event exceeded max posting attempts (${maxAttempts})`,
       );
     }
 

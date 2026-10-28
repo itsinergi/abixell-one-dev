@@ -9,6 +9,7 @@ import { ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS } from "../../domain/organization
 import type { OrganizationUnitRepository } from "../../domain/organization-unit/organization-unit.entity.js";
 import { ConflictError, NotFoundError } from "../../domain/shared-kernel/errors.js";
 import type { RbacService } from "../rbac/rbac.service.js";
+import type { ParameterReader } from "../../domain/configuration/parameter-reader.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,6 +34,7 @@ export class OrganizationUnitHierarchyService {
     private readonly repo: OrganizationUnitHierarchyRepository,
     private readonly units: OrganizationUnitRepository,
     private readonly rbac: RbacService,
+    private readonly parameters?: ParameterReader,
   ) {}
 
   /** §4.5 Putaran 5 — "Draft change request berisi before/after, effective date,
@@ -53,7 +55,7 @@ export class OrganizationUnitHierarchyService {
     if (!input.reason || input.reason.trim().length === 0) {
       throw new ConflictError("A change request needs a reason");
     }
-    this.assertWithinBackdateLimit(input.requestedEffectiveFrom, new Date());
+    await this.assertWithinBackdateLimit(actor.tenantId, input.requestedEffectiveFrom, new Date());
 
     return this.repo.createChangeRequest(input, actor);
   }
@@ -84,7 +86,7 @@ export class OrganizationUnitHierarchyService {
       throw new NotFoundError("OrganizationUnitChangeRequest", id);
     }
     await this.rbac.requireOrganizationUnitScopeForActor(actor, request.organizationUnitId);
-    this.assertWithinBackdateLimit(request.requestedEffectiveFrom, new Date());
+    await this.assertWithinBackdateLimit(actor.tenantId, request.requestedEffectiveFrom, new Date());
     return this.repo.publishChangeRequest(id, actor);
   }
 
@@ -137,7 +139,7 @@ export class OrganizationUnitHierarchyService {
       throw new NotFoundError("OrganizationUnit", organizationUnitId);
     }
     await this.rbac.requireOrganizationUnitScopeForActor(actor, unit.id);
-    if (input.effectiveFrom) this.assertWithinBackdateLimit(input.effectiveFrom, new Date());
+    if (input.effectiveFrom) await this.assertWithinBackdateLimit(actor.tenantId, input.effectiveFrom, new Date());
     return this.repo.tombstoneUnit(organizationUnitId, input, actor);
   }
 
@@ -148,12 +150,23 @@ export class OrganizationUnitHierarchyService {
    * and to its publish alike, so a request cannot become unpublishable between
    * the two.
    */
-  private assertWithinBackdateLimit(effectiveFrom: Date, publishedAt: Date): void {
+  private async assertWithinBackdateLimit(
+    tenantId: string,
+    effectiveFrom: Date,
+    publishedAt: Date,
+  ): Promise<void> {
     if (effectiveFrom.getTime() >= publishedAt.getTime()) return;
+    const limitDays = this.parameters
+      ? await this.parameters.getInteger(
+          tenantId,
+          "platform.organization_unit.backdate_limit_days",
+          ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS,
+        )
+      : ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS;
     const ageDays = (publishedAt.getTime() - effectiveFrom.getTime()) / DAY_MS;
-    if (ageDays > ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS) {
+    if (ageDays > limitDays) {
       throw new ConflictError(
-        `Backdated hierarchy changes are limited to ${ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS} days; ` +
+        `Backdated hierarchy changes are limited to ${limitDays} days; ` +
           `${effectiveFrom.toISOString()} is ${Math.floor(ageDays)} days before the publish date`,
       );
     }

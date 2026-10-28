@@ -19,6 +19,7 @@ import {
   PUBLISHABLE_CHANGE_REQUEST_STATUSES,
 } from "../../../domain/organization-unit/organization-unit-hierarchy.entity.js";
 import type { LifecycleStatus } from "../../../domain/legal-entity/legal-entity.entity.js";
+import type { ParameterReader } from "../../../domain/configuration/parameter-reader.js";
 import {
   inGovernedTransaction,
   recordGovernedAudit,
@@ -121,7 +122,22 @@ interface UnitRow {
 }
 
 export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHierarchyRepository {
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly parameters?: ParameterReader,
+  ) {}
+
+  /** The bound the publish path holds a backdate to (§4.5 G). Read inside the
+   * same flow that enforces it, so the number a reviewer is refused with is the
+   * number the tenant configured, not the platform default. */
+  private async backdateLimitDays(tenantId: string): Promise<number> {
+    if (!this.parameters) return ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS;
+    return this.parameters.getInteger(
+      tenantId,
+      "platform.organization_unit.backdate_limit_days",
+      ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS,
+    );
+  }
 
   async createChangeRequest(
     input: CreateChangeRequestInput,
@@ -313,9 +329,10 @@ export class PgOrganizationUnitHierarchyRepository implements OrganizationUnitHi
         // bound is a policy slot (§4.5 G item 1, Epic 8); until the policy
         // module exists this is the platform default.
         const ageDays = (publishedAt.getTime() - effectiveFrom.getTime()) / DAY_MS;
-        if (ageDays > ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS) {
+        const limitDays = await this.backdateLimitDays(actor.tenantId);
+        if (ageDays > limitDays) {
           throw new ConflictError(
-            `Backdated hierarchy changes are limited to ${ORGANIZATION_UNIT_BACKDATE_LIMIT_DAYS} days; ` +
+            `Backdated hierarchy changes are limited to ${limitDays} days; ` +
               `${effectiveFrom.toISOString()} is ${Math.floor(ageDays)} days before the publish date`,
           );
         }
