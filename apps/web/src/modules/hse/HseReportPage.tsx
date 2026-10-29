@@ -5,7 +5,7 @@
  * Mobile-friendly with date/time pickers for occurred-at timestamp.
  * Submits and redirects to detail view where lifecycle begins.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -24,11 +24,13 @@ import {
   Spinner,
   Textarea,
 } from "../../shell/components/ui";
+import { useT } from "../../i18n/LocaleProvider";
 
 export function HseReportPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
+  const t = useT();
 
   const [recordType, setRecordType] = useState<HseRecordType>("incident");
   const [categoryCode, setCategoryCode] = useState("");
@@ -50,8 +52,8 @@ export function HseReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Load reference data
-  useState(() => {
+  // Load reference data once per session token.
+  useEffect(() => {
     void (async () => {
       setLoading(true);
       try {
@@ -63,12 +65,12 @@ export function HseReportPage() {
         setSeverities(severityList);
         if (categoryList[0]) setCategoryCode(categoryList[0].code);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not load reference data.");
+        setError(err instanceof ApiError ? err.message : t("hse.report.loadRefFailed"));
       } finally {
         setLoading(false);
       }
     })();
-  });
+  }, [token, t]);
 
   async function submit() {
     setBusy(true);
@@ -90,7 +92,7 @@ export function HseReportPage() {
       });
       navigate(`/hse/records/${created.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not report HSE record.");
+      setError(err instanceof ApiError ? err.message : t("hse.report.failed"));
     } finally {
       setBusy(false);
     }
@@ -100,22 +102,22 @@ export function HseReportPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Report Incident or Observation" subtitle="Capture the event details for the HSE register." />
+      <PageHeader title={t("hse.report.title")} subtitle={t("hse.report.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Event Classification</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.report.eventClassification")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Type" required>
+          <Field label={t("fin.common.type")} required>
             <Select value={recordType} onChange={(e) => setRecordType(e.target.value as HseRecordType)}>
-              <option value="incident">Incident</option>
-              <option value="observation">Observation</option>
+              <option value="incident">{t("hse.common.incident")}</option>
+              <option value="observation">{t("hse.common.observation")}</option>
             </Select>
           </Field>
-          <Field label="Category">
+          <Field label={t("fin.common.category")}>
             <Select value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("fin.common.select")}</option>
               {categories.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.label}
@@ -123,9 +125,9 @@ export function HseReportPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Severity">
+          <Field label={t("hse.common.severity")}>
             <Select value={severityCode} onChange={(e) => setSeverityCode(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("fin.common.select")}</option>
               {severities.map((s) => (
                 <option key={s.code} value={s.code}>
                   {s.label}
@@ -137,55 +139,55 @@ export function HseReportPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">When and Where</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.report.whenAndWhere")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Date" required>
+          <Field label={t("fin.common.date")} required>
             <Input type="date" value={occurredDate} onChange={(e) => setOccurredDate(e.target.value)} />
           </Field>
-          <Field label="Time" required>
+          <Field label={t("hse.common.time")} required>
             <Input type="time" value={occurredTime} onChange={(e) => setOccurredTime(e.target.value)} />
           </Field>
-          <Field label="Location Detail">
+          <Field label={t("hse.report.locationDetail")}>
             <Input
               value={locationDetail}
               onChange={(e) => setLocationDetail(e.target.value)}
-              placeholder="e.g. Workshop bay 3"
+              placeholder={t("hse.report.locationPlaceholder")}
             />
           </Field>
         </div>
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Description</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("fin.common.description")}</h2>
         <div className="space-y-3">
-          <Field label="Title" required>
+          <Field label={t("hse.common.title")} required>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Brief headline of the event"
+              placeholder={t("hse.report.titlePlaceholder")}
             />
           </Field>
-          <Field label="Summary">
+          <Field label={t("hse.common.summary")}>
             <Input
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
-              placeholder="One-sentence summary for the register"
+              placeholder={t("hse.report.summaryPlaceholder")}
             />
           </Field>
-          <Field label="Full Description">
+          <Field label={t("hse.report.fullDescription")}>
             <Textarea
               rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Complete narrative of what happened"
+              placeholder={t("hse.report.descriptionPlaceholder")}
             />
           </Field>
-          <Field label="Immediate Action Taken">
+          <Field label={t("hse.report.immediateAction")}>
             <Textarea
               rows={3}
               value={immediateAction}
               onChange={(e) => setImmediateAction(e.target.value)}
-              placeholder="What was done right away (if anything)"
+              placeholder={t("hse.report.actionPlaceholder")}
             />
           </Field>
         </div>
@@ -193,10 +195,10 @@ export function HseReportPage() {
 
       <div className="flex gap-2">
         <Button disabled={busy || !isValid || loading} onClick={() => void submit()}>
-          {busy ? <Spinner /> : "Report"}
+          {busy ? <Spinner /> : t("hse.report.submit")}
         </Button>
         <Button variant="secondary" onClick={() => navigate("/hse")}>
-          Cancel
+          {t("common.cancel")}
         </Button>
       </div>
     </div>

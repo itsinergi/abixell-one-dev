@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { api, ApiError, type TenantSelectionRequired } from "../lib/api";
 import { useT } from "../i18n/LocaleProvider";
+import { LanguageSwitcher } from "../shell/components/LanguageSwitcher";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -55,7 +56,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ground">
+    <div className="relative flex min-h-screen items-center justify-center bg-ground">
+      <div className="absolute right-4 top-4">
+        <LanguageSwitcher />
+      </div>
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm space-y-4 rounded border border-line bg-panel p-6 shadow-xs"
