@@ -14,6 +14,7 @@ import {
   type ScmValuationLayer,
   type ScmWarehouse,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -38,6 +39,7 @@ function label(v: string) {
 export function ValuationPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.supplyChainValuationManage);
@@ -83,11 +85,11 @@ export function ValuationPage() {
 
       if (poList.length > 0 && !lcPoId) setLcPoId(poList[0].id);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load valuation data");
+      setError(err instanceof ApiError ? err.message : t("scm.val.msg.failedToLoadValuationData"));
     } finally {
       setLoading(false);
     }
-  }, [token, filterItemId, lcPoId]);
+  }, [token, filterItemId, lcPoId, t]);
 
   useEffect(() => {
     void loadData();
@@ -120,11 +122,11 @@ export function ValuationPage() {
           },
         ],
       });
-      setNotice("Landed cost voucher created.");
+      setNotice(t("scm.val.msg.landedCostVoucherCreated"));
       setLcNotes("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to create landed cost voucher");
+      setError(err instanceof ApiError ? err.message : t("scm.val.msg.failedToCreateLandedCostVoucher"));
     } finally {
       setBusy(false);
     }
@@ -135,14 +137,14 @@ export function ValuationPage() {
     setError(null);
     try {
       await api.applyScmLandedCost(token, id);
-      setNotice("Landed cost allocated and applied to inventory valuation layers.");
+      setNotice(t("scm.val.msg.landedCostAllocatedAndAppliedToInventory"));
       await loadData();
       if (selectedLandedCost && selectedLandedCost.landedCost.id === id) {
         const updated = await api.scmLandedCost(token, id);
         setSelectedLandedCost(updated);
       }
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to apply landed cost");
+      setError(err instanceof ApiError ? err.message : t("scm.val.msg.failedToApplyLandedCost"));
     } finally {
       setBusy(false);
     }
@@ -155,31 +157,31 @@ export function ValuationPage() {
       const dt = await api.scmLandedCost(token, id);
       setSelectedLandedCost(dt);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load landed cost detail");
+      setError(err instanceof ApiError ? err.message : t("scm.val.msg.failedToLoadLandedCostDetail"));
     } finally {
       setBusy(false);
     }
   }
 
   const layerColumns: Column<ScmValuationLayer>[] = [
-    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
-    { header: "Warehouse", cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "Global" },
-    { header: "Original Qty", cell: (r) => <span className="font-mono">{r.originalQuantity}</span> },
-    { header: "Remaining Qty", cell: (r) => <span className="font-mono font-bold text-blue-600">{r.remainingQuantity}</span> },
-    { header: "Unit Cost (IDR)", cell: (r) => <span className="font-mono">{formatMoney(String(r.effectiveUnitCost))}</span> },
-    { header: "Total Remaining Value", cell: (r) => <span className="font-mono font-semibold text-emerald-600">{formatMoney(String(r.totalValue))}</span>, mobileRole: "status" },
-    { header: "Received Date", cell: (r) => formatDateShort(r.receivedDate) },
+    { header: t("scm.val.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
+    { header: t("scm.val.h.warehouse"), cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "Global" },
+    { header: t("scm.val.h.originalQty"), cell: (r) => <span className="font-mono">{r.originalQuantity}</span> },
+    { header: t("scm.val.h.remainingQty"), cell: (r) => <span className="font-mono font-bold text-blue-600">{r.remainingQuantity}</span> },
+    { header: t("scm.val.h.unitCostIdr"), cell: (r) => <span className="font-mono">{formatMoney(String(r.effectiveUnitCost))}</span> },
+    { header: t("scm.val.h.totalRemainingValue"), cell: (r) => <span className="font-mono font-semibold text-emerald-600">{formatMoney(String(r.totalValue))}</span>, mobileRole: "status" },
+    { header: t("scm.val.h.receivedDate"), cell: (r) => formatDateShort(r.receivedDate) },
   ];
 
   const landedCostColumns: Column<ScmLandedCost>[] = [
-    { header: "Voucher #", cell: (r) => <span className="font-mono font-semibold">{r.voucherNumber}</span>, mobileRole: "title" },
-    { header: "Purchase Order", cell: (r) => poMap.get(r.purchaseOrderId)?.orderNumber || r.purchaseOrderId },
-    { header: "Cost Type", cell: (r) => r.costType },
-    { header: "Method", cell: (r) => label(r.allocationMethod) },
-    { header: "Amount", cell: (r) => <span className="font-mono font-bold text-slate-800">{formatMoney(String(r.amount))}</span> },
-    { header: "Status", cell: (r) => <StatusPill tone={r.status === "applied" ? "success" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
+    { header: t("scm.val.h.voucher"), cell: (r) => <span className="font-mono font-semibold">{r.voucherNumber}</span>, mobileRole: "title" },
+    { header: t("scm.val.h.purchaseOrder"), cell: (r) => poMap.get(r.purchaseOrderId)?.orderNumber || r.purchaseOrderId },
+    { header: t("scm.val.h.costType"), cell: (r) => r.costType },
+    { header: t("scm.val.h.method"), cell: (r) => label(r.allocationMethod) },
+    { header: t("scm.val.h.amount"), cell: (r) => <span className="font-mono font-bold text-slate-800">{formatMoney(String(r.amount))}</span> },
+    { header: t("scm.val.h.status"), cell: (r) => <StatusPill tone={r.status === "applied" ? "success" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
     {
-      header: "Actions",
+      header: t("scm.val.h.actions"),
       cell: (r) => (
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => openLandedCostDetail(r.id)}>Detail</Button>
@@ -194,8 +196,8 @@ export function ValuationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Valuation & Landed Cost"
-        subtitle="Immutable FIFO valuation layers, total capitalized inventory value, and landed cost allocation vouchers."
+        title={t("scm.val.title.valuationLandedCost")}
+        subtitle={t("scm.val.sub.immutableFifoValuationLayersTotalCapital")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -211,15 +213,15 @@ export function ValuationPage() {
       ) : tab === "layers" ? (
         <div className="space-y-4">
           <div className="flex gap-4 items-center">
-            <Field label="Filter by Item">
+            <Field label={t("scm.val.f.filterByItem")}>
               <Select value={filterItemId} onChange={(e) => setFilterItemId(e.target.value)}>
-                <option value="">All Inventory Items</option>
+                <option value="">{t("scm.val.t.allInventoryItems")}</option>
                 {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
               </Select>
             </Field>
           </div>
           <Card>
-            <h3 className="text-base font-semibold text-slate-900 mb-3">Active FIFO Inventory Layers</h3>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.val.t.activeFifoInventoryLayers")}</h3>
             <DataTable columns={layerColumns} rows={layers} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No active inventory valuation layers found.</p>} />
           </Card>
         </div>
@@ -228,35 +230,35 @@ export function ValuationPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <Card>
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Landed Cost Vouchers</h3>
+                <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.val.t.landedCostVouchers")}</h3>
                 <DataTable columns={landedCostColumns} rows={landedCosts} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No landed cost vouchers created.</p>} />
               </Card>
             </div>
             <div>
               <Card>
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Create Landed Cost Voucher</h3>
+                <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.val.t.createLandedCostVoucher")}</h3>
                 <form onSubmit={handleCreateLandedCost} className="space-y-4">
-                  <Field label="Target Purchase Order" required>
+                  <Field label={t("scm.val.f.targetPurchaseOrder")} required>
                     <Select value={lcPoId} onChange={(e) => setLcPoId(e.target.value)} disabled={!canManage || busy}>
                       {pos.map((p) => <option key={p.id} value={p.id}>{p.orderNumber}</option>)}
                     </Select>
                   </Field>
-                  <Field label="Cost Type" required>
+                  <Field label={t("scm.val.f.costType")} required>
                     <Input value={lcCostType} onChange={(e) => setLcCostType(e.target.value)} disabled={!canManage || busy} />
                   </Field>
-                  <Field label="Allocation Basis" required>
+                  <Field label={t("scm.val.f.allocationBasis")} required>
                     <Select value={lcMethod} onChange={(e) => setLcMethod(e.target.value as ScmLandedCostAllocationMethod)} disabled={!canManage || busy}>
-                      <option value="by_value">By Line Item Value (Default)</option>
-                      <option value="by_quantity">By Line Quantity</option>
-                      <option value="by_weight">By Line Weight</option>
-                      <option value="equal">Equal Allocation</option>
+                      <option value="by_value">{t("scm.val.t.byLineItemValueDefault")}</option>
+                      <option value="by_quantity">{t("scm.val.t.byLineQuantity")}</option>
+                      <option value="by_weight">{t("scm.val.t.byLineWeight")}</option>
+                      <option value="equal">{t("scm.val.t.equalAllocation")}</option>
                     </Select>
                   </Field>
-                  <Field label="Amount (IDR)" required>
+                  <Field label={t("scm.val.f.amountIdr")} required>
                     <Input type="number" value={lcFreight} onChange={(e) => setLcFreight(e.target.value)} disabled={!canManage || busy} />
                   </Field>
-                  <Field label="Voucher Notes">
-                    <Input value={lcNotes} onChange={(e) => setLcNotes(e.target.value)} placeholder="Customs bill / B/L reference" disabled={!canManage || busy} />
+                  <Field label={t("scm.val.f.voucherNotes")}>
+                    <Input value={lcNotes} onChange={(e) => setLcNotes(e.target.value)} placeholder={t("scm.val.p.customsBillBLReference")} disabled={!canManage || busy} />
                   </Field>
                   <Button type="submit" variant="primary" disabled={!canManage || busy}>Generate Voucher</Button>
                 </form>
@@ -275,9 +277,9 @@ export function ValuationPage() {
                 </div>
                 <DataTable
                   columns={[
-                    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
-                    { header: "Allocated Amount", cell: (r) => <span className="font-mono font-bold text-amber-600">+{formatMoney(String(r.allocatedAmount))}</span> },
-                    { header: "Cost Per Unit Added", cell: (r) => <span className="font-mono font-bold text-emerald-600">+{formatMoney(String(r.costPerUnitAdded))}</span>, mobileRole: "status" },
+                    { header: t("scm.val.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
+                    { header: t("scm.val.h.allocatedAmount"), cell: (r) => <span className="font-mono font-bold text-amber-600">+{formatMoney(String(r.allocatedAmount))}</span> },
+                    { header: t("scm.val.h.costPerUnitAdded"), cell: (r) => <span className="font-mono font-bold text-emerald-600">+{formatMoney(String(r.costPerUnitAdded))}</span>, mobileRole: "status" },
                   ]}
                   rows={selectedLandedCost.allocations}
                   keyOf={(r) => r.id}

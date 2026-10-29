@@ -15,6 +15,7 @@ import {
   type ScmAdvancedStockMovement,
   type ScmAdvancedStockMovementType,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -51,6 +52,7 @@ function label(v: string): string {
 export function WarehousesPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.supplyChainWarehouseManage);
@@ -131,11 +133,11 @@ export function WarehousesPage() {
       if (itList.length > 0 && !serialItemId) setSerialItemId(itList[0].id);
       if (itList.length > 0 && !movItemId) setMovItemId(itList[0].id);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load warehouse data");
+      setError(err instanceof ApiError ? err.message : t("scm.wh.msg.failedToLoadWarehouseData"));
     } finally {
       setLoading(false);
     }
-  }, [token, locWhId, movWhId, serialWhId, batchItemId, serialItemId, movItemId]);
+  }, [token, locWhId, movWhId, serialWhId, batchItemId, serialItemId, movItemId, t]);
 
   useEffect(() => {
     void loadData();
@@ -165,7 +167,7 @@ export function WarehousesPage() {
       setWhAddress("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to create warehouse");
+      setError(err instanceof ApiError ? err.message : t("scm.wh.msg.failedToCreateWarehouse"));
     } finally {
       setBusy(false);
     }
@@ -196,7 +198,7 @@ export function WarehousesPage() {
       setLocBin("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to create location");
+      setError(err instanceof ApiError ? err.message : t("scm.wh.msg.failedToCreateLocation"));
     } finally {
       setBusy(false);
     }
@@ -223,7 +225,7 @@ export function WarehousesPage() {
       setBatchNotes("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to create batch");
+      setError(err instanceof ApiError ? err.message : t("scm.wh.msg.failedToCreateBatch"));
     } finally {
       setBusy(false);
     }
@@ -249,7 +251,7 @@ export function WarehousesPage() {
       setSerialWarranty("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to create serial");
+      setError(err instanceof ApiError ? err.message : t("scm.wh.msg.failedToCreateSerial"));
     } finally {
       setBusy(false);
     }
@@ -272,11 +274,11 @@ export function WarehousesPage() {
         unitCost: Number(movUnitCost) || 0,
         notes: movNotes.trim() || null,
       });
-      setNotice("Movement recorded successfully.");
+      setNotice(t("scm.wh.msg.movementRecordedSuccessfully"));
       setMovNotes("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to record movement");
+      setError(err instanceof ApiError ? err.message : t("scm.wh.msg.failedToRecordMovement"));
     } finally {
       setBusy(false);
     }
@@ -284,31 +286,31 @@ export function WarehousesPage() {
 
   const warehouseColumns: Column<ScmWarehouse>[] = [
     {
-      header: "Code",
+      header: t("scm.wh.h.code"),
       cell: (r) => <span className="font-mono font-semibold">{r.code}</span>,
       mobileRole: "title",
     },
-    { header: "Name", cell: (r) => r.name },
-    { header: "Address", cell: (r) => r.address || "—" },
+    { header: t("scm.wh.h.name"), cell: (r) => r.name },
+    { header: t("scm.wh.h.address"), cell: (r) => r.address || "—" },
     {
-      header: "Status",
+      header: t("scm.wh.h.status"),
       cell: (r) => <StatusPill tone={r.isActive ? "success" : "neutral"}>{r.isActive ? "Active" : "Inactive"}</StatusPill>,
       mobileRole: "status",
     },
-    { header: "Created", cell: (r) => formatDateShort(r.createdAt) },
+    { header: t("scm.wh.h.created"), cell: (r) => formatDateShort(r.createdAt) },
   ];
 
   const locationColumns: Column<ScmWarehouseLocation>[] = [
-    { header: "Warehouse", cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
+    { header: t("scm.wh.h.warehouse"), cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
     {
-      header: "Location Code",
+      header: t("scm.wh.h.locationCode"),
       cell: (r) => <span className="font-mono font-semibold">{r.code}</span>,
       mobileRole: "title",
     },
-    { header: "Zone / Aisle", cell: (r) => `${r.zone || "—"} / ${r.aisle || "—"}` },
-    { header: "Rack / Shelf / Bin", cell: (r) => `${r.rack || "—"} / ${r.shelf || "—"} / ${r.bin || "—"}` },
+    { header: t("scm.wh.h.zoneAisle"), cell: (r) => `${r.zone || "—"} / ${r.aisle || "—"}` },
+    { header: t("scm.wh.h.rackShelfBin"), cell: (r) => `${r.rack || "—"} / ${r.shelf || "—"} / ${r.bin || "—"}` },
     {
-      header: "Status",
+      header: t("scm.wh.h.status"),
       cell: (r) => <StatusPill tone={r.isActive ? "success" : "neutral"}>{r.isActive ? "Active" : "Inactive"}</StatusPill>,
       mobileRole: "status",
     },
@@ -316,73 +318,73 @@ export function WarehousesPage() {
 
   const batchColumns: Column<ScmItemBatch>[] = [
     {
-      header: "Batch #",
+      header: t("scm.wh.h.batch"),
       cell: (r) => <span className="font-mono font-semibold">{r.batchNumber}</span>,
       mobileRole: "title",
     },
-    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId },
-    { header: "Mfg Date", cell: (r) => r.manufacturedDate ? formatDateShort(r.manufacturedDate) : "—" },
-    { header: "Expiry Date", cell: (r) => r.expiryDate ? formatDateShort(r.expiryDate) : "—" },
-    { header: "Notes", cell: (r) => r.notes || "—" },
+    { header: t("scm.wh.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId },
+    { header: t("scm.wh.h.mfgDate"), cell: (r) => r.manufacturedDate ? formatDateShort(r.manufacturedDate) : "—" },
+    { header: t("scm.wh.h.expiryDate"), cell: (r) => r.expiryDate ? formatDateShort(r.expiryDate) : "—" },
+    { header: t("scm.wh.h.notes"), cell: (r) => r.notes || "—" },
   ];
 
   const serialColumns: Column<ScmItemSerial>[] = [
     {
-      header: "Serial #",
+      header: t("scm.wh.h.serial"),
       cell: (r) => <span className="font-mono font-semibold">{r.serialNumber}</span>,
       mobileRole: "title",
     },
-    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId },
-    { header: "Warehouse", cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "—" },
+    { header: t("scm.wh.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId },
+    { header: t("scm.wh.h.warehouse"), cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "—" },
     {
-      header: "Status",
+      header: t("scm.wh.h.status"),
       cell: (r) => <StatusPill tone={r.status === "in_stock" ? "success" : r.status === "reserved" ? "warning" : "neutral"}>{label(r.status)}</StatusPill>,
       mobileRole: "status",
     },
-    { header: "Warranty Expiry", cell: (r) => r.warrantyExpiryDate ? formatDateShort(r.warrantyExpiryDate) : "—" },
+    { header: t("scm.wh.h.warrantyExpiry"), cell: (r) => r.warrantyExpiryDate ? formatDateShort(r.warrantyExpiryDate) : "—" },
   ];
 
   const balanceColumns: Column<ScmAdvancedStockBalance>[] = [
     {
-      header: "Item",
+      header: t("scm.wh.h.item"),
       cell: (r) => itemMap.get(r.itemId)?.name || r.itemId,
       mobileRole: "title",
     },
-    { header: "Warehouse", cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
-    { header: "Location", cell: (r) => r.locationId ? (locMap.get(r.locationId)?.code || r.locationId) : "—" },
-    { header: "Batch", cell: (r) => r.batchId ? (batchMap.get(r.batchId)?.batchNumber || r.batchId) : "—" },
-    { header: "On Hand", cell: (r) => <span className="font-mono font-bold">{r.quantity}</span> },
-    { header: "Reserved", cell: (r) => <span className="font-mono text-amber-600">{r.reservedQty}</span> },
+    { header: t("scm.wh.h.warehouse"), cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
+    { header: t("scm.wh.h.location"), cell: (r) => r.locationId ? (locMap.get(r.locationId)?.code || r.locationId) : "—" },
+    { header: t("scm.wh.h.batch2"), cell: (r) => r.batchId ? (batchMap.get(r.batchId)?.batchNumber || r.batchId) : "—" },
+    { header: t("scm.wh.h.onHand"), cell: (r) => <span className="font-mono font-bold">{r.quantity}</span> },
+    { header: t("scm.wh.h.reserved"), cell: (r) => <span className="font-mono text-amber-600">{r.reservedQty}</span> },
     {
-      header: "Available",
+      header: t("scm.wh.h.available"),
       cell: (r) => <span className="font-mono font-bold text-emerald-600">{r.availableQuantity}</span>,
       mobileRole: "status",
     },
   ];
 
   const movementColumns: Column<ScmAdvancedStockMovement>[] = [
-    { header: "Date", cell: (r) => formatDateShort(r.occurredAt) },
+    { header: t("scm.wh.h.date"), cell: (r) => formatDateShort(r.occurredAt) },
     {
-      header: "Type",
+      header: t("scm.wh.h.type"),
       cell: (r) => <Badge className={r.movementType.includes("in") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}>{label(r.movementType)}</Badge>,
       mobileRole: "status",
     },
     {
-      header: "Item",
+      header: t("scm.wh.h.item"),
       cell: (r) => itemMap.get(r.itemId)?.name || r.itemId,
       mobileRole: "title",
     },
-    { header: "Warehouse", cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
-    { header: "Quantity", cell: (r) => <span className="font-mono font-bold">{r.quantity}</span> },
-    { header: "Total Cost", cell: (r) => r.totalCost != null ? `$${r.totalCost.toFixed(2)}` : "—" },
-    { header: "Notes", cell: (r) => r.notes || "—" },
+    { header: t("scm.wh.h.warehouse"), cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
+    { header: t("scm.wh.h.quantity"), cell: (r) => <span className="font-mono font-bold">{r.quantity}</span> },
+    { header: t("scm.wh.h.totalCost"), cell: (r) => r.totalCost != null ? `$${r.totalCost.toFixed(2)}` : "—" },
+    { header: t("scm.wh.h.notes"), cell: (r) => r.notes || "—" },
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Warehouses & Tracking"
-        subtitle="Multi-warehouse topology, bin storage locations, batch/lot management, and serial item tracking."
+        title={t("scm.wh.title.warehousesTracking")}
+        subtitle={t("scm.wh.sub.multiWarehouseTopologyBinStorageLocation")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -403,22 +405,22 @@ export function WarehousesPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Warehouse Directory</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.warehouseDirectory")}</h3>
               <DataTable columns={warehouseColumns} rows={warehouses} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No warehouses defined yet.</p>} />
             </Card>
           </div>
           <div>
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Register Warehouse</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.registerWarehouse")}</h3>
               <form onSubmit={handleCreateWarehouse} className="space-y-4">
-                <Field label="Warehouse Code" required>
-                  <Input value={whCode} onChange={(e) => setWhCode(e.target.value)} placeholder="e.g. WH-MAIN" disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.warehouseCode")} required>
+                  <Input value={whCode} onChange={(e) => setWhCode(e.target.value)} placeholder={t("scm.wh.p.eGWhMain")} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Warehouse Name" required>
-                  <Input value={whName} onChange={(e) => setWhName(e.target.value)} placeholder="e.g. Central Distribution Hub" disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.warehouseName")} required>
+                  <Input value={whName} onChange={(e) => setWhName(e.target.value)} placeholder={t("scm.wh.p.eGCentralDistributionHub")} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Address">
-                  <Input value={whAddress} onChange={(e) => setWhAddress(e.target.value)} placeholder="e.g. Building 4, Logistics Park" disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.address")}>
+                  <Input value={whAddress} onChange={(e) => setWhAddress(e.target.value)} placeholder={t("scm.wh.p.eGBuilding4LogisticsPark")} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy}>Create Warehouse</Button>
               </form>
@@ -429,30 +431,30 @@ export function WarehousesPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Storage Bins & Locations</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.storageBinsLocations")}</h3>
               <DataTable columns={locationColumns} rows={locations} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No locations defined yet.</p>} />
             </Card>
           </div>
           <div>
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Define Storage Location</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.defineStorageLocation")}</h3>
               <form onSubmit={handleCreateLocation} className="space-y-4">
-                <Field label="Warehouse" required>
+                <Field label={t("scm.wh.f.warehouse")} required>
                   <Select value={locWhId} onChange={(e) => setLocWhId(e.target.value)} disabled={!canManage || busy}>
                     {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} ({w.code})</option>)}
                   </Select>
                 </Field>
-                <Field label="Location / Bin Code" required>
-                  <Input value={locCode} onChange={(e) => setLocCode(e.target.value)} placeholder="e.g. A-01-02-B" disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.locationBinCode")} required>
+                  <Input value={locCode} onChange={(e) => setLocCode(e.target.value)} placeholder={t("scm.wh.p.eGA0102B")} disabled={!canManage || busy} />
                 </Field>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Zone"><Input value={locZone} onChange={(e) => setLocZone(e.target.value)} placeholder="Zone A" disabled={!canManage || busy} /></Field>
-                  <Field label="Aisle"><Input value={locAisle} onChange={(e) => setLocAisle(e.target.value)} placeholder="Aisle 1" disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.wh.f.zone")}><Input value={locZone} onChange={(e) => setLocZone(e.target.value)} placeholder={t("scm.wh.p.zoneA")} disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.wh.f.aisle")}><Input value={locAisle} onChange={(e) => setLocAisle(e.target.value)} placeholder={t("scm.wh.p.aisle1")} disabled={!canManage || busy} /></Field>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <Field label="Rack"><Input value={locRack} onChange={(e) => setLocRack(e.target.value)} placeholder="R1" disabled={!canManage || busy} /></Field>
-                  <Field label="Shelf"><Input value={locShelf} onChange={(e) => setLocShelf(e.target.value)} placeholder="S2" disabled={!canManage || busy} /></Field>
-                  <Field label="Bin"><Input value={locBin} onChange={(e) => setLocBin(e.target.value)} placeholder="B1" disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.wh.f.rack")}><Input value={locRack} onChange={(e) => setLocRack(e.target.value)} placeholder="R1" disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.wh.f.shelf")}><Input value={locShelf} onChange={(e) => setLocShelf(e.target.value)} placeholder="S2" disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.wh.f.bin")}><Input value={locBin} onChange={(e) => setLocBin(e.target.value)} placeholder="B1" disabled={!canManage || busy} /></Field>
                 </div>
                 <Button type="submit" variant="primary" disabled={!canManage || busy}>Add Location</Button>
               </form>
@@ -463,30 +465,30 @@ export function WarehousesPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Batch / Lot Registry</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.batchLotRegistry")}</h3>
               <DataTable columns={batchColumns} rows={batches} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No batches registered yet.</p>} />
             </Card>
           </div>
           <div>
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Create Item Batch</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.createItemBatch")}</h3>
               <form onSubmit={handleCreateBatch} className="space-y-4">
-                <Field label="Item" required>
+                <Field label={t("scm.wh.f.item")} required>
                   <Select value={batchItemId} onChange={(e) => setBatchItemId(e.target.value)} disabled={!canManage || busy}>
                     {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
                   </Select>
                 </Field>
-                <Field label="Batch Number" required>
-                  <Input value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} placeholder="e.g. LOT-2026-001" disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.batchNumber")} required>
+                  <Input value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} placeholder={t("scm.wh.p.eGLot2026001")} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Manufactured Date">
+                <Field label={t("scm.wh.f.manufacturedDate")}>
                   <Input type="date" value={batchMfgDate} onChange={(e) => setBatchMfgDate(e.target.value)} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Expiry Date">
+                <Field label={t("scm.wh.f.expiryDate")}>
                   <Input type="date" value={batchExpDate} onChange={(e) => setBatchExpDate(e.target.value)} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Notes">
-                  <Input value={batchNotes} onChange={(e) => setBatchNotes(e.target.value)} placeholder="Supplier certificates, storage notes..." disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.notes")}>
+                  <Input value={batchNotes} onChange={(e) => setBatchNotes(e.target.value)} placeholder={t("scm.wh.p.supplierCertificatesStorageNotes")} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy}>Register Batch</Button>
               </form>
@@ -497,29 +499,29 @@ export function WarehousesPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Serial Number Tracking</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.serialNumberTracking")}</h3>
               <DataTable columns={serialColumns} rows={serials} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No serial items registered yet.</p>} />
             </Card>
           </div>
           <div>
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Register Serial Number</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.registerSerialNumber")}</h3>
               <form onSubmit={handleCreateSerial} className="space-y-4">
-                <Field label="Item" required>
+                <Field label={t("scm.wh.f.item")} required>
                   <Select value={serialItemId} onChange={(e) => setSerialItemId(e.target.value)} disabled={!canManage || busy}>
                     {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
                   </Select>
                 </Field>
-                <Field label="Serial Number" required>
-                  <Input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} placeholder="e.g. SN-88492019" disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.serialNumber")} required>
+                  <Input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} placeholder={t("scm.wh.p.eGSn88492019")} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Warehouse">
+                <Field label={t("scm.wh.f.warehouse")}>
                   <Select value={serialWhId} onChange={(e) => setSerialWhId(e.target.value)} disabled={!canManage || busy}>
-                    <option value="">None / Unassigned</option>
+                    <option value="">{t("scm.wh.t.noneUnassigned")}</option>
                     {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </Select>
                 </Field>
-                <Field label="Warranty Expiry Date">
+                <Field label={t("scm.wh.f.warrantyExpiryDate")}>
                   <Input type="date" value={serialWarranty} onChange={(e) => setSerialWarranty(e.target.value)} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy}>Register Serial</Button>
@@ -529,46 +531,46 @@ export function WarehousesPage() {
         </div>
       ) : tab === "balances" ? (
         <Card>
-          <h3 className="text-base font-semibold text-slate-900 mb-3">Authoritative Multi-Warehouse Balances</h3>
+          <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.authoritativeMultiWarehouseBalances")}</h3>
           <DataTable columns={balanceColumns} rows={balances} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No stock balances found.</p>} />
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Immutable Stock Movement Ledger</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.immutableStockMovementLedger")}</h3>
               <DataTable columns={movementColumns} rows={movements} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No ledger movements recorded yet.</p>} />
             </Card>
           </div>
           <div>
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Record Ledger Movement</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.recordLedgerMovement")}</h3>
               <form onSubmit={handleRecordMovement} className="space-y-4">
-                <Field label="Item" required>
+                <Field label={t("scm.wh.f.item")} required>
                   <Select value={movItemId} onChange={(e) => setMovItemId(e.target.value)} disabled={!canManage || busy}>
                     {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
                   </Select>
                 </Field>
-                <Field label="Warehouse" required>
+                <Field label={t("scm.wh.f.warehouse")} required>
                   <Select value={movWhId} onChange={(e) => setMovWhId(e.target.value)} disabled={!canManage || busy}>
                     {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </Select>
                 </Field>
-                <Field label="Movement Type" required>
+                <Field label={t("scm.wh.f.movementType")} required>
                   <Select value={movType} onChange={(e) => setMovType(e.target.value as ScmAdvancedStockMovementType)} disabled={!canManage || busy}>
                     {MOVEMENT_TYPES.map((t) => <option key={t} value={t}>{label(t)}</option>)}
                   </Select>
                 </Field>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Quantity" required>
+                  <Field label={t("scm.wh.f.quantity")} required>
                     <Input type="number" min="0.01" step="any" value={movQty} onChange={(e) => setMovQty(e.target.value)} disabled={!canManage || busy} />
                   </Field>
-                  <Field label="Unit Cost">
+                  <Field label={t("scm.wh.f.unitCost")}>
                     <Input type="number" min="0" step="any" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} disabled={!canManage || busy} />
                   </Field>
                 </div>
-                <Field label="Notes / Reference">
-                  <Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Reason or PO/Job reference" disabled={!canManage || busy} />
+                <Field label={t("scm.wh.f.notesReference")}>
+                  <Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder={t("scm.wh.p.reasonOrPoJobReference")} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy}>Post Ledger Movement</Button>
               </form>

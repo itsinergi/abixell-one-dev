@@ -9,6 +9,7 @@ import {
   type WorkforceManpowerPlan,
   type WorkforceManpowerPlanStatus,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -54,6 +55,7 @@ function money(amount: number | string | null | undefined): string {
 export function WorkforcePlanningPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.workforcePlanningManage);
@@ -94,11 +96,11 @@ export function WorkforcePlanningPage() {
         setSelectedPlanId(planList[0].id);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load manpower planning records.");
+      setError(err instanceof ApiError ? err.message : t("wf.plan.msg.couldNotLoadManpowerPlanningRecords"));
     } finally {
       setLoading(false);
     }
-  }, [token, yearFilter, statusFilter, selectedPlanId]);
+  }, [token, yearFilter, statusFilter, selectedPlanId, t]);
 
   useEffect(() => {
     void load();
@@ -126,7 +128,7 @@ export function WorkforcePlanningPage() {
       setNotice(message);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Planning operation failed.");
+      setError(err instanceof ApiError ? err.message : t("wf.plan.msg.planningOperationFailed"));
     } finally {
       setBusy(false);
     }
@@ -171,7 +173,7 @@ export function WorkforcePlanningPage() {
 
   const planColumns: Column<WorkforceManpowerPlan>[] = [
     {
-      header: "Plan",
+      header: t("wf.plan.h.plan"),
       cell: (row) => (
         <div>
           <div className="font-semibold text-slate-900">{row.title}</div>
@@ -180,23 +182,23 @@ export function WorkforcePlanningPage() {
       ),
       mobileRole: "title",
     },
-    { header: "Headcount (Current / Target)", cell: (row) => `${row.currentHeadcount} → ${row.plannedHeadcount}` },
+    { header: t("wf.plan.h.headcountCurrentTarget"), cell: (row) => `${row.currentHeadcount} → ${row.plannedHeadcount}` },
     {
-      header: "Headcount gap",
+      header: t("wf.plan.h.headcountGap"),
       cell: (row) => (
         <span className={row.varianceHeadcount >= 0 ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"}>
           {row.varianceHeadcount >= 0 ? `+${row.varianceHeadcount}` : row.varianceHeadcount}
         </span>
       ),
     },
-    { header: "Cost delta", cell: (row) => money(row.varianceCostProjection) },
+    { header: t("wf.plan.h.costDelta"), cell: (row) => money(row.varianceCostProjection) },
     {
-      header: "Status",
+      header: t("wf.plan.h.status"),
       cell: (row) => <StatusPill tone={statusTone(row.status)}>{label(row.status)}</StatusPill>,
       mobileRole: "status",
     },
     {
-      header: "Actions",
+      header: t("wf.plan.h.actions"),
       cell: (row) => (
         <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
           <Button variant="secondary" className="text-xs" onClick={() => setSelectedPlanId(row.id)}>
@@ -218,11 +220,11 @@ export function WorkforcePlanningPage() {
   ];
 
   const gapColumns: Column<WorkforceManpowerGapEntry>[] = [
-    { header: "Position", cell: (row) => <span className="font-semibold">{positionName(row.positionId)}</span>, mobileRole: "title" },
-    { header: "Current", cell: (row) => row.currentHeadcount },
-    { header: "Planned", cell: (row) => row.plannedHeadcount },
+    { header: t("wf.plan.h.position"), cell: (row) => <span className="font-semibold">{positionName(row.positionId)}</span>, mobileRole: "title" },
+    { header: t("wf.plan.h.current"), cell: (row) => row.currentHeadcount },
+    { header: t("wf.plan.h.planned"), cell: (row) => row.plannedHeadcount },
     {
-      header: "Variance",
+      header: t("wf.plan.h.variance"),
       cell: (row) => (
         <span className={row.variance >= 0 ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"}>
           {row.variance >= 0 ? `+${row.variance}` : row.variance}
@@ -230,14 +232,14 @@ export function WorkforcePlanningPage() {
       ),
       mobileRole: "status",
     },
-    { header: "Cost Impact", cell: (row) => money(row.costImpact) },
+    { header: t("wf.plan.h.costImpact"), cell: (row) => money(row.costImpact) },
   ];
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Workforce Planning"
-        subtitle="Compare demand models, compute headcount and payroll cost gaps, and make governed advisory planning decisions."
+        title={t("wf.plan.title.workforcePlanning")}
+        subtitle={t("wf.plan.sub.compareDemandModelsComputeHeadcountAndPa")}
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
@@ -246,16 +248,16 @@ export function WorkforcePlanningPage() {
       {!canApply ? <Alert tone="info">Applying planning decisions requires <code className="font-mono text-xs">workforce.planning.apply</code>.</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Scenario Filters</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.plan.t.scenarioFilters")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Plan year"><Input type="number" min="2000" max="2100" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} /></Field>
-          <Field label="Status">
+          <Field label={t("wf.plan.f.planYear")}><Input type="number" min="2000" max="2100" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} /></Field>
+          <Field label={t("wf.plan.f.status")}>
             <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkforceManpowerPlanStatus)}>
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="computed">Computed</option>
-              <option value="applied">Applied</option>
-              <option value="dismissed">Dismissed</option>
+              <option value="">{t("wf.plan.t.allStatuses")}</option>
+              <option value="draft">{t("wf.plan.t.draft")}</option>
+              <option value="computed">{t("wf.plan.t.computed")}</option>
+              <option value="applied">{t("wf.plan.t.applied")}</option>
+              <option value="dismissed">{t("wf.plan.t.dismissed")}</option>
             </Select>
           </Field>
         </div>
@@ -263,26 +265,26 @@ export function WorkforcePlanningPage() {
 
       {canManage ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Manpower Planning Scenario</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.plan.t.createManpowerPlanningScenario")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Scenario title" required><Input value={planTitle} onChange={(event) => setPlanTitle(event.target.value)} placeholder="FY2026 Field Expansion" /></Field>
-            <Field label="Plan year" required><Input type="number" min="2000" max="2100" value={planYear} onChange={(event) => setPlanYear(event.target.value)} /></Field>
-            <Field label="Organization unit ID"><Input value={planUnitId} onChange={(event) => setPlanUnitId(event.target.value)} placeholder="Optional unit scope" /></Field>
+            <Field label={t("wf.plan.f.scenarioTitle")} required><Input value={planTitle} onChange={(event) => setPlanTitle(event.target.value)} placeholder={t("wf.plan.p.fy2026FieldExpansion")} /></Field>
+            <Field label={t("wf.plan.f.planYear")} required><Input type="number" min="2000" max="2100" value={planYear} onChange={(event) => setPlanYear(event.target.value)} /></Field>
+            <Field label={t("wf.plan.f.organizationUnitId")}><Input value={planUnitId} onChange={(event) => setPlanUnitId(event.target.value)} placeholder={t("wf.plan.p.optionalUnitScope")} /></Field>
           </div>
           <Button className="mt-3" disabled={busy || !planTitle.trim()} onClick={() => void createPlan()}>Create scenario</Button>
         </Card>
       ) : null}
 
-      {loading ? <Spinner label="Loading planning scenarios…" /> : (
+      {loading ? <Spinner label={t("wf.plan.f.loadingPlanningScenarios")} /> : (
         <div className="space-y-4">
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Planning Scenarios</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.plan.t.planningScenarios")}</h2>
             <DataTable
               columns={planColumns}
               rows={plans}
               keyOf={(row) => row.id}
               mobileBreakpoint="md"
-              empty={<EmptyState title="No manpower plans found" description="Create a planning scenario above to begin simulation." />}
+              empty={<EmptyState title={t("wf.plan.title.noManpowerPlansFound")} description={t("wf.plan.d.createAPlanningScenarioAboveToBeginSimul")} />}
             />
           </Card>
 
@@ -317,7 +319,7 @@ export function WorkforcePlanningPage() {
                         <Input
                           type="number"
                           min="0"
-                          placeholder="Target headcount"
+                          placeholder={t("wf.plan.p.targetHeadcount")}
                           value={targetByPosition[position.id] ?? ""}
                           onChange={(event) => setTargetByPosition((current) => ({ ...current, [position.id]: event.target.value }))}
                         />
@@ -336,7 +338,7 @@ export function WorkforcePlanningPage() {
                 rows={selectedPlan.gapAnalysis ?? []}
                 keyOf={(row) => `${row.positionId ?? "unassigned"}-${row.organizationUnitId ?? "all"}`}
                 mobileBreakpoint="md"
-                empty={<EmptyState title="No gap computation recorded" description="Run simulation above to calculate position variances and financial delta." />}
+                empty={<EmptyState title={t("wf.plan.title.noGapComputationRecorded")} description={t("wf.plan.d.runSimulationAboveToCalculatePositionVar")} />}
               />
             </Card>
           ) : null}

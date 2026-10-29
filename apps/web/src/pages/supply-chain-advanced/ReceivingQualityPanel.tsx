@@ -29,6 +29,7 @@ import {
   type ScmStockCondition,
   type ScmWarehouse,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -73,6 +74,7 @@ const RETURN_CONDITIONS: ScmStockCondition[] = ["rejected", "quarantined", "qual
 export function ReceivingQualityPanel() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
   const canManage = permissions.includes(PERMISSIONS.supplyChainInventoryManage);
 
@@ -122,11 +124,11 @@ export function ReceivingQualityPanel() {
       setWarehouses(warehouseList);
       setItems(itemList);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load receiving data");
+      setError(err instanceof ApiError ? err.message : t("scm.rq.msg.failedToLoadReceivingData"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void loadData();
@@ -154,7 +156,7 @@ export function ReceivingQualityPanel() {
       setInspQuarantined("0");
       setRtvQty("");
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load the receiving record");
+      setError(err instanceof ApiError ? err.message : t("scm.rq.msg.failedToLoadTheReceivingRecord"));
     } finally {
       setBusy(false);
     }
@@ -182,11 +184,11 @@ export function ReceivingQualityPanel() {
         result: inspResult,
         reason: inspReason.trim() || null,
       });
-      setNotice("Inspection recorded. The line's accepted quantity is updated.");
+      setNotice(t("scm.rq.msg.inspectionRecordedTheLineSAcceptedQuanti"));
       setInspReason("");
       await Promise.all([refreshSelected(), loadData()]);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to record the inspection");
+      setError(err instanceof ApiError ? err.message : t("scm.rq.msg.failedToRecordTheInspection"));
     } finally {
       setBusy(false);
     }
@@ -205,12 +207,12 @@ export function ReceivingQualityPanel() {
         quantity: cmpQty.trim() ? Number(cmpQty) : null,
         description: cmpDescription.trim(),
       });
-      setNotice("Complaint recorded. No stock moved — the goods are still here.");
+      setNotice(t("scm.rq.msg.complaintRecordedNoStockMovedTheGoodsAre"));
       setCmpDescription("");
       setCmpQty("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to record the complaint");
+      setError(err instanceof ApiError ? err.message : t("scm.rq.msg.failedToRecordTheComplaint"));
     } finally {
       setBusy(false);
     }
@@ -221,10 +223,10 @@ export function ReceivingQualityPanel() {
     setError(null);
     try {
       await api.resolveScmDiscrepancy(token, id, { status: "resolved" });
-      setNotice("Complaint resolved.");
+      setNotice(t("scm.rq.msg.complaintResolved"));
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to resolve the complaint");
+      setError(err instanceof ApiError ? err.message : t("scm.rq.msg.failedToResolveTheComplaint"));
     } finally {
       setBusy(false);
     }
@@ -258,12 +260,12 @@ export function ReceivingQualityPanel() {
           },
         ],
       });
-      setNotice("Return to vendor executed. The line is no longer payable for that quantity.");
+      setNotice(t("scm.rq.msg.returnToVendorExecutedTheLineIsNoLongerP"));
       setRtvQty("");
       setRtvReason("");
       await Promise.all([refreshSelected(), loadData()]);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to return goods to the vendor");
+      setError(err instanceof ApiError ? err.message : t("scm.rq.msg.failedToReturnGoodsToTheVendor"));
     } finally {
       setBusy(false);
     }
@@ -271,19 +273,19 @@ export function ReceivingQualityPanel() {
 
   const receiptColumns: Column<ScmReceivingRecord>[] = [
     {
-      header: "Receipt #",
+      header: t("scm.rq.h.receipt"),
       cell: (r) => <span className="font-mono font-semibold">{r.receiptNumber}</span>,
       mobileRole: "title",
     },
-    { header: "Warehouse", cell: (r) => whMap.get(r.warehouseId)?.name ?? r.warehouseId },
-    { header: "Received", cell: (r) => formatDateShort(r.receivedAt) },
+    { header: t("scm.rq.h.warehouse"), cell: (r) => whMap.get(r.warehouseId)?.name ?? r.warehouseId },
+    { header: t("scm.rq.h.received"), cell: (r) => formatDateShort(r.receivedAt) },
     {
-      header: "Status",
+      header: t("scm.rq.h.status"),
       cell: (r) => <StatusPill tone={STATUS_TONE[r.status]}>{label(r.status)}</StatusPill>,
       mobileRole: "status",
     },
     {
-      header: "Open",
+      header: t("scm.rq.h.open"),
       cell: (r) => (
         <Button variant="secondary" onClick={() => openReceipt(r.id)} disabled={busy}>
           Open
@@ -294,24 +296,24 @@ export function ReceivingQualityPanel() {
 
   const lineColumns: Column<ScmReceivingLine>[] = [
     {
-      header: "Item",
+      header: t("scm.rq.h.item"),
       cell: (l) => itemMap.get(l.itemId)?.name ?? l.itemId,
       mobileRole: "title",
     },
-    { header: "Received", cell: (l) => <span className="font-mono">{l.quantityReceived}</span> },
-    { header: "Accepted", cell: (l) => <span className="font-mono">{l.quantityAccepted}</span> },
+    { header: t("scm.rq.h.received"), cell: (l) => <span className="font-mono">{l.quantityReceived}</span> },
+    { header: t("scm.rq.h.accepted"), cell: (l) => <span className="font-mono">{l.quantityAccepted}</span> },
     {
-      header: "Rejected",
+      header: t("scm.rq.h.rejected"),
       cell: (l) => <span className="font-mono">{l.quantityRejected}</span>,
     },
     {
-      header: "Quarantined",
+      header: t("scm.rq.h.quarantined"),
       cell: (l) => <span className="font-mono">{l.quantityQuarantined}</span>,
     },
-    { header: "Returned", cell: (l) => <span className="font-mono">{l.quantityReturned}</span> },
-    { header: "Reversed", cell: (l) => <span className="font-mono">{l.quantityReversed}</span> },
+    { header: t("scm.rq.h.returned"), cell: (l) => <span className="font-mono">{l.quantityReturned}</span> },
+    { header: t("scm.rq.h.reversed"), cell: (l) => <span className="font-mono">{l.quantityReversed}</span> },
     {
-      header: "Payment eligible",
+      header: t("scm.rq.h.paymentEligible"),
       cell: (l) => {
         const eligible = paymentEligible(l);
         return (
@@ -326,25 +328,25 @@ export function ReceivingQualityPanel() {
 
   const complaintColumns: Column<ScmDiscrepancyRecord>[] = [
     {
-      header: "Item",
+      header: t("scm.rq.h.item"),
       cell: (d) => {
         const line = lineMap.get(d.receivingLineId);
         return line ? (itemMap.get(line.itemId)?.name ?? line.itemId) : d.receivingLineId;
       },
       mobileRole: "title",
     },
-    { header: "Type", cell: (d) => label(d.discrepancyType) },
-    { header: "Qty", cell: (d) => <span className="font-mono">{d.quantity ?? "—"}</span> },
-    { header: "Description", cell: (d) => d.description },
+    { header: t("scm.rq.h.type"), cell: (d) => label(d.discrepancyType) },
+    { header: t("scm.rq.h.qty"), cell: (d) => <span className="font-mono">{d.quantity ?? "—"}</span> },
+    { header: t("scm.rq.h.description"), cell: (d) => d.description },
     {
-      header: "Status",
+      header: t("scm.rq.h.status"),
       cell: (d) => (
         <StatusPill tone={d.status === "open" ? "warning" : "success"}>{label(d.status)}</StatusPill>
       ),
       mobileRole: "status",
     },
     {
-      header: "Resolve",
+      header: t("scm.rq.h.resolve"),
       cell: (d) =>
         d.status === "open" ? (
           <Button variant="secondary" onClick={() => handleResolveComplaint(d.id)} disabled={!canManage || busy}>
@@ -368,7 +370,7 @@ export function ReceivingQualityPanel() {
       {notice && <Alert tone="success">{notice}</Alert>}
 
       <Card>
-        <h3 className="mb-3 text-base font-semibold text-ink">Receiving records</h3>
+        <h3 className="mb-3 text-base font-semibold text-ink">{t("scm.rq.t.receivingRecords")}</h3>
         <DataTable
           columns={receiptColumns}
           rows={receipts}
@@ -408,9 +410,9 @@ export function ReceivingQualityPanel() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card>
-              <h3 className="mb-3 text-base font-semibold text-ink">Record inspection</h3>
+              <h3 className="mb-3 text-base font-semibold text-ink">{t("scm.rq.t.recordInspection")}</h3>
               <form onSubmit={handleInspect} className="space-y-3">
-                <Field label="Receiving line" required>
+                <Field label={t("scm.rq.f.receivingLine")} required>
                   <Select value={inspLineId} onChange={(e) => setInspLineId(e.target.value)} disabled={!canManage || busy}>
                     {selected.lines.map((l) => (
                       <option key={l.id} value={l.id}>
@@ -420,37 +422,37 @@ export function ReceivingQualityPanel() {
                   </Select>
                 </Field>
                 <div className="grid grid-cols-3 gap-2">
-                  <Field label="Accepted">
+                  <Field label={t("scm.rq.f.accepted")}>
                     <Input type="number" min="0" step="any" value={inspAccepted} onChange={(e) => setInspAccepted(e.target.value)} disabled={!canManage || busy} />
                   </Field>
-                  <Field label="Rejected">
+                  <Field label={t("scm.rq.f.rejected")}>
                     <Input type="number" min="0" step="any" value={inspRejected} onChange={(e) => setInspRejected(e.target.value)} disabled={!canManage || busy} />
                   </Field>
-                  <Field label="Quarantined">
+                  <Field label={t("scm.rq.f.quarantined")}>
                     <Input type="number" min="0" step="any" value={inspQuarantined} onChange={(e) => setInspQuarantined(e.target.value)} disabled={!canManage || busy} />
                   </Field>
                 </div>
-                <Field label="Result" required>
+                <Field label={t("scm.rq.f.result")} required>
                   <Select value={inspResult} onChange={(e) => setInspResult(e.target.value as ScmInspectionResult)} disabled={!canManage || busy}>
-                    <option value="accepted">Accepted</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="mixed">Mixed</option>
-                    <option value="quarantined">Quarantined</option>
+                    <option value="accepted">{t("scm.rq.t.accepted")}</option>
+                    <option value="rejected">{t("scm.rq.t.rejected")}</option>
+                    <option value="mixed">{t("scm.rq.t.mixed")}</option>
+                    <option value="quarantined">{t("scm.rq.t.quarantined")}</option>
                   </Select>
                 </Field>
-                <Field label="Reason">
-                  <Input value={inspReason} onChange={(e) => setInspReason(e.target.value)} placeholder="Why the goods were judged this way" disabled={!canManage || busy} />
+                <Field label={t("scm.rq.f.reason")}>
+                  <Input value={inspReason} onChange={(e) => setInspReason(e.target.value)} placeholder={t("scm.rq.p.whyTheGoodsWereJudgedThisWay")} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy || !inspLineId}>
-                  Save inspection
-                </Button>
+              {t("scm.rq.t.saveInspection")}
+              </Button>
               </form>
             </Card>
 
             <Card>
-              <h3 className="mb-3 text-base font-semibold text-ink">Raise a complaint</h3>
+              <h3 className="mb-3 text-base font-semibold text-ink">{t("scm.rq.t.raiseAComplaint")}</h3>
               <form onSubmit={handleComplaint} className="space-y-3">
-                <Field label="Receiving line" required>
+                <Field label={t("scm.rq.f.receivingLine")} required>
                   <Select value={cmpLineId} onChange={(e) => setCmpLineId(e.target.value)} disabled={!canManage || busy}>
                     {selected.lines.map((l) => (
                       <option key={l.id} value={l.id}>
@@ -459,31 +461,31 @@ export function ReceivingQualityPanel() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Type" required>
+                <Field label={t("scm.rq.f.type")} required>
                   <Select value={cmpType} onChange={(e) => setCmpType(e.target.value as ScmDiscrepancyType)} disabled={!canManage || busy}>
-                    <option value="quality">Quality</option>
-                    <option value="shortage">Shortage</option>
-                    <option value="overage">Overage</option>
-                    <option value="damage">Damage</option>
-                    <option value="document">Document</option>
+                    <option value="quality">{t("scm.rq.t.quality")}</option>
+                    <option value="shortage">{t("scm.rq.t.shortage")}</option>
+                    <option value="overage">{t("scm.rq.t.overage")}</option>
+                    <option value="damage">{t("scm.rq.t.damage")}</option>
+                    <option value="document">{t("scm.rq.t.document")}</option>
                   </Select>
                 </Field>
-                <Field label="Quantity">
-                  <Input type="number" min="0" step="any" value={cmpQty} onChange={(e) => setCmpQty(e.target.value)} placeholder="Optional" disabled={!canManage || busy} />
+                <Field label={t("scm.rq.f.quantity")}>
+                  <Input type="number" min="0" step="any" value={cmpQty} onChange={(e) => setCmpQty(e.target.value)} placeholder={t("scm.rq.p.optional")} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Description" required>
-                  <Textarea value={cmpDescription} onChange={(e) => setCmpDescription(e.target.value)} rows={3} placeholder="What is wrong, and with which goods" disabled={!canManage || busy} />
+                <Field label={t("scm.rq.f.description")} required>
+                  <Textarea value={cmpDescription} onChange={(e) => setCmpDescription(e.target.value)} rows={3} placeholder={t("scm.rq.p.whatIsWrongAndWithWhichGoods")} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy || !cmpLineId || !cmpDescription.trim()}>
-                  Record complaint
-                </Button>
+              {t("scm.rq.t.recordComplaint")}
+              </Button>
               </form>
             </Card>
 
             <Card>
-              <h3 className="mb-3 text-base font-semibold text-ink">Return to vendor</h3>
+              <h3 className="mb-3 text-base font-semibold text-ink">{t("scm.rq.t.returnToVendor")}</h3>
               <form onSubmit={handleReturn} className="space-y-3">
-                <Field label="Receiving line" required>
+                <Field label={t("scm.rq.f.receivingLine")} required>
                   <Select value={rtvLineId} onChange={(e) => setRtvLineId(e.target.value)} disabled={!canManage || busy}>
                     {selected.lines.map((l) => (
                       <option key={l.id} value={l.id}>
@@ -492,7 +494,7 @@ export function ReceivingQualityPanel() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Quantity" required>
+                <Field label={t("scm.rq.f.quantity")} required>
                   <Input
                     type="number"
                     min="0.01"
@@ -503,19 +505,19 @@ export function ReceivingQualityPanel() {
                     disabled={!canManage || busy}
                   />
                 </Field>
-                <Field label="Stock condition" required>
+                <Field label={t("scm.rq.f.stockCondition")} required>
                   <Select value={rtvCondition} onChange={(e) => setRtvCondition(e.target.value as ScmStockCondition)} disabled={!canManage || busy}>
                     {RETURN_CONDITIONS.map((c) => (
                       <option key={c} value={c}>{label(c)}</option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Reason" required>
-                  <Input value={rtvReason} onChange={(e) => setRtvReason(e.target.value)} placeholder="Why the goods go back" disabled={!canManage || busy} />
+                <Field label={t("scm.rq.f.reason")} required>
+                  <Input value={rtvReason} onChange={(e) => setRtvReason(e.target.value)} placeholder={t("scm.rq.p.whyTheGoodsGoBack")} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy || !rtvLineId || Number(rtvQty) <= 0 || !rtvReason.trim()}>
-                  Ship back
-                </Button>
+              {t("scm.rq.t.shipBack")}
+              </Button>
                 <p className="text-xs text-ink-dim">
                   A return consumes the line's returnable quantity, so the same goods cannot be paid for
                   and shipped back.
@@ -525,7 +527,7 @@ export function ReceivingQualityPanel() {
           </div>
 
           <Card>
-            <h3 className="mb-3 text-base font-semibold text-ink">Open complaints</h3>
+            <h3 className="mb-3 text-base font-semibold text-ink">{t("scm.rq.t.openComplaints")}</h3>
             <DataTable
               columns={complaintColumns}
               rows={discrepancies.filter((d) => lineMap.has(d.receivingLineId))}

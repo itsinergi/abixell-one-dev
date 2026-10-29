@@ -8,6 +8,7 @@ import {
   ApiError,
   type ScmSpendAnalyticsSnapshot,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import {
   Alert,
   Button,
@@ -24,6 +25,7 @@ import { formatMoney } from "../../shared/format";
 export function SpendAnalyticsPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
 
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -45,11 +47,11 @@ export function SpendAnalyticsPage() {
       const snapList = await api.scmSpendSnapshots(token);
       setSnapshots(snapList);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load spend analytics");
+      setError(err instanceof ApiError ? err.message : t("scm.spend.msg.failedToLoadSpendAnalytics"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void loadData();
@@ -68,7 +70,7 @@ export function SpendAnalyticsPage() {
       setSnapshots(computed);
       setNotice(`Spend analytics snapshots recomputed (${computed.length} periods).`);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to recompute spend analytics");
+      setError(err instanceof ApiError ? err.message : t("scm.spend.msg.failedToRecomputeSpendAnalytics"));
     } finally {
       setComputing(false);
     }
@@ -80,25 +82,25 @@ export function SpendAnalyticsPage() {
 
   const snapshotColumns: Column<ScmSpendAnalyticsSnapshot>[] = [
     {
-      header: "Period Key",
+      header: t("scm.spend.h.periodKey"),
       cell: (r) => <span className="font-mono font-semibold">{r.periodKey}</span>,
       mobileRole: "title",
     },
-    { header: "Type", cell: (r) => r.periodType },
+    { header: t("scm.spend.h.type"), cell: (r) => r.periodType },
     {
-      header: "PO Volume",
+      header: t("scm.spend.h.poVolume"),
       cell: (r) => <span className="font-mono">{r.poCount}</span>,
     },
     {
-      header: "Items Purchased",
+      header: t("scm.spend.h.itemsPurchased"),
       cell: (r) => <span className="font-mono">{r.itemsPurchasedCount}</span>,
     },
     {
-      header: "Avg PO Value",
+      header: t("scm.spend.h.avgPoValue"),
       cell: (r) => <span className="font-mono">{formatMoney(String(r.avgPoValue))}</span>,
     },
     {
-      header: "Total Spend",
+      header: t("scm.spend.h.totalSpend"),
       cell: (r) => <span className="font-mono font-bold text-slate-900">{formatMoney(String(r.totalSpend))}</span>,
       mobileRole: "status",
     },
@@ -107,25 +109,25 @@ export function SpendAnalyticsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Spend Analytics"
-        subtitle="Multidimensional spend analysis across suppliers, commodity categories, time series, and anomaly detection."
+        title={t("scm.spend.title.spendAnalytics")}
+        subtitle={t("scm.spend.sub.multidimensionalSpendAnalysisAcrossSuppl")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="success">{notice}</Alert>}
 
       <Card>
-        <h3 className="text-base font-semibold text-slate-900 mb-3">Analytics Date Range & Computation Engine</h3>
+        <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.spend.t.analyticsDateRangeComputationEngine")}</h3>
         <div className="flex flex-wrap items-end gap-4">
-          <Field label="Period Start">
+          <Field label={t("scm.spend.f.periodStart")}>
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={computing} />
           </Field>
-          <Field label="Period End">
+          <Field label={t("scm.spend.f.periodEnd")}>
             <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={computing} />
           </Field>
           <Button variant="primary" onClick={handleCompute} disabled={computing}>
-            Recompute Analytics Snapshot
-          </Button>
+              {t("scm.spend.t.recomputeAnalyticsSnapshot")}
+              </Button>
         </div>
       </Card>
 
@@ -149,7 +151,7 @@ export function SpendAnalyticsPage() {
           </div>
 
           <Card>
-            <h3 className="text-base font-semibold text-slate-900 mb-3">Historical Spend Trend by Period</h3>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.spend.t.historicalSpendTrendByPeriod")}</h3>
             <DataTable
               columns={snapshotColumns}
               rows={snapshots}

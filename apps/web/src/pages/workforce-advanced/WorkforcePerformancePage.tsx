@@ -14,6 +14,7 @@ import {
   type WorkforceTrainingEnrollment,
   type WorkforceWorkflowStatus,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -45,6 +46,7 @@ function workflowLabel(status: WorkforceWorkflowStatus | null): string {
 export function WorkforcePerformancePage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
   const canManage = permissions.includes(PERMISSIONS.workforcePerformanceManage);
 
@@ -135,11 +137,11 @@ export function WorkforcePerformancePage() {
         setEnrollments([]);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load performance and talent records.");
+      setError(err instanceof ApiError ? err.message : t("wf.perf.msg.couldNotLoadPerformanceAndTalentRecords"));
     } finally {
       setLoading(false);
     }
-  }, [token, selectedEmployeeId, yearFilter]);
+  }, [token, selectedEmployeeId, yearFilter, t]);
 
   useEffect(() => {
     void load();
@@ -177,7 +179,7 @@ export function WorkforcePerformancePage() {
       setNotice(message);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("wf.perf.msg.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -289,7 +291,7 @@ export function WorkforcePerformancePage() {
 
   const reviewColumns: Column<WorkforcePerformanceReviewRow>[] = [
     {
-      header: "Review",
+      header: t("wf.perf.h.review"),
       cell: ({ review }) => (
         <div>
           <div className="font-semibold text-slate-900">{review.reviewCode}</div>
@@ -298,22 +300,22 @@ export function WorkforcePerformancePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Period", cell: ({ review }) => `${formatDateShort(review.periodStart)} – ${formatDateShort(review.periodEnd)}` },
-    { header: "Goals", cell: ({ review }) => review.goalsScore != null ? `${review.goalsScore}%` : "—" },
-    { header: "Competency", cell: ({ review }) => review.competencyScore != null ? `${review.competencyScore}%` : "—" },
-    { header: "Rating", cell: ({ review }) => review.overallRating != null ? `${review.overallRating}/5` : "—" },
+    { header: t("wf.perf.h.period"), cell: ({ review }) => `${formatDateShort(review.periodStart)} – ${formatDateShort(review.periodEnd)}` },
+    { header: t("wf.perf.h.goals"), cell: ({ review }) => review.goalsScore != null ? `${review.goalsScore}%` : "—" },
+    { header: t("wf.perf.h.competency"), cell: ({ review }) => review.competencyScore != null ? `${review.competencyScore}%` : "—" },
+    { header: t("wf.perf.h.rating"), cell: ({ review }) => review.overallRating != null ? `${review.overallRating}/5` : "—" },
     {
-      header: "Workflow",
+      header: t("wf.perf.h.workflow"),
       cell: ({ status }) => <StatusPill tone={statusTone(status?.instanceStatus)}>{workflowLabel(status)}</StatusPill>,
       mobileRole: "status",
     },
     {
-      header: "Actions",
+      header: t("wf.perf.h.actions"),
       cell: ({ review }) => canManage ? (
         <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
           <Input
             aria-label={`Workflow action code for ${review.reviewCode}`}
-            placeholder="Action"
+            placeholder={t("wf.perf.p.action")}
             value={reviewActionById[review.id] ?? ""}
             onChange={(event) => setReviewActionById((current) => ({ ...current, [review.id]: event.target.value }))}
             className="w-28! text-xs"
@@ -333,7 +335,7 @@ export function WorkforcePerformancePage() {
 
   const competencyColumns: Column<WorkforceCompetency>[] = [
     {
-      header: "Competency",
+      header: t("wf.perf.h.competency"),
       cell: (row) => (
         <div>
           <div className="font-semibold text-slate-900">{row.name}</div>
@@ -342,21 +344,21 @@ export function WorkforcePerformancePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Category", cell: (row) => <Badge>{label(row.category ?? "General")}</Badge> },
-    { header: "Scale", cell: (row) => `${row.scaleMin} to ${row.scaleMax}` },
-    { header: "State", cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
+    { header: t("wf.perf.h.category"), cell: (row) => <Badge>{label(row.category ?? "General")}</Badge> },
+    { header: t("wf.perf.h.scale"), cell: (row) => `${row.scaleMin} to ${row.scaleMax}` },
+    { header: t("wf.perf.h.state"), cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
   ];
 
   const employeeCompColumns: Column<WorkforceEmployeeCompetency>[] = [
-    { header: "Competency", cell: (row) => <span className="font-semibold">{competencyName(row.competencyId)}</span>, mobileRole: "title" },
-    { header: "Proficiency Level", cell: (row) => <Badge>{row.proficiencyLevel}</Badge>, mobileRole: "status" },
-    { header: "Last assessed", cell: (row) => formatDateShort(row.lastAssessedDate) },
-    { header: "Notes", cell: (row) => row.notes ?? "—" },
+    { header: t("wf.perf.h.competency"), cell: (row) => <span className="font-semibold">{competencyName(row.competencyId)}</span>, mobileRole: "title" },
+    { header: t("wf.perf.h.proficiencyLevel"), cell: (row) => <Badge>{row.proficiencyLevel}</Badge>, mobileRole: "status" },
+    { header: t("wf.perf.h.lastAssessed"), cell: (row) => formatDateShort(row.lastAssessedDate) },
+    { header: t("wf.perf.h.notes"), cell: (row) => row.notes ?? "—" },
   ];
 
   const courseColumns: Column<WorkforceTrainingCourse>[] = [
     {
-      header: "Course",
+      header: t("wf.perf.h.course"),
       cell: (row) => (
         <div>
           <div className="font-semibold text-slate-900">{row.title}</div>
@@ -365,18 +367,18 @@ export function WorkforcePerformancePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Provider", cell: (row) => row.provider ?? "Internal" },
-    { header: "Duration", cell: (row) => `${row.durationHours} hours` },
-    { header: "Linked competency", cell: (row) => row.competencyId ? competencyName(row.competencyId) : "None" },
-    { header: "Status", cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
+    { header: t("wf.perf.h.provider"), cell: (row) => row.provider ?? "Internal" },
+    { header: t("wf.perf.h.duration"), cell: (row) => `${row.durationHours} hours` },
+    { header: t("wf.perf.h.linkedCompetency"), cell: (row) => row.competencyId ? competencyName(row.competencyId) : "None" },
+    { header: t("wf.perf.h.status"), cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
   ];
 
   const enrollmentColumns: Column<WorkforceTrainingEnrollment>[] = [
-    { header: "Training course", cell: (row) => <span className="font-semibold">{courseTitleById(row.trainingCourseId)}</span>, mobileRole: "title" },
-    { header: "Enrolled", cell: (row) => formatDateShort(row.enrolledAt) },
-    { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{label(row.status)}</StatusPill>, mobileRole: "status" },
+    { header: t("wf.perf.h.trainingCourse"), cell: (row) => <span className="font-semibold">{courseTitleById(row.trainingCourseId)}</span>, mobileRole: "title" },
+    { header: t("wf.perf.h.enrolled"), cell: (row) => formatDateShort(row.enrolledAt) },
+    { header: t("wf.perf.h.status"), cell: (row) => <StatusPill tone={statusTone(row.status)}>{label(row.status)}</StatusPill>, mobileRole: "status" },
     {
-      header: "Completion",
+      header: t("wf.perf.h.completion"),
       cell: (row) => canManage && row.status !== "completed" ? (
         <Button variant="secondary" className="text-xs" disabled={busy} onClick={() => void completeTraining(row.id)}>
           Mark completed
@@ -386,10 +388,10 @@ export function WorkforcePerformancePage() {
   ];
 
   const careerColumns: Column<WorkforceCareerPath>[] = [
-    { header: "From position", cell: (row) => <span className="font-semibold">{positionName(row.fromPositionId)}</span>, mobileRole: "title" },
-    { header: "To position", cell: (row) => <span className="font-semibold text-slate-900">{positionName(row.toPositionId)}</span> },
-    { header: "Required tenure", cell: (row) => `${row.requiredTenureMonths} months` },
-    { header: "Guidelines", cell: (row) => row.guidelines ?? "Standard career progression" },
+    { header: t("wf.perf.h.fromPosition"), cell: (row) => <span className="font-semibold">{positionName(row.fromPositionId)}</span>, mobileRole: "title" },
+    { header: t("wf.perf.h.toPosition"), cell: (row) => <span className="font-semibold text-slate-900">{positionName(row.toPositionId)}</span> },
+    { header: t("wf.perf.h.requiredTenure"), cell: (row) => `${row.requiredTenureMonths} months` },
+    { header: t("wf.perf.h.guidelines"), cell: (row) => row.guidelines ?? "Standard career progression" },
   ];
 
   const tabButton = (value: typeof tab, text: string) => (
@@ -404,7 +406,7 @@ export function WorkforcePerformancePage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Talent & Performance" subtitle="Maintain competencies, training catalogs, structured appraisal cycles, and career mobility paths." />
+      <PageHeader title={t("wf.perf.title.talentPerformance")} subtitle={t("wf.perf.sub.maintainCompetenciesTrainingCatalogsStru")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {!canManage ? <Alert tone="info">Performance evaluations and catalog maintenance require <code className="font-mono text-xs">workforce.performance.manage</code>.</Alert> : null}
@@ -417,30 +419,30 @@ export function WorkforcePerformancePage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Scoped Filters</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.perf.t.scopedFilters")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Employee context">
+          <Field label={t("wf.perf.f.employeeContext")}>
             <Select value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
-              <option value="">All employees</option>
+              <option value="">{t("wf.perf.t.allEmployees")}</option>
               {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName} ({employee.employeeNumber})</option>)}
             </Select>
           </Field>
-          <Field label="Year"><Input type="number" min="2000" max="2100" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} /></Field>
+          <Field label={t("wf.perf.f.year")}><Input type="number" min="2000" max="2100" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} /></Field>
         </div>
       </Card>
 
       {canManage && tab === "reviews" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Performance Review</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.perf.t.createPerformanceReview")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Employee" required><Select value={reviewEmployeeId} onChange={(event) => setReviewEmployeeId(event.target.value)}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
-            <Field label="Period start" required><Input type="date" value={reviewStart} onChange={(event) => setReviewStart(event.target.value)} /></Field>
-            <Field label="Period end" required><Input type="date" value={reviewEnd} onChange={(event) => setReviewEnd(event.target.value)} /></Field>
-            <Field label="Overall rating (1-5)"><Input type="number" min="1" max="5" value={overallRating} onChange={(event) => setOverallRating(event.target.value)} /></Field>
-            <Field label="Goals score (%)"><Input type="number" min="0" max="100" value={goalsScore} onChange={(event) => setGoalsScore(event.target.value)} /></Field>
-            <Field label="Competency score (%)"><Input type="number" min="0" max="100" value={competencyScore} onChange={(event) => setCompetencyScore(event.target.value)} /></Field>
-            <div className="sm:col-span-2 lg:col-span-4"><Field label="Review notes"><Textarea rows={2} value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /></Field></div>
-            <div className="sm:col-span-2 lg:col-span-4"><Field label="Development plan"><Textarea rows={2} value={developmentPlan} onChange={(event) => setDevelopmentPlan(event.target.value)} /></Field></div>
+            <Field label={t("wf.perf.f.employee")} required><Select value={reviewEmployeeId} onChange={(event) => setReviewEmployeeId(event.target.value)}><option value="">{t("wf.perf.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
+            <Field label={t("wf.perf.f.periodStart")} required><Input type="date" value={reviewStart} onChange={(event) => setReviewStart(event.target.value)} /></Field>
+            <Field label={t("wf.perf.f.periodEnd")} required><Input type="date" value={reviewEnd} onChange={(event) => setReviewEnd(event.target.value)} /></Field>
+            <Field label={t("wf.perf.f.overallRating15")}><Input type="number" min="1" max="5" value={overallRating} onChange={(event) => setOverallRating(event.target.value)} /></Field>
+            <Field label={t("wf.perf.f.goalsScore")}><Input type="number" min="0" max="100" value={goalsScore} onChange={(event) => setGoalsScore(event.target.value)} /></Field>
+            <Field label={t("wf.perf.f.competencyScore")}><Input type="number" min="0" max="100" value={competencyScore} onChange={(event) => setCompetencyScore(event.target.value)} /></Field>
+            <div className="sm:col-span-2 lg:col-span-4"><Field label={t("wf.perf.f.reviewNotes")}><Textarea rows={2} value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /></Field></div>
+            <div className="sm:col-span-2 lg:col-span-4"><Field label={t("wf.perf.f.developmentPlan")}><Textarea rows={2} value={developmentPlan} onChange={(event) => setDevelopmentPlan(event.target.value)} /></Field></div>
           </div>
           <Button className="mt-3" disabled={busy || !reviewEmployeeId || !reviewStart || !reviewEnd} onClick={() => void createReview()}>Submit performance appraisal</Button>
         </Card>
@@ -449,26 +451,26 @@ export function WorkforcePerformancePage() {
       {canManage && tab === "competencies" ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Add Competency Definition</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.perf.t.addCompetencyDefinition")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Code" required><Input value={compCode} onChange={(event) => setCompCode(event.target.value)} placeholder="LEADERSHIP" /></Field>
-              <Field label="Name" required><Input value={compName} onChange={(event) => setCompName(event.target.value)} placeholder="Team Leadership" /></Field>
-              <Field label="Category"><Input value={compCategory} onChange={(event) => setCompCategory(event.target.value)} /></Field>
+              <Field label={t("wf.perf.f.code")} required><Input value={compCode} onChange={(event) => setCompCode(event.target.value)} placeholder="LEADERSHIP" /></Field>
+              <Field label={t("wf.perf.f.name")} required><Input value={compName} onChange={(event) => setCompName(event.target.value)} placeholder={t("wf.perf.p.teamLeadership")} /></Field>
+              <Field label={t("wf.perf.f.category")}><Input value={compCategory} onChange={(event) => setCompCategory(event.target.value)} /></Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Min"><Input type="number" min="1" value={scaleMin} onChange={(event) => setScaleMin(event.target.value)} /></Field>
-                <Field label="Max"><Input type="number" min="1" value={scaleMax} onChange={(event) => setScaleMax(event.target.value)} /></Field>
+                <Field label={t("wf.perf.f.min")}><Input type="number" min="1" value={scaleMin} onChange={(event) => setScaleMin(event.target.value)} /></Field>
+                <Field label={t("wf.perf.f.max")}><Input type="number" min="1" value={scaleMax} onChange={(event) => setScaleMax(event.target.value)} /></Field>
               </div>
             </div>
             <Button className="mt-3" disabled={busy || !compCode.trim() || !compName.trim()} onClick={() => void createCompetency()}>Save competency</Button>
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Assess Employee Competency</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.perf.t.assessEmployeeCompetency")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Employee" required><Select value={assessEmployeeId} onChange={(event) => setAssessEmployeeId(event.target.value)}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
-              <Field label="Competency" required><Select value={assessCompetencyId} onChange={(event) => setAssessCompetencyId(event.target.value)}><option value="">Select competency</option>{competencies.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-              <Field label="Proficiency level" required><Input type="number" min="1" max="10" value={assessLevel} onChange={(event) => setAssessLevel(event.target.value)} /></Field>
-              <Field label="Assessment notes"><Input value={assessNotes} onChange={(event) => setAssessNotes(event.target.value)} /></Field>
+              <Field label={t("wf.perf.f.employee")} required><Select value={assessEmployeeId} onChange={(event) => setAssessEmployeeId(event.target.value)}><option value="">{t("wf.perf.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
+              <Field label={t("wf.perf.f.competency")} required><Select value={assessCompetencyId} onChange={(event) => setAssessCompetencyId(event.target.value)}><option value="">{t("wf.perf.t.selectCompetency")}</option>{competencies.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+              <Field label={t("wf.perf.f.proficiencyLevel")} required><Input type="number" min="1" max="10" value={assessLevel} onChange={(event) => setAssessLevel(event.target.value)} /></Field>
+              <Field label={t("wf.perf.f.assessmentNotes")}><Input value={assessNotes} onChange={(event) => setAssessNotes(event.target.value)} /></Field>
             </div>
             <Button className="mt-3" disabled={busy || !assessEmployeeId || !assessCompetencyId} onClick={() => void assessCompetency()}>Save assessment</Button>
           </Card>
@@ -478,16 +480,16 @@ export function WorkforcePerformancePage() {
       {canManage && tab === "training" ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Add Training Course</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.perf.t.addTrainingCourse")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Course code" required><Input value={courseCode} onChange={(event) => setCourseCode(event.target.value)} placeholder="SAFE_001" /></Field>
-              <Field label="Title" required><Input value={courseTitle} onChange={(event) => setCourseTitle(event.target.value)} placeholder="Field Safety Protocol" /></Field>
-              <Field label="Provider"><Input value={courseProvider} onChange={(event) => setCourseProvider(event.target.value)} /></Field>
-              <Field label="Duration (hours)"><Input type="number" min="1" value={durationHours} onChange={(event) => setDurationHours(event.target.value)} /></Field>
+              <Field label={t("wf.perf.f.courseCode")} required><Input value={courseCode} onChange={(event) => setCourseCode(event.target.value)} placeholder="SAFE_001" /></Field>
+              <Field label={t("wf.perf.f.title")} required><Input value={courseTitle} onChange={(event) => setCourseTitle(event.target.value)} placeholder={t("wf.perf.p.fieldSafetyProtocol")} /></Field>
+              <Field label={t("wf.perf.f.provider")}><Input value={courseProvider} onChange={(event) => setCourseProvider(event.target.value)} /></Field>
+              <Field label={t("wf.perf.f.durationHours")}><Input type="number" min="1" value={durationHours} onChange={(event) => setDurationHours(event.target.value)} /></Field>
               <div className="sm:col-span-2">
-                <Field label="Linked competency">
+                <Field label={t("wf.perf.f.linkedCompetency")}>
                   <Select value={courseCompetencyId} onChange={(event) => setCourseCompetencyId(event.target.value)}>
-                    <option value="">None</option>
+                    <option value="">{t("wf.perf.t.none")}</option>
                     {competencies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </Select>
                 </Field>
@@ -497,10 +499,10 @@ export function WorkforcePerformancePage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Enroll Employee</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.perf.t.enrollEmployee")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Employee" required><Select value={enrollEmployeeId} onChange={(event) => setEnrollEmployeeId(event.target.value)}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
-              <Field label="Course" required><Select value={enrollCourseId} onChange={(event) => setEnrollCourseId(event.target.value)}><option value="">Select course</option>{courses.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</Select></Field>
+              <Field label={t("wf.perf.f.employee")} required><Select value={enrollEmployeeId} onChange={(event) => setEnrollEmployeeId(event.target.value)}><option value="">{t("wf.perf.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
+              <Field label={t("wf.perf.f.course")} required><Select value={enrollCourseId} onChange={(event) => setEnrollCourseId(event.target.value)}><option value="">{t("wf.perf.t.selectCourse")}</option>{courses.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</Select></Field>
             </div>
             <Button className="mt-3" disabled={busy || !enrollEmployeeId || !enrollCourseId} onClick={() => void enrollEmployee()}>Enroll in training</Button>
           </Card>
@@ -509,43 +511,43 @@ export function WorkforcePerformancePage() {
 
       {canManage && tab === "career" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Career Pathway</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.perf.t.createCareerPathway")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="From position" required><Select value={fromPositionId} onChange={(event) => setFromPositionId(event.target.value)}><option value="">Select current position</option>{positions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-            <Field label="To target position" required><Select value={toPositionId} onChange={(event) => setToPositionId(event.target.value)}><option value="">Select target position</option>{positions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-            <Field label="Required tenure (months)"><Input type="number" min="0" value={tenureMonths} onChange={(event) => setTenureMonths(event.target.value)} /></Field>
-            <div className="sm:col-span-3"><Field label="Career mobility guidelines"><Textarea rows={2} value={careerGuidelines} onChange={(event) => setCareerGuidelines(event.target.value)} /></Field></div>
+            <Field label={t("wf.perf.f.fromPosition")} required><Select value={fromPositionId} onChange={(event) => setFromPositionId(event.target.value)}><option value="">{t("wf.perf.t.selectCurrentPosition")}</option>{positions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+            <Field label={t("wf.perf.f.toTargetPosition")} required><Select value={toPositionId} onChange={(event) => setToPositionId(event.target.value)}><option value="">{t("wf.perf.t.selectTargetPosition")}</option>{positions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+            <Field label={t("wf.perf.f.requiredTenureMonths")}><Input type="number" min="0" value={tenureMonths} onChange={(event) => setTenureMonths(event.target.value)} /></Field>
+            <div className="sm:col-span-3"><Field label={t("wf.perf.f.careerMobilityGuidelines")}><Textarea rows={2} value={careerGuidelines} onChange={(event) => setCareerGuidelines(event.target.value)} /></Field></div>
           </div>
           <Button className="mt-3" disabled={busy || !fromPositionId || !toPositionId} onClick={() => void createCareerPath()}>Save career path</Button>
         </Card>
       ) : null}
 
-      {loading ? <Spinner label="Loading performance records…" /> : (
+      {loading ? <Spinner label={t("wf.perf.f.loadingPerformanceRecords")} /> : (
         <Card>
-          {tab === "reviews" ? <DataTable columns={reviewColumns} rows={reviews} keyOf={(row) => row.review.id} mobileBreakpoint="md" empty={<EmptyState title="No appraisals found" description="Create a performance review above." />} /> : null}
+          {tab === "reviews" ? <DataTable columns={reviewColumns} rows={reviews} keyOf={(row) => row.review.id} mobileBreakpoint="md" empty={<EmptyState title={t("wf.perf.title.noAppraisalsFound")} description={t("wf.perf.d.createAPerformanceReviewAbove")} />} /> : null}
           {tab === "competencies" ? (
             <div className="space-y-4">
-              <DataTable columns={competencyColumns} rows={competencies} keyOf={(row) => row.id} empty={<EmptyState title="No competencies defined" description="Create a competency model above." />} />
+              <DataTable columns={competencyColumns} rows={competencies} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.perf.title.noCompetenciesDefined")} description={t("wf.perf.d.createACompetencyModelAbove")} />} />
               {selectedEmployeeId ? (
                 <>
-                  <h3 className="text-sm font-semibold text-slate-800">Assessed Competencies for Selected Employee</h3>
-                  <DataTable columns={employeeCompColumns} rows={employeeCompetencies} keyOf={(row) => row.id} empty={<EmptyState title="No assessments recorded" description="Assess competency levels above." />} />
+                  <h3 className="text-sm font-semibold text-slate-800">{t("wf.perf.t.assessedCompetenciesForSelectedEmployee")}</h3>
+                  <DataTable columns={employeeCompColumns} rows={employeeCompetencies} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.perf.title.noAssessmentsRecorded")} description={t("wf.perf.d.assessCompetencyLevelsAbove")} />} />
                 </>
               ) : null}
             </div>
           ) : null}
           {tab === "training" ? (
             <div className="space-y-4">
-              <DataTable columns={courseColumns} rows={courses} keyOf={(row) => row.id} empty={<EmptyState title="No training courses" description="Add training courses above." />} />
+              <DataTable columns={courseColumns} rows={courses} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.perf.title.noTrainingCourses")} description={t("wf.perf.d.addTrainingCoursesAbove")} />} />
               {selectedEmployeeId ? (
                 <>
-                  <h3 className="text-sm font-semibold text-slate-800">Enrollments for Selected Employee</h3>
-                  <DataTable columns={enrollmentColumns} rows={enrollments} keyOf={(row) => row.id} empty={<EmptyState title="No enrollments recorded" description="Enroll this employee in courses above." />} />
+                  <h3 className="text-sm font-semibold text-slate-800">{t("wf.perf.t.enrollmentsForSelectedEmployee")}</h3>
+                  <DataTable columns={enrollmentColumns} rows={enrollments} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.perf.title.noEnrollmentsRecorded")} description={t("wf.perf.d.enrollThisEmployeeInCoursesAbove")} />} />
                 </>
               ) : null}
             </div>
           ) : null}
-          {tab === "career" ? <DataTable columns={careerColumns} rows={careerPaths} keyOf={(row) => row.id} empty={<EmptyState title="No career pathways" description="Define role-to-role progression paths above." />} /> : null}
+          {tab === "career" ? <DataTable columns={careerColumns} rows={careerPaths} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.perf.title.noCareerPathways")} description={t("wf.perf.d.defineRoleToRoleProgressionPathsAbove")} />} /> : null}
         </Card>
       )}
     </div>

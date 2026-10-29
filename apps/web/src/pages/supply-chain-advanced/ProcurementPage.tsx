@@ -12,6 +12,7 @@ import {
   type SupplierRecord,
   type ScmSupplierBid,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -37,6 +38,7 @@ function label(v: string) {
 export function ProcurementPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.supplyChainProcurementManage);
@@ -86,11 +88,11 @@ export function ProcurementPage() {
       if (itemList.length > 0 && !rfqItemId) setRfqItemId(itemList[0].id);
       if (suppList.length > 0 && !bidSupplierId) setBidSupplierId(suppList[0].id);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load procurement data");
+      setError(err instanceof ApiError ? err.message : t("scm.proc.msg.failedToLoadProcurementData"));
     } finally {
       setLoading(false);
     }
-  }, [token, rfqItemId, bidSupplierId]);
+  }, [token, rfqItemId, bidSupplierId, t]);
 
   useEffect(() => {
     void loadData();
@@ -119,12 +121,12 @@ export function ProcurementPage() {
           },
         ],
       });
-      setNotice("RFQ published successfully.");
+      setNotice(t("scm.proc.msg.rfqPublishedSuccessfully"));
       setRfqTitle("");
       setRfqSpec("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to create RFQ");
+      setError(err instanceof ApiError ? err.message : t("scm.proc.msg.failedToCreateRfq"));
     } finally {
       setBusy(false);
     }
@@ -137,7 +139,7 @@ export function ProcurementPage() {
       const dt = await api.scmRfq(token, id);
       setSelectedRfqDetail(dt);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load RFQ detail");
+      setError(err instanceof ApiError ? err.message : t("scm.proc.msg.failedToLoadRfqDetail"));
     } finally {
       setBusy(false);
     }
@@ -169,12 +171,12 @@ export function ProcurementPage() {
           },
         ],
       });
-      setNotice("Supplier bid recorded.");
+      setNotice(t("scm.proc.msg.supplierBidRecorded"));
       setBidNotes("");
       const updated = await api.scmRfq(token, selectedRfqDetail.rfq.id);
       setSelectedRfqDetail(updated);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to submit supplier bid");
+      setError(err instanceof ApiError ? err.message : t("scm.proc.msg.failedToSubmitSupplierBid"));
     } finally {
       setBusy(false);
     }
@@ -186,12 +188,12 @@ export function ProcurementPage() {
     setError(null);
     try {
       await api.awardScmSupplierBid(token, { bidId });
-      setNotice("Bid awarded successfully.");
+      setNotice(t("scm.proc.msg.bidAwardedSuccessfully"));
       await loadData();
       const updated = await api.scmRfq(token, selectedRfqDetail.rfq.id);
       setSelectedRfqDetail(updated);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to award bid");
+      setError(err instanceof ApiError ? err.message : t("scm.proc.msg.failedToAwardBid"));
     } finally {
       setBusy(false);
     }
@@ -199,23 +201,23 @@ export function ProcurementPage() {
 
   const rfqColumns: Column<ScmRfq>[] = [
     { header: "RFQ #", cell: (r) => <span className="font-mono font-semibold">{r.rfqNumber}</span>, mobileRole: "title" },
-    { header: "Title", cell: (r) => r.title },
-    { header: "Deadline", cell: (r) => formatDateShort(r.submissionDeadline) },
-    { header: "Status", cell: (r) => <StatusPill tone={r.status === "awarded" ? "success" : r.status === "in_evaluation" ? "info" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
+    { header: t("scm.proc.h.title"), cell: (r) => r.title },
+    { header: t("scm.proc.h.deadline"), cell: (r) => formatDateShort(r.submissionDeadline) },
+    { header: t("scm.proc.h.status"), cell: (r) => <StatusPill tone={r.status === "awarded" ? "success" : r.status === "in_evaluation" ? "info" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
     {
-      header: "Action",
+      header: t("scm.proc.h.action"),
       cell: (r) => <Button variant="secondary" onClick={() => openRfqDetail(r.id)}>Inspect & Compare</Button>,
     },
   ];
 
   const bidColumns: Column<ScmSupplierBid>[] = [
-    { header: "Supplier", cell: (b) => suppMap.get(b.supplierId)?.name || b.supplierId, mobileRole: "title" },
-    { header: "Quoted Total", cell: (b) => <span className="font-mono font-bold text-slate-800">{formatMoney(String(b.totalAmount))}</span> },
-    { header: "Lead Time", cell: (b) => `${b.leadTimeDays ?? "—"} days` },
-    { header: "Final Score", cell: (b) => b.finalScore != null ? <Badge>{b.finalScore} / 100</Badge> : "—" },
-    { header: "Status", cell: (b) => <StatusPill tone={b.status === "awarded" ? "success" : b.status === "rejected" ? "danger" : "neutral"}>{label(b.status)}</StatusPill>, mobileRole: "status" },
+    { header: t("scm.proc.h.supplier"), cell: (b) => suppMap.get(b.supplierId)?.name || b.supplierId, mobileRole: "title" },
+    { header: t("scm.proc.h.quotedTotal"), cell: (b) => <span className="font-mono font-bold text-slate-800">{formatMoney(String(b.totalAmount))}</span> },
+    { header: t("scm.proc.h.leadTime"), cell: (b) => `${b.leadTimeDays ?? "—"} days` },
+    { header: t("scm.proc.h.finalScore"), cell: (b) => b.finalScore != null ? <Badge>{b.finalScore} / 100</Badge> : "—" },
+    { header: t("scm.proc.h.status"), cell: (b) => <StatusPill tone={b.status === "awarded" ? "success" : b.status === "rejected" ? "danger" : "neutral"}>{label(b.status)}</StatusPill>, mobileRole: "status" },
     {
-      header: "Award Decision",
+      header: t("scm.proc.h.awardDecision"),
       cell: (b) =>
         selectedRfqDetail?.rfq.status !== "awarded" && b.status !== "awarded" ? (
           <Button variant="primary" onClick={() => handleAwardBid(b.id)} disabled={!canAward || busy}>Award to PO</Button>
@@ -228,8 +230,8 @@ export function ProcurementPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="RFQ & Tender Management"
-        subtitle="Multi-line RFQ publication, supplier quotation collection, comparative evaluation scoring, and automated PO award."
+        title={t("scm.proc.title.rfqTenderManagement")}
+        subtitle={t("scm.proc.sub.multiLineRfqPublicationSupplierQuotation")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -243,30 +245,30 @@ export function ProcurementPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card>
-            <h3 className="text-base font-semibold text-slate-900 mb-3">Active RFQs & Tenders</h3>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.proc.t.activeRfqsTenders")}</h3>
             <DataTable columns={rfqColumns} rows={rfqs} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No RFQs created.</p>} />
           </Card>
         </div>
         <div>
           <Card>
-            <h3 className="text-base font-semibold text-slate-900 mb-3">Publish New RFQ</h3>
+            <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.proc.t.publishNewRfq")}</h3>
             <form onSubmit={handleCreateRfq} className="space-y-4">
-              <Field label="RFQ Title" required>
-                <Input value={rfqTitle} onChange={(e) => setRfqTitle(e.target.value)} placeholder="Procurement of Server Racks" disabled={!canManage || busy} />
+              <Field label={t("scm.proc.f.rfqTitle")} required>
+                <Input value={rfqTitle} onChange={(e) => setRfqTitle(e.target.value)} placeholder={t("scm.proc.p.procurementOfServerRacks")} disabled={!canManage || busy} />
               </Field>
-              <Field label="Submission Deadline" required>
+              <Field label={t("scm.proc.f.submissionDeadline")} required>
                 <Input type="date" value={rfqDeadline} onChange={(e) => setRfqDeadline(e.target.value)} disabled={!canManage || busy} />
               </Field>
-              <Field label="Target Item" required>
+              <Field label={t("scm.proc.f.targetItem")} required>
                 <Select value={rfqItemId} onChange={(e) => setRfqItemId(e.target.value)} disabled={!canManage || busy}>
                   {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
                 </Select>
               </Field>
-              <Field label="Quantity Required" required>
+              <Field label={t("scm.proc.f.quantityRequired")} required>
                 <Input type="number" min="1" value={rfqQty} onChange={(e) => setRfqQty(e.target.value)} disabled={!canManage || busy} />
               </Field>
-              <Field label="Technical Specification">
-                <Input value={rfqSpec} onChange={(e) => setRfqSpec(e.target.value)} placeholder="Minimum 42U, dual PDU..." disabled={!canManage || busy} />
+              <Field label={t("scm.proc.f.technicalSpecification")}>
+                <Input value={rfqSpec} onChange={(e) => setRfqSpec(e.target.value)} placeholder={t("scm.proc.p.minimum42uDualPdu")} disabled={!canManage || busy} />
               </Field>
               <Button type="submit" variant="primary" disabled={!canManage || busy}>Publish RFQ</Button>
             </form>
@@ -287,9 +289,9 @@ export function ProcurementPage() {
               <h4 className="text-sm font-bold text-slate-800 mb-2">Required Items</h4>
               <DataTable
                 columns={[
-                  { header: "Item", cell: (l) => itemMap.get(l.itemId)?.name || l.itemId, mobileRole: "title" },
-                  { header: "Target Qty", cell: (l) => l.targetQuantity },
-                  { header: "Specification", cell: (l) => l.specifications || "—", mobileRole: "status" },
+                  { header: t("scm.proc.h.item"), cell: (l) => itemMap.get(l.itemId)?.name || l.itemId, mobileRole: "title" },
+                  { header: t("scm.proc.h.targetQty"), cell: (l) => l.targetQuantity },
+                  { header: t("scm.proc.h.specification"), cell: (l) => l.specifications || "—", mobileRole: "status" },
                 ]}
                 rows={selectedRfqDetail.items}
                 keyOf={(l) => l.id}
@@ -305,19 +307,19 @@ export function ProcurementPage() {
                 <Card>
                   <h4 className="text-sm font-bold text-slate-800 mb-3">Record Supplier Bid</h4>
                   <form onSubmit={handleSubmitBid} className="space-y-4">
-                    <Field label="Supplier" required>
+                    <Field label={t("scm.proc.f.supplier")} required>
                       <Select value={bidSupplierId} onChange={(e) => setBidSupplierId(e.target.value)} disabled={!canManage || busy}>
                         {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </Select>
                     </Field>
-                    <Field label="Unit Price Quoted (IDR)" required>
+                    <Field label={t("scm.proc.f.unitPriceQuotedIdr")} required>
                       <Input type="number" value={bidPrice} onChange={(e) => setBidPrice(e.target.value)} disabled={!canManage || busy} />
                     </Field>
-                    <Field label="Lead Time (Days)" required>
+                    <Field label={t("scm.proc.f.leadTimeDays")} required>
                       <Input type="number" value={bidLeadDays} onChange={(e) => setBidLeadDays(e.target.value)} disabled={!canManage || busy} />
                     </Field>
-                    <Field label="Bid Notes">
-                      <Input value={bidNotes} onChange={(e) => setBidNotes(e.target.value)} placeholder="Includes FOB shipping..." disabled={!canManage || busy} />
+                    <Field label={t("scm.proc.f.bidNotes")}>
+                      <Input value={bidNotes} onChange={(e) => setBidNotes(e.target.value)} placeholder={t("scm.proc.p.includesFobShipping")} disabled={!canManage || busy} />
                     </Field>
                     <Button type="submit" variant="primary" disabled={!canManage || busy || selectedRfqDetail.rfq.status === "awarded"}>Submit Bid</Button>
                   </form>

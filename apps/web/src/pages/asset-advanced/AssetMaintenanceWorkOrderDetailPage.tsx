@@ -9,6 +9,7 @@ import {
   type Employee,
   type ScmItem,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -38,6 +39,7 @@ export function AssetMaintenanceWorkOrderDetailPage() {
   const { workOrderId } = useParams<{ workOrderId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.assetMaintenanceManage);
@@ -76,11 +78,11 @@ export function AssetMaintenanceWorkOrderDetailPage() {
       setEmployees(employeeList.filter((employee) => employee.userId && employee.employmentStatus === "active"));
       setItems(itemList.filter((item) => item.isActive));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load maintenance work order.");
+      setError(err instanceof ApiError ? err.message : t("sca.maint.msg.couldNotLoadMaintenanceWorkOrder"));
     } finally {
       setLoading(false);
     }
-  }, [token, workOrderId]);
+  }, [token, workOrderId, t]);
 
   useEffect(() => {
     void load();
@@ -96,13 +98,13 @@ export function AssetMaintenanceWorkOrderDetailPage() {
       setNotice(successMessage);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("sca.maint.msg.actionFailed"));
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <Spinner label="Loading maintenance work order…" />;
+  if (loading) return <Spinner label={t("sca.maint.f.loadingMaintenanceWorkOrder")} />;
   if (!detail) return <Alert tone="error">{error ?? "Maintenance work order not found."}</Alert>;
 
   const { workOrder, schedule, parts, status, availableActions } = detail;
@@ -110,11 +112,11 @@ export function AssetMaintenanceWorkOrderDetailPage() {
   const itemName = (id: string) => items.find((item) => item.id === id)?.name ?? id;
 
   const partColumns: Column<(typeof parts)[number]>[] = [
-    { header: "Item", cell: (row) => <span className="font-semibold text-slate-900">{itemName(row.itemId)}</span>, mobileRole: "title" },
-    { header: "Quantity", cell: (row) => row.quantity.toLocaleString(), mobileRole: "status" },
-    { header: "Unit Cost", cell: (row) => row.unitCost ?? "—" },
-    { header: "Recorded", cell: (row) => formatDate(row.recordedAt) },
-    { header: "Notes", cell: (row) => row.notes ?? "—" },
+    { header: t("sca.maint.h.item"), cell: (row) => <span className="font-semibold text-slate-900">{itemName(row.itemId)}</span>, mobileRole: "title" },
+    { header: t("sca.maint.h.quantity"), cell: (row) => row.quantity.toLocaleString(), mobileRole: "status" },
+    { header: t("sca.maint.h.unitCost"), cell: (row) => row.unitCost ?? "—" },
+    { header: t("sca.maint.h.recorded"), cell: (row) => formatDate(row.recordedAt) },
+    { header: t("sca.maint.h.notes"), cell: (row) => row.notes ?? "—" },
   ];
 
   const timeline = [
@@ -154,7 +156,7 @@ export function AssetMaintenanceWorkOrderDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Work Order Details</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.workOrderDetails")}</h2>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <dt className="text-slate-500">Asset</dt>
@@ -179,14 +181,14 @@ export function AssetMaintenanceWorkOrderDetailPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Lifecycle Timeline</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.lifecycleTimeline")}</h2>
           <Timeline items={timeline} />
         </Card>
       </div>
 
       {schedule ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Linked Preventive Schedule</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.linkedPreventiveSchedule")}</h2>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-4">
             <div><dt className="text-slate-500">Schedule Code</dt><dd className="font-mono text-xs text-slate-900">{schedule.scheduleCode}</dd></div>
             <div><dt className="text-slate-500">Title</dt><dd className="text-slate-900">{schedule.title}</dd></div>
@@ -199,11 +201,11 @@ export function AssetMaintenanceWorkOrderDetailPage() {
       {canManage ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Assignment and Direct Actions</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.assignmentAndDirectActions")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Assign to user">
+              <Field label={t("sca.maint.f.assignToUser")}>
                 <Select value={assignedToUserId} onChange={(e) => setAssignedToUserId(e.target.value)}>
-                  <option value="">Select active user</option>
+                  <option value="">{t("sca.maint.t.selectActiveUser")}</option>
                   {employees.map((employee) => (
                     <option key={employee.id} value={employee.userId ?? ""}>{employee.fullName}</option>
                   ))}
@@ -228,9 +230,9 @@ export function AssetMaintenanceWorkOrderDetailPage() {
 
             {availableActions.length > 0 ? (
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Workflow Actions</h3>
-                <Field label="Workflow comment">
-                  <Input value={workflowComment} onChange={(e) => setWorkflowComment(e.target.value)} placeholder="Optional comment" />
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("sca.maint.t.workflowActions")}</h3>
+                <Field label={t("sca.maint.f.workflowComment")}>
+                  <Input value={workflowComment} onChange={(e) => setWorkflowComment(e.target.value)} placeholder={t("sca.maint.p.optionalComment")} />
                 </Field>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {availableActions.map((action) => (
@@ -252,22 +254,22 @@ export function AssetMaintenanceWorkOrderDetailPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Complete / Verify</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.completeVerify")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Actual Cost">
+              <Field label={t("sca.maint.f.actualCost")}>
                 <Input type="number" min="0" step="0.01" value={actualCost} onChange={(e) => setActualCost(e.target.value)} />
               </Field>
-              <Field label="Downtime Hours">
+              <Field label={t("sca.maint.f.downtimeHours")}>
                 <Input type="number" min="0" step="0.01" value={downtimeHours} onChange={(e) => setDowntimeHours(e.target.value)} />
               </Field>
-              <Field label="Current Meter Reading">
+              <Field label={t("sca.maint.f.currentMeterReading")}>
                 <Input type="number" min="0" step="0.01" value={currentMeterReading} onChange={(e) => setCurrentMeterReading(e.target.value)} />
               </Field>
-              <Field label="Verification Notes">
+              <Field label={t("sca.maint.f.verificationNotes")}>
                 <Input value={verificationNotes} onChange={(e) => setVerificationNotes(e.target.value)} />
               </Field>
               <div className="sm:col-span-2">
-                <Field label="Completion Notes">
+                <Field label={t("sca.maint.f.completionNotes")}>
                   <Textarea rows={2} value={completionNotes} onChange={(e) => setCompletionNotes(e.target.value)} />
                 </Field>
               </div>
@@ -305,7 +307,7 @@ export function AssetMaintenanceWorkOrderDetailPage() {
       <Card>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-semibold text-slate-800">Spare Parts Usage</h2>
+            <h2 className="text-sm font-semibold text-slate-800">{t("sca.maint.t.sparePartsUsage")}</h2>
             <p className="text-xs text-slate-500">Parts are recorded against this maintenance work order.</p>
           </div>
           <Badge>{parts.length} parts</Badge>
@@ -313,21 +315,21 @@ export function AssetMaintenanceWorkOrderDetailPage() {
 
         {canManage && !workOrder.completedAt ? (
           <div className="mb-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-4">
-            <Field label="Item" required>
+            <Field label={t("sca.maint.f.item")} required>
               <Select value={partItemId} onChange={(e) => setPartItemId(e.target.value)}>
-                <option value="">Select item</option>
+                <option value="">{t("sca.maint.t.selectItem")}</option>
                 {items.map((item) => (
                   <option key={item.id} value={item.id}>{item.code} — {item.name}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Quantity" required>
+            <Field label={t("sca.maint.f.quantity")} required>
               <Input type="number" min="0.01" step="0.01" value={partQuantity} onChange={(e) => setPartQuantity(e.target.value)} />
             </Field>
-            <Field label="Unit Cost">
+            <Field label={t("sca.maint.f.unitCost")}>
               <Input type="number" min="0" step="0.01" value={partUnitCost} onChange={(e) => setPartUnitCost(e.target.value)} />
             </Field>
-            <Field label="Notes">
+            <Field label={t("sca.maint.f.notes")}>
               <Input value={partNotes} onChange={(e) => setPartNotes(e.target.value)} />
             </Field>
             <div className="sm:col-span-4">
@@ -353,7 +355,7 @@ export function AssetMaintenanceWorkOrderDetailPage() {
           columns={partColumns}
           rows={parts}
           keyOf={(row) => row.id}
-          empty={<EmptyState title="No spare parts recorded" description="Record parts before completing the work order when inventory materials are consumed." />}
+          empty={<EmptyState title={t("sca.maint.title.noSparePartsRecorded")} description={t("sca.maint.d.recordPartsBeforeCompletingTheWorkOrderW")} />}
         />
       </Card>
     </div>

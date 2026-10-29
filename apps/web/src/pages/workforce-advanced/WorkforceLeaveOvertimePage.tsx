@@ -11,6 +11,7 @@ import {
   type WorkforceOvertimeRequestRow,
   type WorkforceWorkflowStatus,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -46,6 +47,7 @@ function toTime(value: string): string {
 export function WorkforceLeaveOvertimePage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
   const canManage = permissions.includes(PERMISSIONS.workforceLeaveManage);
   const canApprove = permissions.includes(PERMISSIONS.workforceLeaveApprove);
@@ -122,11 +124,11 @@ export function WorkforceLeaveOvertimePage() {
         setBalances([]);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load leave and overtime data.");
+      setError(err instanceof ApiError ? err.message : t("wf.leave.msg.couldNotLoadLeaveAndOvertimeData"));
     } finally {
       setLoading(false);
     }
-  }, [token, employeeFilter, fromDate, toDate, balanceYear]);
+  }, [token, employeeFilter, fromDate, toDate, balanceYear, t]);
 
   useEffect(() => {
     void load();
@@ -153,7 +155,7 @@ export function WorkforceLeaveOvertimePage() {
       setNotice(message);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The action could not be completed.");
+      setError(err instanceof ApiError ? err.message : t("wf.leave.msg.theActionCouldNotBeCompleted"));
     } finally {
       setBusy(false);
     }
@@ -231,7 +233,7 @@ export function WorkforceLeaveOvertimePage() {
 
   const leaveColumns: Column<WorkforceLeaveRequestRow>[] = [
     {
-      header: "Request",
+      header: t("wf.leave.h.request"),
       cell: ({ leaveRequest }) => (
         <div>
           <div className="font-semibold text-slate-900">{leaveRequest.requestNumber}</div>
@@ -240,27 +242,27 @@ export function WorkforceLeaveOvertimePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Leave type", cell: ({ leaveRequest }) => <Badge>{leaveTypeName(leaveRequest.leaveTypeId)}</Badge> },
-    { header: "Dates", cell: ({ leaveRequest }) => `${formatDateShort(leaveRequest.startDate)} – ${formatDateShort(leaveRequest.endDate)}` },
-    { header: "Days", cell: ({ leaveRequest }) => leaveRequest.totalDays },
+    { header: t("wf.leave.h.leaveType"), cell: ({ leaveRequest }) => <Badge>{leaveTypeName(leaveRequest.leaveTypeId)}</Badge> },
+    { header: t("wf.leave.h.dates"), cell: ({ leaveRequest }) => `${formatDateShort(leaveRequest.startDate)} – ${formatDateShort(leaveRequest.endDate)}` },
+    { header: t("wf.leave.h.days"), cell: ({ leaveRequest }) => leaveRequest.totalDays },
     {
-      header: "Workflow",
+      header: t("wf.leave.h.workflow"),
       cell: ({ status }) => <StatusPill tone={statusTone(status?.instanceStatus)}>{workflowLabel(status)}</StatusPill>,
       mobileRole: "status",
     },
     {
-      header: "Approval action",
+      header: t("wf.leave.h.approvalAction"),
       cell: ({ leaveRequest, status }) => canApprove && status?.instanceStatus === "in_progress" ? (
         <div className="min-w-[180px] space-y-1" onClick={(event) => event.stopPropagation()}>
           <Input
             aria-label={`Action code for ${leaveRequest.requestNumber}`}
-            placeholder="Action code"
+            placeholder={t("wf.leave.p.actionCode")}
             value={actionCodeById[leaveRequest.id] ?? ""}
             onChange={(event) => setActionCodeById((current) => ({ ...current, [leaveRequest.id]: event.target.value }))}
           />
           <Input
             aria-label={`Comment for ${leaveRequest.requestNumber}`}
-            placeholder="Optional comment"
+            placeholder={t("wf.leave.p.optionalComment")}
             value={commentById[leaveRequest.id] ?? ""}
             onChange={(event) => setCommentById((current) => ({ ...current, [leaveRequest.id]: event.target.value }))}
           />
@@ -274,7 +276,7 @@ export function WorkforceLeaveOvertimePage() {
 
   const overtimeColumns: Column<WorkforceOvertimeRequestRow>[] = [
     {
-      header: "Request",
+      header: t("wf.leave.h.request"),
       cell: ({ overtimeRequest }) => (
         <div>
           <div className="font-semibold text-slate-900">{overtimeRequest.requestNumber}</div>
@@ -283,16 +285,16 @@ export function WorkforceLeaveOvertimePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Date", cell: ({ overtimeRequest }) => formatDateShort(overtimeRequest.overtimeDate) },
-    { header: "Planned", cell: ({ overtimeRequest }) => `${overtimeRequest.startTime}–${overtimeRequest.endTime} (${overtimeRequest.estimatedHours}h)` },
-    { header: "Actual", cell: ({ overtimeRequest }) => overtimeRequest.actualHours == null ? "—" : `${overtimeRequest.actualHours}h` },
+    { header: t("wf.leave.h.date"), cell: ({ overtimeRequest }) => formatDateShort(overtimeRequest.overtimeDate) },
+    { header: t("wf.leave.h.planned"), cell: ({ overtimeRequest }) => `${overtimeRequest.startTime}–${overtimeRequest.endTime} (${overtimeRequest.estimatedHours}h)` },
+    { header: t("wf.leave.h.actual"), cell: ({ overtimeRequest }) => overtimeRequest.actualHours == null ? "—" : `${overtimeRequest.actualHours}h` },
     {
-      header: "Workflow",
+      header: t("wf.leave.h.workflow"),
       cell: ({ status }) => <StatusPill tone={statusTone(status?.instanceStatus)}>{workflowLabel(status)}</StatusPill>,
       mobileRole: "status",
     },
     {
-      header: "Actions",
+      header: t("wf.leave.h.actions"),
       cell: ({ overtimeRequest, status }) => (
         <div className="min-w-[190px] space-y-1" onClick={(event) => event.stopPropagation()}>
           {canManage && overtimeRequest.approvedAt && overtimeRequest.actualHours == null ? (
@@ -302,7 +304,7 @@ export function WorkforceLeaveOvertimePage() {
                 type="number"
                 min="0"
                 step="0.25"
-                placeholder="Actual hours"
+                placeholder={t("wf.leave.p.actualHours")}
                 value={actualHoursById[overtimeRequest.id] ?? ""}
                 onChange={(event) => setActualHoursById((current) => ({ ...current, [overtimeRequest.id]: event.target.value }))}
               />
@@ -322,13 +324,13 @@ export function WorkforceLeaveOvertimePage() {
             <>
               <Input
                 aria-label={`Action code for ${overtimeRequest.requestNumber}`}
-                placeholder="Workflow action code"
+                placeholder={t("wf.leave.p.workflowActionCode")}
                 value={actionCodeById[overtimeRequest.id] ?? ""}
                 onChange={(event) => setActionCodeById((current) => ({ ...current, [overtimeRequest.id]: event.target.value }))}
               />
               <Input
                 aria-label={`Comment for ${overtimeRequest.requestNumber}`}
-                placeholder="Optional comment"
+                placeholder={t("wf.leave.p.optionalComment")}
                 value={commentById[overtimeRequest.id] ?? ""}
                 onChange={(event) => setCommentById((current) => ({ ...current, [overtimeRequest.id]: event.target.value }))}
               />
@@ -345,14 +347,14 @@ export function WorkforceLeaveOvertimePage() {
   ];
 
   const balanceColumns: Column<WorkforceLeaveBalance>[] = [
-    { header: "Employee", cell: (row) => <span className="font-semibold">{employeeName(row.employeeId)}</span>, mobileRole: "title" },
-    { header: "Leave type", cell: (row) => leaveTypeName(row.leaveTypeId) },
-    { header: "Year", cell: (row) => row.balanceYear },
-    { header: "Allocated", cell: (row) => row.allocatedDays },
-    { header: "Used", cell: (row) => row.usedDays },
-    { header: "Pending", cell: (row) => row.pendingDays },
+    { header: t("wf.leave.h.employee"), cell: (row) => <span className="font-semibold">{employeeName(row.employeeId)}</span>, mobileRole: "title" },
+    { header: t("wf.leave.h.leaveType"), cell: (row) => leaveTypeName(row.leaveTypeId) },
+    { header: t("wf.leave.h.year"), cell: (row) => row.balanceYear },
+    { header: t("wf.leave.h.allocated"), cell: (row) => row.allocatedDays },
+    { header: t("wf.leave.h.used"), cell: (row) => row.usedDays },
+    { header: t("wf.leave.h.pending"), cell: (row) => row.pendingDays },
     {
-      header: "Available",
+      header: t("wf.leave.h.available"),
       cell: (row) => <StatusPill tone={row.allocatedDays - row.usedDays - row.pendingDays > 0 ? "success" : "warning"}>
         {row.allocatedDays - row.usedDays - row.pendingDays} days
       </StatusPill>,
@@ -362,14 +364,14 @@ export function WorkforceLeaveOvertimePage() {
 
   const typeColumns: Column<WorkforceLeaveType>[] = [
     {
-      header: "Leave type",
+      header: t("wf.leave.h.leaveType"),
       cell: (row) => <div><div className="font-semibold">{row.name}</div><div className="font-mono text-xs text-slate-500">{row.code}</div></div>,
       mobileRole: "title",
     },
-    { header: "Annual allowance", cell: (row) => `${row.annualAllowanceDays} days` },
-    { header: "Paid", cell: (row) => row.isPaid ? "Yes" : "No" },
-    { header: "Attachment", cell: (row) => row.requiresAttachment ? "Required" : "Optional" },
-    { header: "State", cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
+    { header: t("wf.leave.h.annualAllowance"), cell: (row) => `${row.annualAllowanceDays} days` },
+    { header: t("wf.leave.h.paid"), cell: (row) => row.isPaid ? "Yes" : "No" },
+    { header: t("wf.leave.h.attachment"), cell: (row) => row.requiresAttachment ? "Required" : "Optional" },
+    { header: t("wf.leave.h.state"), cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
   ];
 
   const tabButton = (value: typeof tab, text: string) => (
@@ -384,7 +386,7 @@ export function WorkforceLeaveOvertimePage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Leave & Overtime" subtitle="Keep entitlements accurate and route leave and overtime through configured approval workflows." />
+      <PageHeader title={t("wf.leave.title.leaveOvertime")} subtitle={t("wf.leave.sub.keepEntitlementsAccurateAndRouteLeaveAnd")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {!canManage ? <Alert tone="info">Leave setup and request submission require <code className="font-mono text-xs">workforce.leave.manage</code>.</Alert> : null}
@@ -398,32 +400,32 @@ export function WorkforceLeaveOvertimePage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Filters</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.leave.t.filters")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Employee">
+          <Field label={t("wf.leave.f.employee")}>
             <Select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}>
-              <option value="">All employees</option>
+              <option value="">{t("wf.leave.t.allEmployees")}</option>
               {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName} ({employee.employeeNumber})</option>)}
             </Select>
           </Field>
-          <Field label="From"><Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></Field>
-          <Field label="To"><Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></Field>
-          <Field label="Balance year"><Input type="number" min="2000" max="2100" value={balanceYear} onChange={(event) => setBalanceYear(event.target.value)} /></Field>
+          <Field label={t("wf.leave.f.from")}><Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></Field>
+          <Field label={t("wf.leave.f.to")}><Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></Field>
+          <Field label={t("wf.leave.f.balanceYear")}><Input type="number" min="2000" max="2100" value={balanceYear} onChange={(event) => setBalanceYear(event.target.value)} /></Field>
         </div>
         {tab === "balances" && !employeeFilter ? <p className="mt-2 text-xs text-slate-500">Select an employee to load scoped leave balances.</p> : null}
       </Card>
 
       {canManage && tab === "leave" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Submit Leave Request</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.leave.t.submitLeaveRequest")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Employee" required><Select value={leaveEmployee} onChange={(event) => setLeaveEmployee(event.target.value)}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
-            <Field label="Leave type" required><Select value={leaveTypeId} onChange={(event) => setLeaveTypeId(event.target.value)}><option value="">Select leave type</option>{leaveTypes.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-            <Field label="Start date" required><Input type="date" value={leaveStart} onChange={(event) => setLeaveStart(event.target.value)} /></Field>
-            <Field label="End date" required><Input type="date" value={leaveEnd} onChange={(event) => setLeaveEnd(event.target.value)} /></Field>
-            <Field label="Total days" required><Input type="number" min="0.5" step="0.5" value={leaveDays} onChange={(event) => setLeaveDays(event.target.value)} /></Field>
-            <Field label="Attachment document ID" hint="Required when the selected policy requires evidence."><Input value={leaveAttachmentId} onChange={(event) => setLeaveAttachmentId(event.target.value)} /></Field>
-            <div className="sm:col-span-2"><Field label="Reason"><Textarea rows={2} value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} /></Field></div>
+            <Field label={t("wf.leave.f.employee")} required><Select value={leaveEmployee} onChange={(event) => setLeaveEmployee(event.target.value)}><option value="">{t("wf.leave.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
+            <Field label={t("wf.leave.f.leaveType")} required><Select value={leaveTypeId} onChange={(event) => setLeaveTypeId(event.target.value)}><option value="">{t("wf.leave.t.selectLeaveType")}</option>{leaveTypes.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+            <Field label={t("wf.leave.f.startDate")} required><Input type="date" value={leaveStart} onChange={(event) => setLeaveStart(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.endDate")} required><Input type="date" value={leaveEnd} onChange={(event) => setLeaveEnd(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.totalDays")} required><Input type="number" min="0.5" step="0.5" value={leaveDays} onChange={(event) => setLeaveDays(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.attachmentDocumentId")} hint={t("wf.leave.n.requiredWhenTheSelectedPolicyRequiresEvi")}><Input value={leaveAttachmentId} onChange={(event) => setLeaveAttachmentId(event.target.value)} /></Field>
+            <div className="sm:col-span-2"><Field label={t("wf.leave.f.reason")}><Textarea rows={2} value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} /></Field></div>
           </div>
           <Button className="mt-3" disabled={busy || !leaveEmployee || !leaveTypeId || !leaveStart || !leaveEnd || Number(leaveDays) <= 0} onClick={() => void submitLeave()}>Submit leave request</Button>
         </Card>
@@ -431,14 +433,14 @@ export function WorkforceLeaveOvertimePage() {
 
       {canManage && tab === "overtime" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Submit Overtime Request</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.leave.t.submitOvertimeRequest")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Employee" required><Select value={overtimeEmployee} onChange={(event) => setOvertimeEmployee(event.target.value)}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
-            <Field label="Overtime date" required><Input type="date" value={overtimeDate} onChange={(event) => setOvertimeDate(event.target.value)} /></Field>
-            <Field label="Start time" required><Input type="time" value={overtimeStart} onChange={(event) => setOvertimeStart(event.target.value)} /></Field>
-            <Field label="End time" required><Input type="time" value={overtimeEnd} onChange={(event) => setOvertimeEnd(event.target.value)} /></Field>
-            <Field label="Estimated hours" required><Input type="number" min="0.25" step="0.25" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /></Field>
-            <div className="sm:col-span-2 lg:col-span-3"><Field label="Reason"><Textarea rows={2} value={overtimeReason} onChange={(event) => setOvertimeReason(event.target.value)} /></Field></div>
+            <Field label={t("wf.leave.f.employee")} required><Select value={overtimeEmployee} onChange={(event) => setOvertimeEmployee(event.target.value)}><option value="">{t("wf.leave.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
+            <Field label={t("wf.leave.f.overtimeDate")} required><Input type="date" value={overtimeDate} onChange={(event) => setOvertimeDate(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.startTime")} required><Input type="time" value={overtimeStart} onChange={(event) => setOvertimeStart(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.endTime")} required><Input type="time" value={overtimeEnd} onChange={(event) => setOvertimeEnd(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.estimatedHours")} required><Input type="number" min="0.25" step="0.25" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /></Field>
+            <div className="sm:col-span-2 lg:col-span-3"><Field label={t("wf.leave.f.reason")}><Textarea rows={2} value={overtimeReason} onChange={(event) => setOvertimeReason(event.target.value)} /></Field></div>
           </div>
           <Button className="mt-3" disabled={busy || !overtimeEmployee || !overtimeDate || !overtimeStart || !overtimeEnd || Number(estimatedHours) <= 0} onClick={() => void submitOvertime()}>Submit overtime request</Button>
         </Card>
@@ -446,12 +448,12 @@ export function WorkforceLeaveOvertimePage() {
 
       {canManage && tab === "balances" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Set Leave Allocation</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.leave.t.setLeaveAllocation")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <Field label="Employee" required><Select value={allocationEmployee} onChange={(event) => setAllocationEmployee(event.target.value)}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
-            <Field label="Leave type" required><Select value={allocationType} onChange={(event) => setAllocationType(event.target.value)}><option value="">Select type</option>{leaveTypes.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-            <Field label="Year" required><Input type="number" min="2000" max="2100" value={balanceYear} onChange={(event) => setBalanceYear(event.target.value)} /></Field>
-            <Field label="Allocated days" required><Input type="number" min="0" step="0.5" value={allocatedDays} onChange={(event) => setAllocatedDays(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.employee")} required><Select value={allocationEmployee} onChange={(event) => setAllocationEmployee(event.target.value)}><option value="">{t("wf.leave.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
+            <Field label={t("wf.leave.f.leaveType")} required><Select value={allocationType} onChange={(event) => setAllocationType(event.target.value)}><option value="">{t("wf.leave.t.selectType")}</option>{leaveTypes.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+            <Field label={t("wf.leave.f.year")} required><Input type="number" min="2000" max="2100" value={balanceYear} onChange={(event) => setBalanceYear(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.allocatedDays")} required><Input type="number" min="0" step="0.5" value={allocatedDays} onChange={(event) => setAllocatedDays(event.target.value)} /></Field>
           </div>
           <Button className="mt-3" disabled={busy || !allocationEmployee || !allocationType || Number(allocatedDays) < 0} onClick={() => void allocateBalance()}>Save allocation</Button>
         </Card>
@@ -459,11 +461,11 @@ export function WorkforceLeaveOvertimePage() {
 
       {canManage && tab === "types" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Leave Type</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.leave.t.createLeaveType")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Code" required><Input value={typeCode} onChange={(event) => setTypeCode(event.target.value)} placeholder="ANNUAL" /></Field>
-            <Field label="Name" required><Input value={typeName} onChange={(event) => setTypeName(event.target.value)} placeholder="Annual leave" /></Field>
-            <Field label="Annual allowance"><Input type="number" min="0" step="0.5" value={allowance} onChange={(event) => setAllowance(event.target.value)} /></Field>
+            <Field label={t("wf.leave.f.code")} required><Input value={typeCode} onChange={(event) => setTypeCode(event.target.value)} placeholder="ANNUAL" /></Field>
+            <Field label={t("wf.leave.f.name")} required><Input value={typeName} onChange={(event) => setTypeName(event.target.value)} placeholder={t("wf.leave.p.annualLeave")} /></Field>
+            <Field label={t("wf.leave.f.annualAllowance")}><Input type="number" min="0" step="0.5" value={allowance} onChange={(event) => setAllowance(event.target.value)} /></Field>
           </div>
           <div className="mt-3 flex flex-wrap gap-5 text-sm text-slate-700">
             <label className="flex items-center gap-2"><input type="checkbox" checked={typePaid} onChange={(event) => setTypePaid(event.target.checked)} />Paid leave</label>
@@ -473,12 +475,12 @@ export function WorkforceLeaveOvertimePage() {
         </Card>
       ) : null}
 
-      {loading ? <Spinner label="Loading leave and overtime records…" /> : (
+      {loading ? <Spinner label={t("wf.leave.f.loadingLeaveAndOvertimeRecords")} /> : (
         <Card>
-          {tab === "leave" ? <DataTable columns={leaveColumns} rows={leaveRequests} keyOf={(row) => row.leaveRequest.id} mobileBreakpoint="md" empty={<EmptyState title="No leave requests" description="Submit a request above or adjust the filters." />} /> : null}
-          {tab === "overtime" ? <DataTable columns={overtimeColumns} rows={overtimeRequests} keyOf={(row) => row.overtimeRequest.id} mobileBreakpoint="md" empty={<EmptyState title="No overtime requests" description="Submit an overtime request above or adjust the filters." />} /> : null}
-          {tab === "balances" ? <DataTable columns={balanceColumns} rows={balances} keyOf={(row) => row.id} empty={<EmptyState title="No balances loaded" description="Select an employee and year to view leave balances." />} /> : null}
-          {tab === "types" ? <DataTable columns={typeColumns} rows={leaveTypes} keyOf={(row) => row.id} empty={<EmptyState title="No leave types" description="Create the first leave entitlement policy above." />} /> : null}
+          {tab === "leave" ? <DataTable columns={leaveColumns} rows={leaveRequests} keyOf={(row) => row.leaveRequest.id} mobileBreakpoint="md" empty={<EmptyState title={t("wf.leave.title.noLeaveRequests")} description={t("wf.leave.d.submitARequestAboveOrAdjustTheFilters")} />} /> : null}
+          {tab === "overtime" ? <DataTable columns={overtimeColumns} rows={overtimeRequests} keyOf={(row) => row.overtimeRequest.id} mobileBreakpoint="md" empty={<EmptyState title={t("wf.leave.title.noOvertimeRequests")} description={t("wf.leave.d.submitAnOvertimeRequestAboveOrAdjustTheF")} />} /> : null}
+          {tab === "balances" ? <DataTable columns={balanceColumns} rows={balances} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.leave.title.noBalancesLoaded")} description={t("wf.leave.d.selectAnEmployeeAndYearToViewLeaveBalanc")} />} /> : null}
+          {tab === "types" ? <DataTable columns={typeColumns} rows={leaveTypes} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.leave.title.noLeaveTypes")} description={t("wf.leave.d.createTheFirstLeaveEntitlementPolicyAbov")} />} /> : null}
         </Card>
       )}
     </div>

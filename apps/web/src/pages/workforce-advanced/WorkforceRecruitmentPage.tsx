@@ -11,6 +11,7 @@ import {
   type WorkforceJobPostingStatus,
   type WorkforceWorkflowStatus,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -70,6 +71,7 @@ function stageTone(stage: WorkforceJobApplicationStage) {
 export function WorkforceRecruitmentPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
   const canManage = permissions.includes(PERMISSIONS.workforceRecruitmentManage);
 
@@ -120,11 +122,11 @@ export function WorkforceRecruitmentPage() {
       setPostings(postingList);
       setApplications(applicationList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load recruitment data.");
+      setError(err instanceof ApiError ? err.message : t("wf.recruit.msg.couldNotLoadRecruitmentData"));
     } finally {
       setLoading(false);
     }
-  }, [token, statusFilter, selectedPostingId, stageFilter]);
+  }, [token, statusFilter, selectedPostingId, stageFilter, t]);
 
   useEffect(() => {
     void load();
@@ -144,7 +146,7 @@ export function WorkforceRecruitmentPage() {
       setNotice(message);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Recruitment action failed.");
+      setError(err instanceof ApiError ? err.message : t("wf.recruit.msg.recruitmentActionFailed"));
     } finally {
       setBusy(false);
     }
@@ -207,7 +209,7 @@ export function WorkforceRecruitmentPage() {
 
   const postingColumns: Column<WorkforceJobPostingRow>[] = [
     {
-      header: "Opening",
+      header: t("wf.recruit.h.opening"),
       cell: ({ jobPosting }) => (
         <div>
           <div className="font-semibold text-slate-900">{jobPosting.title}</div>
@@ -216,22 +218,22 @@ export function WorkforceRecruitmentPage() {
       ),
       mobileRole: "title",
     },
-    { header: "Headcount target", cell: ({ jobPosting }) => jobPosting.headcountTarget },
-    { header: "Employment type", cell: ({ jobPosting }) => label(jobPosting.employmentType ?? "—") },
+    { header: t("wf.recruit.h.headcountTarget"), cell: ({ jobPosting }) => jobPosting.headcountTarget },
+    { header: t("wf.recruit.h.employmentType"), cell: ({ jobPosting }) => label(jobPosting.employmentType ?? "—") },
     {
-      header: "Status",
+      header: t("wf.recruit.h.status"),
       cell: ({ jobPosting, status }) => (
         <StatusPill tone={statusTone(status?.instanceStatus)}>{workflowLabel(status, jobPosting.status)}</StatusPill>
       ),
       mobileRole: "status",
     },
     {
-      header: "Workflow actions",
+      header: t("wf.recruit.h.workflowActions"),
       cell: ({ jobPosting }) => canManage ? (
         <div className="flex flex-wrap items-center gap-1" onClick={(event) => event.stopPropagation()}>
           <Input
             aria-label={`Workflow action code for ${jobPosting.title}`}
-            placeholder="Action code"
+            placeholder={t("wf.recruit.p.actionCode")}
             value={postingActionById[jobPosting.id] ?? ""}
             onChange={(event) => setPostingActionById((current) => ({ ...current, [jobPosting.id]: event.target.value }))}
             className="w-32! text-xs"
@@ -251,7 +253,7 @@ export function WorkforceRecruitmentPage() {
 
   const applicationColumns: Column<WorkforceJobApplication>[] = [
     {
-      header: "Candidate",
+      header: t("wf.recruit.h.candidate"),
       cell: (row) => (
         <div>
           <div className="font-semibold text-slate-900">{row.candidateName}</div>
@@ -260,16 +262,16 @@ export function WorkforceRecruitmentPage() {
       ),
       mobileRole: "title",
     },
-    { header: "Opening", cell: (row) => <Badge>{postingTitleById(row.jobPostingId)}</Badge> },
-    { header: "Applied", cell: (row) => formatDateShort(row.appliedAt) },
+    { header: t("wf.recruit.h.opening"), cell: (row) => <Badge>{postingTitleById(row.jobPostingId)}</Badge> },
+    { header: t("wf.recruit.h.applied"), cell: (row) => formatDateShort(row.appliedAt) },
     {
-      header: "Stage",
+      header: t("wf.recruit.h.stage"),
       cell: (row) => <StatusPill tone={stageTone(row.stage)}>{label(row.stage)}</StatusPill>,
       mobileRole: "status",
     },
-    { header: "Rating", cell: (row) => row.rating != null ? `${row.rating}/5` : "—" },
+    { header: t("wf.recruit.h.rating"), cell: (row) => row.rating != null ? `${row.rating}/5` : "—" },
     {
-      header: "Advance stage",
+      header: t("wf.recruit.h.advanceStage"),
       cell: (row) => canManage ? (
         <div className="space-y-1 min-w-[210px]" onClick={(event) => event.stopPropagation()}>
           <div className="flex items-center gap-1">
@@ -285,7 +287,7 @@ export function WorkforceRecruitmentPage() {
               type="number"
               min="1"
               max="5"
-              placeholder="Rating"
+              placeholder={t("wf.recruit.p.rating")}
               value={ratingById[row.id] ?? ""}
               onChange={(event) => setRatingById((current) => ({ ...current, [row.id]: event.target.value }))}
               className="w-20!"
@@ -293,7 +295,7 @@ export function WorkforceRecruitmentPage() {
           </div>
           <Input
             aria-label={`Interviewer notes for ${row.candidateName}`}
-            placeholder="Interviewer notes"
+            placeholder={t("wf.recruit.p.interviewerNotes")}
             value={notesById[row.id] ?? ""}
             onChange={(event) => setNotesById((current) => ({ ...current, [row.id]: event.target.value }))}
           />
@@ -307,7 +309,7 @@ export function WorkforceRecruitmentPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Recruitment" subtitle="Publish openings, source candidates, run interview feedback, and advance through the pipeline." />
+      <PageHeader title={t("wf.recruit.title.recruitment")} subtitle={t("wf.recruit.sub.publishOpeningsSourceCandidatesRunInterv")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {!canManage ? <Alert tone="info">Posting openings and advancing candidates require <code className="font-mono text-xs">workforce.recruitment.manage</code>.</Alert> : null}
@@ -330,28 +332,28 @@ export function WorkforceRecruitmentPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Filters</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.recruit.t.filters")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Job opening">
+          <Field label={t("wf.recruit.f.jobOpening")}>
             <Select value={selectedPostingId} onChange={(event) => setSelectedPostingId(event.target.value)}>
-              <option value="">All openings</option>
+              <option value="">{t("wf.recruit.t.allOpenings")}</option>
               {postings.map(({ jobPosting }) => <option key={jobPosting.id} value={jobPosting.id}>{jobPosting.title} ({jobPosting.postingCode})</option>)}
             </Select>
           </Field>
           {tab === "postings" ? (
-            <Field label="Posting status">
+            <Field label={t("wf.recruit.f.postingStatus")}>
               <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkforceJobPostingStatus)}>
-                <option value="">All statuses</option>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="closed">Closed</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="">{t("wf.recruit.t.allStatuses")}</option>
+                <option value="draft">{t("wf.recruit.t.draft")}</option>
+                <option value="published">{t("wf.recruit.t.published")}</option>
+                <option value="closed">{t("wf.recruit.t.closed")}</option>
+                <option value="cancelled">{t("wf.recruit.t.cancelled")}</option>
               </Select>
             </Field>
           ) : (
-            <Field label="Pipeline stage">
+            <Field label={t("wf.recruit.f.pipelineStage")}>
               <Select value={stageFilter} onChange={(event) => setStageFilter(event.target.value as WorkforceJobApplicationStage)}>
-                <option value="">All stages</option>
+                <option value="">{t("wf.recruit.t.allStages")}</option>
                 {APPLICATION_STAGES.map((stage) => <option key={stage} value={stage}>{label(stage)}</option>)}
               </Select>
             </Field>
@@ -361,13 +363,13 @@ export function WorkforceRecruitmentPage() {
 
       {canManage && tab === "postings" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Job Opening</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.recruit.t.createJobOpening")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Title" required><Input value={postingTitle} onChange={(event) => setPostingTitle(event.target.value)} placeholder="Senior Site Supervisor" /></Field>
-            <Field label="Position"><Select value={positionId} onChange={(event) => setPositionId(event.target.value)}><option value="">None / Custom</option>{positions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-            <Field label="Headcount target"><Input type="number" min="1" value={headcountTarget} onChange={(event) => setHeadcountTarget(event.target.value)} /></Field>
-            <Field label="Employment type"><Select value={employmentType} onChange={(event) => setEmploymentType(event.target.value)}><option value="full_time">Full time</option><option value="contract">Contract</option><option value="temporary">Temporary</option></Select></Field>
-            <div className="sm:col-span-2 lg:col-span-4"><Field label="Job description"><Textarea rows={2} value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} /></Field></div>
+            <Field label={t("wf.recruit.f.title")} required><Input value={postingTitle} onChange={(event) => setPostingTitle(event.target.value)} placeholder={t("wf.recruit.p.seniorSiteSupervisor")} /></Field>
+            <Field label={t("wf.recruit.f.position")}><Select value={positionId} onChange={(event) => setPositionId(event.target.value)}><option value="">{t("wf.recruit.t.noneCustom")}</option>{positions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+            <Field label={t("wf.recruit.f.headcountTarget")}><Input type="number" min="1" value={headcountTarget} onChange={(event) => setHeadcountTarget(event.target.value)} /></Field>
+            <Field label={t("wf.recruit.f.employmentType")}><Select value={employmentType} onChange={(event) => setEmploymentType(event.target.value)}><option value="full_time">{t("wf.recruit.t.fullTime")}</option><option value="contract">{t("wf.recruit.t.contract")}</option><option value="temporary">{t("wf.recruit.t.temporary")}</option></Select></Field>
+            <div className="sm:col-span-2 lg:col-span-4"><Field label={t("wf.recruit.f.jobDescription")}><Textarea rows={2} value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} /></Field></div>
           </div>
           <Button className="mt-3" disabled={busy || !postingTitle.trim()} onClick={() => void createPosting()}>Publish opening</Button>
         </Card>
@@ -375,29 +377,29 @@ export function WorkforceRecruitmentPage() {
 
       {canManage && tab === "applications" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Add Candidate Application</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.recruit.t.addCandidateApplication")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Opening" required>
+            <Field label={t("wf.recruit.f.opening")} required>
               <Select value={selectedPostingId} onChange={(event) => setSelectedPostingId(event.target.value)}>
-                <option value="">Select opening</option>
+                <option value="">{t("wf.recruit.t.selectOpening")}</option>
                 {postings.map(({ jobPosting }) => <option key={jobPosting.id} value={jobPosting.id}>{jobPosting.title}</option>)}
               </Select>
             </Field>
-            <Field label="Candidate full name" required><Input value={candidateName} onChange={(event) => setCandidateName(event.target.value)} /></Field>
-            <Field label="Candidate email"><Input type="email" value={candidateEmail} onChange={(event) => setCandidateEmail(event.target.value)} /></Field>
-            <Field label="Candidate phone"><Input value={candidatePhone} onChange={(event) => setCandidatePhone(event.target.value)} /></Field>
-            <Field label="Resume document ID"><Input value={resumeId} onChange={(event) => setResumeId(event.target.value)} placeholder="Optional document ID" /></Field>
+            <Field label={t("wf.recruit.f.candidateFullName")} required><Input value={candidateName} onChange={(event) => setCandidateName(event.target.value)} /></Field>
+            <Field label={t("wf.recruit.f.candidateEmail")}><Input type="email" value={candidateEmail} onChange={(event) => setCandidateEmail(event.target.value)} /></Field>
+            <Field label={t("wf.recruit.f.candidatePhone")}><Input value={candidatePhone} onChange={(event) => setCandidatePhone(event.target.value)} /></Field>
+            <Field label={t("wf.recruit.f.resumeDocumentId")}><Input value={resumeId} onChange={(event) => setResumeId(event.target.value)} placeholder={t("wf.recruit.p.optionalDocumentId")} /></Field>
           </div>
           <Button className="mt-3" disabled={busy || !selectedPostingId || !candidateName.trim()} onClick={() => void createApplication()}>Record application</Button>
         </Card>
       ) : null}
 
-      {loading ? <Spinner label="Loading recruitment records…" /> : (
+      {loading ? <Spinner label={t("wf.recruit.f.loadingRecruitmentRecords")} /> : (
         <Card>
           {tab === "postings" ? (
-            <DataTable columns={postingColumns} rows={postings} keyOf={(row) => row.jobPosting.id} mobileBreakpoint="md" empty={<EmptyState title="No openings found" description="Create a job opening above." />} />
+            <DataTable columns={postingColumns} rows={postings} keyOf={(row) => row.jobPosting.id} mobileBreakpoint="md" empty={<EmptyState title={t("wf.recruit.title.noOpeningsFound")} description={t("wf.recruit.d.createAJobOpeningAbove")} />} />
           ) : (
-            <DataTable columns={applicationColumns} rows={applications} keyOf={(row) => row.id} mobileBreakpoint="md" empty={<EmptyState title="No applications in pipeline" description="Record candidates above to track the hiring workflow." />} />
+            <DataTable columns={applicationColumns} rows={applications} keyOf={(row) => row.id} mobileBreakpoint="md" empty={<EmptyState title={t("wf.recruit.title.noApplicationsInPipeline")} description={t("wf.recruit.d.recordCandidatesAboveToTrackTheHiringWor")} />} />
           )}
         </Card>
       )}

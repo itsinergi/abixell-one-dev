@@ -15,6 +15,7 @@ import {
   type WorkforceRoster,
   type WorkforceShift,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -74,6 +75,7 @@ function label(value: string): string {
 export function WorkforceAttendancePage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.workforceAttendanceManage);
@@ -143,11 +145,11 @@ export function WorkforceAttendancePage() {
       setRosters(rosterList);
       setAttendanceRecords(attendanceList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load attendance & roster data.");
+      setError(err instanceof ApiError ? err.message : t("wf.attend.msg.couldNotLoadAttendanceRosterData"));
     } finally {
       setLoading(false);
     }
-  }, [token, filterEmployeeId, filterStatus, filterFromDate, filterToDate]);
+  }, [token, filterEmployeeId, filterStatus, filterFromDate, filterToDate, t]);
 
   useEffect(() => {
     void load();
@@ -190,7 +192,7 @@ export function WorkforceAttendancePage() {
       setShiftName("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create shift.");
+      setError(err instanceof ApiError ? err.message : t("wf.attend.msg.failedToCreateShift"));
     } finally {
       setBusy(false);
     }
@@ -206,7 +208,7 @@ export function WorkforceAttendancePage() {
       setNotice(`Shift ${updated.shiftCode} is now ${updated.isActive ? "active" : "inactive"}.`);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update shift status.");
+      setError(err instanceof ApiError ? err.message : t("wf.attend.msg.failedToUpdateShiftStatus"));
     } finally {
       setBusy(false);
     }
@@ -228,7 +230,7 @@ export function WorkforceAttendancePage() {
       setRosterNotes("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to assign roster.");
+      setError(err instanceof ApiError ? err.message : t("wf.attend.msg.failedToAssignRoster"));
     } finally {
       setBusy(false);
     }
@@ -256,7 +258,7 @@ export function WorkforceAttendancePage() {
       setAttNotes("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to record attendance.");
+      setError(err instanceof ApiError ? err.message : t("wf.attend.msg.failedToRecordAttendance"));
     } finally {
       setBusy(false);
     }
@@ -264,7 +266,7 @@ export function WorkforceAttendancePage() {
 
   const attendanceColumns: Column<WorkforceAttendanceRecord>[] = [
     {
-      header: "Date",
+      header: t("wf.attend.h.date"),
       cell: (row) => (
         <div>
           <span className="font-semibold text-slate-900">{formatDateShort(row.attendanceDate)}</span>
@@ -274,13 +276,13 @@ export function WorkforceAttendancePage() {
       mobileRole: "title",
     },
     {
-      header: "Status",
+      header: t("wf.attend.h.status"),
       cell: (row) => <StatusPill tone={statusTone(row.status)}>{label(row.status)}</StatusPill>,
       mobileRole: "status",
     },
-    { header: "Shift", cell: (row) => shiftLabel(row.shiftId) },
+    { header: t("wf.attend.h.shift"), cell: (row) => shiftLabel(row.shiftId) },
     {
-      header: "Clock In / Out",
+      header: t("wf.attend.h.clockInOut"),
       cell: (row) => (
         <span className="font-mono text-xs">
           {row.clockIn ? formatDate(row.clockIn) : "—"} / {row.clockOut ? formatDate(row.clockOut) : "—"}
@@ -288,7 +290,7 @@ export function WorkforceAttendancePage() {
       ),
     },
     {
-      header: "Variances",
+      header: t("wf.attend.h.variances"),
       cell: (row) => (
         <div className="text-xs space-y-0.5">
           {row.lateMinutes > 0 && <Badge className="bg-amber-50 text-amber-700">Late: {row.lateMinutes}m</Badge>}
@@ -297,12 +299,12 @@ export function WorkforceAttendancePage() {
         </div>
       ),
     },
-    { header: "Source", cell: (row) => <Badge>{label(row.source)}</Badge> },
+    { header: t("wf.attend.h.source"), cell: (row) => <Badge>{label(row.source)}</Badge> },
   ];
 
   const rosterColumns: Column<WorkforceRoster>[] = [
     {
-      header: "Employee",
+      header: t("wf.attend.h.employee"),
       cell: (row) => (
         <div>
           <span className="font-semibold text-slate-900">{employeeName(row.employeeId)}</span>
@@ -311,13 +313,13 @@ export function WorkforceAttendancePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Date", cell: (row) => formatDateShort(row.rosterDate), mobileRole: "status" },
-    { header: "Assigned Shift", cell: (row) => <Badge>{shiftLabel(row.shiftId)}</Badge> },
+    { header: t("wf.attend.h.date"), cell: (row) => formatDateShort(row.rosterDate), mobileRole: "status" },
+    { header: t("wf.attend.h.assignedShift"), cell: (row) => <Badge>{shiftLabel(row.shiftId)}</Badge> },
   ];
 
   const shiftColumns: Column<WorkforceShift>[] = [
     {
-      header: "Shift Code",
+      header: t("wf.attend.h.shiftCode"),
       cell: (row) => (
         <div>
           <span className="font-semibold text-slate-900">{row.name}</span>
@@ -327,21 +329,21 @@ export function WorkforceAttendancePage() {
       mobileRole: "title",
     },
     {
-      header: "Schedule",
+      header: t("wf.attend.h.schedule"),
       cell: (row) => (
         <span className="font-mono text-xs">
           {row.startTime} – {row.endTime} {row.isOvernight ? "(Overnight)" : ""}
         </span>
       ),
     },
-    { header: "Break", cell: (row) => `${row.breakMinutes} mins` },
+    { header: t("wf.attend.h.break"), cell: (row) => `${row.breakMinutes} mins` },
     {
-      header: "Status",
+      header: t("wf.attend.h.status"),
       cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>,
       mobileRole: "status",
     },
     {
-      header: "Actions",
+      header: t("wf.attend.h.actions"),
       cell: (row) =>
         canManage ? (
           <Button
@@ -359,8 +361,8 @@ export function WorkforceAttendancePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Attendance & Rosters"
-        subtitle="Configure work shifts, publish daily employee rosters, and maintain operational attendance records."
+        title={t("wf.attend.title.attendanceRosters")}
+        subtitle={t("wf.attend.sub.configureWorkShiftsPublishDailyEmployeeR")}
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
@@ -409,11 +411,11 @@ export function WorkforceAttendancePage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Filter Criteria</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.attend.t.filterCriteria")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Employee">
+          <Field label={t("wf.attend.f.employee")}>
             <Select value={filterEmployeeId} onChange={(e) => setFilterEmployeeId(e.target.value)}>
-              <option value="">All employees</option>
+              <option value="">{t("wf.attend.t.allEmployees")}</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.fullName} ({emp.employeeNumber})
@@ -422,19 +424,19 @@ export function WorkforceAttendancePage() {
             </Select>
           </Field>
           {activeTab === "attendance" && (
-            <Field label="Status">
+            <Field label={t("wf.attend.f.status")}>
               <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as WorkforceAttendanceStatus)}>
-                <option value="">All statuses</option>
+                <option value="">{t("wf.attend.t.allStatuses")}</option>
                 {ATTENDANCE_STATUSES.map((st) => (
                   <option key={st} value={st}>{label(st)}</option>
                 ))}
               </Select>
             </Field>
           )}
-          <Field label="From Date">
+          <Field label={t("wf.attend.f.fromDate")}>
             <Input type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} />
           </Field>
-          <Field label="To Date">
+          <Field label={t("wf.attend.f.toDate")}>
             <Input type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} />
           </Field>
         </div>
@@ -444,41 +446,41 @@ export function WorkforceAttendancePage() {
         <>
           {activeTab === "attendance" && (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-800">Record Daily Attendance</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.attend.t.recordDailyAttendance")}</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Employee" required>
+                <Field label={t("wf.attend.f.employee")} required>
                   <Select value={attEmployeeId} onChange={(e) => setAttEmployeeId(e.target.value)}>
-                    <option value="">Select employee</option>
+                    <option value="">{t("wf.attend.t.selectEmployee")}</option>
                     {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.employeeNumber})</option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Attendance Date" required>
+                <Field label={t("wf.attend.f.attendanceDate")} required>
                   <Input type="date" value={attDate} onChange={(e) => setAttDate(e.target.value)} />
                 </Field>
-                <Field label="Shift">
+                <Field label={t("wf.attend.f.shift")}>
                   <Select value={attShiftId} onChange={(e) => setAttShiftId(e.target.value)}>
-                    <option value="">No shift / Default</option>
+                    <option value="">{t("wf.attend.t.noShiftDefault")}</option>
                     {shifts.filter((s) => s.isActive).map((s) => (
                       <option key={s.id} value={s.id}>{s.name} ({s.shiftCode})</option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Status">
+                <Field label={t("wf.attend.f.status")}>
                   <Select value={attStatus} onChange={(e) => setAttStatus(e.target.value as WorkforceAttendanceStatus)}>
                     {ATTENDANCE_STATUSES.map((st) => (
                       <option key={st} value={st}>{label(st)}</option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Clock In (ISO / Time)">
+                <Field label={t("wf.attend.f.clockInIsoTime")}>
                   <Input type="datetime-local" value={attClockIn} onChange={(e) => setAttClockIn(e.target.value)} />
                 </Field>
-                <Field label="Clock Out (ISO / Time)">
+                <Field label={t("wf.attend.f.clockOutIsoTime")}>
                   <Input type="datetime-local" value={attClockOut} onChange={(e) => setAttClockOut(e.target.value)} />
                 </Field>
-                <Field label="Source">
+                <Field label={t("wf.attend.f.source")}>
                   <Select value={attSource} onChange={(e) => setAttSource(e.target.value as WorkforceAttendanceSource)}>
                     {ATTENDANCE_SOURCES.map((src) => (
                       <option key={src} value={src}>{label(src)}</option>
@@ -486,8 +488,8 @@ export function WorkforceAttendancePage() {
                   </Select>
                 </Field>
                 <div className="sm:col-span-2 lg:col-span-4">
-                  <Field label="Notes">
-                    <Input value={attNotes} onChange={(e) => setAttNotes(e.target.value)} placeholder="Optional attendance notes" />
+                  <Field label={t("wf.attend.f.notes")}>
+                    <Input value={attNotes} onChange={(e) => setAttNotes(e.target.value)} placeholder={t("wf.attend.p.optionalAttendanceNotes")} />
                   </Field>
                 </div>
               </div>
@@ -501,30 +503,30 @@ export function WorkforceAttendancePage() {
 
           {activeTab === "rosters" && (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-800">Assign Employee Roster</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.attend.t.assignEmployeeRoster")}</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Field label="Employee" required>
+                <Field label={t("wf.attend.f.employee")} required>
                   <Select value={rosterEmployeeId} onChange={(e) => setRosterEmployeeId(e.target.value)}>
-                    <option value="">Select employee</option>
+                    <option value="">{t("wf.attend.t.selectEmployee")}</option>
                     {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.employeeNumber})</option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Shift" required>
+                <Field label={t("wf.attend.f.shift")} required>
                   <Select value={rosterShiftId} onChange={(e) => setRosterShiftId(e.target.value)}>
-                    <option value="">Select shift</option>
+                    <option value="">{t("wf.attend.t.selectShift")}</option>
                     {shifts.filter((s) => s.isActive).map((s) => (
                       <option key={s.id} value={s.id}>{s.name} ({s.shiftCode})</option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Roster Date" required>
+                <Field label={t("wf.attend.f.rosterDate")} required>
                   <Input type="date" value={rosterDate} onChange={(e) => setRosterDate(e.target.value)} />
                 </Field>
                 <div className="sm:col-span-3">
-                  <Field label="Notes">
-                    <Input value={rosterNotes} onChange={(e) => setRosterNotes(e.target.value)} placeholder="Roster allocation notes" />
+                  <Field label={t("wf.attend.f.notes")}>
+                    <Input value={rosterNotes} onChange={(e) => setRosterNotes(e.target.value)} placeholder={t("wf.attend.p.rosterAllocationNotes")} />
                   </Field>
                 </div>
               </div>
@@ -538,21 +540,21 @@ export function WorkforceAttendancePage() {
 
           {activeTab === "shifts" && (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Work Shift</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.attend.t.createWorkShift")}</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <Field label="Shift Code" required>
+                <Field label={t("wf.attend.f.shiftCode")} required>
                   <Input value={shiftCode} onChange={(e) => setShiftCode(e.target.value)} placeholder="SHIFT_MORNING" />
                 </Field>
-                <Field label="Shift Name" required>
-                  <Input value={shiftName} onChange={(e) => setShiftName(e.target.value)} placeholder="Morning Standard" />
+                <Field label={t("wf.attend.f.shiftName")} required>
+                  <Input value={shiftName} onChange={(e) => setShiftName(e.target.value)} placeholder={t("wf.attend.p.morningStandard")} />
                 </Field>
-                <Field label="Start Time (HH:MM:SS)" required>
+                <Field label={t("wf.attend.f.startTimeHhMmSs")} required>
                   <Input value={shiftStartTime} onChange={(e) => setShiftStartTime(e.target.value)} placeholder="08:00:00" />
                 </Field>
-                <Field label="End Time (HH:MM:SS)" required>
+                <Field label={t("wf.attend.f.endTimeHhMmSs")} required>
                   <Input value={shiftEndTime} onChange={(e) => setShiftEndTime(e.target.value)} placeholder="17:00:00" />
                 </Field>
-                <Field label="Break Minutes">
+                <Field label={t("wf.attend.f.breakMinutes")}>
                   <Input type="number" min="0" value={shiftBreakMinutes} onChange={(e) => setShiftBreakMinutes(e.target.value)} />
                 </Field>
                 <div className="flex items-center pt-6">
@@ -578,41 +580,41 @@ export function WorkforceAttendancePage() {
       )}
 
       {loading ? (
-        <Spinner label="Loading records…" />
+        <Spinner label={t("wf.attend.f.loadingRecords")} />
       ) : (
         <>
           {activeTab === "attendance" && (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-800">Attendance Records</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.attend.t.attendanceRecords")}</h2>
               <DataTable
                 columns={attendanceColumns}
                 rows={attendanceRecords}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No attendance records found" description="Adjust your filters or record attendance above." />}
+                empty={<EmptyState title={t("wf.attend.title.noAttendanceRecordsFound")} description={t("wf.attend.d.adjustYourFiltersOrRecordAttendanceAbove")} />}
               />
             </Card>
           )}
 
           {activeTab === "rosters" && (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-800">Assigned Rosters</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.attend.t.assignedRosters")}</h2>
               <DataTable
                 columns={rosterColumns}
                 rows={rosters}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No roster assignments found" description="Assign employees to shifts above." />}
+                empty={<EmptyState title={t("wf.attend.title.noRosterAssignmentsFound")} description={t("wf.attend.d.assignEmployeesToShiftsAbove")} />}
               />
             </Card>
           )}
 
           {activeTab === "shifts" && (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-800">Configured Work Shifts</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.attend.t.configuredWorkShifts")}</h2>
               <DataTable
                 columns={shiftColumns}
                 rows={shifts}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No shifts defined" description="Create standard or overnight shifts above." />}
+                empty={<EmptyState title={t("wf.attend.title.noShiftsDefined")} description={t("wf.attend.d.createStandardOrOvernightShiftsAbove")} />}
               />
             </Card>
           )}

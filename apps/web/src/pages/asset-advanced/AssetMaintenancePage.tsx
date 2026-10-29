@@ -18,6 +18,7 @@ import {
   type MaintenanceType,
   type MeterReadingType,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -58,6 +59,7 @@ function workOrderDisplayState(row: AssetMaintenanceWorkOrderRow): string {
 export function AssetMaintenancePage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const navigate = useNavigate();
   const { permissions } = useShell();
 
@@ -113,11 +115,11 @@ export function AssetMaintenancePage() {
       setDueSchedules(dueList);
       setWorkOrders(orderList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load asset maintenance data.");
+      setError(err instanceof ApiError ? err.message : t("sca.maint.msg.couldNotLoadAssetMaintenanceData"));
     } finally {
       setLoading(false);
     }
-  }, [token, assetFilter, typeFilter, asOfDate]);
+  }, [token, assetFilter, typeFilter, asOfDate, t]);
 
   useEffect(() => {
     void load();
@@ -162,7 +164,7 @@ export function AssetMaintenancePage() {
       setNextDueMeter("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create maintenance schedule.");
+      setError(err instanceof ApiError ? err.message : t("sca.maint.msg.couldNotCreateMaintenanceSchedule"));
     } finally {
       setBusy(false);
     }
@@ -190,7 +192,7 @@ export function AssetMaintenancePage() {
       await load();
       navigate(`/asset-maintenance/work-orders/${created.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create maintenance work order.");
+      setError(err instanceof ApiError ? err.message : t("sca.maint.msg.couldNotCreateMaintenanceWorkOrder"));
     } finally {
       setBusy(false);
     }
@@ -198,7 +200,7 @@ export function AssetMaintenancePage() {
 
   const scheduleColumns: Column<AssetMaintenanceSchedule>[] = [
     {
-      header: "Schedule",
+      header: t("sca.maint.h.schedule"),
       cell: (row) => (
         <div>
           <span className="font-semibold text-slate-900">{row.title}</span>
@@ -207,10 +209,10 @@ export function AssetMaintenancePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Asset", cell: (row) => assetName(row.assetId) },
-    { header: "Frequency", cell: (row) => label(row.frequencyType) },
+    { header: t("sca.maint.h.asset"), cell: (row) => assetName(row.assetId) },
+    { header: t("sca.maint.h.frequency"), cell: (row) => label(row.frequencyType) },
     {
-      header: "Next Due",
+      header: t("sca.maint.h.nextDue"),
       cell: (row) =>
         row.frequencyType === "calendar"
           ? formatDateShort(row.nextDueDate)
@@ -220,21 +222,21 @@ export function AssetMaintenancePage() {
       mobileRole: "status",
     },
     {
-      header: "State",
+      header: t("sca.maint.h.state"),
       cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>,
     },
   ];
 
   const dueScheduleColumns: Column<AssetMaintenanceSchedule>[] = [
-    { header: "Due Schedule", cell: (row) => <span className="font-semibold">{row.title}</span>, mobileRole: "title" },
-    { header: "Asset", cell: (row) => assetName(row.assetId) },
-    { header: "Due", cell: (row) => row.nextDueDate ? formatDateShort(row.nextDueDate) : `${row.nextDueMeter ?? "—"} ${row.meterType ?? ""}` },
-    { header: "Type", cell: (row) => <Badge>{label(row.frequencyType)}</Badge>, mobileRole: "status" },
+    { header: t("sca.maint.h.dueSchedule"), cell: (row) => <span className="font-semibold">{row.title}</span>, mobileRole: "title" },
+    { header: t("sca.maint.h.asset"), cell: (row) => assetName(row.assetId) },
+    { header: t("sca.maint.h.due"), cell: (row) => row.nextDueDate ? formatDateShort(row.nextDueDate) : `${row.nextDueMeter ?? "—"} ${row.meterType ?? ""}` },
+    { header: t("sca.maint.h.type"), cell: (row) => <Badge>{label(row.frequencyType)}</Badge>, mobileRole: "status" },
   ];
 
   const workOrderColumns: Column<AssetMaintenanceWorkOrderRow>[] = [
     {
-      header: "Work Order",
+      header: t("sca.maint.h.workOrder"),
       cell: (row) => (
         <Link
           to={`/asset-maintenance/work-orders/${row.workOrder.id}`}
@@ -245,12 +247,12 @@ export function AssetMaintenancePage() {
       ),
       mobileRole: "title",
     },
-    { header: "Title", cell: (row) => row.workOrder.title },
-    { header: "Asset", cell: (row) => assetName(row.workOrder.assetId) },
-    { header: "Type", cell: (row) => <Badge>{label(row.workOrder.maintenanceType)}</Badge> },
-    { header: "Priority", cell: (row) => <Badge>{label(row.workOrder.priority)}</Badge> },
+    { header: t("sca.maint.h.title"), cell: (row) => row.workOrder.title },
+    { header: t("sca.maint.h.asset"), cell: (row) => assetName(row.workOrder.assetId) },
+    { header: t("sca.maint.h.type"), cell: (row) => <Badge>{label(row.workOrder.maintenanceType)}</Badge> },
+    { header: t("sca.maint.h.priority"), cell: (row) => <Badge>{label(row.workOrder.priority)}</Badge> },
     {
-      header: "Lifecycle",
+      header: t("sca.maint.h.lifecycle"),
       cell: (row) => (
         <StatusPill tone={statusTone(row.status?.instanceStatus)}>{workOrderDisplayState(row)}</StatusPill>
       ),
@@ -261,8 +263,8 @@ export function AssetMaintenancePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Asset Maintenance"
-        subtitle="Preventive schedules, maintenance work orders, and due-work planning for Asset Advanced."
+        title={t("sca.maint.title.assetMaintenance")}
+        subtitle={t("sca.maint.sub.preventiveSchedulesMaintenanceWorkOrders")}
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
@@ -275,11 +277,11 @@ export function AssetMaintenancePage() {
       ) : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Filters</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.filters")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Asset">
+          <Field label={t("sca.maint.f.asset")}>
             <Select value={assetFilter} onChange={(e) => setAssetFilter(e.target.value)}>
-              <option value="">All assets</option>
+              <option value="">{t("sca.maint.t.allAssets")}</option>
               {assets.map((asset) => (
                 <option key={asset.id} value={asset.id}>
                   {asset.assetNumber} — {asset.name}
@@ -287,15 +289,15 @@ export function AssetMaintenancePage() {
               ))}
             </Select>
           </Field>
-          <Field label="Maintenance type">
+          <Field label={t("sca.maint.f.maintenanceType")}>
             <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              <option value="">All types</option>
+              <option value="">{t("sca.maint.t.allTypes")}</option>
               {MAINTENANCE_TYPES.map((type) => (
                 <option key={type} value={type}>{label(type)}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Due as of">
+          <Field label={t("sca.maint.f.dueAsOf")}>
             <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
           </Field>
         </div>
@@ -304,54 +306,54 @@ export function AssetMaintenancePage() {
       {canManage ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Maintenance Schedule</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.createMaintenanceSchedule")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Asset" required>
+              <Field label={t("sca.maint.f.asset")} required>
                 <Select value={scheduleAssetId} onChange={(e) => setScheduleAssetId(e.target.value)}>
-                  <option value="">Select asset</option>
+                  <option value="">{t("sca.maint.t.selectAsset")}</option>
                   {assets.map((asset) => (
                     <option key={asset.id} value={asset.id}>{asset.assetNumber} — {asset.name}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Schedule Code" required>
-                <Input value={scheduleCode} onChange={(e) => setScheduleCode(e.target.value)} placeholder="pm_generator_30d" />
+              <Field label={t("sca.maint.f.scheduleCode")} required>
+                <Input value={scheduleCode} onChange={(e) => setScheduleCode(e.target.value)} placeholder={t("sca.maint.p.pmGenerator30d")} />
               </Field>
-              <Field label="Title" required>
-                <Input value={scheduleTitle} onChange={(e) => setScheduleTitle(e.target.value)} placeholder="30-day preventive inspection" />
+              <Field label={t("sca.maint.f.title")} required>
+                <Input value={scheduleTitle} onChange={(e) => setScheduleTitle(e.target.value)} placeholder={t("sca.maint.p.30DayPreventiveInspection")} />
               </Field>
-              <Field label="Frequency Type">
+              <Field label={t("sca.maint.f.frequencyType")}>
                 <Select value={frequencyType} onChange={(e) => setFrequencyType(e.target.value as MaintenanceFrequencyType)}>
-                  <option value="calendar">Calendar</option>
-                  <option value="meter">Meter</option>
+                  <option value="calendar">{t("sca.maint.t.calendar")}</option>
+                  <option value="meter">{t("sca.maint.t.meter")}</option>
                 </Select>
               </Field>
               {frequencyType === "calendar" ? (
                 <>
-                  <Field label="Interval Days" required>
+                  <Field label={t("sca.maint.f.intervalDays")} required>
                     <Input type="number" min="1" value={intervalDays} onChange={(e) => setIntervalDays(e.target.value)} />
                   </Field>
-                  <Field label="Next Due Date">
+                  <Field label={t("sca.maint.f.nextDueDate")}>
                     <Input type="date" value={nextDueDate} onChange={(e) => setNextDueDate(e.target.value)} />
                   </Field>
                 </>
               ) : (
                 <>
-                  <Field label="Meter Interval" required>
+                  <Field label={t("sca.maint.f.meterInterval")} required>
                     <Input type="number" min="0" step="0.01" value={meterInterval} onChange={(e) => setMeterInterval(e.target.value)} />
                   </Field>
-                  <Field label="Meter Type">
+                  <Field label={t("sca.maint.f.meterType")}>
                     <Select value={meterType} onChange={(e) => setMeterType(e.target.value as MeterReadingType)}>
                       {METER_TYPES.map((type) => <option key={type} value={type}>{label(type)}</option>)}
                     </Select>
                   </Field>
-                  <Field label="Next Due Meter">
+                  <Field label={t("sca.maint.f.nextDueMeter")}>
                     <Input type="number" min="0" step="0.01" value={nextDueMeter} onChange={(e) => setNextDueMeter(e.target.value)} />
                   </Field>
                 </>
               )}
               <div className="sm:col-span-2">
-                <Field label="Description">
+                <Field label={t("sca.maint.f.description")}>
                   <Textarea rows={2} value={scheduleDescription} onChange={(e) => setScheduleDescription(e.target.value)} />
                 </Field>
               </div>
@@ -367,42 +369,42 @@ export function AssetMaintenancePage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Maintenance Work Order</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.createMaintenanceWorkOrder")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Asset" required>
+              <Field label={t("sca.maint.f.asset")} required>
                 <Select value={woAssetId} onChange={(e) => { setWoAssetId(e.target.value); setWoScheduleId(""); }}>
-                  <option value="">Select asset</option>
+                  <option value="">{t("sca.maint.t.selectAsset")}</option>
                   {assets.map((asset) => (
                     <option key={asset.id} value={asset.id}>{asset.assetNumber} — {asset.name}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Schedule">
+              <Field label={t("sca.maint.f.schedule")}>
                 <Select value={woScheduleId} onChange={(e) => setWoScheduleId(e.target.value)}>
-                  <option value="">No linked schedule</option>
+                  <option value="">{t("sca.maint.t.noLinkedSchedule")}</option>
                   {availableSchedulesForWorkOrder.map((schedule) => (
                     <option key={schedule.id} value={schedule.id}>{schedule.scheduleCode} — {schedule.title}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Maintenance Type">
+              <Field label={t("sca.maint.f.maintenanceType2")}>
                 <Select value={woType} onChange={(e) => setWoType(e.target.value as MaintenanceType)}>
                   {MAINTENANCE_TYPES.map((type) => <option key={type} value={type}>{label(type)}</option>)}
                 </Select>
               </Field>
-              <Field label="Priority">
+              <Field label={t("sca.maint.f.priority")}>
                 <Select value={woPriority} onChange={(e) => setWoPriority(e.target.value as MaintenancePriority)}>
                   {PRIORITIES.map((priority) => <option key={priority} value={priority}>{label(priority)}</option>)}
                 </Select>
               </Field>
-              <Field label="Title" required>
-                <Input value={woTitle} onChange={(e) => setWoTitle(e.target.value)} placeholder="Inspect pump seal" />
+              <Field label={t("sca.maint.f.title")} required>
+                <Input value={woTitle} onChange={(e) => setWoTitle(e.target.value)} placeholder={t("sca.maint.p.inspectPumpSeal")} />
               </Field>
-              <Field label="Cost Estimate">
+              <Field label={t("sca.maint.f.costEstimate")}>
                 <Input type="number" min="0" step="0.01" value={costEstimate} onChange={(e) => setCostEstimate(e.target.value)} />
               </Field>
               <div className="sm:col-span-2">
-                <Field label="Description">
+                <Field label={t("sca.maint.f.description")}>
                   <Textarea rows={2} value={woDescription} onChange={(e) => setWoDescription(e.target.value)} />
                 </Field>
               </div>
@@ -417,36 +419,36 @@ export function AssetMaintenancePage() {
       ) : null}
 
       {loading ? (
-        <Spinner label="Loading maintenance records…" />
+        <Spinner label={t("sca.maint.f.loadingMaintenanceRecords")} />
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Due Maintenance Schedules</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.dueMaintenanceSchedules")}</h2>
             <DataTable
               columns={dueScheduleColumns}
               rows={dueSchedules}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No schedules currently due" description="Due schedules appear here when their date or meter threshold has been reached." />}
+              empty={<EmptyState title={t("sca.maint.title.noSchedulesCurrentlyDue")} description={t("sca.maint.d.dueSchedulesAppearHereWhenTheirDateOrMet")} />}
             />
           </Card>
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Maintenance Schedules</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.maintenanceSchedules")}</h2>
             <DataTable
               columns={scheduleColumns}
               rows={schedules}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No maintenance schedules" description="Create calendar or meter-based preventive schedules for critical assets." />}
+              empty={<EmptyState title={t("sca.maint.title.noMaintenanceSchedules")} description={t("sca.maint.d.createCalendarOrMeterBasedPreventiveSche")} />}
             />
           </Card>
           <Card className="xl:col-span-2">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Maintenance Work Orders</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.maintenanceWorkOrders")}</h2>
             <DataTable
               columns={workOrderColumns}
               rows={workOrders}
               keyOf={(row) => row.workOrder.id}
               onRowClick={(row) => navigate(`/asset-maintenance/work-orders/${row.workOrder.id}`)}
               mobileBreakpoint="md"
-              empty={<EmptyState title="No maintenance work orders" description="Create preventive, corrective, or emergency maintenance work orders above." />}
+              empty={<EmptyState title={t("sca.maint.title.noMaintenanceWorkOrders")} description={t("sca.maint.d.createPreventiveCorrectiveOrEmergencyMai")} />}
             />
           </Card>
         </div>

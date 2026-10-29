@@ -14,6 +14,7 @@ import {
   type WorkforceStatutoryPolicy,
   type WorkforceWorkflowStatus,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -60,6 +61,7 @@ function money(amount: number | string | null | undefined): string {
 export function WorkforcePayrollPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
   const canManage = permissions.includes(PERMISSIONS.workforcePayrollManage);
   const canApprove = permissions.includes(PERMISSIONS.workforcePayrollApprove);
@@ -123,11 +125,11 @@ export function WorkforcePayrollPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load payroll records.");
+      setError(err instanceof ApiError ? err.message : t("wf.payroll.msg.couldNotLoadPayrollRecords"));
     } finally {
       setLoading(false);
     }
-  }, [token, yearFilter, unitFilter, selectedRunId]);
+  }, [token, yearFilter, unitFilter, selectedRunId, t]);
 
   useEffect(() => {
     void load();
@@ -150,7 +152,7 @@ export function WorkforcePayrollPage() {
       setNotice(message);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Payroll operation failed.");
+      setError(err instanceof ApiError ? err.message : t("wf.payroll.msg.payrollOperationFailed"));
     } finally {
       setBusy(false);
     }
@@ -219,7 +221,7 @@ export function WorkforcePayrollPage() {
 
   const runColumns: Column<WorkforcePayrollRunRow>[] = [
     {
-      header: "Payroll Run",
+      header: t("wf.payroll.h.payrollRun"),
       cell: ({ payrollRun }) => (
         <div>
           <div className="font-semibold text-slate-900">{payrollRun.runNumber}</div>
@@ -228,12 +230,12 @@ export function WorkforcePayrollPage() {
       ),
       mobileRole: "title",
     },
-    { header: "Employees", cell: ({ payrollRun }) => payrollRun.employeeCount },
-    { header: "Total gross", cell: ({ payrollRun }) => money(payrollRun.totalGross) },
-    { header: "Total deductions", cell: ({ payrollRun }) => money(payrollRun.totalDeductions) },
-    { header: "Total net", cell: ({ payrollRun }) => <span className="font-semibold text-slate-900">{money(payrollRun.totalNet)}</span> },
+    { header: t("wf.payroll.h.employees"), cell: ({ payrollRun }) => payrollRun.employeeCount },
+    { header: t("wf.payroll.h.totalGross"), cell: ({ payrollRun }) => money(payrollRun.totalGross) },
+    { header: t("wf.payroll.h.totalDeductions"), cell: ({ payrollRun }) => money(payrollRun.totalDeductions) },
+    { header: t("wf.payroll.h.totalNet"), cell: ({ payrollRun }) => <span className="font-semibold text-slate-900">{money(payrollRun.totalNet)}</span> },
     {
-      header: "Status",
+      header: t("wf.payroll.h.status"),
       cell: ({ status, payrollRun }) => (
         <StatusPill tone={statusTone(status?.instanceStatus)}>
           {payrollRun.closedAt ? "Closed" : workflowLabel(status)}
@@ -242,7 +244,7 @@ export function WorkforcePayrollPage() {
       mobileRole: "status",
     },
     {
-      header: "Actions",
+      header: t("wf.payroll.h.actions"),
       cell: ({ payrollRun }) => (
         <div className="flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
           <Button
@@ -270,19 +272,19 @@ export function WorkforcePayrollPage() {
   ];
 
   const payslipColumns: Column<WorkforcePayslip>[] = [
-    { header: "Employee", cell: (row) => <span className="font-semibold">{employeeName(row.employeeId)}</span>, mobileRole: "title" },
+    { header: t("wf.payroll.h.employee"), cell: (row) => <span className="font-semibold">{employeeName(row.employeeId)}</span>, mobileRole: "title" },
     { header: "PTKP", cell: (row) => <Badge>{row.ptkpStatus ?? "TK/0"}</Badge> },
-    { header: "Base salary", cell: (row) => money(row.baseSalary) },
-    { header: "Allowances", cell: (row) => money(row.allowances) },
-    { header: "Gross", cell: (row) => money(row.grossSalary) },
-    { header: "PPh 21", cell: (row) => money(row.pph21Withheld) },
-    { header: "Deductions", cell: (row) => money(row.totalDeductions) },
-    { header: "Net payout", cell: (row) => <span className="font-bold text-slate-900">{money(row.netSalary)}</span>, mobileRole: "status" },
+    { header: t("wf.payroll.h.baseSalary"), cell: (row) => money(row.baseSalary) },
+    { header: t("wf.payroll.h.allowances"), cell: (row) => money(row.allowances) },
+    { header: t("wf.payroll.h.gross"), cell: (row) => money(row.grossSalary) },
+    { header: t("wf.payroll.h.pph21"), cell: (row) => money(row.pph21Withheld) },
+    { header: t("wf.payroll.h.deductions"), cell: (row) => money(row.totalDeductions) },
+    { header: t("wf.payroll.h.netPayout"), cell: (row) => <span className="font-bold text-slate-900">{money(row.netSalary)}</span>, mobileRole: "status" },
   ];
 
   const policyColumns: Column<WorkforceStatutoryPolicy>[] = [
     {
-      header: "Policy",
+      header: t("wf.payroll.h.policy"),
       cell: (row) => (
         <div>
           <div className="font-semibold text-slate-900">{row.name}</div>
@@ -291,11 +293,11 @@ export function WorkforcePayrollPage() {
       ),
       mobileRole: "title",
     },
-    { header: "Method", cell: (row) => label(row.pph21Method) },
-    { header: "BPJS Kes (EE/ER)", cell: (row) => `${(row.bpjsKesehatanRateEmployee * 100).toFixed(1)}% / ${(row.bpjsKesehatanRateEmployer * 100).toFixed(1)}%` },
-    { header: "BPJS TK JHT (EE/ER)", cell: (row) => `${(row.bpjsTkJhtRateEmployee * 100).toFixed(1)}% / ${(row.bpjsTkJhtRateEmployer * 100).toFixed(1)}%` },
-    { header: "Effective from", cell: (row) => formatDateShort(row.effectiveFrom) },
-    { header: "Status", cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
+    { header: t("wf.payroll.h.method"), cell: (row) => label(row.pph21Method) },
+    { header: t("wf.payroll.h.bpjsKesEeEr"), cell: (row) => `${(row.bpjsKesehatanRateEmployee * 100).toFixed(1)}% / ${(row.bpjsKesehatanRateEmployer * 100).toFixed(1)}%` },
+    { header: t("wf.payroll.h.bpjsTkJhtEeEr"), cell: (row) => `${(row.bpjsTkJhtRateEmployee * 100).toFixed(1)}% / ${(row.bpjsTkJhtRateEmployer * 100).toFixed(1)}%` },
+    { header: t("wf.payroll.h.effectiveFrom"), cell: (row) => formatDateShort(row.effectiveFrom) },
+    { header: t("wf.payroll.h.status"), cell: (row) => <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>, mobileRole: "status" },
   ];
 
   const tabButton = (value: typeof tab, text: string) => (
@@ -310,7 +312,7 @@ export function WorkforcePayrollPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Payroll" subtitle="Manage Indonesian statutory payroll policies, employee compensation profiles, calculations, and payslip runs." />
+      <PageHeader title={t("wf.payroll.title.payroll")} subtitle={t("wf.payroll.sub.manageIndonesianStatutoryPayrollPolicies")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {!canManage ? <Alert tone="info">Setting profiles, running payroll, and recalculations require <code className="font-mono text-xs">workforce.payroll.manage</code>.</Alert> : null}
@@ -323,20 +325,20 @@ export function WorkforcePayrollPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Scope Filters</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.payroll.t.scopeFilters")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Period year"><Input type="number" min="2000" max="2100" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} /></Field>
-          <Field label="Organization unit ID"><Input value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)} placeholder="All organization units" /></Field>
+          <Field label={t("wf.payroll.f.periodYear")}><Input type="number" min="2000" max="2100" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} /></Field>
+          <Field label={t("wf.payroll.f.organizationUnitId")}><Input value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)} placeholder={t("wf.payroll.p.allOrganizationUnits")} /></Field>
         </div>
       </Card>
 
       {canManage && tab === "runs" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Payroll Run</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.payroll.t.createPayrollRun")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Month" required><Input type="number" min="1" max="12" value={runMonth} onChange={(event) => setRunMonth(event.target.value)} /></Field>
-            <Field label="Year" required><Input type="number" min="2000" max="2100" value={runYear} onChange={(event) => setRunYear(event.target.value)} /></Field>
-            <Field label="Organization unit ID"><Input value={runUnit} onChange={(event) => setRunUnit(event.target.value)} placeholder="Optional scope" /></Field>
+            <Field label={t("wf.payroll.f.month")} required><Input type="number" min="1" max="12" value={runMonth} onChange={(event) => setRunMonth(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.year")} required><Input type="number" min="2000" max="2100" value={runYear} onChange={(event) => setRunYear(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.organizationUnitId")}><Input value={runUnit} onChange={(event) => setRunUnit(event.target.value)} placeholder={t("wf.payroll.p.optionalScope")} /></Field>
           </div>
           <Button className="mt-3" disabled={busy || !runMonth || !runYear} onClick={() => void createRun()}>Create payroll period</Button>
         </Card>
@@ -344,18 +346,18 @@ export function WorkforcePayrollPage() {
 
       {canManage && tab === "profiles" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Configure Employee Salary Profile</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.payroll.t.configureEmployeeSalaryProfile")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Employee" required><Select value={profileEmployee} onChange={(event) => setProfileEmployee(event.target.value)}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
-            <Field label="Base salary" required><Input type="number" min="0" step="1000" value={baseSalary} onChange={(event) => setBaseSalary(event.target.value)} /></Field>
-            <Field label="Fixed allowance"><Input type="number" min="0" step="1000" value={fixedAllowance} onChange={(event) => setFixedAllowance(event.target.value)} /></Field>
-            <Field label="Overtime hourly rate"><Input type="number" min="0" step="1000" value={overtimeRate} onChange={(event) => setOvertimeRate(event.target.value)} placeholder="Auto-calculated if blank" /></Field>
-            <Field label="PTKP status" required><Select value={ptkpStatus} onChange={(event) => setPtkpStatus(event.target.value as WorkforcePtkpStatus)}>{PTKP_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</Select></Field>
-            <Field label="BPJS Kesehatan number"><Input value={bpjsKesNumber} onChange={(event) => setBpjsKesNumber(event.target.value)} /></Field>
-            <Field label="BPJS Ketenagakerjaan number"><Input value={bpjsTkNumber} onChange={(event) => setBpjsTkNumber(event.target.value)} /></Field>
-            <Field label="Effective from" required><Input type="date" value={profileEffectiveFrom} onChange={(event) => setProfileEffectiveFrom(event.target.value)} /></Field>
-            <Field label="Bank name"><Input value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="BCA / Mandiri / BNI" /></Field>
-            <Field label="Bank account number"><Input value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.employee")} required><Select value={profileEmployee} onChange={(event) => setProfileEmployee(event.target.value)}><option value="">{t("wf.payroll.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
+            <Field label={t("wf.payroll.f.baseSalary")} required><Input type="number" min="0" step="1000" value={baseSalary} onChange={(event) => setBaseSalary(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.fixedAllowance")}><Input type="number" min="0" step="1000" value={fixedAllowance} onChange={(event) => setFixedAllowance(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.overtimeHourlyRate")}><Input type="number" min="0" step="1000" value={overtimeRate} onChange={(event) => setOvertimeRate(event.target.value)} placeholder={t("wf.payroll.p.autoCalculatedIfBlank")} /></Field>
+            <Field label={t("wf.payroll.f.ptkpStatus")} required><Select value={ptkpStatus} onChange={(event) => setPtkpStatus(event.target.value as WorkforcePtkpStatus)}>{PTKP_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</Select></Field>
+            <Field label={t("wf.payroll.f.bpjsKesehatanNumber")}><Input value={bpjsKesNumber} onChange={(event) => setBpjsKesNumber(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.bpjsKetenagakerjaanNumber")}><Input value={bpjsTkNumber} onChange={(event) => setBpjsTkNumber(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.effectiveFrom")} required><Input type="date" value={profileEffectiveFrom} onChange={(event) => setProfileEffectiveFrom(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.bankName")}><Input value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder={t("wf.payroll.p.bcaMandiriBni")} /></Field>
+            <Field label={t("wf.payroll.f.bankAccountNumber")}><Input value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} /></Field>
             <div className="flex items-center pt-6"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={hasNpwp} onChange={(event) => setHasNpwp(event.target.checked)} />Has registered NPWP</label></div>
           </div>
           <Button className="mt-3" disabled={busy || !profileEmployee || Number(baseSalary) <= 0 || !profileEffectiveFrom} onClick={() => void saveProfile()}>Save salary profile</Button>
@@ -369,23 +371,23 @@ export function WorkforcePayrollPage() {
 
       {canManage && tab === "policies" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Statutory Policy</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.payroll.t.createStatutoryPolicy")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Policy code" required><Input value={policyCode} onChange={(event) => setPolicyCode(event.target.value)} placeholder="ID_STATUTORY_2026" /></Field>
-            <Field label="Policy name" required><Input value={policyName} onChange={(event) => setPolicyName(event.target.value)} placeholder="Indonesia Standard 2026" /></Field>
-            <Field label="Effective from" required><Input type="date" value={effectiveFromPolicy} onChange={(event) => setEffectiveFromPolicy(event.target.value)} /></Field>
+            <Field label={t("wf.payroll.f.policyCode")} required><Input value={policyCode} onChange={(event) => setPolicyCode(event.target.value)} placeholder="ID_STATUTORY_2026" /></Field>
+            <Field label={t("wf.payroll.f.policyName")} required><Input value={policyName} onChange={(event) => setPolicyName(event.target.value)} placeholder={t("wf.payroll.p.indonesiaStandard2026")} /></Field>
+            <Field label={t("wf.payroll.f.effectiveFrom")} required><Input type="date" value={effectiveFromPolicy} onChange={(event) => setEffectiveFromPolicy(event.target.value)} /></Field>
           </div>
           <Button className="mt-3" disabled={busy || !policyCode.trim() || !policyName.trim()} onClick={() => void createPolicy()}>Create statutory policy</Button>
         </Card>
       ) : null}
 
-      {loading ? <Spinner label="Loading payroll data…" /> : (
+      {loading ? <Spinner label={t("wf.payroll.f.loadingPayrollData")} /> : (
         <>
           {tab === "runs" ? (
             <div className="space-y-4">
               <Card>
-                <h2 className="mb-3 text-sm font-semibold text-slate-800">Payroll Runs</h2>
-                <DataTable columns={runColumns} rows={runs} keyOf={(row) => row.payrollRun.id} mobileBreakpoint="md" empty={<EmptyState title="No payroll runs" description="Create a monthly period above to start calculation." />} />
+                <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.payroll.t.payrollRuns")}</h2>
+                <DataTable columns={runColumns} rows={runs} keyOf={(row) => row.payrollRun.id} mobileBreakpoint="md" empty={<EmptyState title={t("wf.payroll.title.noPayrollRuns")} description={t("wf.payroll.d.createAMonthlyPeriodAboveToStartCalculat")} />} />
               </Card>
 
               {runDetail ? (
@@ -406,11 +408,11 @@ export function WorkforcePayrollPage() {
                   </div>
                   {canApprove && runDetail.availableActions.length > 0 ? (
                     <div className="mb-4 max-w-md">
-                      <Field label="Approval comment"><Input value={actionComment} onChange={(event) => setActionComment(event.target.value)} placeholder="Reason or sign-off comment" /></Field>
+                      <Field label={t("wf.payroll.f.approvalComment")}><Input value={actionComment} onChange={(event) => setActionComment(event.target.value)} placeholder={t("wf.payroll.p.reasonOrSignOffComment")} /></Field>
                     </div>
                   ) : null}
                   <h4 className="mb-2 text-sm font-semibold text-slate-800">Generated Payslips ({runDetail.payslips.length})</h4>
-                  <DataTable columns={payslipColumns} rows={runDetail.payslips} keyOf={(row) => row.id} mobileBreakpoint="md" empty={<EmptyState title="No payslips generated" description="Click Calculate on the payroll run to compute payslips." />} />
+                  <DataTable columns={payslipColumns} rows={runDetail.payslips} keyOf={(row) => row.id} mobileBreakpoint="md" empty={<EmptyState title={t("wf.payroll.title.noPayslipsGenerated")} description={t("wf.payroll.d.clickCalculateOnThePayrollRunToComputePa")} />} />
                 </Card>
               ) : null}
             </div>
@@ -418,8 +420,8 @@ export function WorkforcePayrollPage() {
 
           {tab === "policies" ? (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-800">Configured Statutory Policies</h2>
-              <DataTable columns={policyColumns} rows={policies} keyOf={(row) => row.id} empty={<EmptyState title="No statutory policies" description="Create the baseline policy above." />} />
+              <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.payroll.t.configuredStatutoryPolicies")}</h2>
+              <DataTable columns={policyColumns} rows={policies} keyOf={(row) => row.id} empty={<EmptyState title={t("wf.payroll.title.noStatutoryPolicies")} description={t("wf.payroll.d.createTheBaselinePolicyAbove")} />} />
             </Card>
           ) : null}
         </>
