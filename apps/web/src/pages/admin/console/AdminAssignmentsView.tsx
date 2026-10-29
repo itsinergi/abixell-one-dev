@@ -11,47 +11,50 @@ import {
   type AdminAssignmentRow,
   type AdminRoleAssignmentSummary,
 } from "../../../lib/api";
+import { useT } from "../../../i18n/LocaleProvider";
 import { DataTable, EmptyState, Field, Input, StatusPill } from "../../../shell/components/ui";
 import { AdminPanel, AdminSectionState } from "./AdminSection";
 import { useAdminResource } from "./useAdminResource";
 import { api } from "../../../lib/api";
 
-function roleLabel(assignment: AdminRoleAssignmentSummary): string {
+type Translate = ReturnType<typeof useT>;
+
+function roleLabel(t: Translate, assignment: AdminRoleAssignmentSummary): string {
   return assignment.roleState === "available"
-    ? assignment.roleName ?? assignment.roleCode ?? "Unavailable role"
-    : "Unavailable role";
+    ? assignment.roleName ?? assignment.roleCode ?? t("adminAssignments.roleUnavailable")
+    : t("adminAssignments.roleUnavailable");
 }
 
 /** Wave 3 — the inventory reads the same lifecycle state the user-centric
  * surface shows, so one policy never splits into two labels. */
-function stateLabel(assignment: AdminRoleAssignmentSummary): string {
+function stateLabel(t: Translate, assignment: AdminRoleAssignmentSummary): string {
   switch (assignment.assignmentState) {
     case "active":
-      return "Active";
+      return t("adminAssignments.stateActive");
     case "revoked":
-      return "Revoked";
+      return t("adminAssignments.stateRevoked");
     case "invalidated":
-      return "Invalidated";
+      return t("adminAssignments.stateInvalidated");
     default:
-      return "Unavailable";
+      return t("adminAssignments.stateUnavailable");
   }
 }
 
-function scopeLabel(assignment: AdminRoleAssignmentSummary): string {
-  if (assignment.scopeType === "tenant") return "Tenant-wide";
+function scopeLabel(t: Translate, assignment: AdminRoleAssignmentSummary): string {
+  if (assignment.scopeType === "tenant") return t("adminAssignments.scopeTenantWide");
   if (assignment.scopeType === "legal_entity") {
     return assignment.scopeState === "available"
-      ? assignment.scopeLegalEntityName ?? "Unavailable legal entity"
-      : "Unavailable legal entity";
+      ? assignment.scopeLegalEntityName ?? t("adminAssignments.legalEntityUnavailable")
+      : t("adminAssignments.legalEntityUnavailable");
   }
   if (assignment.scopeType === "organization_unit") {
     return assignment.scopeState === "available"
-      ? assignment.scopeOrganizationUnitName ?? "Unavailable organization unit"
-      : "Unavailable organization unit";
+      ? assignment.scopeOrganizationUnitName ?? t("adminAssignments.orgUnitUnavailable")
+      : t("adminAssignments.orgUnitUnavailable");
   }
   return assignment.scopeState === "available"
-    ? assignment.scopeCustomerName ?? "Unavailable customer"
-    : "Unavailable customer";
+    ? assignment.scopeCustomerName ?? t("adminAssignments.customerUnavailable")
+    : t("adminAssignments.customerUnavailable");
 }
 
 export function AdminAssignmentsView({
@@ -59,9 +62,10 @@ export function AdminAssignmentsView({
 }: {
   canManageAccess: boolean;
 }) {
+  const t = useT();
   const resource = useAdminResource<AdminAssignmentRow[]>(
     (token) => api.adminAssignments(token),
-    "Failed to load assignment inventory",
+    t("adminAssignments.loadFailed"),
     canManageAccess,
   );
   const [query, setQuery] = useState("");
@@ -69,18 +73,18 @@ export function AdminAssignmentsView({
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return resource.data ?? [];
     return (resource.data ?? []).filter((row) =>
-      `${row.userName} ${row.userEmail} ${row.roleName ?? ""} ${row.roleCode ?? ""} ${scopeLabel(row)}`
+      `${row.userName} ${row.userEmail} ${row.roleName ?? ""} ${row.roleCode ?? ""} ${scopeLabel(t, row)}`
         .toLocaleLowerCase()
         .includes(normalized),
     );
-  }, [query, resource.data]);
+  }, [query, resource.data, t]);
 
   if (!canManageAccess) return null;
 
   return (
     <AdminSectionState
       loading={resource.loading}
-      loadingLabel="Loading assignment inventory…"
+      loadingLabel={t("adminAssignments.loading")}
       denied={resource.denied}
       sessionExpired={resource.sessionExpired}
       error={resource.error}
@@ -88,23 +92,26 @@ export function AdminAssignmentsView({
       onRetry={resource.reload}
     >
       <AdminPanel
-        title="Assignment inventory"
-        description="Cross-user view of role grants inside your current administrative visibility."
+        title={t("adminAssignments.title")}
+        description={t("adminAssignments.description")}
       >
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <Field label="Search assignments">
+          <Field label={t("adminAssignments.searchLabel")}>
             <Input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="User, email, role, or scope"
-              aria-label="Search assignments by user, email, role, or scope"
+              placeholder={t("adminAssignments.searchPlaceholder")}
+              aria-label={t("adminAssignments.searchAria")}
               autoComplete="off"
               className="sm:w-80"
             />
           </Field>
           <p className="text-sm tabular-nums text-ink-dim" role="status" aria-live="polite">
-            Showing {rows.length} of {(resource.data ?? []).length}
+            {t("adminAssignments.showing", {
+              shown: rows.length,
+              total: (resource.data ?? []).length,
+            })}
           </p>
         </div>
         <DataTable
@@ -113,13 +120,17 @@ export function AdminAssignmentsView({
           mobileBreakpoint="md"
           empty={
             <EmptyState
-              title="No assignments found"
-              description={query ? "Try a different search term." : "No visible role assignments exist."}
+              title={t("adminAssignments.emptyTitle")}
+              description={
+                query
+                  ? t("adminAssignments.emptySearch")
+                  : t("adminAssignments.emptyAll")
+              }
             />
           }
           columns={[
             {
-              header: "User",
+              header: t("adminAssignments.columnUser"),
               mobileRole: "title",
               cell: (row) => (
                 <div>
@@ -129,7 +140,7 @@ export function AdminAssignmentsView({
               ),
             },
             {
-              header: "User status",
+              header: t("adminAssignments.columnUserStatus"),
               mobileRole: "status",
               cell: (row) => (
                 <StatusPill tone={row.userStatus === "active" ? "success" : "neutral"}>
@@ -138,10 +149,10 @@ export function AdminAssignmentsView({
               ),
             },
             {
-              header: "Role",
+              header: t("adminAssignments.columnRole"),
               cell: (row) => (
                 <div>
-                  <div className="text-sm text-ink">{roleLabel(row)}</div>
+                  <div className="text-sm text-ink">{roleLabel(t, row)}</div>
                   {row.roleCode && (
                     <code className="break-all font-mono text-[11.5px] text-ink-dim">
                       {row.roleCode}
@@ -151,21 +162,23 @@ export function AdminAssignmentsView({
               ),
             },
             {
-              header: "Scope",
+              header: t("adminAssignments.columnScope"),
               mobileRole: "detail",
-              cell: (row) => <span className="text-sm text-ink-dim">{scopeLabel(row)}</span>,
+              cell: (row) => (
+                <span className="text-sm text-ink-dim">{scopeLabel(t, row)}</span>
+              ),
             },
             {
-              header: "State",
+              header: t("adminAssignments.columnState"),
               mobileRole: "status",
               cell: (row) => (
                 <StatusPill tone={row.assignmentState === "active" ? "success" : "warning"}>
-                  {stateLabel(row)}
+                  {stateLabel(t, row)}
                 </StatusPill>
               ),
             },
             {
-              header: "Revoked",
+              header: t("adminAssignments.columnRevoked"),
               mobileRole: "detail",
               cell: (row) =>
                 row.revokedAt ? (

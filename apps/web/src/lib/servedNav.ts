@@ -20,6 +20,8 @@
  */
 
 import type { MenuNode } from "./api";
+import { resolveNavLabel } from "../i18n/navLabels";
+import type { Locale } from "../i18n/LocaleProvider";
 
 /** One page. `locked` is the server's answer, not a local calculation. */
 export interface ServedNavPage {
@@ -60,8 +62,16 @@ function isPage(node: MenuNode): boolean {
  * already dropped by the server, so an empty module here means the payload was
  * malformed — skipping it keeps the shell from rendering a folder that opens
  * onto nothing.
+ *
+ * Labels are localized here rather than at render time, so every consumer
+ * (sidebar, Overview cards, nav search) sees the same text and search matches
+ * what is on screen.
  */
-export function servedNavGroups(menu: MenuNode[]): ServedNavGroup[] {
+export function servedNavGroups(menu: MenuNode[], locale: Locale): ServedNavGroup[] {
+  const label = (code: string, name: string) => resolveNavLabel(code, name, locale);
+  const description = (code: string, text: string | undefined) =>
+    resolveNavLabel(code, text ?? "", locale, "description");
+
   return menu.flatMap((group) => {
     const nodes: ServedNavNode[] = [];
 
@@ -70,8 +80,8 @@ export function servedNavGroups(menu: MenuNode[]): ServedNavGroup[] {
         nodes.push({
           type: "page",
           code: child.code,
-          label: child.name,
-          description: child.description,
+          label: label(child.code, child.name),
+          description: description(child.code, child.description),
           path: child.path as string,
           locked: child.locked === true,
           lockedReason: child.lockedReason,
@@ -82,8 +92,8 @@ export function servedNavGroups(menu: MenuNode[]): ServedNavGroup[] {
         (page): ServedNavPage => ({
           type: "page",
           code: page.code,
-          label: page.name,
-          description: page.description,
+          label: label(page.code, page.name),
+          description: description(page.code, page.description),
           path: page.path as string,
           locked: page.locked === true,
           lockedReason: page.lockedReason,
@@ -96,14 +106,21 @@ export function servedNavGroups(menu: MenuNode[]): ServedNavGroup[] {
         // the parity check asserts it); the code is the fallback so an odd row
         // still expands rather than crashing the shell.
         moduleCode: child.moduleCode ?? child.code,
-        label: child.name,
+        label: label(child.code, child.name),
         pages,
       });
     }
 
     return nodes.length === 0
       ? []
-      : [{ key: group.code, label: group.name, description: group.description ?? "", nodes }];
+      : [
+          {
+            key: group.code,
+            label: label(group.code, group.name),
+            description: description(group.code, group.description),
+            nodes,
+          },
+        ];
   });
 }
 

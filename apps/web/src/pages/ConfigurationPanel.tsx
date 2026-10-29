@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type AppParameter, type EffectiveParameterValue } from "../lib/api";
+import { useT } from "../i18n/LocaleProvider";
 import { OverlayDialog } from "../shell/components/OverlayDialog";
 import {
   Alert,
@@ -74,7 +75,7 @@ const LEVEL_LABELS: Record<string, string> = {
   S: "System",
   C: "Client",
   O: "Organization",
-  product_default: "Default produk",
+  product_default: "Product default",
 };
 
 function describeValue(value: unknown): string {
@@ -96,12 +97,13 @@ export function ConfigurationPanel({
   canManage: boolean;
   onMessage: (m: { type: "error" | "success"; text: string }) => void;
 }) {
-  const modules = useAdminResource(api.configModules, "Gagal memuat daftar module.");
-  const flags = useAdminResource(api.configFeatureFlags, "Gagal memuat feature flag.");
-  const terms = useAdminResource(api.configTerminology, "Gagal memuat terminology.");
-  const types = useAdminResource(api.configReferenceDataTypes, "Gagal memuat tipe referensi.");
-  const profile = useAdminResource(api.tenant, "Gagal memuat profil tenant.");
-  const parameters = useAdminResource(api.configParameters, "Gagal memuat parameter.");
+  const t = useT();
+  const modules = useAdminResource(api.configModules, t("configPanel.loadModules"));
+  const flags = useAdminResource(api.configFeatureFlags, t("configPanel.loadFlags"));
+  const terms = useAdminResource(api.configTerminology, t("configPanel.loadTerminology"));
+  const types = useAdminResource(api.configReferenceDataTypes, t("configPanel.loadTypes"));
+  const profile = useAdminResource(api.tenant, t("configPanel.loadProfile"));
+  const parameters = useAdminResource(api.configParameters, t("configPanel.loadParameters"));
 
   const [scopeId, setScopeId] = useState("");
   const [typeCode, setTypeCode] = useState("");
@@ -165,13 +167,13 @@ export function ConfigurationPanel({
       .catch((error: unknown) => {
         if (current)
           setEffectiveFlagsError(
-            error instanceof ApiError ? error.message : "Gagal memuat nilai efektif per unit.",
+            error instanceof ApiError ? error.message : t("configPanel.loadEffectiveFlags"),
           );
       });
     return () => {
       current = false;
     };
-  }, [section, token, effectiveScopeId]);
+  }, [section, t, token, effectiveScopeId]);
 
   useEffect(() => {
     if (section !== "system" || !effectiveTypeCode) {
@@ -191,13 +193,13 @@ export function ConfigurationPanel({
       .catch((error: unknown) => {
         if (current)
           setRefItemsError(
-            error instanceof ApiError ? error.message : "Gagal memuat item referensi.",
+            error instanceof ApiError ? error.message : t("configPanel.loadRefItems"),
           );
       });
     return () => {
       current = false;
     };
-  }, [section, token, effectiveTypeCode]);
+  }, [section, t, token, effectiveTypeCode]);
 
   function open(next: Dialog, trigger: HTMLButtonElement) {
     if (busy.current) return;
@@ -224,10 +226,10 @@ export function ConfigurationPanel({
       setLoadedSequence(null);
       setSequenceError(
         error instanceof ApiError && error.status === 404
-          ? `Urutan '${code}' belum ada untuk tenant ini.`
+          ? t("configPanel.sequenceNotFound", { code })
           : error instanceof ApiError
             ? error.message
-            : "Gagal memuat urutan.",
+            : t("configPanel.loadSequence"),
       );
     } finally {
       setSequenceBusy(false);
@@ -279,7 +281,7 @@ export function ConfigurationPanel({
     } catch (error) {
       if (generation === lifetime.current)
         setDialogError(
-          error instanceof ApiError ? error.message : "Perubahan tidak dapat disimpan.",
+          error instanceof ApiError ? error.message : t("configPanel.changeFailed"),
         );
       return;
     } finally {
@@ -290,7 +292,7 @@ export function ConfigurationPanel({
     setDialog(null);
     onMessage({
       type: "success",
-      text: target.kind === "parameter" ? "Nilai parameter disimpan." : "Konfigurasi disimpan.",
+      text: target.kind === "parameter" ? t("configPanel.parameterSaved") : t("configPanel.configSaved"),
     });
     if (target.kind === "module") void modules.reload();
     if (target.kind === "flag") void flags.reload();
@@ -314,7 +316,7 @@ export function ConfigurationPanel({
       setLoadedSequence({ code: loadedSequence.code, info });
     } catch (error) {
       setSequenceError(
-        error instanceof ApiError ? error.message : "Gagal membuat nomor berikutnya.",
+        error instanceof ApiError ? error.message : t("configPanel.generateNumber"),
       );
     }
   }
@@ -322,19 +324,19 @@ export function ConfigurationPanel({
   /* ------------------------------------------------------------- Columns */
 
   const moduleColumns: Column<ModuleRow>[] = [
-    { header: "Module", mobileRole: "title", cell: (row) => row.moduleName },
-    { header: "Kode", cell: (row) => <span className="font-mono text-xs">{row.moduleCode}</span> },
+    { header: t("configPanel.moduleHeader"), mobileRole: "title", cell: (row) => row.moduleName },
+    { header: t("configPanel.codeHeader"), cell: (row) => <span className="font-mono text-xs">{row.moduleCode}</span> },
     {
-      header: "Status",
+      header: t("configPanel.statusHeader"),
       mobileRole: "status",
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>
-          {row.isActive ? "Aktif" : "Nonaktif"}
+          {row.isActive ? t("configPanel.activeStatus") : t("configPanel.inactiveStatus")}
         </StatusPill>
       ),
     },
     {
-      header: "Aksi",
+      header: t("configPanel.actionHeader"),
       cell: (row) => (
         <div className="flex flex-wrap gap-2">
           <Button
@@ -344,7 +346,7 @@ export function ConfigurationPanel({
               setDetailModuleCode(detailModuleCode === row.moduleCode ? null : row.moduleCode)
             }
           >
-            {detailModuleCode === row.moduleCode ? "Tutup detail" : "Lihat konfigurasi"}
+            {detailModuleCode === row.moduleCode ? t("configPanel.closeDetail") : t("configPanel.viewConfig")}
           </Button>
           {canManage && (
             <Button
@@ -353,7 +355,7 @@ export function ConfigurationPanel({
                 open({ kind: "module", row, next: !row.isActive }, event.currentTarget)
               }
             >
-              {row.isActive ? "Nonaktifkan" : "Aktifkan"}
+              {row.isActive ? t("configPanel.deactivate") : t("configPanel.activate")}
             </Button>
           )}
         </div>
@@ -362,18 +364,18 @@ export function ConfigurationPanel({
   ];
 
   const flagColumns: Column<FlagRow>[] = [
-    { header: "Feature", mobileRole: "title", cell: (row) => row.name },
-    { header: "Nilai tenant", cell: (row) => (row.isEnabled ? "Aktif" : "Nonaktif") },
+    { header: t("configPanel.featureHeader"), mobileRole: "title", cell: (row) => row.name },
+    { header: t("configPanel.tenantValue"), cell: (row) => (row.isEnabled ? t("configPanel.activeStatus") : t("configPanel.inactiveStatus")) },
     {
-      header: "Efektif di unit",
+      header: t("configPanel.effectiveInUnit"),
       cell: (row) => {
-        if (!effectiveScopeId) return <span className="text-ink-faint">Pilih unit</span>;
+        if (!effectiveScopeId) return <span className="text-ink-faint">{t("configPanel.selectUnit")}</span>;
         const value = effectiveFlags?.list.find((flag) => flag.code === row.code);
-        return value ? `${value.isEnabled ? "Aktif" : "Nonaktif"} (${value.source})` : "—";
+        return value ? `${value.isEnabled ? t("configPanel.activeStatus") : t("configPanel.inactiveStatus")} (${value.source})` : "—";
       },
     },
     {
-      header: "Aksi",
+      header: t("configPanel.actionHeader"),
       cell: (row) => {
         const value = effectiveFlags?.list.find((flag) => flag.code === row.code);
         return (
@@ -387,14 +389,14 @@ export function ConfigurationPanel({
                       kind: "flag",
                       row,
                       scopeId: null,
-                      scopeName: "Seluruh tenant",
+                      scopeName: t("configPanel.wholeTenant"),
                       next: !row.isEnabled,
                     },
                     event.currentTarget,
                   )
                 }
               >
-                {row.isEnabled ? "Nonaktifkan" : "Aktifkan"} tenant
+                {row.isEnabled ? t("configPanel.deactivateForTenant") : t("configPanel.activateForTenant")}
               </Button>
               <Button
                 variant="secondary"
@@ -413,7 +415,7 @@ export function ConfigurationPanel({
                     );
                 }}
               >
-                Override di unit
+                {t("configPanel.overrideUnit")}
               </Button>
             </div>
           )
@@ -423,30 +425,30 @@ export function ConfigurationPanel({
   ];
 
   const termColumns: Column<TermRow>[] = [
-    { header: "Kunci", mobileRole: "title", cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
-    { header: "Label", cell: (row) => row.value },
-    { header: "Sumber", cell: (row) => (row.isOverridden ? "Override tenant" : "Default") },
+    { header: t("configPanel.keyHeader"), mobileRole: "title", cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
+    { header: t("configPanel.labelHeader"), cell: (row) => row.value },
+    { header: t("configPanel.sourceHeader"), cell: (row) => (row.isOverridden ? t("configPanel.tenantOverride") : t("configPanel.defaultValue")) },
     {
-      header: "Aksi",
+      header: t("configPanel.actionHeader"),
       cell: (row) =>
         canManage && (
           <Button variant="ghost" onClick={(event) => open({ kind: "terminology", row }, event.currentTarget)}>
-            Ubah label
+            {t("configPanel.editLabel")}
           </Button>
         ),
     },
   ];
 
   const itemColumns: Column<RefItemRow>[] = [
-    { header: "Label", mobileRole: "title", cell: (row) => row.label },
-    { header: "Kode", cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
-    { header: "Urutan", cell: (row) => row.sortOrder },
+    { header: t("configPanel.labelHeader"), mobileRole: "title", cell: (row) => row.label },
+    { header: t("configPanel.codeHeader"), cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
+    { header: t("configPanel.orderHeader"), cell: (row) => row.sortOrder },
     {
-      header: "Status",
+      header: t("configPanel.statusHeader"),
       mobileRole: "status",
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>
-          {row.isActive ? "Aktif" : "Nonaktif"}
+          {row.isActive ? t("configPanel.activeStatus") : t("configPanel.inactiveStatus")}
         </StatusPill>
       ),
     },
@@ -454,36 +456,36 @@ export function ConfigurationPanel({
 
   const parameterColumns: Column<AppParameter>[] = [
     {
-      header: "Parameter",
+      header: t("configPanel.parameter"),
       mobileRole: "title",
       cell: (row) => (
         <div className="flex items-center gap-2">
           <span>{row.name}</span>
-          {row.inUse === false && <StatusPill tone="neutral">Belum dipakai</StatusPill>}
+          {row.inUse === false && <StatusPill tone="neutral">{t("configPanel.notInUse")}</StatusPill>}
         </div>
       ),
     },
-    { header: "Kode", cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
-    { header: "Tipe", cell: (row) => row.parameterType },
+    { header: t("configPanel.codeHeader"), cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
+    { header: t("configPanel.typeHeader"), cell: (row) => row.parameterType },
     {
-      header: "Level",
+      header: t("configPanel.levelLabel"),
       cell: (row) => (
         <div className="flex gap-1">
           {row.allowedLevels.map((level) => (
             <Badge key={level}>{level}</Badge>
           ))}
-          {row.isGuardrail && <StatusPill tone="warning">Guardrail</StatusPill>}
+          {row.isGuardrail && <StatusPill tone="warning">{t("configPanel.guardrail")}</StatusPill>}
         </div>
       ),
     },
-    { header: "Default", cell: (row) => <span className="font-mono text-xs">{describeValue(row.defaultValue)}</span> },
+    { header: t("configPanel.defaultValue"), cell: (row) => <span className="font-mono text-xs">{describeValue(row.defaultValue)}</span> },
     {
-      header: "Aksi",
+      header: t("configPanel.actionHeader"),
       cell: (row) =>
         canManage &&
         row.inUse !== false && (
           <Button variant="ghost" onClick={(event) => open({ kind: "parameter", row }, event.currentTarget)}>
-            Atur nilai
+            {t("configPanel.setValue")}
           </Button>
         ),
     },
@@ -491,22 +493,24 @@ export function ConfigurationPanel({
 
   const title =
     dialog?.kind === "module"
-      ? `${dialog.next ? "Aktifkan" : "Nonaktifkan"} module`
+      ? dialog.next
+        ? t("configPanel.activateModuleTitle")
+        : t("configPanel.deactivateModuleTitle")
       : dialog?.kind === "flag"
-        ? "Override feature flag"
+        ? t("configPanel.overrideFlagTitle")
         : dialog?.kind === "terminology"
-          ? "Ubah terminology"
+          ? t("configPanel.editTermTitle")
           : dialog?.kind === "reference"
-            ? "Buat item referensi"
-            : "Atur nilai parameter";
+            ? t("configPanel.createRefItemTitle")
+            : t("configPanel.setParamValueTitle");
 
   const writeLevels = dialog?.kind === "parameter" ? dialog.row.allowedLevels.filter((l) => l !== "S") : [];
 
   return (
-    <section className="space-y-4" aria-label="Konfigurasi dan metadata">
+    <section className="space-y-4" aria-label={t("configPanel.configAria")}>
       {section === "module" && (
         <>
-          <Panel title="Module" count={modules.data?.length}>
+          <Panel title={t("configPanel.moduleHeader")} count={modules.data?.length}>
             <AdminSectionState {...modules} onRetry={modules.reload}>
               <DataTable columns={moduleColumns} rows={modules.data ?? []} keyOf={(row) => row.moduleId} />
             </AdminSectionState>
@@ -514,32 +518,31 @@ export function ConfigurationPanel({
 
           {detailModule && (
             <Panel
-              title={`Konfigurasi ${detailModule.moduleName}`}
+              title={t("configPanel.detailConfig", { name: detailModule.moduleName })}
               count={detailParameters.length}
               action={
                 <StatusPill tone={detailModule.isActive ? "success" : "neutral"}>
-                  {detailModule.isActive ? "Aktif" : "Nonaktif"}
+                  {detailModule.isActive ? t("configPanel.activeStatus") : t("configPanel.inactiveStatus")}
                 </StatusPill>
               }
             >
               {!detailModule.isActive && (
                 <Alert tone="warning">
-                  Module ini nonaktif untuk tenant. Aktifkan lebih dulu agar pengaturannya berlaku.
+                  {t("configPanel.moduleInactive")}
                 </Alert>
               )}
               {detailModule.moduleCode === "customer_complaint" && (
                 <p className="mb-3 text-sm">
-                  Kategori, SLA, dan eskalasi dikelola di{" "}
+                  {t("configPanel.managedIn")}{" "}
                   <Link className="underline" to="/administration/complaints">
-                    Konfigurasi keluhan
+                    {t("configPanel.complaintConfig")}
                   </Link>
                   .
                 </p>
               )}
               {detailParameters.length === 0 ? (
                 <p className="text-sm text-ink-dim">
-                  Module ini belum mendeklarasikan parameter. Pengaturannya muncul di sini setelah
-                  module mendaftarkannya.
+                  {t("configPanel.noParameters")}
                 </p>
               ) : (
                 <DataTable
@@ -551,13 +554,13 @@ export function ConfigurationPanel({
             </Panel>
           )}
 
-          <Panel title="Feature flag" count={flags.data?.length}>
+          <Panel title={t("configPanel.featureFlagHeader")} count={flags.data?.length}>
             <Field
-              label="Scope organization unit"
-              hint="Nilai di unit menimpa nilai tenant."
+              label={t("configPanel.unitScope")}
+              hint={t("configPanel.unitScopeHint")}
             >
               <Select value={effectiveScopeId} onChange={(event) => setScopeId(event.target.value)} disabled={!orgUnits.length}>
-                <option value="">Pilih unit</option>
+                <option value="">{t("configPanel.selectUnit")}</option>
                 {orgUnits.map((unit) => (
                   <option key={unit.id} value={unit.id}>
                     {unit.name}
@@ -575,7 +578,7 @@ export function ConfigurationPanel({
 
       {section === "platform" && (
         <>
-          <Panel title="Profil tenant">
+          <Panel title={t("configPanel.tenantProfile")}>
             <AdminSectionState {...profile} onRetry={profile.reload}>
               {profile.data && (
                 <TenantProfileForm
@@ -589,7 +592,7 @@ export function ConfigurationPanel({
             </AdminSectionState>
           </Panel>
 
-          <Panel title="Terminology" count={terms.data?.length}>
+          <Panel title={t("configPanel.terminology")} count={terms.data?.length}>
             <AdminSectionState {...terms} onRetry={terms.reload}>
               <DataTable columns={termColumns} rows={terms.data ?? []} keyOf={(row) => row.code} />
             </AdminSectionState>
@@ -600,7 +603,7 @@ export function ConfigurationPanel({
       {section === "system" && (
         <>
           <Panel
-            title="Data referensi"
+            title={t("configPanel.referenceData")}
             count={refItems?.list.length}
             action={
               canManage &&
@@ -610,15 +613,15 @@ export function ConfigurationPanel({
                     open({ kind: "reference", typeCode: selectedType.code, typeName: selectedType.name }, event.currentTarget)
                   }
                 >
-                  Buat item
+                  {t("configPanel.createItem")}
                 </Button>
               )
             }
           >
             <AdminSectionState {...types} onRetry={types.reload}>
-              <Field label="Tipe referensi">
+              <Field label={t("configPanel.referenceType")}>
                 <Select value={effectiveTypeCode} onChange={(event) => setTypeCode(event.target.value)} disabled={!types.data?.length}>
-                  <option value="">Pilih tipe</option>
+                  <option value="">{t("configPanel.selectType")}</option>
                   {types.data?.map((type) => (
                     <option key={type.code} value={type.code}>
                       {type.name}
@@ -630,14 +633,14 @@ export function ConfigurationPanel({
             {refItemsError && <Alert tone="error">{refItemsError}</Alert>}
             <DataTable columns={itemColumns} rows={refItems?.list ?? []} keyOf={(row) => row.id} />
             <p className="mt-3 text-xs text-ink-faint">
-              Panel ini membaca dan membuat item. Perubahan siklus hidup item belum tersedia di sini.
+              {t("configPanel.readsCreates")}
             </p>
           </Panel>
 
-          <Panel title="Penomoran">
+          <Panel title={t("configPanel.numbering")}>
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-48 flex-1">
-                <Field label="Kode urutan" hint="Misalnya kode dokumen yang tenant ini pakai.">
+                <Field label={t("configPanel.sequenceCode")} hint={t("configPanel.sequenceCodeHint")}>
                   <Input
                     value={sequenceCode}
                     onChange={(event) => setSequenceCode(event.target.value)}
@@ -646,35 +649,35 @@ export function ConfigurationPanel({
                 </Field>
               </div>
               <Button variant="secondary" onClick={() => void loadSequence()} disabled={!sequenceCode.trim() || sequenceBusy}>
-                {sequenceBusy ? "Memuat…" : "Muat"}
+                {sequenceBusy ? t("configPanel.loading") : t("configPanel.load")}
               </Button>
             </div>
             {sequenceError && <Alert tone="error">{sequenceError}</Alert>}
             {loadedSequence && (
               <dl className="mt-4 space-y-1 text-sm">
-                <dt className="text-ink-faint">Pola</dt>
+                <dt className="text-ink-faint">{t("configPanel.pattern")}</dt>
                 <dd className="font-mono text-xs">{loadedSequence.info.pattern}</dd>
-                <dt className="text-ink-faint">Urutan saat ini</dt>
+                <dt className="text-ink-faint">{t("configPanel.currentSequence")}</dt>
                 <dd className="tabular-nums">{loadedSequence.info.currentSequence}</dd>
               </dl>
             )}
             {loadedSequence && canManage && (
               <Button className="mt-3" onClick={() => void generateNumber()}>
-                Buat nomor berikutnya
+                {t("configPanel.generateNext")}
               </Button>
             )}
-            {lastNumber && <p className="mt-3 text-sm">Nomor terakhir: <span className="font-mono text-xs">{lastNumber}</span></p>}
+            {lastNumber && <p className="mt-3 text-sm">{t("configPanel.lastNumber")} <span className="font-mono text-xs">{lastNumber}</span></p>}
             <p className="mt-3 text-xs text-ink-faint">
-              Membuat nomor menaikkan urutan tersimpan dan tidak bisa dibatalkan di sini.
+              {t("configPanel.generatingAdvances")}
             </p>
           </Panel>
 
-          <Panel title="Parameter" count={parameters.data?.length}>
+          <Panel title={t("configPanel.parameter")} count={parameters.data?.length}>
             <AdminSectionState {...parameters} onRetry={parameters.reload}>
               <DataTable columns={parameterColumns} rows={parameters.data ?? []} keyOf={(row) => row.id} />
             </AdminSectionState>
             <p className="mt-3 text-xs text-ink-faint">
-              Nilai System hanya dapat diubah pemegang otoritas platform, bukan dari layar ini.
+              {t("configPanel.systemValuesAuth")}
             </p>
           </Panel>
         </>
@@ -689,10 +692,10 @@ export function ConfigurationPanel({
         footer={
           <>
             <Button variant="secondary" disabled={pending} onClick={close}>
-              Batal
+              {t("configPanel.cancel")}
             </Button>
             <Button type="submit" form="configuration-change" disabled={pending || !canManage}>
-              {pending ? "Menyimpan…" : dialog?.kind === "reference" ? "Buat" : "Simpan"}
+              {pending ? t("configPanel.saving") : dialog?.kind === "reference" ? t("configPanel.create") : t("configPanel.save")}
             </Button>
           </>
         }
@@ -702,39 +705,44 @@ export function ConfigurationPanel({
           <fieldset disabled={pending} className="space-y-4">
             {dialog?.kind === "module" && (
               <p>
-                {dialog.next ? "Aktifkan" : "Nonaktifkan"} {dialog.row.moduleName} untuk tenant ini?
+                {t("configPanel.confirmActivate", {
+                  action: dialog.next ? t("configPanel.activate") : t("configPanel.deactivate"),
+                  name: dialog.row.moduleName,
+                })}
               </p>
             )}
             {dialog?.kind === "flag" && (
               <>
                 <p>
-                  Set <strong>{dialog.row.name}</strong> menjadi{" "}
-                  <strong>{dialog.next ? "Aktif" : "Nonaktif"}</strong>?
+                  {t("configPanel.setFlag", {
+                    name: dialog.row.name,
+                    status: dialog.next ? t("configPanel.activeStatus") : t("configPanel.inactiveStatus"),
+                  })}
                 </p>
-                <p className="text-ink-dim">Scope: {dialog.scopeName}</p>
+                <p className="text-ink-dim">{t("configPanel.scopeLabel")} {dialog.scopeName}</p>
                 <p className="text-xs text-ink-faint">
-                  Override di unit tetap menimpa nilai tenant.
+                  {t("configPanel.unitOverridePrecedence")}
                 </p>
               </>
             )}
             {dialog?.kind === "terminology" && (
               <>
-                <p className="wrap-break-word font-mono text-xs text-ink-dim">Kunci: {dialog.row.code}</p>
-                <Field label="Label" required>
+                <p className="wrap-break-word font-mono text-xs text-ink-dim">{t("configPanel.keyLabel")} {dialog.row.code}</p>
+                <Field label={t("configPanel.labelHeader")} required>
                   <Input name="value" required defaultValue={dialog.row.value} />
                 </Field>
               </>
             )}
             {dialog?.kind === "reference" && (
               <>
-                <p className="text-ink-dim">Tipe: {dialog.typeName}</p>
-                <Field label="Kode" required>
+                <p className="text-ink-dim">{t("configPanel.typeLabel")} {dialog.typeName}</p>
+                <Field label={t("configPanel.codeHeader")} required>
                   <Input name="code" required />
                 </Field>
-                <Field label="Label" required>
+                <Field label={t("configPanel.labelHeader")} required>
                   <Input name="label" required />
                 </Field>
-                <Field label="Urutan">
+                <Field label={t("configPanel.orderHeader")}>
                   <Input name="sortOrder" type="number" step="1" />
                 </Field>
               </>
@@ -746,22 +754,22 @@ export function ConfigurationPanel({
                 <EffectiveValue token={token} parameter={dialog.row} organizationUnitId={effectiveScopeId} />
                 {writeLevels.length === 0 ? (
                   <Alert tone="warning">
-                    Parameter ini hanya punya nilai System, yang memerlukan otoritas platform.
+                    {t("configPanel.systemOnly")}
                   </Alert>
                 ) : (
                   <>
-                    <Field label="Level" required>
+                    <Field label={t("configPanel.levelLabel")} required>
                       <Select name="level" defaultValue={writeLevels[0]}>
                         {writeLevels.map((level) => (
                           <option key={level} value={level}>
-                            {LEVEL_LABELS[level]}
+                            {LEVEL_LABELS[level] ?? level}
                           </option>
                         ))}
                       </Select>
                     </Field>
                     {writeLevels.includes("O") && !effectiveScopeId && (
                       <Alert tone="warning">
-                        Pilih organization unit di kategori Module untuk menulis nilai Organization.
+                        {t("configPanel.selectOrgUnit")}
                       </Alert>
                     )}
                     <ParameterValueField parameter={dialog.row} />
@@ -789,6 +797,7 @@ function EffectiveValue({
   parameter: AppParameter;
   organizationUnitId: string;
 }) {
+  const t = useT();
   const [state, setState] = useState<{
     value: unknown;
     sourceLevel: EffectiveParameterValue["sourceLevel"];
@@ -806,21 +815,21 @@ function EffectiveValue({
       })
       .catch((err: unknown) => {
         if (current)
-          setError(err instanceof ApiError ? err.message : "Gagal membaca nilai efektif.");
+          setError(err instanceof ApiError ? err.message : t("configPanel.readEffectiveValue"));
       });
     return () => {
       current = false;
     };
-  }, [token, parameter.code, organizationUnitId]);
+  }, [token, parameter.code, organizationUnitId, t]);
 
   if (error) return <p className="text-xs text-status-danger">{error}</p>;
-  if (!state) return <p className="text-xs text-ink-faint">Membaca nilai efektif…</p>;
+  if (!state) return <p className="text-xs text-ink-faint">{t("configPanel.readingValue")}</p>;
 
   return (
     <div className="rounded border border-line bg-panel-2 p-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-ink-faint">Nilai efektif</span>
-        <Badge>{LEVEL_LABELS[state.sourceLevel] ?? state.sourceLevel}</Badge>
+        <span className="text-ink-faint">{t("configPanel.effectiveValue")}</span>
+        <Badge>{state.sourceLevel === "product_default" ? t("configPanel.levelProductDefault") : (LEVEL_LABELS[state.sourceLevel] ?? state.sourceLevel)}</Badge>
       </div>
       <p className="mt-1 wrap-break-word font-mono text-xs text-ink">{describeValue(state.value)}</p>
     </div>
@@ -828,10 +837,11 @@ function EffectiveValue({
 }
 
 function ParameterValueField({ parameter }: { parameter: AppParameter }) {
+  const t = useT();
   const defaultValue = describeValue(parameter.defaultValue);
   if (parameter.parameterType === "boolean") {
     return (
-      <Field label="Nilai" required>
+      <Field label={t("configPanel.valueLabel")} required>
         <Select name="value" defaultValue={defaultValue === "true" ? "true" : "false"}>
           <option value="true">true</option>
           <option value="false">false</option>
@@ -841,14 +851,14 @@ function ParameterValueField({ parameter }: { parameter: AppParameter }) {
   }
   if (parameter.parameterType === "json") {
     return (
-      <Field label="Nilai (JSON)" required hint="Harus JSON yang valid.">
+      <Field label={t("configPanel.valueLabel")} required hint={t("configPanel.valueJsonHint")}>
         <Textarea name="value" required defaultValue={defaultValue} rows={4} />
       </Field>
     );
   }
   const numeric = parameter.parameterType === "integer" || parameter.parameterType === "decimal";
   return (
-    <Field label="Nilai" required>
+    <Field label={t("configPanel.valueLabel")} required>
       <Input
         name="value"
         required
@@ -897,6 +907,7 @@ function TenantProfileForm({
   onSaved: (message: string) => void;
   onReload: () => void;
 }) {
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -920,10 +931,10 @@ function TenantProfileForm({
         contactAdminEmail: text("contactAdminEmail"),
         contactAdminPhone: text("contactAdminPhone"),
       });
-      onSaved("Profil tenant disimpan.");
+      onSaved(t("configPanel.profileSaved"));
       onReload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Profil tenant tidak dapat disimpan.");
+      setError(err instanceof ApiError ? err.message : t("configPanel.profileFailed"));
     } finally {
       setPending(false);
     }
@@ -933,34 +944,34 @@ function TenantProfileForm({
     <form onSubmit={submit} className="space-y-3">
       {error && <Alert tone="error">{error}</Alert>}
       <fieldset disabled={pending || !canManage} className="grid gap-3 sm:grid-cols-2">
-        <Field label="Nama workspace" required>
+        <Field label={t("configPanel.workspaceName")} required>
           <Input name="name" required defaultValue={profile.name} minLength={2} maxLength={120} />
         </Field>
-        <Field label="Zona waktu bawaan" hint="Diwarisi Legal Entity dan unit yang tidak menimpanya.">
+        <Field label={t("configPanel.defaultTimezone")} hint={t("configPanel.defaultTimezoneHint")}>
           <Input name="defaultTimezone" defaultValue={profile.defaultTimezone ?? ""} placeholder="Asia/Jakarta" />
         </Field>
-        <Field label="Locale bawaan">
+        <Field label={t("configPanel.defaultLocale")}>
           <Input name="defaultLocale" defaultValue={profile.defaultLocale ?? ""} placeholder="id-ID" />
         </Field>
-        <Field label="Mata uang bawaan" hint="Tiga huruf kode ISO 4217.">
+        <Field label={t("configPanel.defaultCurrency")} hint={t("configPanel.defaultCurrencyHint")}>
           <Input name="defaultCurrency" defaultValue={profile.defaultCurrency ?? ""} placeholder="IDR" maxLength={3} />
         </Field>
-        <Field label="Nama admin kontak">
+        <Field label={t("configPanel.contactAdminName")}>
           <Input name="contactAdminName" defaultValue={profile.contactAdminName ?? ""} />
         </Field>
-        <Field label="Email admin kontak">
+        <Field label={t("configPanel.contactAdminEmail")}>
           <Input name="contactAdminEmail" type="email" defaultValue={profile.contactAdminEmail ?? ""} />
         </Field>
-        <Field label="Telepon admin kontak">
+        <Field label={t("configPanel.contactAdminPhone")}>
           <Input name="contactAdminPhone" defaultValue={profile.contactAdminPhone ?? ""} />
         </Field>
       </fieldset>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={pending || !canManage}>
-          {pending ? "Menyimpan…" : "Simpan profil"}
+          {pending ? t("configPanel.savingProfile") : t("configPanel.saveProfile")}
         </Button>
-        {!canManage && <span className="text-xs text-ink-faint">Butuh izin tenant.update.</span>}
-        <span className="text-xs text-ink-faint">Kosongkan sebuah kolom untuk menghapus nilainya.</span>
+        {!canManage && <span className="text-xs text-ink-faint">{t("configPanel.requiresPermission")}</span>}
+        <span className="text-xs text-ink-faint">{t("configPanel.clearField")}</span>
       </div>
     </form>
   );

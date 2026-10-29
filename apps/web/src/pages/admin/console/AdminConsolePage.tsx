@@ -12,6 +12,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../auth/AuthContext";
 import { api, ApiError, type AdminCountSection, type AdminOverview } from "../../../lib/api";
+import { useT } from "../../../i18n/LocaleProvider";
+import type { MessageKey } from "../../../i18n/dictionaries/en";
 import { isInternalScope, PERMISSIONS } from "../../../lib/capabilities";
 import { OverlayDialog } from "../../../shell/components/OverlayDialog";
 import {
@@ -47,15 +49,15 @@ type SectionKey =
   | "workflows"
   | "audit";
 
-const SECTIONS: { key: SectionKey; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "users", label: "Users" },
-  { key: "assignments", label: "Assignments" },
-  { key: "roles", label: "Roles" },
-  { key: "permissions", label: "Permissions" },
-  { key: "modules", label: "Modules" },
-  { key: "workflows", label: "Workflows" },
-  { key: "audit", label: "Recent activity" },
+const SECTIONS: { key: SectionKey; label: MessageKey }[] = [
+  { key: "overview", label: "adminConsole.navOverview" },
+  { key: "users", label: "adminConsole.navUsers" },
+  { key: "assignments", label: "adminConsole.navAssignments" },
+  { key: "roles", label: "adminConsole.navRoles" },
+  { key: "permissions", label: "adminConsole.navPermissions" },
+  { key: "modules", label: "adminConsole.navModules" },
+  { key: "workflows", label: "adminConsole.navWorkflows" },
+  { key: "audit", label: "adminConsole.navAudit" },
 ];
 
 function isSectionKey(value: string | null): value is SectionKey {
@@ -68,13 +70,14 @@ function sectionUrl(section: SectionKey): string {
 
 export function AdminConsolePage() {
   const { permissions, scopeTypes } = useShell();
+  const t = useT();
 
   // Client-side gates are UX conveniences only. Every endpoint independently
   // enforces `admin.console.read`, its section permission, and tenant scope.
   if (!permissions.includes(PERMISSIONS.adminConsoleRead)) {
     return (
       <>
-        <PageHeader title="Admin Console" />
+        <PageHeader title={t("adminConsole.title")} />
         <PermissionDeniedState permission={PERMISSIONS.adminConsoleRead} />
       </>
     );
@@ -83,10 +86,10 @@ export function AdminConsolePage() {
   if (!isInternalScope(scopeTypes)) {
     return (
       <>
-        <PageHeader title="Admin Console" />
+        <PageHeader title={t("adminConsole.title")} />
         <EmptyState
-          title="An internal data scope is required"
-          description="The Admin Console is available only to actors with an explicit tenant or organization unit scope. Backend authorization remains authoritative."
+          title={t("adminConsole.noScope")}
+          description={t("adminConsole.noScopeDesc")}
         />
       </>
     );
@@ -98,11 +101,12 @@ export function AdminConsolePage() {
 function AdminConsoleContent() {
   const { permissions, scopeTypes } = useShell();
   const [searchParams] = useSearchParams();
+  const t = useT();
   const requestedSection = searchParams.get("section");
   const activeSection: SectionKey = isSectionKey(requestedSection) ? requestedSection : "overview";
   const overview = useAdminResource<AdminOverview>(
     (token) => api.adminOverview(token),
-    "Failed to load the administration overview",
+    t("adminConsole.loadFailed"),
   );
   // The overview's capability tuple is tenant-scoped only, but Wave 2
   // assignment authority accepts Organization-Unit scope too (the backend
@@ -115,19 +119,19 @@ function AdminConsoleContent() {
   return (
     <>
       <PageHeader
-        title="Admin Console"
-        subtitle="Tenant-local administration summaries with section-specific permission checks."
+        title={t("adminConsole.title")}
+        subtitle={t("adminConsole.subtitle")}
         actions={
           overview.data?.capabilities.readOnly &&
           !(permissions.includes(PERMISSIONS.tenantUpdate) && scopeTypes.includes("tenant")) ? (
-            <Badge>Read only</Badge>
+            <Badge>{t("adminConsole.readOnly")}</Badge>
           ) : undefined
         }
       />
 
       <nav
         className="mb-6 overflow-x-auto border-b border-line"
-        aria-label="Admin Console sections"
+        aria-label={t("adminConsole.sectionsLabel")}
       >
         <div className="flex min-w-max gap-1">
           {SECTIONS.map((section) => (
@@ -141,7 +145,7 @@ function AdminConsoleContent() {
                   : "border-b-2 border-transparent text-ink-dim hover:text-ink"
               }`}
             >
-              {section.label}
+              {t(section.label)}
             </Link>
           ))}
         </div>
@@ -169,6 +173,7 @@ function AdminConsoleContent() {
 }
 
 function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOverview> }) {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const assignmentId = session!.assignmentId;
@@ -198,7 +203,7 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
     if (editPending || !editFormRef.current || !canEditTenant) return;
     const name = String(new FormData(editFormRef.current).get("name") ?? "").trim();
     if (name.length < 2 || name.length > 120) {
-      setEditError("Tenant name must be between 2 and 120 characters.");
+      setEditError(t("adminConsole.tenantNameInvalid"));
       return;
     }
     const life = lifetime.current;
@@ -209,25 +214,27 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
       const updated = await api.updateTenantName(token, { name });
       if (lifetime.current !== life) return;
       setTenantName(updated.name);
-      setEditMessage("Tenant name updated.");
+      setEditMessage(t("adminConsole.tenantNameUpdated"));
       setEditOpen(false);
     } catch (err) {
       if (lifetime.current !== life) return;
-      setEditError(err instanceof ApiError ? err.message : "Failed to update tenant name");
+      setEditError(
+        err instanceof ApiError ? err.message : t("adminConsole.tenantNameFailed"),
+      );
     } finally {
       if (lifetime.current === life) setEditPending(false);
     }
-  }, [token, canEditTenant, editPending, setTenantName]);
+  }, [token, canEditTenant, editPending, setTenantName, t]);
   const scopeLabels = [
-    scopeTypes.includes("tenant") ? "Tenant-wide" : null,
-    scopeTypes.includes("organization_unit") ? "Organization unit" : null,
-    scopeTypes.includes("customer") ? "Customer" : null,
+    scopeTypes.includes("tenant") ? t("adminConsole.scopeTenant") : null,
+    scopeTypes.includes("organization_unit") ? t("adminConsole.scopeOrgUnit") : null,
+    scopeTypes.includes("customer") ? t("adminConsole.scopeCustomer") : null,
   ].filter((label): label is string => label !== null);
 
   return (
     <AdminSectionState
       loading={loading}
-      loadingLabel="Loading administration overview…"
+      loadingLabel={t("adminConsole.loading")}
       denied={denied}
       sessionExpired={sessionExpired}
       error={error}
@@ -238,67 +245,63 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <OverviewCard
-              title="Users"
-              description="User accounts and their governed role assignments."
+              title={t("adminConsole.navUsers")}
+              description={t("adminConsole.cardUsersDesc")}
               section={data.sections.users}
               destination="users"
             />
             <OverviewCard
-              title="Roles"
-              description="Tenant-local role definitions and assignment totals."
+              title={t("adminConsole.navRoles")}
+              description={t("adminConsole.cardRolesDesc")}
               section={data.sections.roles}
               destination="roles"
             />
             <OverviewCard
-              title="Permissions"
-              description="The fixed catalogue of grantable platform capabilities."
+              title={t("adminConsole.navPermissions")}
+              description={t("adminConsole.cardPermissionsDesc")}
               section={data.sections.permissions}
               destination="permissions"
             />
             <OverviewCard
-              title="Modules"
-              description="Configured module activation records for this tenant."
+              title={t("adminConsole.navModules")}
+              description={t("adminConsole.cardModulesDesc")}
               section={data.sections.modules}
               destination="modules"
               footnote={
                 data.sections.modules.activeCount === null
                   ? undefined
-                  : `${data.sections.modules.activeCount} active`
+                  : t("adminConsole.activeCount", { count: data.sections.modules.activeCount })
               }
             />
             <OverviewCard
-              title="Workflows"
-              description="Configured approval and lifecycle definitions."
+              title={t("adminConsole.navWorkflows")}
+              description={t("adminConsole.cardWorkflowsDesc")}
               section={data.sections.workflows}
               destination="workflows"
             />
             <OverviewCard
-              title="Recent activity"
-              description="A bounded list of recent privacy-safe audit events."
+              title={t("adminConsole.navAudit")}
+              description={t("adminConsole.cardAuditDesc")}
               section={data.sections.audit}
               destination="audit"
             />
           </div>
 
           <Card className="mt-6">
-            <h2 className="text-sm font-semibold text-ink">Tenant and data scope</h2>
+            <h2 className="text-sm font-semibold text-ink">{t("adminConsole.tenantScopeTitle")}</h2>
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Workspace</dt>
-                <dd className="mt-1 wrap-break-word text-ink-dim">{tenantName || "Current tenant"}</dd>
+                <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t("adminConsole.workspace")}</dt>
+                <dd className="mt-1 wrap-break-word text-ink-dim">{tenantName || t("adminConsole.currentTenant")}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">Reported scope</dt>
+                <dt className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t("adminConsole.reportedScope")}</dt>
                 <dd className="mt-1 text-ink-dim">
-                  {scopeLabels.length > 0 ? scopeLabels.join(" · ") : "No data scope reported"}
+                  {scopeLabels.length > 0 ? scopeLabels.join(" · ") : t("adminConsole.noScopeReported")}
                 </dd>
               </div>
             </dl>
-            <p className="mt-4 text-sm text-ink-dim">
-              Tenant-owned summaries are returned within the current deployment and actor scope. The
-              permission catalogue is fixed platform metadata and contains no tenant, user, or business
-              record data.
-            </p>
+            <p className="mt-4 text-sm text-ink-dim">{t("adminConsole.summaryNote")}</p>
             {canEditTenant && (
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <Button
@@ -310,7 +313,7 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
                     setEditOpen(true);
                   }}
                 >
-                  Edit tenant name
+                  {t("adminConsole.editTenantName")}
                 </Button>
                 {editMessage && <Alert tone="success">{editMessage}</Alert>}
               </div>
@@ -321,44 +324,54 @@ function AdminOverviewView({ resource }: { resource: AdminResourceState<AdminOve
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-ink">
-                  {data.capabilities.userRoleManage ? "Governed user access management" : "Assignment access status"}
+                  {data.capabilities.userRoleManage
+                    ? t("adminConsole.manageTitle")
+                    : t("adminConsole.statusTitle")}
                 </h2>
                 <p className="mt-1 text-sm text-ink-dim">
                   {data.capabilities.userRoleManage
-                    ? "You can add or remove user role assignments through mandatory review and server-authoritative reload. Roles, permission definitions, modules, and workflows remain read only."
-                    : "You can inspect administration summaries and access assignments. Changes remain limited to separately permissioned controls, such as tenant name when available."}
+                    ? t("adminConsole.manageBody")
+                    : t("adminConsole.statusBody")}
                 </p>
               </div>
-              <Badge>{data.capabilities.userRoleManage ? "User access manager" : "API declared"}</Badge>
+              <Badge>
+                {data.capabilities.userRoleManage
+                  ? t("adminConsole.badgeManager")
+                  : t("adminConsole.badgeDeclared")}
+              </Badge>
             </div>
           </Card>
 
           {canEditTenant && (
             <OverlayDialog
               open={editOpen}
-              title="Edit tenant name"
-              description="Update the name shown for this tenant. Its code, status, and business data will not change."
+              title={t("adminConsole.editTenantName")}
+              description={t("adminConsole.editTenantDesc")}
               pending={editPending}
               onClose={closeEdit}
               restoreFocusRef={editTriggerRef}
               footer={
                 <>
                   <Button variant="secondary" onClick={closeEdit} disabled={editPending}>
-                    Cancel
+                    {t("adminConsole.cancel")}
                   </Button>
                   <Button
                     variant="primary"
                     onClick={() => editFormRef.current?.requestSubmit()}
                     disabled={editPending}
                   >
-                    {editPending ? "Saving…" : "Save changes"}
+                    {editPending ? t("adminConsole.saving") : t("adminConsole.saveChanges")}
                   </Button>
                 </>
               }
             >
               <form ref={editFormRef} onSubmit={handleEdit} className="space-y-4">
                 {editError && <Alert tone="error">{editError}</Alert>}
-                <Field label="Tenant name" required hint="Between 2 and 120 characters.">
+                <Field
+                label={t("adminConsole.tenantNameLabel")}
+                required
+                hint={t("adminConsole.tenantNameHint")}
+              >
                   <Input
                     name="name"
                     required
@@ -391,12 +404,13 @@ function OverviewCard({
   destination?: Exclude<SectionKey, "overview" | "assignments">;
   footnote?: string;
 }) {
+  const t = useT();
   const content = (
     <Card className={`h-full ${section.visible && destination ? "transition-colors group-hover:border-line-strong group-hover:bg-panel-2" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {!section.visible ? (
-          <StatusPill tone="neutral">Restricted</StatusPill>
+          <StatusPill tone="neutral">{t("adminConsole.restricted")}</StatusPill>
         ) : destination ? (
           <span aria-hidden="true" className="text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-ink-dim">
             →
@@ -411,7 +425,7 @@ function OverviewCard({
         </>
       ) : (
         <p className="mt-3 text-sm text-ink-dim">
-          Requires{" "}
+          {t("adminConsole.requires")}{" "}
           <code className="rounded bg-panel-3 px-1.5 py-0.5 font-mono text-xs text-ink-dim">
             {section.requiredPermission}
           </code>
@@ -427,7 +441,7 @@ function OverviewCard({
     <Link
       to={sectionUrl(destination)}
       className="group rounded focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-      aria-label={`Open ${title}`}
+      aria-label={t("adminConsole.openSection", { section: title })}
     >
       {content}
     </Link>

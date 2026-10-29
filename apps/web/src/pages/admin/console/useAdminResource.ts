@@ -49,8 +49,12 @@ export function useAdminResource<T>(
   // ref write can be dropped or applied twice under StrictMode and concurrent
   // rendering, and `run` would then call a loader from a render that never
   // committed. Declared before the run effect so it lands first on mount.
+  // Same treatment for the fallback text: it is translated, so it changes with
+  // the locale, and a language switch must not refetch the resource.
+  const latestFallback = useRef(fallbackMessage);
   useEffect(() => {
     latestLoader.current = load;
+    latestFallback.current = fallbackMessage;
   });
 
   const run = useCallback(async () => {
@@ -77,10 +81,10 @@ export function useAdminResource<T>(
         return;
       }
 
-      setError(err instanceof ApiError ? err.message : fallbackMessage);
+      setError(err instanceof ApiError ? err.message : latestFallback.current);
       setStatus("error");
     }
-  }, [enabled, fallbackMessage, token]);
+  }, [enabled, token]);
 
   useEffect(() => {
     if (!enabled) {

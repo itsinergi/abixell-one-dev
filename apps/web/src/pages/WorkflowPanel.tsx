@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type WorkflowAssignment, type WorkflowInstance } from "../lib/api";
+import { useT } from "../i18n/LocaleProvider";
+import type { MessageKey } from "../i18n/dictionaries/en";
+
+const ACTION_LABEL: Record<"approve" | "reject" | "return" | "resubmit", MessageKey> = {
+  approve: "workflow.approve",
+  reject: "workflow.reject",
+  return: "workflow.return",
+  resubmit: "workflow.resubmit",
+};
 import { OverlayDialog } from "../shell/components/OverlayDialog";
 import {
   Button,
@@ -34,7 +43,7 @@ const initialResourceState: ResourceState = { loading: true, error: null, denied
 
 /** A failed read must never render as an empty queue: 401 and 403 stay
  * distinct from a load failure, matching the console resource model. */
-function describeFailure(error: unknown, fallback: string): ResourceState {
+function describeFailure(error: unknown, t: ReturnType<typeof useT>, fallback: string): ResourceState {
   const denied = error instanceof ApiError && error.status === 403;
   const sessionExpired = error instanceof ApiError && error.status === 401;
   return {
@@ -42,9 +51,9 @@ function describeFailure(error: unknown, fallback: string): ResourceState {
     denied,
     sessionExpired,
     error: sessionExpired
-      ? "Your session has expired. Sign in again."
+      ? t("workflow.sessionExpired")
       : denied
-        ? "You do not have permission to read this resource."
+        ? t("workflow.noPermission")
         : error instanceof ApiError
           ? error.message
           : fallback,
@@ -66,6 +75,7 @@ export function WorkflowPanel({
   canManage: boolean;
   onMessage: (m: { type: "error" | "success"; text: string }) => void;
 }) {
+  const t = useT();
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [myAssignments, setMyAssignments] = useState<WorkflowAssignment[]>([]);
   const [instancesState, setInstancesState] = useState<ResourceState>(initialResourceState);
@@ -134,16 +144,16 @@ export function WorkflowPanel({
       setInstances(instanceResult.value);
       setInstancesState({ loading: false, error: null, denied: false, sessionExpired: false });
     } else {
-      setInstancesState(describeFailure(instanceResult.reason, "Failed to load workflow instances."));
+      setInstancesState(describeFailure(instanceResult.reason, t, t("workflow.instancesLoad")));
     }
 
     if (assignmentResult.status === "fulfilled") {
       setMyAssignments(assignmentResult.value);
       setAssignmentsState({ loading: false, error: null, denied: false, sessionExpired: false });
     } else {
-      setAssignmentsState(describeFailure(assignmentResult.reason, "Failed to load your tasks."));
+      setAssignmentsState(describeFailure(assignmentResult.reason, t, t("workflow.tasksLoad")));
     }
-  }, [token]);
+  }, [t, token]);
 
   useEffect(() => {
     void refresh();
@@ -172,12 +182,12 @@ export function WorkflowPanel({
       } catch (err) {
         if (generation !== historyGeneration.current) return;
         setHistory([]);
-        setHistoryError(err instanceof ApiError ? err.message : "Failed to load workflow history.");
+        setHistoryError(err instanceof ApiError ? err.message : t("workflow.historyLoad"));
       } finally {
         if (generation === historyGeneration.current) setHistoryPending(false);
       }
     },
-    [token],
+    [t, token],
   );
 
   async function handleStartInstance() {
@@ -198,17 +208,19 @@ export function WorkflowPanel({
       if (lifetime.current !== life) return;
       onMessage({
         type: "success",
-        text: `Workflow Instance started (category: ${category}) — routed to ${
-          result.assignment.assignmentType === "role"
-            ? `role '${result.assignment.assignedRoleCode}'`
-            : "the submitting user"
-        }.`,
+        text: t("workflow.instanceStart", {
+          category,
+          routing:
+            result.assignment.assignmentType === "role"
+              ? t("workflow.roleRouting", { code: result.assignment.assignedRoleCode ?? "" })
+              : t("workflow.userRouting"),
+        }),
       });
       setStartOpen(false);
       setSelectedInstanceId(result.instance.id);
       await refresh();
     } catch (err) {
-      if (lifetime.current === life) setStartError(err instanceof ApiError ? err.message : "Failed to start workflow instance.");
+      if (lifetime.current === life) setStartError(err instanceof ApiError ? err.message : t("workflow.startFailed"));
     } finally {
       if (lifetime.current === life) setStartPending(false);
       startBusy.current = false;
@@ -236,11 +248,15 @@ export function WorkflowPanel({
     try {
       const result = await api.actOnWorkflowAssignment(token, assignment.id, { actionCode: code, comment });
       if (lifetime.current !== life) return;
-      onMessage({ type: "success", text: `Action '${code}' recorded — Instance status is now '${result.instance.status}'.` });
+      onMessage({
+        type: "success",
+        text: t("workflow.actionRecorded", { code, status: result.instance.status }),
+      });
       setActionOpen(false);
       await refresh();
     } catch (err) {
-      if (lifetime.current === life) setActionError(err instanceof ApiError ? err.message : "Failed to record workflow action.");
+      if (lifetime.current === life)
+        setActionError(err instanceof ApiError ? err.message : t("workflow.actionFailed"));
     } finally {
       if (lifetime.current === life) setActionPending(false);
       actionBusy.current = false;
@@ -269,15 +285,19 @@ export function WorkflowPanel({
       if (lifetime.current !== life) return;
       onMessage({
         type: "success",
-        text: releasing
-          ? "Claim released — any eligible teammate can now claim/act on it."
-          : "Task claimed — reserved for you for 15 minutes (ADR-0008).",
+        text: releasing ? t("workflow.releaseSuccess") : t("workflow.claimSuccess"),
       });
       setClaimTarget(null);
       await refresh();
     } catch (err) {
       if (lifetime.current === life) {
-        setClaimError(err instanceof ApiError ? err.message : releasing ? "Failed to release claim." : "Failed to claim task.");
+        setClaimError(
+          err instanceof ApiError
+            ? err.message
+            : releasing
+              ? t("workflow.releaseFailed")
+              : t("workflow.claimFailed"),
+        );
       }
     } finally {
       if (lifetime.current === life) setClaimPending(false);
@@ -294,11 +314,14 @@ export function WorkflowPanel({
     try {
       const result = await api.triggerWorkflowEscalationSweep(token);
       if (lifetime.current !== life) return;
-      onMessage({ type: "success", text: `Escalation sweep complete — ${result.escalatedCount} overdue Assignment(s) reassigned.` });
+      onMessage({
+        type: "success",
+        text: t("workflow.sweepSuccess", { count: result.escalatedCount }),
+      });
       setSweepOpen(false);
       await refresh();
     } catch (err) {
-      if (lifetime.current === life) setSweepError(err instanceof ApiError ? err.message : "Failed to run escalation sweep.");
+      if (lifetime.current === life) setSweepError(err instanceof ApiError ? err.message : t("workflow.sweepFailed"));
     } finally {
       if (lifetime.current === life) setSweepPending(false);
       sweepBusy.current = false;
@@ -306,20 +329,20 @@ export function WorkflowPanel({
   }
 
   const instanceColumns: Column<WorkflowInstance>[] = [
-    { header: "Entity", mobileRole: "title", cell: (row) => <span className="font-mono">{row.entityId.slice(0, 8)}…</span> },
+    { header: t("workflow.entity"), mobileRole: "title", cell: (row) => <span className="font-mono">{row.entityId.slice(0, 8)}…</span> },
     {
-      header: "Status",
+      header: t("workflow.statusHeader"),
       mobileRole: "status",
       cell: (row) => (
         <StatusPill tone={row.status === "approved" ? "success" : row.status === "rejected" ? "danger" : "info"}>{row.status}</StatusPill>
       ),
     },
-    { header: "Started", cell: (row) => new Date(row.startedAt).toLocaleString() },
+    { header: t("workflow.startedHeader"), cell: (row) => new Date(row.startedAt).toLocaleString() },
     {
-      header: "Action",
+      header: t("workflow.actionsHeader"),
       cell: (row) => (
         <Button variant="ghost" className="min-h-0 px-1 py-1 text-xs underline" onClick={() => void openHistory(row.id)}>
-          View history
+          {t("workflow.viewHistory")}
         </Button>
       ),
     },
@@ -327,30 +350,33 @@ export function WorkflowPanel({
 
   const assignmentColumns: Column<WorkflowAssignment>[] = [
     {
-      header: "Routing",
+      header: t("workflow.routingHeader"),
       mobileRole: "title",
-      cell: (row) => (row.assignmentType === "role" ? `Role: ${row.assignedRoleCode ?? "Unavailable"}` : "Assigned to you directly"),
+      cell: (row) =>
+        row.assignmentType === "role"
+          ? `${t("workflow.role")} ${row.assignedRoleCode ?? t("workflow.unavailable")}`
+          : t("workflow.directAssignment"),
     },
-    { header: "Due", cell: (row) => (row.dueAt ? new Date(row.dueAt).toLocaleString() : "No due date") },
+    { header: t("workflow.dueHeader"), cell: (row) => (row.dueAt ? new Date(row.dueAt).toLocaleString() : t("workflow.noDueDate")) },
     {
-      header: "Status",
+      header: t("workflow.statusHeader"),
       mobileRole: "status",
       cell: (row) => (
-        <StatusPill tone={row.claimedByUserId ? "info" : "warning"}>{row.claimedByUserId ? "Claimed" : row.status}</StatusPill>
+        <StatusPill tone={row.claimedByUserId ? "info" : "warning"}>{row.claimedByUserId ? t("workflow.claimed") : row.status}</StatusPill>
       ),
     },
     {
-      header: "Actions",
+      header: t("workflow.actionsHeader"),
       cell: (row) =>
         canAct ? (
           <div className="flex flex-wrap gap-1">
             {(["approve", "reject", "return", "resubmit"] as const).map((code) => (
               <Button key={code} variant="secondary" className="min-h-0 px-2 py-1 text-xs" onClick={() => openAction(row, code)}>
-                {code[0].toUpperCase() + code.slice(1)}
+                {t(ACTION_LABEL[code])}
               </Button>
             ))}
             <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => openClaim(row)}>
-              {row.claimedByUserId ? "Release claim" : "Claim"}
+              {row.claimedByUserId ? t("workflow.releaseClaim") : t("workflow.claim")}
             </Button>
           </div>
         ) : (
@@ -365,16 +391,16 @@ export function WorkflowPanel({
     timestamp: entry.occurredAt,
     detail: entry.comment ?? undefined,
   }));
-  const actionTitle = actionCode ? actionCode[0].toUpperCase() + actionCode.slice(1) : "Workflow";
+  const actionTitle = actionCode
+    ? t(ACTION_LABEL[actionCode as keyof typeof ACTION_LABEL] ?? "workflow.title")
+    : t("workflow.title");
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Workflow &amp; Approval Engine</h2>
-          <p className="text-sm text-slate-500">
-            Loaded workflow instances and My Tasks. Counts reflect only the data currently loaded from the server.
-          </p>
+          <h2 className="text-xl font-semibold text-slate-900">{t("workflow.title")}</h2>
+          <p className="text-sm text-slate-500">{t("workflow.subtitle")}</p>
         </div>
         {canStart && (
           <Button
@@ -383,7 +409,7 @@ export function WorkflowPanel({
               setStartOpen(true);
             }}
           >
-            Start workflow
+            {t("workflow.startWorkflow")}
           </Button>
         )}
       </div>
@@ -391,21 +417,21 @@ export function WorkflowPanel({
       <Card>
         <div className="mb-3 flex items-baseline justify-between gap-2">
           <div>
-            <h3 className="text-base font-semibold">My Tasks</h3>
-            <p className="text-xs text-slate-500">Pending assignments routed to the signed-in user.</p>
+            <h3 className="text-base font-semibold">{t("workflow.myTasks")}</h3>
+            <p className="text-xs text-slate-500">{t("workflow.myTasksDesc")}</p>
           </div>
           {assignmentsState.loading === false && assignmentsState.error === null && (
             <span className="text-xs text-slate-500">
-              {myAssignments.length} result{myAssignments.length === 1 ? "" : "s"}
+              {myAssignments.length} {t(myAssignments.length === 1 ? "workflow.result" : "workflow.results")}
             </span>
           )}
         </div>
-        <AdminSectionState {...assignmentsState} loadingLabel="Loading your tasks…" onRetry={() => void refresh()}>
+        <AdminSectionState {...assignmentsState} loadingLabel={t("workflow.loadingTasks")} onRetry={() => void refresh()}>
           <DataTable
             columns={assignmentColumns}
             rows={myAssignments}
             keyOf={(row) => row.id}
-            empty={<EmptyState title="Nothing pending" description="There are no pending assignments for you." />}
+            empty={<EmptyState title={t("workflow.nothingPending")} description={t("workflow.noAssignments")} />}
             mobileBreakpoint="md"
           />
         </AdminSectionState>
@@ -414,24 +440,24 @@ export function WorkflowPanel({
       <Card>
         <div className="mb-3 flex items-baseline justify-between gap-2">
           <div>
-            <h3 className="text-base font-semibold">Workflow Instances</h3>
-            <p className="text-xs text-slate-500">Instances created through the existing workflow engine.</p>
+            <h3 className="text-base font-semibold">{t("workflow.instances")}</h3>
+            <p className="text-xs text-slate-500">{t("workflow.instancesDesc")}</p>
           </div>
           {instancesState.loading === false && instancesState.error === null && (
             <span className="text-xs text-slate-500">
-              {instances.length} result{instances.length === 1 ? "" : "s"}
+              {instances.length} {t(instances.length === 1 ? "workflow.result" : "workflow.results")}
             </span>
           )}
         </div>
-        <AdminSectionState {...instancesState} loadingLabel="Loading workflow instances…" onRetry={() => void refresh()}>
+        <AdminSectionState {...instancesState} loadingLabel={t("workflow.loadingInstances")} onRetry={() => void refresh()}>
           <DataTable
             columns={instanceColumns}
             rows={instances}
             keyOf={(row) => row.id}
             empty={
               <EmptyState
-                title="No workflow instances"
-                description="Start a workflow to create the demo transaction used by this engine demonstration."
+                title={t("workflow.noInstances")}
+                description={t("workflow.noInstancesDesc")}
               />
             }
           />
@@ -440,11 +466,8 @@ export function WorkflowPanel({
 
       {canManage && (
         <Card>
-          <h3 className="text-base font-semibold">Escalation Sweep</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Triggers the same existing sweep that the scheduler runs automatically. Overdue assignments are reassigned according to
-            server-side rules.
-          </p>
+          <h3 className="text-base font-semibold">{t("workflow.escalationSweep")}</h3>
+          <p className="mt-1 text-sm text-slate-500">{t("workflow.sweepDesc")}</p>
           <Button
             className="mt-3"
             onClick={() => {
@@ -452,24 +475,24 @@ export function WorkflowPanel({
               setSweepOpen(true);
             }}
           >
-            Run escalation sweep
+            {t("workflow.runSweep")}
           </Button>
         </Card>
       )}
 
       <OverlayDialog
         open={startOpen}
-        title="Start workflow"
-        description="This creates a demo transaction, then starts the existing demo_approval_workflow against it. It does not create a business transaction."
+        title={t("workflow.startTitle")}
+        description={t("workflow.startDesc")}
         pending={startPending}
         onClose={() => setStartOpen(false)}
         footer={
           <>
             <Button variant="secondary" disabled={startPending} onClick={() => setStartOpen(false)}>
-              Cancel
+              {t("workflow.cancel")}
             </Button>
             <Button disabled={startPending || !startOrgUnitId} onClick={() => void handleStartInstance()}>
-              {startPending ? "Starting…" : "Start workflow"}
+              {startPending ? t("workflow.starting") : t("workflow.startWorkflow")}
             </Button>
           </>
         }
@@ -480,10 +503,10 @@ export function WorkflowPanel({
               {startError}
             </div>
           )}
-          <Field label="Organization Unit" required hint="The existing workflow context scope.">
+          <Field label={t("workflow.orgUnit")} required hint={t("workflow.orgUnitHint")}>
             <Select value={startOrgUnitId} onChange={(event) => setStartOrgUnitId(event.target.value)} disabled={startPending}>
               <option value="" disabled>
-                Select an organization unit
+                {t("workflow.selectUnit")}
               </option>
               {orgUnits.map((unit) => (
                 <option key={unit.id} value={unit.id}>
@@ -492,10 +515,10 @@ export function WorkflowPanel({
               ))}
             </Select>
           </Field>
-          <Field label="Category" required hint="The existing demo condition routes high_risk to the tenant Manager.">
+          <Field label={t("workflow.category")} required hint={t("workflow.categoryHint")}>
             <Select value={startCategory} onChange={(event) => setStartCategory(event.target.value)} disabled={startPending}>
-              <option value="normal">Normal — Site Reviewer</option>
-              <option value="high_risk">High risk — tenant Manager</option>
+              <option value="normal">{t("workflow.normal")}</option>
+              <option value="high_risk">{t("workflow.highRisk")}</option>
             </Select>
           </Field>
         </div>
@@ -503,17 +526,17 @@ export function WorkflowPanel({
 
       <OverlayDialog
         open={actionOpen}
-        title={`${actionTitle} assignment`}
-        description={`Confirm the existing '${actionCode}' transition. The server remains authoritative for permissions and valid transitions.`}
+        title={t("workflow.actionTitle", { code: actionTitle })}
+        description={t("workflow.actionDesc", { code: actionTitle })}
         pending={actionPending}
         onClose={() => setActionOpen(false)}
         footer={
           <>
             <Button variant="secondary" disabled={actionPending} onClick={() => setActionOpen(false)}>
-              Cancel
+              {t("workflow.cancel")}
             </Button>
             <Button disabled={actionPending} onClick={() => void handleAct()}>
-              {actionPending ? "Saving…" : `Confirm ${actionCode}`}
+              {actionPending ? t("workflow.saving") : t("workflow.confirm", { code: actionTitle })}
             </Button>
           </>
         }
@@ -524,24 +547,24 @@ export function WorkflowPanel({
               {actionError}
             </div>
           )}
-          <Field label="Task" hint="The assignment this decision applies to.">
+          <Field label={t("workflow.task")} hint={t("workflow.taskHint")}>
             <Input
               readOnly
               value={
                 actionAssignment
                   ? actionAssignment.assignmentType === "role"
-                    ? `Role: ${actionAssignment.assignedRoleCode ?? "Unavailable"}`
-                    : "Assigned to you directly"
+                    ? `${t("workflow.role")} ${actionAssignment.assignedRoleCode ?? t("workflow.unavailable")}`
+                    : t("workflow.directAssignment")
                   : ""
               }
             />
           </Field>
-          <Field label="Comment" hint="Optional. Leave blank to send no comment.">
+          <Field label={t("workflow.comment")} hint={t("workflow.commentHint")}>
             <Input
               value={actionComment}
               onChange={(event) => setActionComment(event.target.value)}
               disabled={actionPending}
-              placeholder="Add a comment"
+              placeholder={t("workflow.commentPlaceholder")}
             />
           </Field>
         </div>
@@ -549,21 +572,21 @@ export function WorkflowPanel({
 
       <OverlayDialog
         open={claimTarget !== null}
-        title={claimTarget?.releasing ? "Release claim" : "Claim task"}
+        title={claimTarget?.releasing ? t("workflow.releaseTitle") : t("workflow.claimTitle")}
         description={
           claimTarget?.releasing
-            ? "Releases your reservation so any eligible teammate can claim or act on this task."
-            : "Reserves this task for you for 15 minutes (ADR-0008). Acting does not require a claim."
+            ? t("workflow.releaseDesc")
+            : t("workflow.claimDesc")
         }
         pending={claimPending}
         onClose={() => setClaimTarget(null)}
         footer={
           <>
             <Button variant="secondary" disabled={claimPending} onClick={() => setClaimTarget(null)}>
-              Cancel
+              {t("workflow.cancel")}
             </Button>
             <Button disabled={claimPending} onClick={() => void handleClaimDecision()}>
-              {claimPending ? "Saving…" : claimTarget?.releasing ? "Release claim" : "Claim task"}
+              {claimPending ? t("workflow.saving") : claimTarget?.releasing ? t("workflow.releaseClaim") : t("workflow.claim")}
             </Button>
           </>
         }
@@ -576,27 +599,31 @@ export function WorkflowPanel({
           )}
           {claimTarget && (
             <p className="text-sm text-slate-600">
-              Task:{" "}
+              {t("workflow.taskLabel")}{" "}
               <strong>
                 {claimTarget.assignment.assignmentType === "role"
-                  ? `Role: ${claimTarget.assignment.assignedRoleCode ?? "Unavailable"}`
-                  : "Assigned to you directly"}
+                  ? `${t("workflow.role")} ${claimTarget.assignment.assignedRoleCode ?? t("workflow.unavailable")}`
+                  : t("workflow.directAssignment")}
               </strong>
             </p>
           )}
-          <p className="text-sm text-slate-500">The server re-checks eligibility and claim ownership when you confirm.</p>
+          <p className="text-sm text-slate-500">{t("workflow.serverRechecks")}</p>
         </div>
       </OverlayDialog>
 
       <OverlayDialog
         open={historyOpen}
-        title="Workflow history"
-        description={selectedInstanceId ? `History for instance ${selectedInstanceId.slice(0, 8)}…` : undefined}
+        title={t("workflow.history")}
+        description={
+          selectedInstanceId
+            ? t("workflow.historyDesc", { id: `${selectedInstanceId.slice(0, 8)}…` })
+            : undefined
+        }
         pending={historyPending}
         onClose={() => setHistoryOpen(false)}
         footer={
           <Button variant="secondary" onClick={() => setHistoryOpen(false)}>
-            Close
+            {t("workflow.close")}
           </Button>
         }
       >
@@ -605,7 +632,7 @@ export function WorkflowPanel({
             {historyError}
           </div>
         ) : historyPending ? (
-          <p className="text-sm text-slate-500">Loading history…</p>
+          <p className="text-sm text-slate-500">{t("workflow.loadingHistory")}</p>
         ) : (
           <Timeline items={historyItems} />
         )}
@@ -613,17 +640,17 @@ export function WorkflowPanel({
 
       <OverlayDialog
         open={sweepOpen}
-        title="Run escalation sweep"
-        description="This invokes the existing escalation endpoint and may reassign overdue work. Confirm only if you intend to run it."
+        title={t("workflow.sweepTitle")}
+        description={t("workflow.sweepDialogDesc")}
         pending={sweepPending}
         onClose={() => setSweepOpen(false)}
         footer={
           <>
             <Button variant="secondary" disabled={sweepPending} onClick={() => setSweepOpen(false)}>
-              Cancel
+              {t("workflow.cancel")}
             </Button>
             <Button disabled={sweepPending} onClick={() => void handleEscalationSweep()}>
-              {sweepPending ? "Running…" : "Confirm sweep"}
+              {sweepPending ? t("workflow.running") : t("workflow.confirmSweep")}
             </Button>
           </>
         }
@@ -633,7 +660,7 @@ export function WorkflowPanel({
             {sweepError}
           </div>
         )}
-        <p className="text-sm text-slate-600">The server will apply its existing permission and overdue-assignment rules.</p>
+        <p className="text-sm text-slate-600">{t("workflow.serverApplies")}</p>
       </OverlayDialog>
     </div>
   );

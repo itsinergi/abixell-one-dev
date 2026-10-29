@@ -6,6 +6,7 @@
  * become a bulk audit export.
  */
 import { useMemo } from "react";
+import { useT } from "../../../i18n/LocaleProvider";
 import { api, type AdminAuditEntry } from "../../../lib/api";
 import { DataTable, type Column } from "../../../shell/components/ui";
 import { useShell } from "../../../shell/layout/AppShell";
@@ -27,44 +28,8 @@ function formatTimestamp(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function auditColumns(
-  actorNames: Record<string, string>,
-  actorNamesResolved: boolean,
-): Column<AdminAuditEntry>[] {
-  return [
-    {
-      header: "When",
-      cell: (entry) => (
-        <time dateTime={entry.createdAt} className="whitespace-nowrap tabular-nums">
-          {formatTimestamp(entry.createdAt)}
-        </time>
-      ),
-      mobileRole: "title",
-    },
-    {
-      header: "Action",
-      cell: (entry) => <code className="break-all font-mono text-xs font-medium text-ink">{entry.action}</code>,
-    },
-    {
-      header: "Area",
-      cell: (entry) => <code className="break-all font-mono text-xs">{entry.entityType}</code>,
-    },
-    {
-      header: "Actor",
-      cell: (entry) =>
-        entry.actorUserId ? (
-          <span>
-            {actorNames[entry.actorUserId] ??
-              (actorNamesResolved ? "User unavailable" : "Name not shown")}
-          </span>
-        ) : (
-          <span className="text-ink-faint">System</span>
-        ),
-    },
-  ];
-}
-
 export function AdminAuditView() {
+  const t = useT();
   const { permissions } = useShell();
   const canReadUsers = permissions.includes("user.read");
   const { data, loading, error, denied, sessionExpired, reload } =
@@ -84,27 +49,60 @@ export function AdminAuditView() {
           return { entries, actorNames: {}, actorNamesResolved: false };
         }
       },
-      "Failed to load recent activity",
+      t("adminAudit.loadFailed"),
     );
-  const columns = useMemo(
-    () => auditColumns(data?.actorNames ?? {}, data?.actorNamesResolved ?? false),
-    [data?.actorNames, data?.actorNamesResolved],
+  const actorNames = data?.actorNames;
+  const actorNamesResolved = data?.actorNamesResolved ?? false;
+  const columns = useMemo<Column<AdminAuditEntry>[]>(
+    () => [
+      {
+        header: t("adminAudit.columnWhen"),
+        cell: (entry) => (
+          <time dateTime={entry.createdAt} className="whitespace-nowrap tabular-nums">
+            {formatTimestamp(entry.createdAt)}
+          </time>
+        ),
+        mobileRole: "title",
+      },
+      {
+        header: t("adminAudit.columnAction"),
+        cell: (entry) => (
+          <code className="break-all font-mono text-xs font-medium text-ink">{entry.action}</code>
+        ),
+      },
+      {
+        header: t("adminAudit.columnArea"),
+        cell: (entry) => <code className="break-all font-mono text-xs">{entry.entityType}</code>,
+      },
+      {
+        header: t("adminAudit.columnActor"),
+        cell: (entry) =>
+          entry.actorUserId ? (
+            <span>
+              {actorNames?.[entry.actorUserId] ??
+                (actorNamesResolved
+                  ? t("adminAudit.userUnavailable")
+                  : t("adminAudit.nameNotShown"))}
+            </span>
+          ) : (
+            <span className="text-ink-faint">{t("adminAudit.system")}</span>
+          ),
+      },
+    ],
+    [t, actorNames, actorNamesResolved],
   );
 
   return (
     <AdminSectionState
       loading={loading}
-      loadingLabel="Loading recent administrative activity…"
+      loadingLabel={t("adminAudit.loading")}
       denied={denied}
       sessionExpired={sessionExpired}
       error={error}
       requiredPermission="audit_log.read"
       onRetry={reload}
     >
-      <AdminPanel
-        title="Recent activity"
-        description="A bounded list of recent tenant events. Free-form metadata and affected entity IDs are deliberately omitted for privacy."
-      >
+      <AdminPanel title={t("adminAudit.title")} description={t("adminAudit.description")}>
         <DataTable
           columns={columns}
           rows={data?.entries ?? []}
@@ -112,8 +110,8 @@ export function AdminAuditView() {
           mobileBreakpoint="md"
           empty={
             <AdminEmpty
-              title="No recent activity recorded"
-              description="The bounded recent-activity response contains no events."
+              title={t("adminAudit.emptyTitle")}
+              description={t("adminAudit.emptyDescription")}
             />
           }
         />

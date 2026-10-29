@@ -14,6 +14,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { useAuth } from "../../../auth/AuthContext";
+import { useT } from "../../../i18n/LocaleProvider";
 import { api, type AdminRoleAssignmentInput } from "../../../lib/api";
 import { Alert, Button, Field, Input } from "../../../shell/components/ui";
 import { OverlayDialog } from "../../../shell/components/OverlayDialog";
@@ -36,6 +37,7 @@ export function AdminCreateUserDialog({
   restoreFocusRef?: React.RefObject<HTMLElement | null>;
 }) {
   const { session } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
   const formRef = useRef<HTMLFormElement>(null);
   const [step, setStep] = useState<Step>("edit");
@@ -66,11 +68,11 @@ export function AdminCreateUserDialog({
     const password = String(form.get("password") ?? "");
 
     if (email.length === 0 || fullName.length === 0 || password.length < 8) {
-      setError("Email, full name, and a password of at least 8 characters are required.");
+      setError(t("adminCreateUser.missingFields"));
       return;
     }
     if (showPairs && assignmentPairsHaveDuplicate(pairs)) {
-      setError("The same role and scope combination appears more than once.");
+      setError(t("adminCreateUser.duplicatePair"));
       return;
     }
 
@@ -86,11 +88,16 @@ export function AdminCreateUserDialog({
       setStep("success");
       onCreated(
         pairs.length > 0
-          ? `User ${result.user.fullName} created with ${result.assignments.length} initial assignment${result.assignments.length === 1 ? "" : "s"}.`
-          : `User ${result.user.fullName} created with no assignment.`,
+          ? result.assignments.length === 1
+            ? t("adminCreateUser.createdWithOnePair", { name: result.user.fullName })
+            : t("adminCreateUser.createdWithPairs", {
+                name: result.user.fullName,
+                count: result.assignments.length,
+              })
+          : t("adminCreateUser.createdWithoutPairs", { name: result.user.fullName }),
       );
     } catch (err) {
-      setError(errorMessage(err, "The user could not be created."));
+      setError(errorMessage(t, err, t("adminCreateUser.createFailed")));
       setStep("edit");
     } finally {
       submitInFlight.current = false;
@@ -100,8 +107,8 @@ export function AdminCreateUserDialog({
   return (
     <OverlayDialog
       open
-      title="Create user"
-      description="Creates an account in this tenant. An initial assignment set is optional; a user with none has no effective access."
+      title={t("adminCreateUser.title")}
+      description={t("adminCreateUser.description")}
       pending={pending}
       onClose={closeDialog}
       restoreFocusRef={restoreFocusRef}
@@ -109,7 +116,7 @@ export function AdminCreateUserDialog({
       footer={
         step === "success" ? (
           <Button className="min-h-[44px]" onClick={closeDialog}>
-            Done
+            {t("adminCreateUser.done")}
           </Button>
         ) : (
           <>
@@ -119,29 +126,26 @@ export function AdminCreateUserDialog({
               onClick={closeDialog}
               disabled={pending}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               className="min-h-[44px]"
               disabled={pending}
               onClick={() => formRef.current?.requestSubmit()}
             >
-              {pending ? "Creating…" : "Create user"}
+              {pending ? t("adminCreateUser.submitting") : t("adminCreateUser.submit")}
             </Button>
           </>
         )
       }
     >
       {step === "success" ? (
-        <Alert tone="success">
-          The user was created. The user list has been reloaded with the authoritative
-          access view.
-        </Alert>
+        <Alert tone="success">{t("adminCreateUser.success")}</Alert>
       ) : (
         <form ref={formRef} onSubmit={submit} className="space-y-5">
           {error && <Alert tone="error">{error}</Alert>}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Email" required>
+            <Field label={t("adminCreateUser.email")} required>
               <Input
                 name="email"
                 type="email"
@@ -151,7 +155,7 @@ export function AdminCreateUserDialog({
                 disabled={pending}
               />
             </Field>
-            <Field label="Full name" required>
+            <Field label={t("adminCreateUser.fullName")} required>
               <Input
                 name="fullName"
                 required
@@ -163,9 +167,9 @@ export function AdminCreateUserDialog({
             </Field>
           </div>
           <Field
-            label="Password"
+            label={t("adminCreateUser.password")}
             required
-            hint="At least 8 characters. The initial password is hashed server-side."
+            hint={t("adminCreateUser.passwordHint")}
           >
             <Input
               name="password"
@@ -182,7 +186,7 @@ export function AdminCreateUserDialog({
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold text-ink">
-                    Initial assignments (optional)
+                    {t("adminCreateUser.initialTitle")}
                   </h3>
                   <Button
                     variant="ghost"
@@ -192,24 +196,20 @@ export function AdminCreateUserDialog({
                     }}
                     disabled={pending}
                   >
-                    Remove initial assignments
+                    {t("adminCreateUser.removeInitial")}
                   </Button>
                 </div>
                 {optionsState.status === "loading" || optionsState.status === "idle" ? (
-                  <p className="text-sm text-ink-dim">Loading governed choices…</p>
+                  <p className="text-sm text-ink-dim">{t("adminCreateUser.loadingOptions")}</p>
                 ) : optionsState.options ? (
                   <AssignmentPairEditor
                     options={optionsState.options}
                     pairs={pairs}
                     onChange={setPairs}
-                    addLabel="Add initial assignment"
+                    addLabel={t("adminCreateUser.addInitialRow")}
                   />
                 ) : (
-                  <Alert tone="warning">
-                    Assignment options could not be loaded. The user can still be
-                    created without an initial assignment; access can be added after
-                    creation.
-                  </Alert>
+                  <Alert tone="warning">{t("adminCreateUser.optionsFailed")}</Alert>
                 )}
               </div>
             ) : (
@@ -218,15 +218,11 @@ export function AdminCreateUserDialog({
                 disabled={pending}
                 onClick={() => setShowPairs(true)}
               >
-                Add initial assignments
+                {t("adminCreateUser.addInitial")}
               </Button>
             )}
           </div>
-          <p className="text-sm text-ink-dim">
-            Account status starts from the governed default and cannot be set here.
-            When initial assignments are included, they are applied in the same
-            transaction: if one pair is refused, the user is not created.
-          </p>
+          <p className="text-sm text-ink-dim">{t("adminCreateUser.statusNote")}</p>
         </form>
       )}
     </OverlayDialog>

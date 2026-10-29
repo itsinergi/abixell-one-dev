@@ -10,10 +10,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError, api } from "../lib/api";
 import { Alert, Button, Card, Field, Input, PageHeader } from "../shell/components/ui";
+import { useT } from "../i18n/LocaleProvider";
 
 export function ProfilePage() {
   const { session, updateSession, logout } = useAuth();
   const navigate = useNavigate();
+  const t = useT();
   const [fullName, setFullName] = useState(session?.fullName ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
@@ -38,19 +40,19 @@ export function ProfilePage() {
     setErrorField(null);
     const trimmedName = fullName.trim();
     if (!trimmedName) {
-      fail("fullName", "Full name is required.", nameRef.current);
+      fail("fullName", t("profile.nameRequired"), nameRef.current);
       return;
     }
     if (password && !currentPassword) {
-      fail("password", "Enter your current password to set a new password.", newPasswordRef.current);
+      fail("password", t("profile.currentRequired"), newPasswordRef.current);
       return;
     }
     if (currentPassword && !password) {
-      fail("password", "Enter a new password with your current password.", newPasswordRef.current);
+      fail("password", t("profile.newRequired"), newPasswordRef.current);
       return;
     }
     if (password && password.length < 8) {
-      fail("password", "New password must be at least 8 characters.", newPasswordRef.current);
+      fail("password", t("profile.tooShort"), newPasswordRef.current);
       return;
     }
 
@@ -69,11 +71,11 @@ export function ProfilePage() {
       }
       updateSession({ fullName: updated.fullName, email: updated.email });
       setFullName(updated.fullName);
-      setFeedback({ tone: "success", message: "Profile updated." });
+      setFeedback({ tone: "success", message: t("profile.updated") });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         if (/current password/i.test(error.message)) {
-          fail("password", "Current password is not valid.", newPasswordRef.current);
+          fail("password", t("profile.currentInvalid"), newPasswordRef.current);
         } else {
           // A 401 from app.authenticate (expired/invalid access token) is a
           // dead session, not a wrong password — reporting it as the latter
@@ -85,7 +87,7 @@ export function ProfilePage() {
       } else {
         setFeedback({
           tone: "error",
-          message: error instanceof ApiError ? error.message : "Unable to update profile.",
+          message: error instanceof ApiError ? error.message : t("profile.updateFailed"),
         });
       }
     } finally {
@@ -106,8 +108,8 @@ export function ProfilePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Profile"
-        subtitle="Manage your name and sign-in password."
+        title={t("profile.title")}
+        subtitle={t("profile.subtitle")}
       />
       <Card className="max-w-2xl">
         <form onSubmit={submit} className="space-y-5" noValidate>
@@ -120,7 +122,7 @@ export function ProfilePage() {
               <span id={feedbackId}>{feedback.message}</span>
             </Alert>
           )}
-          <Field label="Full name" required>
+          <Field label={t("profile.fullName")} required>
             <Input
               ref={nameRef}
               id="profile-full-name"
@@ -134,18 +136,16 @@ export function ProfilePage() {
             />
           </Field>
           <Field
-            label="Email"
-            hint="Email can only be changed by an administrator."
+            label={t("profile.email")}
+            hint={t("profile.emailHint")}
           >
             <Input value={session?.email ?? ""} readOnly aria-readonly="true" />
           </Field>
           <div className="border-t border-line pt-5">
-            <h2 className="text-sm font-semibold text-ink">Change password</h2>
-            <p className="mt-1 text-sm text-ink-dim">
-              Leave both password fields empty to keep your current password.
-            </p>
+            <h2 className="text-sm font-semibold text-ink">{t("profile.changePassword")}</h2>
+            <p className="mt-1 text-sm text-ink-dim">{t("profile.passwordHint")}</p>
             <div className="mt-4 space-y-4">
-              <Field label="Current password" hint="Required when setting a new password.">
+              <Field label={t("profile.currentPassword")} hint={t("profile.currentPasswordHint")}>
                 <Input
                   type="password"
                   value={currentPassword}
@@ -154,7 +154,7 @@ export function ProfilePage() {
                   disabled={saving}
                 />
               </Field>
-              <Field label="New password" hint="At least 8 characters.">
+              <Field label={t("profile.newPassword")} hint={t("profile.newPasswordHint")}>
                 <Input
                   ref={newPasswordRef}
                   type="password"
@@ -175,10 +175,10 @@ export function ProfilePage() {
                 change. Submitting instead announces what is missing and
                 moves focus to that field (see fail()). */}
             <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? t("profile.saving") : t("profile.save")}
             </Button>
             <Button type="button" variant="secondary" onClick={cancel} disabled={saving}>
-              Cancel
+              {t("profile.cancel")}
             </Button>
           </div>
         </form>

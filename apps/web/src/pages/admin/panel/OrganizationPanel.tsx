@@ -21,6 +21,8 @@ import {
 } from "../../../shell/components/ui";
 import { useAdminResource } from "../console/useAdminResource";
 import { AdminPanel, AdminSectionState } from "../console/AdminSection";
+import type { MessageKey } from "../../../i18n/dictionaries/en";
+import { useT } from "../../../i18n/LocaleProvider";
 
 /**
  * Panel Admin — Organization category (Epic 15 Decision #2).
@@ -39,13 +41,17 @@ import { AdminPanel, AdminSectionState } from "../console/AdminSection";
  */
 type OrgUnitRow = Awaited<ReturnType<typeof api.organizationUnits>>[number];
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Draf",
-  pending_review: "Menunggu tinjauan",
-  published: "Terbit",
-  rejected: "Ditolak",
-  cancelled: "Dibatalkan",
-};
+function getStatusLabel(t: ReturnType<typeof useT>, status: string): string {
+  const statusMap: Record<string, MessageKey> = {
+    draft: "orgPanel.statusDraft",
+    pending_review: "orgPanel.statusPendingReview",
+    published: "orgPanel.statusPublished",
+    rejected: "orgPanel.statusRejected",
+    cancelled: "orgPanel.statusCancelled",
+  };
+  const key = statusMap[status];
+  return key ? t(key) : status;
+}
 
 function statusTone(status: string): "neutral" | "success" | "warning" | "danger" {
   if (status === "published") return "success";
@@ -57,7 +63,7 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
 function formatDate(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("id-ID");
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-GB");
 }
 
 /** `datetime-local` yields `YYYY-MM-DDTHH:mm` with no zone; the API refuses a
@@ -82,12 +88,13 @@ export function OrganizationPanel({
   canManage: boolean;
   onMessage: (m: { type: "error" | "success"; text: string }) => void;
 }) {
-  const units = useAdminResource(api.organizationUnits, "Gagal memuat organization unit.");
-  const entities = useAdminResource(api.legalEntities, "Gagal memuat legal entity.");
-  const departments = useAdminResource(api.departments, "Gagal memuat department.");
+  const t = useT();
+  const units = useAdminResource(api.organizationUnits, t("orgPanel.loadUnitsFailed"));
+  const entities = useAdminResource(api.legalEntities, t("orgPanel.loadEntitiesFailed"));
+  const departments = useAdminResource(api.departments, t("orgPanel.loadDepartmentsFailed"));
   const requests = useAdminResource(
-    (t) => api.organizationUnitChangeRequests(t, { status: "pending_review" }),
-    "Gagal memuat permintaan perubahan.",
+    (token) => api.organizationUnitChangeRequests(token, { status: "pending_review" }),
+    t("orgPanel.loadRequestsFailed"),
   );
 
   const [selectedUnitId, setSelectedUnitId] = useState("");
@@ -117,7 +124,7 @@ export function OrganizationPanel({
       setHistory(await api.organizationUnitHierarchy(token, unitId));
     } catch (error) {
       setHistoryError(
-        error instanceof ApiError ? error.message : "Gagal memuat riwayat hierarki.",
+        error instanceof ApiError ? error.message : t("orgPanel.loadHistoryFailed"),
       );
     }
   }
@@ -130,7 +137,7 @@ export function OrganizationPanel({
     } catch (error) {
       onMessage({
         type: "error",
-        text: error instanceof ApiError ? error.message : "Tindakan tidak dapat diselesaikan.",
+        text: error instanceof ApiError ? error.message : t("orgPanel.actionFailed"),
       });
     } finally {
       setActionPending(null);
@@ -214,32 +221,32 @@ export function OrganizationPanel({
       }
     } catch (error) {
       setDialogError(
-        error instanceof ApiError ? error.message : "Perubahan tidak dapat disimpan.",
+        error instanceof ApiError ? error.message : t("orgPanel.saveFailed"),
       );
       return;
     } finally {
       setPending(false);
     }
     setDialog(null);
-    onMessage({ type: "success", text: "Perubahan disimpan." });
+    onMessage({ type: "success", text: t("orgPanel.changesSaved") });
   }
 
   const entityColumns: Column<LegalEntityRow>[] = [
-    { header: "Nama", mobileRole: "title", cell: (row) => row.displayName || row.name },
+    { header: t("orgPanel.entityName"), mobileRole: "title", cell: (row) => row.displayName || row.name },
     {
-      header: "Status",
+      header: t("orgPanel.entityStatus"),
       mobileRole: "status",
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>
-          {row.isActive ? "Aktif" : "Nonaktif"}
+          {row.isActive ? t("orgPanel.entityActive") : t("orgPanel.entityInactive")}
         </StatusPill>
       ),
     },
-    { header: "Negara", cell: (row) => row.country ?? "—" },
-    { header: "Mata uang", cell: (row) => row.baseCurrency ?? "—" },
-    { header: "Registrasi", cell: (row) => <span className="font-mono text-xs">{row.registrationNo ?? "—"}</span> },
+    { header: t("orgPanel.entityCountry"), cell: (row) => row.country ?? "—" },
+    { header: t("orgPanel.entityCurrency"), cell: (row) => row.baseCurrency ?? "—" },
+    { header: t("orgPanel.entityRegistration"), cell: (row) => <span className="font-mono text-xs">{row.registrationNo ?? "—"}</span> },
     {
-      header: "Aksi",
+      header: t("orgPanel.entityAction"),
       cell: (row) =>
         canManage && (
           <Button
@@ -249,69 +256,69 @@ export function OrganizationPanel({
               setActiveTarget({ kind: "entity", id: row.id, next: !row.isActive, name: row.displayName || row.name })
             }
           >
-            {row.isActive ? "Nonaktifkan" : "Aktifkan"}
+            {row.isActive ? t("orgPanel.entityDeactivate") : t("orgPanel.entityActivate")}
           </Button>
         ),
     },
   ];
 
   const unitColumns: Column<OrgUnitRow>[] = [
-    { header: "Unit", mobileRole: "title", cell: (row) => row.name },
+    { header: t("orgPanel.unitName"), mobileRole: "title", cell: (row) => row.name },
     {
-      header: "Status",
+      header: t("orgPanel.entityStatus"),
       mobileRole: "status",
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>
-          {row.isActive ? "Aktif" : "Nonaktif"}
+          {row.isActive ? t("orgPanel.entityActive") : t("orgPanel.entityInactive")}
         </StatusPill>
       ),
     },
-    { header: "Tipe", cell: (row) => row.unitType },
+    { header: t("orgPanel.unitType"), cell: (row) => row.unitType },
     {
-      header: "Induk",
+      header: t("orgPanel.unitParent"),
       cell: (row) =>
         row.parentId
           ? (units.data?.find((unit) => unit.id === row.parentId)?.name ?? "—")
-          : <span className="text-ink-faint">Akar</span>,
+          : <span className="text-ink-faint">{t("orgPanel.unitRoot")}</span>,
     },
     {
-      header: "Riwayat",
+      header: t("orgPanel.unitHistory"),
       cell: (row) => (
         <Button variant="secondary" onClick={() => void loadHistory(row.id)}>
-          Lihat riwayat
+          {t("orgPanel.viewHistory")}
         </Button>
       ),
     },
   ];
 
   const departmentColumns: Column<DepartmentRow>[] = [
-    { header: "Department", mobileRole: "title", cell: (row) => row.name },
+    { header: t("orgPanel.departmentName"), mobileRole: "title", cell: (row) => row.name },
     {
-      header: "Status",
+      header: t("orgPanel.entityStatus"),
       mobileRole: "status",
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>
-          {row.isActive ? "Aktif" : "Nonaktif"}
+          {row.isActive ? t("orgPanel.entityActive") : t("orgPanel.entityInactive")}
         </StatusPill>
       ),
     },
-    { header: "Kode", cell: (row) => <span className="font-mono text-xs">{row.code ?? "—"}</span> },
+    { header: t("orgPanel.departmentCode"), cell: (row) => <span className="font-mono text-xs">{row.code ?? "—"}</span> },
     {
-      header: "Induk",
+      header: t("orgPanel.departmentParent"),
       cell: (row) =>
         row.parentDepartmentId
           ? (departments.data?.find((d) => d.id === row.parentDepartmentId)?.name ?? "—")
-          : <span className="text-ink-faint">Akar</span>,
+          : <span className="text-ink-faint">{t("orgPanel.unitRoot")}</span>,
     },
     {
-      header: "Aksi",
+      header: t("orgPanel.entityAction"),
       cell: (row) =>
         canManage && (
           <Button
             variant="ghost"
             onClick={() => setActiveTarget({ kind: "department", id: row.id, next: !row.isActive, name: row.name })}
           >
-            {row.isActive ? "Nonaktifkan" : "Aktifkan"}
+            {row.isActive ? t("orgPanel.entityDeactivate") : t("orgPanel.entityActivate")}
           </Button>
         ),
     },
@@ -319,22 +326,22 @@ export function OrganizationPanel({
 
   const requestColumns: Column<OrganizationUnitChangeRequest>[] = [
     {
-      header: "Unit",
+      header: t("orgPanel.unitName"),
       mobileRole: "title",
       cell: (row) => units.data?.find((unit) => unit.id === row.organizationUnitId)?.name ?? row.organizationUnitId,
     },
     {
-      header: "Status",
+      header: t("orgPanel.entityStatus"),
       mobileRole: "status",
       cell: (row) => (
-        <StatusPill tone={statusTone(row.status)}>{STATUS_LABELS[row.status] ?? row.status}</StatusPill>
+        <StatusPill tone={statusTone(row.status)}>{getStatusLabel(t, row.status)}</StatusPill>
       ),
     },
-    { header: "Tindakan", cell: (row) => (row.requestedAction === "move" ? "Pindah induk" : "Tombstone") },
-    { header: "Berlaku", cell: (row) => formatDate(row.requestedEffectiveFrom) },
-    { header: "Alasan", cell: (row) => <span className="wrap-break-word">{row.reason}</span> },
+    { header: t("orgPanel.requestedChange"), cell: (row) => (row.requestedAction === "move" ? t("orgPanel.fieldMoveParent") : t("orgPanel.fieldTombstone")) },
+    { header: t("orgPanel.requestEffective"), cell: (row) => formatDate(row.requestedEffectiveFrom) },
+    { header: t("orgPanel.requestReason"), cell: (row) => <span className="wrap-break-word">{row.reason}</span> },
     {
-      header: "Aksi",
+      header: t("orgPanel.entityAction"),
       cell: (row) =>
         canManage && (
           <div className="flex flex-wrap gap-2">
@@ -345,7 +352,7 @@ export function OrganizationPanel({
                 setDialog("publish");
               }}
             >
-              Terbitkan
+              {t("orgPanel.requestPublish")}
             </Button>
             <Button
               variant="ghost"
@@ -354,7 +361,7 @@ export function OrganizationPanel({
                 setDialog("reject");
               }}
             >
-              Tolak
+              {t("orgPanel.requestReject")}
             </Button>
           </div>
         ),
@@ -362,125 +369,125 @@ export function OrganizationPanel({
   ];
 
   const historyColumns: Column<HierarchyHistoryEntry>[] = [
-    { header: "Berlaku dari", mobileRole: "title", cell: (row) => formatDate(row.effectiveFrom) },
-    { header: "Sampai", cell: (row) => formatDate(row.effectiveTo) },
+    { header: t("orgPanel.fieldEffectiveFrom"), mobileRole: "title", cell: (row) => formatDate(row.effectiveFrom) },
+    { header: t("orgPanel.historyUntil"), cell: (row) => formatDate(row.effectiveTo) },
     {
-      header: "Induk",
+      header: t("orgPanel.unitParent"),
       cell: (row) =>
         row.parentOrganizationUnitId
           ? (units.data?.find((unit) => unit.id === row.parentOrganizationUnitId)?.name ?? row.parentOrganizationUnitId)
-          : <span className="text-ink-faint">Akar</span>,
+          : <span className="text-ink-faint">{t("orgPanel.unitRoot")}</span>,
     },
-    { header: "Alasan", cell: (row) => <span className="wrap-break-word">{row.reason}</span> },
+    { header: t("orgPanel.requestReason"), cell: (row) => <span className="wrap-break-word">{row.reason}</span> },
   ];
 
   const dialogTitle =
     dialog === "entity"
-      ? "Buat legal entity"
+      ? t("orgPanel.createEntityTitle")
       : dialog === "unit"
-        ? "Buat organization unit"
+        ? t("orgPanel.createUnitTitle")
         : dialog === "department"
-          ? "Buat department"
+          ? t("orgPanel.createDeptTitle")
           : dialog === "change"
-            ? "Ajukan perubahan struktur"
+            ? t("orgPanel.changeRequestTitle")
             : dialog === "reject"
-              ? "Tolak permintaan perubahan"
-              : "Terbitkan permintaan perubahan";
+              ? t("orgPanel.rejectTitle")
+              : t("orgPanel.publishTitle");
 
   return (
     <div className="space-y-4">
       <AdminPanel
-        title="Legal entity"
-        description="Identitas hukum resmi. Tenant bukan profil perusahaan; default di sini diwarisi unit di bawahnya."
+        title={t("orgPanel.legalEntitySection")}
+        description={t("orgPanel.legalEntityDesc")}
         actions={
-          canManage && <Button onClick={() => setDialog("entity")}>Buat legal entity</Button>
+          canManage && <Button onClick={() => setDialog("entity")}>{t("orgPanel.createEntity")}</Button>
         }
       >
-        <AdminSectionState {...entities} onRetry={entities.reload} loadingLabel="Memuat legal entity…">
+        <AdminSectionState {...entities} onRetry={entities.reload} loadingLabel={t("orgPanel.loadingEntities")}>
           <DataTable
             columns={entityColumns}
             rows={entities.data ?? []}
             keyOf={(row) => row.id}
-            empty={<p className="text-sm text-ink-dim">Belum ada legal entity.</p>}
+            empty={<p className="text-sm text-ink-dim">{t("orgPanel.noEntities")}</p>}
           />
         </AdminSectionState>
       </AdminPanel>
 
       <AdminPanel
-        title="Organization unit"
-        description="Hierarki yang menjadi scope otorisasi. Perubahan induk diajukan sebagai permintaan, bukan langsung diterapkan."
+        title={t("orgPanel.orgUnitSection")}
+        description={t("orgPanel.orgUnitDesc")}
         actions={
           canManage && (
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setDialog("change")}>
-                Ajukan perubahan
+                {t("orgPanel.requestChange")}
               </Button>
-              <Button onClick={() => setDialog("unit")}>Buat unit</Button>
+              <Button onClick={() => setDialog("unit")}>{t("orgPanel.createUnit")}</Button>
             </div>
           )
         }
       >
-        <AdminSectionState {...units} onRetry={units.reload} loadingLabel="Memuat organization unit…">
+        <AdminSectionState {...units} onRetry={units.reload} loadingLabel={t("orgPanel.loadingUnits")}>
           <DataTable
             columns={unitColumns}
             rows={units.data ?? []}
             keyOf={(row) => row.id}
-            empty={<p className="text-sm text-ink-dim">Belum ada organization unit.</p>}
+            empty={<p className="text-sm text-ink-dim">{t("orgPanel.noUnits")}</p>}
           />
         </AdminSectionState>
         {historyError && <Alert tone="error">{historyError}</Alert>}
         {selectedUnitId && (
           <div className="mt-4">
-            <h3 className="mb-2 text-sm font-semibold text-ink">Riwayat hierarki</h3>
+            <h3 className="mb-2 text-sm font-semibold text-ink">{t("orgPanel.hierarchyHistory")}</h3>
             <DataTable
               columns={historyColumns}
               rows={history ?? []}
               keyOf={(row) => row.id}
-              empty={<p className="text-sm text-ink-dim">Belum ada riwayat untuk unit ini.</p>}
+              empty={<p className="text-sm text-ink-dim">{t("orgPanel.noHistory")}</p>}
             />
           </div>
         )}
       </AdminPanel>
 
       <AdminPanel
-        title="Permintaan perubahan"
-        description="Antrean tinjauan. Membuat permintaan dan menerbitkannya memerlukan izin berbeda."
-        actions={canManage && <Button onClick={() => setDialog("change")}>Ajukan perubahan</Button>}
+        title={t("orgPanel.requestsSection")}
+        description={t("orgPanel.requestsDesc")}
+        actions={canManage && <Button onClick={() => setDialog("change")}>{t("orgPanel.requestChange")}</Button>}
       >
-        <AdminSectionState {...requests} onRetry={requests.reload} loadingLabel="Memuat permintaan…">
+        <AdminSectionState {...requests} onRetry={requests.reload} loadingLabel={t("orgPanel.loadingRequests")}>
           <DataTable
             columns={requestColumns}
             rows={requests.data ?? []}
             keyOf={(row) => row.id}
-            empty={<p className="text-sm text-ink-dim">Tidak ada permintaan menunggu tinjauan.</p>}
+            empty={<p className="text-sm text-ink-dim">{t("orgPanel.noRequests")}</p>}
           />
         </AdminSectionState>
       </AdminPanel>
 
       <AdminPanel
-        title="Department"
-        description="Mengelompokkan orang. Department bukan scope otorisasi dan tidak dipakai untuk keputusan data scope."
-        actions={canManage && <Button onClick={() => setDialog("department")}>Buat department</Button>}
+        title={t("orgPanel.departmentSection")}
+        description={t("orgPanel.departmentDesc")}
+        actions={canManage && <Button onClick={() => setDialog("department")}>{t("orgPanel.createDepartment")}</Button>}
       >
-        <AdminSectionState {...departments} onRetry={departments.reload} loadingLabel="Memuat department…">
+        <AdminSectionState {...departments} onRetry={departments.reload} loadingLabel={t("orgPanel.loadingDepartments")}>
           <DataTable
             columns={departmentColumns}
             rows={departments.data ?? []}
             keyOf={(row) => row.id}
-            empty={<p className="text-sm text-ink-dim">Belum ada department.</p>}
+            empty={<p className="text-sm text-ink-dim">{t("orgPanel.noDepartments")}</p>}
           />
         </AdminSectionState>
       </AdminPanel>
 
       <OverlayDialog
         open={activeTarget !== null}
-        title={activeTarget?.next ? "Aktifkan entitas" : "Nonaktifkan entitas"}
+        title={activeTarget?.next ? t("orgPanel.entityActivate") : t("orgPanel.entityDeactivate")}
         pending={actionPending !== null}
         onClose={() => setActiveTarget(null)}
         footer={
           <>
             <Button variant="secondary" disabled={actionPending !== null} onClick={() => setActiveTarget(null)}>
-              Batal
+              {t("common.cancel")}
             </Button>
             <Button
               disabled={actionPending !== null}
@@ -505,18 +512,21 @@ export function OrganizationPanel({
                       await units.reload();
                     }
                   },
-                  target.next ? "Entitas diaktifkan." : "Entitas dinonaktifkan.",
+                  target.next ? t("orgPanel.entityActivated") : t("orgPanel.entityDeactivated"),
                 ).then(() => setActiveTarget(null));
               }}
             >
-              {actionPending !== null ? "Memproses…" : activeTarget?.next ? "Aktifkan" : "Nonaktifkan"}
+              {actionPending !== null ? t("orgPanel.working") : activeTarget?.next ? t("orgPanel.entityActivate") : t("orgPanel.entityDeactivate")}
             </Button>
           </>
         }
       >
         {activeTarget && (
           <p>
-            {activeTarget.next ? "Aktifkan" : "Nonaktifkan"} <strong>{activeTarget.name}</strong>?
+            {t("orgPanel.confirmActivate", {
+              action: activeTarget.next ? t("orgPanel.entityActivate") : t("orgPanel.entityDeactivate"),
+              name: activeTarget.name,
+            })}
           </p>
         )}
       </OverlayDialog>
@@ -531,10 +541,10 @@ export function OrganizationPanel({
         footer={
           <>
             <Button variant="secondary" disabled={pending} onClick={() => setDialog(null)}>
-              Batal
+              {t("common.cancel")}
             </Button>
             <Button type="submit" form="organization-change" disabled={pending}>
-              {pending ? "Menyimpan…" : dialog === "publish" ? "Terbitkan" : "Simpan"}
+              {pending ? t("orgPanel.working") : dialog === "publish" ? t("orgPanel.requestPublish") : t("common.save")}
             </Button>
           </>
         }
@@ -544,28 +554,28 @@ export function OrganizationPanel({
           <fieldset disabled={pending} className="space-y-3">
             {dialog === "entity" && (
               <>
-                <Field label="Nama hukum" required>
+                <Field label={t("orgPanel.fieldLegalName")} required>
                   <Input name="name" required minLength={2} />
                 </Field>
-                <Field label="Nama dagang">
+                <Field label={t("orgPanel.fieldTradingName")}>
                   <Input name="displayName" />
                 </Field>
-                <Field label="Nomor registrasi">
+                <Field label={t("orgPanel.fieldRegistrationNo")}>
                   <Input name="registrationNo" />
                 </Field>
-                <Field label="Negara">
+                <Field label={t("orgPanel.fieldCountry")}>
                   <Input name="country" placeholder="ID" />
                 </Field>
-                <Field label="Zona waktu" hint="Kosong berarti mewarisi default tenant.">
+                <Field label={t("orgPanel.fieldTimezone")} hint={t("orgPanel.timezoneHint")}>
                   <Input name="timezone" placeholder="Asia/Jakarta" />
                 </Field>
-                <Field label="Mata uang dasar" hint="Tiga huruf ISO 4217.">
+                <Field label={t("orgPanel.fieldBaseCurrency")} hint={t("orgPanel.currencyHint")}>
                   <Input name="baseCurrency" maxLength={3} placeholder="IDR" />
                 </Field>
-                <Field label="Email">
+                <Field label={t("orgPanel.fieldEmail")}>
                   <Input name="email" type="email" />
                 </Field>
-                <Field label="Telepon">
+                <Field label={t("orgPanel.fieldPhone")}>
                   <Input name="phone" />
                 </Field>
               </>
@@ -573,10 +583,10 @@ export function OrganizationPanel({
 
             {dialog === "unit" && (
               <>
-                <Field label="Legal entity" required>
+                <Field label={t("orgPanel.fieldLegalEntity")} required>
                   <Select name="legalEntityId" required defaultValue="">
                     <option value="" disabled>
-                      Pilih legal entity
+                      {t("orgPanel.selectLegalEntity")}
                     </option>
                     {entities.data?.map((entity) => (
                       <option key={entity.id} value={entity.id}>
@@ -585,9 +595,9 @@ export function OrganizationPanel({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Induk" hint="Kosong berarti unit akar di bawah Legal Entity.">
+                <Field label={t("orgPanel.fieldParent")} hint={t("orgPanel.unitRootHint")}>
                   <Select name="parentId" defaultValue="">
-                    <option value="">Tanpa induk</option>
+                    <option value="">{t("orgPanel.noParentUnit")}</option>
                     {units.data?.map((unit) => (
                       <option key={unit.id} value={unit.id}>
                         {unit.name}
@@ -595,10 +605,10 @@ export function OrganizationPanel({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Nama unit" required>
+                <Field label={t("orgPanel.fieldUnitName")} required>
                   <Input name="name" required />
                 </Field>
-                <Field label="Tipe unit" hint="Teks bebas, misalnya cabang atau gudang.">
+                <Field label={t("orgPanel.fieldUnitType")} hint={t("orgPanel.unitTypeHint")}>
                   <Input name="unitType" />
                 </Field>
               </>
@@ -606,15 +616,15 @@ export function OrganizationPanel({
 
             {dialog === "department" && (
               <>
-                <Field label="Nama" required>
+                <Field label={t("orgPanel.fieldDeptName")} required>
                   <Input name="name" required maxLength={160} />
                 </Field>
-                <Field label="Kode" hint="Unik per tenant. Boleh dikosongkan.">
+                <Field label={t("orgPanel.fieldDeptCode")} hint={t("orgPanel.codeHint")}>
                   <Input name="code" maxLength={64} />
                 </Field>
-                <Field label="Department induk">
+                <Field label={t("orgPanel.fieldParentDept")}>
                   <Select name="parentId" defaultValue="">
-                    <option value="">Tanpa induk</option>
+                    <option value="">{t("orgPanel.noParentDept")}</option>
                     {departments.data?.map((department) => (
                       <option key={department.id} value={department.id}>
                         {department.name}
@@ -627,10 +637,10 @@ export function OrganizationPanel({
 
             {dialog === "change" && (
               <>
-                <Field label="Unit" required>
+                <Field label={t("orgPanel.unitName")} required>
                   <Select name="organizationUnitId" required defaultValue="">
                     <option value="" disabled>
-                      Pilih unit
+                      {t("orgPanel.selectUnit")}
                     </option>
                     {units.data?.map((unit) => (
                       <option key={unit.id} value={unit.id}>
@@ -639,15 +649,15 @@ export function OrganizationPanel({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Tindakan" required>
+                <Field label={t("orgPanel.fieldAction")} required>
                   <Select name="requestedAction" defaultValue="move">
-                    <option value="move">Pindah induk</option>
-                    <option value="tombstone">Tombstone</option>
+                    <option value="move">{t("orgPanel.fieldMoveParent")}</option>
+                    <option value="tombstone">{t("orgPanel.fieldTombstone")}</option>
                   </Select>
                 </Field>
-                <Field label="Induk baru" hint="Hanya untuk tindakan pindah.">
+                <Field label={t("orgPanel.fieldNewParent")} hint={t("orgPanel.actionMoveHint")}>
                   <Select name="proposedParentOrganizationUnitId" defaultValue="">
-                    <option value="">Jadikan akar</option>
+                    <option value="">{t("orgPanel.moveRoot")}</option>
                     {units.data?.map((unit) => (
                       <option key={unit.id} value={unit.id}>
                         {unit.name}
@@ -655,9 +665,9 @@ export function OrganizationPanel({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Unit pengganti" hint="Hanya untuk tindakan tombstone.">
+                <Field label={t("orgPanel.fieldReplacementUnit")} hint={t("orgPanel.actionTombstoneHint")}>
                   <Select name="requestedReplacementOrganizationUnitId" defaultValue="">
-                    <option value="">Tanpa pengganti</option>
+                    <option value="">{t("orgPanel.noReplacement")}</option>
                     {units.data?.map((unit) => (
                       <option key={unit.id} value={unit.id}>
                         {unit.name}
@@ -665,27 +675,27 @@ export function OrganizationPanel({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Berlaku mulai" required hint="Waktu lokal; zona waktu tenant ditambahkan otomatis.">
+                <Field label={t("orgPanel.fieldEffectiveFrom")} required hint={t("orgPanel.effectiveFromHint")}>
                   <Input name="requestedEffectiveFrom" type="datetime-local" required />
                 </Field>
-                <Field label="Alasan" required>
+                <Field label={t("orgPanel.fieldReason")} required>
                   <Input name="reason" required />
                 </Field>
                 <p className="text-xs text-ink-faint">
-                  Permintaan dikirim untuk ditinjau. Menerbitkannya memerlukan izin tinjauan.
+                  {t("orgPanel.requestSentReview")}
                 </p>
               </>
             )}
 
             {dialog === "publish" && (
-              <Field label="Permintaan" required>
+              <Field label={t("orgPanel.fieldRequest")} required>
                 <Select name="requestId" required defaultValue={requestTarget}>
                   <option value="" disabled>
-                    Pilih permintaan menunggu tinjauan
+                    {t("orgPanel.selectRequest")}
                   </option>
                   {(requests.data ?? []).map((request) => (
                     <option key={request.id} value={request.id}>
-                      {units.data?.find((unit) => unit.id === request.organizationUnitId)?.name ?? request.organizationUnitId} — {STATUS_LABELS[request.status] ?? request.status}
+                      {units.data?.find((unit) => unit.id === request.organizationUnitId)?.name ?? request.organizationUnitId} — {getStatusLabel(t, request.status)}
                     </option>
                   ))}
                 </Select>
@@ -695,16 +705,17 @@ export function OrganizationPanel({
             {dialog === "reject" && (
               <>
                 <p className="text-sm text-ink-dim">
-                  Tolak permintaan{" "}
-                  {units.data?.find(
-                    (unit) =>
-                      unit.id ===
-                      (requests.data ?? []).find((request) => request.id === requestTarget)
-                        ?.organizationUnitId,
-                  )?.name ?? requestTarget}
-                  ? Alasan tercatat di jejak audit.
+                  {t("orgPanel.rejectPrompt", {
+                    unitName:
+                      units.data?.find(
+                        (unit) =>
+                          unit.id ===
+                          (requests.data ?? []).find((request) => request.id === requestTarget)
+                            ?.organizationUnitId,
+                      )?.name ?? requestTarget,
+                  })}
                 </p>
-                <Field label="Alasan penolakan" required>
+                <Field label={t("orgPanel.rejectReason")} required>
                   <Textarea name="reviewReason" required rows={3} />
                 </Field>
               </>

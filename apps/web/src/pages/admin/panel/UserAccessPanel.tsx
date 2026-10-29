@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "../../../i18n/LocaleProvider";
 import { useShell } from "../../../shell/layout/AppShell";
 import { AdminAssignmentsView } from "../console/AdminAssignmentsView";
 import { AdminPermissionsView } from "../console/AdminPermissionsView";
@@ -16,22 +17,23 @@ import { AdminUsersView } from "../console/AdminUsersView";
  */
 type Tab = "users" | "assignments" | "roles" | "permissions";
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "users", label: "User" },
-  { key: "assignments", label: "Assignment" },
-  { key: "roles", label: "Role" },
-  { key: "permissions", label: "Permission" },
-];
-
 export function UserAccessPanel({ canManageAccess }: { canManageAccess: boolean }) {
   const { permissions } = useShell();
+  const t = useT();
   const [tab, setTab] = useState<Tab>("users");
   const canReadDefinitions = permissions.includes("config.read");
   const canManageRoles = permissions.includes("role.manage");
 
+  const TABS: { key: Tab; label: string }[] = [
+    { key: "users", label: t("userAccessPanel.title") },
+    { key: "assignments", label: t("userAccessPanel.assignments") },
+    { key: "roles", label: t("userAccessPanel.roles") },
+    { key: "permissions", label: t("userAccessPanel.permissions") },
+  ];
+
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="Bagian akses pengguna" className="flex flex-wrap gap-1 border-b border-line">
+      <div role="tablist" aria-label={t("userAccessPanel.ariaLabel")} className="flex flex-wrap gap-1 border-b border-line">
         {TABS.map((entry) => (
           <button
             key={entry.key}
@@ -57,10 +59,7 @@ export function UserAccessPanel({ canManageAccess }: { canManageAccess: boolean 
         {tab === "permissions" && <AdminPermissionsView />}
       </div>
 
-      <p className="text-xs text-ink-faint">
-        Setiap bagian memeriksa izinnya sendiri. Daftar yang tidak dapat Anda baca ditampilkan sebagai
-        penolakan, bukan daftar kosong.
-      </p>
+      <p className="text-xs text-ink-faint">{t("userAccessPanel.note")}</p>
     </div>
   );
 }

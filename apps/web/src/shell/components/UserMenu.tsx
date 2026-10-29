@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { useT } from "../../i18n/LocaleProvider";
 
 function initialsOf(fullName?: string, email?: string): string {
   const name = (fullName ?? "").trim();
@@ -39,6 +40,7 @@ export function UserMenu({
   onSwitchRole: () => void;
   onSignOut: () => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -95,7 +97,7 @@ export function UserMenu({
   }, [open]);
 
   const initials = initialsOf(fullName, email);
-  const displayName = fullName || "User";
+  const displayName = fullName || t("userMenu.defaultName");
 
   return (
     <div className="relative">
@@ -131,14 +133,14 @@ export function UserMenu({
           id={menuId}
           ref={menuRef}
           role="menu"
-          aria-label="User menu"
+          aria-label={t("userMenu.label")}
           className="absolute right-0 z-30 mt-2 w-56 rounded border border-line bg-panel py-1 shadow-lg"
         >
           <div className="border-b border-line px-3 py-2">
             <div className="truncate text-sm font-medium text-ink">{displayName}</div>
             {activeRoleName ? (
               <div className="truncate text-xs text-ink-dim" title={activeScopeName ?? undefined}>
-                Working as {activeRoleName}
+                {t("userMenu.workingAs", { role: activeRoleName })}
                 {activeScopeName ? ` (${activeScopeName})` : ""}
               </div>
             ) : (
@@ -155,7 +157,7 @@ export function UserMenu({
             }}
             className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-hidden"
           >
-            Switch role…
+            {t("userMenu.switchRole")}
           </button>
           <NavLink
             to="/profile"
@@ -164,7 +166,7 @@ export function UserMenu({
             onClick={close}
             className="block min-h-[44px] px-3 py-2 text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-hidden"
           >
-            Profile
+            {t("userMenu.profile")}
           </NavLink>
           <button
             type="button"
@@ -176,7 +178,7 @@ export function UserMenu({
             }}
             className="block min-h-[44px] w-full px-3 py-2 text-left text-sm text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:bg-panel-2 focus-visible:outline-hidden"
           >
-            Sign out
+            {t("userMenu.signOut")}
           </button>
         </div>
       )}

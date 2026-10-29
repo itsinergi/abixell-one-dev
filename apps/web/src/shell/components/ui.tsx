@@ -22,6 +22,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
+import { useT } from "../../i18n/LocaleProvider";
 
 /* ------------------------------------------------------------------ Button */
 
@@ -384,23 +385,24 @@ export function PermissionDeniedState({
   permission?: string;
   action?: ReactNode;
 }) {
+  const t = useT();
   return (
     <EmptyState
-      title="You do not have access to this area"
+      title={t("common.permissionDenied")}
       description={
         <>
           {permission ? (
             <>
-              Viewing this area requires permission{" "}
+              {t("common.permissionRequired")}{" "}
               <code className="rounded bg-panel-3 px-1.5 py-0.5 font-mono text-xs text-ink-dim">
                 {permission}
               </code>
               .
             </>
           ) : (
-            "Your roles do not grant permission to view this area."
+            t("common.permissionNone")
           )}{" "}
-          Ask an administrator if you expect access.
+          {t("common.askAdmin")}
         </>
       }
       action={action}
@@ -419,8 +421,9 @@ export interface TimelineItem {
 
 /** Vertical progress timeline — generic, ordered oldest→newest by caller. */
 export function Timeline({ items }: { items: TimelineItem[] }) {
+  const t = useT();
   if (items.length === 0) {
-    return <p className="text-sm text-ink-dim">No activity recorded yet.</p>;
+    return <p className="text-sm text-ink-dim">{t("common.noActivity")}</p>;
   }
   return (
     <ol className="relative ml-2 border-l border-line">
