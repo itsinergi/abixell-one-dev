@@ -11,6 +11,7 @@ import {
   type ScheduledJobRun,
   type WorkflowInstance,
 } from "../lib/api";
+import { useT } from "../i18n/LocaleProvider";
 import { OverlayDialog } from "../shell/components/OverlayDialog";
 import {
   Alert,
@@ -75,9 +76,9 @@ function initialResource<T>(data: T, loading = true): ResourceState<T> {
   return { data, loading, error: null, status: null };
 }
 
-function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError && error.status === 401) return "Your session has expired. Sign in again.";
-  if (error instanceof ApiError && error.status === 403) return "You do not have permission to view this resource.";
+function errorMessage(error: unknown, t: ReturnType<typeof useT>, fallback: string) {
+  if (error instanceof ApiError && error.status === 401) return t("sharedServices.sessionExpired");
+  if (error instanceof ApiError && error.status === 403) return t("sharedServices.noPerm");
   return error instanceof ApiError ? error.message : fallback;
 }
 
@@ -99,9 +100,10 @@ function ResourceBlock<T>({
   loadingLabel: string;
   children: React.ReactNode;
 }) {
+  const t = useT();
   if (resource.loading) return <Spinner label={loadingLabel} />;
-  if (resource.status === 401) return <EmptyState title="Your session has expired" description="Sign in again to continue." />;
-  if (resource.status === 403) return <EmptyState title="Access denied" description="You do not have permission to view this resource." />;
+  if (resource.status === 401) return <EmptyState title={t("sharedServices.sessionExpiredTitle")} description={t("sharedServices.sessionExpired")} />;
+  if (resource.status === 403) return <EmptyState title={t("sharedServices.accessDenied")} description={t("sharedServices.noPerm")} />;
   if (resource.error) return <Alert tone="error">{resource.error}</Alert>;
   return <>{children}</>;
 }
@@ -123,6 +125,7 @@ export function SharedServicesPanel({
   canReadObservability: boolean;
   onMessage: (m: Message) => void;
 }) {
+  const t = useT();
   const integrationRead = canReadIntegration ?? canManageIntegration ?? false;
   const integrationManage = canManageIntegration ?? false;
 
@@ -169,28 +172,28 @@ export function SharedServicesPanel({
           setter((state) => ({
             ...state,
             loading: false,
-            error: errorMessage(error, fallback),
+            error: errorMessage(error, t, fallback),
             status: errorStatus(error),
           }));
         });
     },
-    [],
+    [t],
   );
 
   const refresh = useCallback(() => {
-    loadResource("notifications", setNotifications, () => api.myNotifications(token), "Failed to load notifications.");
-    loadResource("instances", setInstances, () => api.workflowInstances(token), "Failed to load workflow instances.");
+    loadResource("notifications", setNotifications, () => api.myNotifications(token), t("sharedServices.notificationsLoad"));
+    loadResource("instances", setInstances, () => api.workflowInstances(token), t("sharedServices.instancesLoad"));
 
     if (canManageScheduler) {
-      loadResource("jobs", setJobs, () => api.scheduledJobs(token), "Failed to load scheduler jobs.");
+      loadResource("jobs", setJobs, () => api.scheduledJobs(token), t("sharedServices.jobsLoad"));
     } else {
       generations.current.jobs = (generations.current.jobs ?? 0) + 1;
       setJobs({ data: [], loading: false, error: null, status: null });
     }
 
     if (integrationRead) {
-      loadResource("endpoints", setEndpoints, () => api.integrationEndpoints(token), "Failed to load integration endpoints.");
-      loadResource("integrationLog", setIntegrationLog, () => api.integrationLog(token), "Failed to load integration log.");
+      loadResource("endpoints", setEndpoints, () => api.integrationEndpoints(token), t("sharedServices.endpointsLoad"));
+      loadResource("integrationLog", setIntegrationLog, () => api.integrationLog(token), t("sharedServices.integrationLogLoad"));
     } else {
       generations.current.endpoints = (generations.current.endpoints ?? 0) + 1;
       generations.current.integrationLog = (generations.current.integrationLog ?? 0) + 1;
@@ -199,12 +202,12 @@ export function SharedServicesPanel({
     }
 
     if (canReadObservability) {
-      loadResource("events", setEvents, () => api.observabilityEvents(token), "Failed to load observability events.");
+      loadResource("events", setEvents, () => api.observabilityEvents(token), t("sharedServices.eventsLoad"));
     } else {
       generations.current.events = (generations.current.events ?? 0) + 1;
       setEvents({ data: [], loading: false, error: null, status: 403 });
     }
-  }, [canManageScheduler, canReadObservability, integrationRead, loadResource, token]);
+  }, [canManageScheduler, canReadObservability, integrationRead, loadResource, t, token]);
 
   useEffect(() => {
     refresh();
@@ -249,10 +252,10 @@ export function SharedServicesPanel({
         "documents",
         setDocuments,
         () => api.documentsForEntity(token, "demo_transaction", instance.entityId),
-        "Failed to load documents.",
+        t("sharedServices.documentsLoad"),
       );
     },
-    [loadResource, token],
+    [loadResource, t, token],
   );
 
   useEffect(() => {
@@ -297,7 +300,7 @@ export function SharedServicesPanel({
       afterSuccess?.();
     } catch (error) {
       if (dialogGeneration.current !== generation) return;
-      const text = errorMessage(error, "Operation failed.");
+      const text = errorMessage(error, t, t("sharedServices.opFailed"));
       setDialogError(text);
       onMessage({ type: "error", text });
     } finally {
@@ -320,7 +323,7 @@ export function SharedServicesPanel({
       anchor.rel = "noopener";
       anchor.click();
     } catch (error) {
-      onMessage({ type: "error", text: errorMessage(error, "Download failed.") });
+      onMessage({ type: "error", text: errorMessage(error, t, t("sharedServices.downloadFailed")) });
     }
   }
 
@@ -332,15 +335,15 @@ export function SharedServicesPanel({
       const file = uploadFile;
       const instance = selectedInstance;
       if (!instance) {
-        setDialogError("Choose a Workflow Instance before uploading a document.");
+        setDialogError(t("sharedServices.selectInstance"));
         return;
       }
       if (!file) {
-        setDialogError("Choose a file before uploading.");
+        setDialogError(t("sharedServices.selectFile"));
         return;
       }
       if (file.size > MAX_UPLOAD_BYTES) {
-        setDialogError("Files must be 20 MB or smaller.");
+        setDialogError(t("sharedServices.fileTooLarge"));
         return;
       }
       void runMutation(
@@ -356,7 +359,7 @@ export function SharedServicesPanel({
       const instance = selectedInstance;
       void runMutation(
         () => api.deleteDocument(token, document.id),
-        "Document deleted.",
+        t("sharedServices.documentDeleted"),
         () => loadDocuments(instance),
       );
       return;
@@ -366,7 +369,7 @@ export function SharedServicesPanel({
       const notification = dialog.notification;
       void runMutation(
         () => api.markNotificationRead(token, notification.id),
-        "Notification marked read.",
+        t("sharedServices.markedRead"),
         refresh,
       );
       return;
@@ -400,12 +403,12 @@ export function SharedServicesPanel({
       const baseUrl = endpointForm.baseUrl.trim() || null;
       const webhookSecret = endpointForm.webhookSecret || null;
       if (!code || !name) {
-        setDialogError("Code and name are required.");
+        setDialogError(t("sharedServices.codeNameRequired"));
         return;
       }
       void runMutation(
         () => api.createIntegrationEndpoint(token, { code, name, direction, baseUrl, webhookSecret }),
-        "Integration endpoint created.",
+        t("sharedServices.endpointCreated"),
         refresh,
       );
     }
@@ -413,47 +416,47 @@ export function SharedServicesPanel({
 
   function openJobRuns(job: ScheduledJob, trigger?: HTMLButtonElement) {
     openDialog({ kind: "job-runs", job }, trigger);
-    loadResource("jobRuns", setJobRuns, () => api.scheduledJobRuns(token, job.jobCode), "Failed to load run history.");
+    loadResource("jobRuns", setJobRuns, () => api.scheduledJobRuns(token, job.jobCode), t("sharedServices.jobRunsLoad"));
   }
 
   const notificationColumns: Column<Notification>[] = [
-    { header: "Notification", mobileRole: "title", cell: (item) => item.subject ?? item.eventType },
-    { header: "Body", mobileRole: "detail", cell: (item) => item.body },
-    { header: "Channel", cell: (item) => item.channel },
+    { header: t("sharedServices.colNotification"), mobileRole: "title", cell: (item) => item.subject ?? item.eventType },
+    { header: t("sharedServices.colBody"), mobileRole: "detail", cell: (item) => item.body },
+    { header: t("sharedServices.colChannel"), cell: (item) => item.channel },
     {
-      header: "Status",
+      header: t("sharedServices.colStatus"),
       mobileRole: "status",
-      cell: (item) => <StatusPill tone={item.readAt ? "neutral" : "info"}>{item.readAt ? "Read" : "Unread"}</StatusPill>,
+      cell: (item) => <StatusPill tone={item.readAt ? "neutral" : "info"}>{item.readAt ? t("sharedServices.read") : t("sharedServices.unread")}</StatusPill>,
     },
-    { header: "Created", cell: (item) => new Date(item.createdAt).toLocaleString() },
+    { header: t("sharedServices.colCreated"), cell: (item) => new Date(item.createdAt).toLocaleString() },
     {
-      header: "Action",
+      header: t("sharedServices.colAction"),
       cell: (item) =>
         item.readAt ? (
           "—"
         ) : (
           <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={(event) => openDialog({ kind: "mark-read", notification: item }, event.currentTarget)}>
-            Mark read
+            {t("sharedServices.markReadAction")}
           </Button>
         ),
     },
   ];
 
   const documentColumns: Column<DocumentRecord>[] = [
-    { header: "File", mobileRole: "title", cell: (item) => item.fileName },
-    { header: "MIME", mobileRole: "detail", cell: (item) => item.mimeType },
-    { header: "Size", cell: (item) => bytesLabel(item.sizeBytes) },
-    { header: "Uploaded", cell: (item) => new Date(item.createdAt).toLocaleString() },
+    { header: t("sharedServices.colFile"), mobileRole: "title", cell: (item) => item.fileName },
+    { header: t("sharedServices.colMime"), mobileRole: "detail", cell: (item) => item.mimeType },
+    { header: t("sharedServices.colSize"), cell: (item) => bytesLabel(item.sizeBytes) },
+    { header: t("sharedServices.colUploaded"), cell: (item) => new Date(item.createdAt).toLocaleString() },
     {
-      header: "Actions",
+      header: t("sharedServices.colActions"),
       cell: (item) => (
         <div className="flex flex-wrap gap-1">
           <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => void downloadDocument(item)}>
-            Download
+            {t("sharedServices.download")}
           </Button>
           {canManageDocuments && (
             <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={(event) => openDialog({ kind: "delete-document", document: item }, event.currentTarget)}>
-              Delete
+              {t("sharedServices.delete")}
             </Button>
           )}
         </div>
@@ -463,7 +466,7 @@ export function SharedServicesPanel({
 
   const jobColumns: Column<ScheduledJob>[] = [
     {
-      header: "Job",
+      header: t("sharedServices.colJob"),
       mobileRole: "title",
       cell: (item) => (
         <span>
@@ -472,22 +475,22 @@ export function SharedServicesPanel({
         </span>
       ),
     },
-    { header: "Interval", mobileRole: "detail", cell: (item) => `Every ${item.intervalSeconds}s` },
+    { header: t("sharedServices.colInterval"), mobileRole: "detail", cell: (item) => t("sharedServices.everySeconds", { count: item.intervalSeconds }) },
     {
-      header: "Status",
+      header: t("sharedServices.colStatus"),
       mobileRole: "status",
-      cell: (item) => <StatusPill tone={item.lastStatus === "failed" ? "danger" : item.lastStatus === "success" ? "success" : "neutral"}>{item.lastStatus ?? "Never run"}</StatusPill>,
+      cell: (item) => <StatusPill tone={item.lastStatus === "failed" ? "danger" : item.lastStatus === "success" ? "success" : "neutral"}>{item.lastStatus ?? t("sharedServices.neverRun")}</StatusPill>,
     },
-    { header: "Last run", cell: (item) => (item.lastRunAt ? new Date(item.lastRunAt).toLocaleString() : "—") },
+    { header: t("sharedServices.colLastRun"), cell: (item) => (item.lastRunAt ? new Date(item.lastRunAt).toLocaleString() : "—") },
     {
-      header: "Actions",
+      header: t("sharedServices.colActions"),
       cell: (item) => (
         <div className="flex flex-wrap gap-1">
           <Button variant="secondary" className="min-h-0 px-2 py-1 text-xs" onClick={(event) => openDialog({ kind: "trigger-job", job: item }, event.currentTarget)}>
-            Trigger now
+            {t("sharedServices.triggerNow")}
           </Button>
           <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={(event) => openJobRuns(item, event.currentTarget)}>
-            History
+            {t("sharedServices.history")}
           </Button>
         </div>
       ),
@@ -496,7 +499,7 @@ export function SharedServicesPanel({
 
   const endpointColumns: Column<IntegrationEndpoint>[] = [
     {
-      header: "Endpoint",
+      header: t("sharedServices.colEndpoint"),
       mobileRole: "title",
       cell: (item) => (
         <span>
@@ -505,19 +508,19 @@ export function SharedServicesPanel({
         </span>
       ),
     },
-    { header: "Direction", mobileRole: "detail", cell: (item) => item.direction },
-    { header: "Base URL", cell: (item) => item.baseUrl ?? "—" },
+    { header: t("sharedServices.colDirection"), mobileRole: "detail", cell: (item) => item.direction },
+    { header: t("sharedServices.colBaseUrl"), cell: (item) => item.baseUrl ?? "—" },
     {
-      header: "Status",
+      header: t("sharedServices.colStatus"),
       mobileRole: "status",
-      cell: (item) => <StatusPill tone={item.isActive ? "success" : "neutral"}>{item.isActive ? "Active" : "Inactive"}</StatusPill>,
+      cell: (item) => <StatusPill tone={item.isActive ? "success" : "neutral"}>{item.isActive ? t("sharedServices.active") : t("sharedServices.inactive")}</StatusPill>,
     },
     {
-      header: "Action",
+      header: t("sharedServices.colAction"),
       cell: (item) =>
         integrationManage ? (
           <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={(event) => openDialog({ kind: "endpoint-status", endpoint: item }, event.currentTarget)}>
-            {item.isActive ? "Deactivate" : "Activate"}
+            {item.isActive ? t("sharedServices.deactivate") : t("sharedServices.activate")}
           </Button>
         ) : (
           "—"
@@ -526,80 +529,80 @@ export function SharedServicesPanel({
   ];
 
   const logColumns: Column<IntegrationLogEntry>[] = [
-    { header: "Event", mobileRole: "title", cell: (item) => item.eventType },
-    { header: "Direction", mobileRole: "detail", cell: (item) => item.direction },
-    { header: "Status", mobileRole: "status", cell: (item) => item.status },
-    { header: "Created", cell: (item) => new Date(item.createdAt).toLocaleString() },
+    { header: t("sharedServices.colEvent"), mobileRole: "title", cell: (item) => item.eventType },
+    { header: t("sharedServices.colDirection"), mobileRole: "detail", cell: (item) => item.direction },
+    { header: t("sharedServices.colStatus"), mobileRole: "status", cell: (item) => item.status },
+    { header: t("sharedServices.colCreated"), cell: (item) => new Date(item.createdAt).toLocaleString() },
   ];
 
   const eventColumns: Column<DomainEvent>[] = [
-    { header: "Event", mobileRole: "title", cell: (item) => item.eventType },
-    { header: "Entity", mobileRole: "detail", cell: (item) => item.entityType },
-    { header: "Entity ID", cell: (item) => (item.entityId ? `${item.entityId.slice(0, 8)}…` : "—") },
-    { header: "Occurred", cell: (item) => new Date(item.occurredAt).toLocaleString() },
+    { header: t("sharedServices.colEvent"), mobileRole: "title", cell: (item) => item.eventType },
+    { header: t("sharedServices.colEntity"), mobileRole: "detail", cell: (item) => item.entityType },
+    { header: t("sharedServices.colEntityId"), cell: (item) => (item.entityId ? `${item.entityId.slice(0, 8)}…` : "—") },
+    { header: t("sharedServices.colOccurred"), cell: (item) => new Date(item.occurredAt).toLocaleString() },
   ];
 
   const runColumns: Column<ScheduledJobRun>[] = [
-    { header: "Started", mobileRole: "title", cell: (item) => new Date(item.startedAt).toLocaleString() },
-    { header: "Trigger", mobileRole: "detail", cell: (item) => item.trigger },
-    { header: "Status", mobileRole: "status", cell: (item) => <StatusPill tone={item.status === "failed" ? "danger" : item.status === "success" ? "success" : "info"}>{item.status}</StatusPill> },
-    { header: "Finished", cell: (item) => (item.finishedAt ? new Date(item.finishedAt).toLocaleString() : "—") },
-    { header: "Error", cell: (item) => item.errorMessage ?? "—" },
+    { header: t("sharedServices.colStarted"), mobileRole: "title", cell: (item) => new Date(item.startedAt).toLocaleString() },
+    { header: t("sharedServices.colTrigger"), mobileRole: "detail", cell: (item) => item.trigger },
+    { header: t("sharedServices.colStatus"), mobileRole: "status", cell: (item) => <StatusPill tone={item.status === "failed" ? "danger" : item.status === "success" ? "success" : "info"}>{item.status}</StatusPill> },
+    { header: t("sharedServices.colFinished"), cell: (item) => (item.finishedAt ? new Date(item.finishedAt).toLocaleString() : "—") },
+    { header: t("sharedServices.colError"), cell: (item) => item.errorMessage ?? "—" },
   ];
 
   const dialogTitle = dialog?.kind === "mark-read"
-    ? "Mark notification read"
+    ? t("sharedServices.markReadTitle")
     : dialog?.kind === "upload"
-      ? "Upload document"
+      ? t("sharedServices.uploadTitle")
       : dialog?.kind === "delete-document"
-        ? "Delete document"
+        ? t("sharedServices.deleteTitle")
         : dialog?.kind === "trigger-job"
-          ? "Trigger scheduler job"
+          ? t("sharedServices.triggerTitle")
           : dialog?.kind === "endpoint"
-            ? "Create integration endpoint"
+            ? t("sharedServices.endpointTitle")
             : dialog?.kind === "endpoint-status"
-              ? `${dialog.endpoint.isActive ? "Deactivate" : "Activate"} endpoint`
+              ? t("sharedServices.endpointStatusTitle", { action: dialog.endpoint.isActive ? t("sharedServices.deactivate") : t("sharedServices.activate") })
               : dialog?.kind === "job-runs"
-                ? "Scheduler run history"
-                : "Shared Services";
+                ? t("sharedServices.jobRunsTitle")
+                : t("sharedServices.sharedServices");
 
   const dialogDescription = dialog?.kind === "endpoint"
-    ? "Secrets can be entered here but are never displayed after submission."
+    ? t("sharedServices.endpointDesc")
     : dialog?.kind === "upload"
-      ? "Attach a file to the selected Workflow Instance. Maximum size is 20 MB."
+      ? t("sharedServices.uploadDesc")
       : dialog?.kind === "job-runs"
-        ? `Recent runs for ${dialog.job.jobCode}.`
-        : "The server will re-check permissions when you confirm.";
+        ? t("sharedServices.jobRunsDesc", { code: dialog.job.jobCode })
+        : t("sharedServices.serverRechecks");
 
   const confirmLabel = dialog?.kind === "endpoint"
-    ? "Create endpoint"
+    ? t("sharedServices.createEndpoint")
     : dialog?.kind === "upload"
-      ? "Upload"
+      ? t("sharedServices.upload")
       : dialog?.kind === "endpoint-status"
-        ? dialog.endpoint.isActive ? "Deactivate" : "Activate"
+        ? (dialog.endpoint.isActive ? t("sharedServices.deactivate") : t("sharedServices.activate"))
         : dialog?.kind === "trigger-job"
-          ? "Trigger now"
-          : "Confirm";
+          ? t("sharedServices.triggerNow")
+          : t("sharedServices.confirm");
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-slate-900">Enterprise Shared Services</h2>
-        <p className="text-sm text-slate-500">Documents, notifications, scheduler, integrations, and observability.</p>
+        <h2 className="text-xl font-semibold text-slate-900">{t("sharedServices.title")}</h2>
+        <p className="text-sm text-slate-500">{t("sharedServices.subtitle")}</p>
       </div>
 
       <Card>
         <div className="mb-3">
-          <h3 className="text-base font-semibold">My Notifications</h3>
-          <p className="text-xs text-slate-500">In-app notifications delivered to the signed-in user.</p>
+          <h3 className="text-base font-semibold">{t("sharedServices.myNotifications")}</h3>
+          <p className="text-xs text-slate-500">{t("sharedServices.notificationsDesc")}</p>
         </div>
-        <ResourceBlock resource={notifications} loadingLabel="Loading notifications…">
+        <ResourceBlock resource={notifications} loadingLabel={t("sharedServices.loadingNotifications")}>
           <DataTable
             columns={notificationColumns}
             rows={notifications.data}
             keyOf={(item) => item.id}
             mobileBreakpoint="md"
-            empty={<EmptyState title="No notifications" description="No notifications have been delivered to you." />}
+            empty={<EmptyState title={t("sharedServices.noNotifications")} description={t("sharedServices.noNotificationsDesc")} />}
           />
         </ResourceBlock>
       </Card>
@@ -607,22 +610,22 @@ export function SharedServicesPanel({
       <Card>
         <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h3 className="text-base font-semibold">Document / File Service</h3>
-            <p className="text-xs text-slate-500">Files are attached to a selected Workflow Instance. Maximum upload size is 20 MB.</p>
+            <h3 className="text-base font-semibold">{t("sharedServices.docService")}</h3>
+            <p className="text-xs text-slate-500">{t("sharedServices.docServiceDesc")}</p>
           </div>
           {canManageDocuments && (
             <Button disabled={!selectedInstance} onClick={(event) => openDialog({ kind: "upload" }, event.currentTarget)}>
-              Upload document
+              {t("sharedServices.uploadDocument")}
             </Button>
           )}
         </div>
-        <Field label="Workflow Instance" required>
+        <Field label={t("sharedServices.workflowInstance")} required>
           <Select
             value={selectedInstanceId}
             onChange={(event) => setSelectedInstanceId(event.target.value)}
             disabled={instances.loading || instances.data.length === 0}
           >
-            <option value="">{instances.data.length === 0 ? "No Workflow Instances loaded" : "Select an instance"}</option>
+            <option value="">{instances.data.length === 0 ? t("sharedServices.noInstancesLoaded") : t("sharedServices.selectInstanceOption")}</option>
             {instances.data.map((instance) => (
               <option key={instance.id} value={instance.id}>
                 {instance.id.slice(0, 8)}… ({instance.status})
@@ -632,13 +635,13 @@ export function SharedServicesPanel({
         </Field>
         {instances.error && <div className="mt-3"><Alert tone="error">{instances.error}</Alert></div>}
         <div className="mt-3">
-          <ResourceBlock resource={documents} loadingLabel="Loading documents…">
+          <ResourceBlock resource={documents} loadingLabel={t("sharedServices.loadingDocuments")}>
             <DataTable
               columns={documentColumns}
               rows={documents.data.filter((item) => item.deletedAt === null)}
               keyOf={(item) => item.id}
               mobileBreakpoint="md"
-              empty={<EmptyState title="No documents" description="No documents are attached to this instance." />}
+              empty={<EmptyState title={t("sharedServices.noDocs")} description={t("sharedServices.noDocsDesc")} />}
             />
           </ResourceBlock>
         </div>
@@ -647,16 +650,16 @@ export function SharedServicesPanel({
       {canManageScheduler && (
         <Card>
           <div className="mb-3">
-            <h3 className="text-base font-semibold">Scheduler / Background Jobs</h3>
-            <p className="text-xs text-slate-500">Automatic jobs are read-only here; manual trigger and history use existing routes.</p>
+            <h3 className="text-base font-semibold">{t("sharedServices.scheduler")}</h3>
+            <p className="text-xs text-slate-500">{t("sharedServices.schedulerDesc")}</p>
           </div>
-          <ResourceBlock resource={jobs} loadingLabel="Loading scheduler jobs…">
+          <ResourceBlock resource={jobs} loadingLabel={t("sharedServices.loadingJobs")}>
             <DataTable
               columns={jobColumns}
               rows={jobs.data}
               keyOf={(item) => item.id}
               mobileBreakpoint="md"
-              empty={<EmptyState title="No jobs" description="No scheduler jobs are configured." />}
+              empty={<EmptyState title={t("sharedServices.noJobs")} description={t("sharedServices.noJobsDesc")} />}
             />
           </ResourceBlock>
         </Card>
@@ -666,31 +669,31 @@ export function SharedServicesPanel({
         <Card>
           <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h3 className="text-base font-semibold">Integration Boundary</h3>
-              <p className="text-xs text-slate-500">Read access is separate from endpoint management. Secrets are never shown in lists, logs, or summaries.</p>
+              <h3 className="text-base font-semibold">{t("sharedServices.integration")}</h3>
+              <p className="text-xs text-slate-500">{t("sharedServices.integrationDesc")}</p>
             </div>
             {integrationManage && (
-              <Button onClick={(event) => openDialog({ kind: "endpoint" }, event.currentTarget)}>Create endpoint</Button>
+              <Button onClick={(event) => openDialog({ kind: "endpoint" }, event.currentTarget)}>{t("sharedServices.createEndpoint")}</Button>
             )}
           </div>
-          <ResourceBlock resource={endpoints} loadingLabel="Loading integration endpoints…">
+          <ResourceBlock resource={endpoints} loadingLabel={t("sharedServices.loadingEndpoints")}>
             <DataTable
               columns={endpointColumns}
               rows={endpoints.data}
               keyOf={(item) => item.id}
               mobileBreakpoint="md"
-              empty={<EmptyState title="No endpoints" description="No integration endpoints are configured." />}
+              empty={<EmptyState title={t("sharedServices.noEndpoints")} description={t("sharedServices.noEndpointsDesc")} />}
             />
           </ResourceBlock>
           <div className="mt-6">
-            <h4 className="mb-3 text-sm font-semibold text-slate-700">Recent integration log</h4>
-            <ResourceBlock resource={integrationLog} loadingLabel="Loading integration log…">
+            <h4 className="mb-3 text-sm font-semibold text-slate-700">{t("sharedServices.recentLog")}</h4>
+            <ResourceBlock resource={integrationLog} loadingLabel={t("sharedServices.loadingIntegrationLog")}>
               <DataTable
                 columns={logColumns}
                 rows={integrationLog.data.slice(0, 20)}
                 keyOf={(item) => item.id}
                 mobileBreakpoint="md"
-                empty={<EmptyState title="No log entries" description="No integration activity is available." />}
+                empty={<EmptyState title={t("sharedServices.noLogEntries")} description={t("sharedServices.noLogEntriesDesc")} />}
               />
             </ResourceBlock>
           </div>
@@ -700,16 +703,16 @@ export function SharedServicesPanel({
       {canReadObservability && (
         <Card>
           <div className="mb-3">
-            <h3 className="text-base font-semibold">Observability — Domain Event Log</h3>
-            <p className="text-xs text-slate-500">Raw domain events consumed by notifications and integrations.</p>
+            <h3 className="text-base font-semibold">{t("sharedServices.observability")}</h3>
+            <p className="text-xs text-slate-500">{t("sharedServices.observabilityDesc")}</p>
           </div>
-          <ResourceBlock resource={events} loadingLabel="Loading domain events…">
+          <ResourceBlock resource={events} loadingLabel={t("sharedServices.loadingEvents")}>
             <DataTable
               columns={eventColumns}
               rows={events.data.slice(0, 30)}
               keyOf={(item) => item.id}
               mobileBreakpoint="md"
-              empty={<EmptyState title="No events" description="No domain events are available." />}
+              empty={<EmptyState title={t("sharedServices.noEvents")} description={t("sharedServices.noEventsDesc")} />}
             />
           </ResourceBlock>
         </Card>
@@ -725,27 +728,27 @@ export function SharedServicesPanel({
         size={dialog?.kind === "job-runs" ? "lg" : "md"}
         footer={
           dialog?.kind === "job-runs" ? (
-            <Button variant="secondary" onClick={closeDialog}>Close</Button>
+            <Button variant="secondary" onClick={closeDialog}>{t("sharedServices.close")}</Button>
           ) : (
             <>
               <Button variant="secondary" disabled={pending} onClick={closeDialog}>
-                Cancel
+                {t("sharedServices.cancel")}
               </Button>
               <Button type="submit" form="shared-services-dialog-form" disabled={pending}>
-                {pending ? "Saving…" : confirmLabel}
+                {pending ? t("sharedServices.saving") : confirmLabel}
               </Button>
             </>
           )
         }
       >
         {dialog?.kind === "job-runs" ? (
-          <ResourceBlock resource={jobRuns} loadingLabel="Loading run history…">
+          <ResourceBlock resource={jobRuns} loadingLabel={t("sharedServices.loadingRuns")}>
             <DataTable
               columns={runColumns}
               rows={jobRuns.data}
               keyOf={(item) => item.id}
               mobileBreakpoint="md"
-              empty={<EmptyState title="No runs" description="This job has no visible run history." />}
+              empty={<EmptyState title={t("sharedServices.noRuns")} description={t("sharedServices.noRunsDesc")} />}
             />
           </ResourceBlock>
         ) : (
@@ -754,16 +757,16 @@ export function SharedServicesPanel({
 
             {dialog?.kind === "mark-read" && (
               <p className="text-sm text-slate-600">
-                Mark <strong>{dialog.notification.subject ?? dialog.notification.eventType}</strong> as read?
+                {t("sharedServices.markReadConfirm", { subject: <strong>{dialog.notification.subject ?? dialog.notification.eventType}</strong> })}
               </p>
             )}
 
             {dialog?.kind === "upload" && (
               <>
                 <p className="text-sm text-slate-600">
-                  Target instance: <strong>{selectedInstance ? `${selectedInstance.id.slice(0, 8)}… (${selectedInstance.status})` : "No instance selected"}</strong>
+                  {t("sharedServices.targetInstance")} <strong>{selectedInstance ? `${selectedInstance.id.slice(0, 8)}… (${selectedInstance.status})` : t("sharedServices.noInstanceSelected")}</strong>
                 </p>
-                <Field label="File" required hint="Maximum 20 MB.">
+                <Field label={t("sharedServices.fileLabel")} required hint={t("sharedServices.fileHint")}>
                   <Input
                     key={uploadInputKey}
                     type="file"
@@ -776,25 +779,25 @@ export function SharedServicesPanel({
 
             {dialog?.kind === "delete-document" && (
               <p className="text-sm text-slate-600">
-                Delete <strong>{dialog.document.fileName}</strong>? The server will enforce authorization before removing it.
+                {t("sharedServices.deleteConfirm", { name: <strong>{dialog.document.fileName}</strong> })} {t("sharedServices.serverEnforces")}
               </p>
             )}
 
             {dialog?.kind === "trigger-job" && (
               <p className="text-sm text-slate-600">
-                Trigger <strong>{dialog.job.jobCode}</strong> now? This uses the existing scheduler route.
+                {t("sharedServices.triggerConfirm", { code: <strong>{dialog.job.jobCode}</strong> })} {t("sharedServices.existingRoute")}
               </p>
             )}
 
             {dialog?.kind === "endpoint-status" && (
               <p className="text-sm text-slate-600">
-                {dialog.endpoint.isActive ? "Deactivate" : "Activate"} <strong>{dialog.endpoint.name}</strong>? Logs and endpoint summaries never display webhook secrets.
+                {t("sharedServices.endpointToggleConfirm", { action: dialog.endpoint.isActive ? t("sharedServices.deactivate") : t("sharedServices.activate"), name: <strong>{dialog.endpoint.name}</strong> })} {t("sharedServices.logsNeverShow")}
               </p>
             )}
 
             {dialog?.kind === "endpoint" && (
               <>
-                <Field label="Code" required>
+                <Field label={t("sharedServices.codeLabel")} required>
                   <Input
                     value={endpointForm.code}
                     onChange={(event) => setEndpointForm((form) => ({ ...form, code: event.target.value }))}
@@ -802,7 +805,7 @@ export function SharedServicesPanel({
                     autoComplete="off"
                   />
                 </Field>
-                <Field label="Name" required>
+                <Field label={t("sharedServices.nameLabel")} required>
                   <Input
                     value={endpointForm.name}
                     onChange={(event) => setEndpointForm((form) => ({ ...form, name: event.target.value }))}
@@ -810,17 +813,17 @@ export function SharedServicesPanel({
                     autoComplete="off"
                   />
                 </Field>
-                <Field label="Direction" required>
+                <Field label={t("sharedServices.directionLabel")} required>
                   <Select
                     value={endpointForm.direction}
                     onChange={(event) => setEndpointForm((form) => ({ ...form, direction: event.target.value as "outbound" | "inbound" }))}
                     disabled={pending}
                   >
-                    <option value="outbound">Outbound</option>
-                    <option value="inbound">Inbound</option>
+                    <option value="outbound">{t("sharedServices.outbound")}</option>
+                    <option value="inbound">{t("sharedServices.inbound")}</option>
                   </Select>
                 </Field>
-                <Field label="Base URL" hint="Leave blank when not applicable.">
+                <Field label={t("sharedServices.baseUrlLabel")} hint={t("sharedServices.baseUrlHint")}>
                   <Input
                     value={endpointForm.baseUrl}
                     onChange={(event) => setEndpointForm((form) => ({ ...form, baseUrl: event.target.value }))}
@@ -828,7 +831,7 @@ export function SharedServicesPanel({
                     autoComplete="url"
                   />
                 </Field>
-                <Field label="Webhook secret" hint="Stored by the server when provided; never displayed after submission.">
+                <Field label={t("sharedServices.webhookSecret")} hint={t("sharedServices.webhookHint")}>
                   <Input
                     type="password"
                     value={endpointForm.webhookSecret}

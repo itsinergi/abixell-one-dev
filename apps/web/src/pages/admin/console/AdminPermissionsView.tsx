@@ -6,6 +6,7 @@
  * deployment and naming no tenant, user, or record.
  */
 import { useMemo, useState } from "react";
+import { useT } from "../../../i18n/LocaleProvider";
 import { api, type AdminPermission } from "../../../lib/api";
 import {
   Button,
@@ -17,22 +18,12 @@ import {
 import { AdminEmpty, AdminPanel, AdminSectionState } from "./AdminSection";
 import { useAdminResource } from "./useAdminResource";
 
-const COLUMNS: Column<AdminPermission>[] = [
-  {
-    header: "Code",
-    cell: (permission) => (
-      <code className="break-all font-mono text-xs font-medium text-ink">{permission.code}</code>
-    ),
-    mobileRole: "title",
-  },
-  { header: "Description", cell: (permission) => permission.description },
-];
-
 export function AdminPermissionsView() {
+  const t = useT();
   const { data, loading, error, denied, sessionExpired, reload } =
     useAdminResource<AdminPermission[]>(
       (token) => api.adminPermissions(token),
-      "Failed to load permissions",
+      t("adminPermissions.loadFailed"),
     );
   const [filter, setFilter] = useState("");
 
@@ -49,10 +40,21 @@ export function AdminPermissionsView() {
   }, [data, filter]);
   const hasFilter = filter.trim().length > 0;
 
+  const columns: Column<AdminPermission>[] = [
+    {
+      header: t("adminPermissions.columnCode"),
+      cell: (permission) => (
+        <code className="break-all font-mono text-xs font-medium text-ink">{permission.code}</code>
+      ),
+      mobileRole: "title",
+    },
+    { header: t("adminPermissions.columnDescription"), cell: (permission) => permission.description },
+  ];
+
   return (
     <AdminSectionState
       loading={loading}
-      loadingLabel="Loading permission catalogue…"
+      loadingLabel={t("adminPermissions.loading")}
       denied={denied}
       sessionExpired={sessionExpired}
       error={error}
@@ -60,53 +62,53 @@ export function AdminPermissionsView() {
       onRetry={reload}
     >
       <AdminPanel
-        title="Permissions"
-        description="Grantable capability metadata fixed by the platform. This is not a user assignment list and cannot be edited here."
+        title={t("adminPermissions.title")}
+        description={t("adminPermissions.description")}
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="w-full max-w-sm">
             <label htmlFor="admin-permission-filter" className="text-sm font-medium text-ink-dim">
-              Filter permissions
+              {t("adminPermissions.filterLabel")}
             </label>
             <Input
               id="admin-permission-filter"
               type="search"
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="Search code or description"
+              placeholder={t("adminPermissions.filterPlaceholder")}
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm tabular-nums text-ink-dim" role="status" aria-live="polite">
-              Showing {rows.length} of {(data ?? []).length}
+              {t("adminPermissions.showing", { shown: rows.length, total: (data ?? []).length })}
             </p>
             {hasFilter && (
               <Button variant="secondary" onClick={() => setFilter("")}>
-                Clear filters
+                {t("adminPermissions.clearFilters")}
               </Button>
             )}
           </div>
         </div>
         <DataTable
-          columns={COLUMNS}
+          columns={columns}
           rows={rows}
           keyOf={(permission) => permission.code}
           mobileBreakpoint="md"
           empty={
             hasFilter ? (
               <EmptyState
-                title={`No permissions match “${filter.trim()}”`}
-                description="Try a different code or description."
+                title={t("adminPermissions.noMatch", { query: filter.trim() })}
+                description={t("adminPermissions.noMatchDescription")}
                 action={
                   <Button variant="secondary" onClick={() => setFilter("")}>
-                    Clear filters
+                    {t("adminPermissions.clearFilters")}
                   </Button>
                 }
               />
             ) : (
               <AdminEmpty
-                title="No permissions available"
-                description="The platform permission catalogue returned no entries."
+                title={t("adminPermissions.emptyTitle")}
+                description={t("adminPermissions.emptyDescription")}
               />
             )
           }

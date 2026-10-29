@@ -24,6 +24,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "../../../auth/AuthContext";
+import { useT } from "../../../i18n/LocaleProvider";
 import {
   api,
   ApiError,
@@ -128,6 +129,7 @@ export function AdminRoleDefinitionView({
   onBack: () => void;
 }) {
   const { session } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
 
   const [definition, setDefinition] = useState<RoleDefinition | null>(null);
@@ -199,11 +201,11 @@ export function AdminRoleDefinitionView({
         return;
       }
       setLoadError(
-        err instanceof ApiError ? err.message : "Failed to load the Role definition",
+        err instanceof ApiError ? err.message : t("roleDef.loadFailed"),
       );
       setLoadState("error");
     }
-  }, [token, roleCode]);
+  }, [token, roleCode, t]);
 
   useEffect(() => {
     void load();
@@ -243,7 +245,7 @@ export function AdminRoleDefinitionView({
       if (!definition || !draft || saveState !== "idle") return;
       const name = draft.name.trim();
       if (name.length === 0) {
-        setSaveError("A Role needs a name.");
+        setSaveError(t("roleDef.nameRequired"));
         return;
       }
       setSaveError(null);
@@ -264,13 +266,13 @@ export function AdminRoleDefinitionView({
         });
       } catch (err) {
         setSaveError(
-          err instanceof ApiError ? err.message : "Failed to preview the Role definition",
+          err instanceof ApiError ? err.message : t("roleDef.previewFailed"),
         );
       } finally {
         setSaveState("idle");
       }
     },
-    [definition, draft, saveState, token, roleCode, toWindows],
+    [definition, draft, saveState, token, roleCode, toWindows, t],
   );
 
   const commit = useCallback(async () => {
@@ -291,17 +293,17 @@ export function AdminRoleDefinitionView({
       setDraft(draftFromDefinition(updated));
       setPreview(null);
       setSaved(
-        `Saved. The Role is now at version ${updated.version}. Window read-only mode is recorded, not yet enforced.`,
+        t("roleDef.saveSuccess", { version: updated.version }),
       );
     } catch (err) {
       setPreview(null);
       setSaveError(
-        err instanceof ApiError ? err.message : "Failed to save the Role definition",
+        err instanceof ApiError ? err.message : t("roleDef.saveFailed"),
       );
     } finally {
       setSaveState("idle");
     }
-  }, [preview, draft, saveState, token, roleCode, toWindows]);
+  }, [preview, draft, saveState, token, roleCode, toWindows, t]);
 
   const confirmDelete = useCallback(async () => {
     if (deletePending) return;
@@ -315,11 +317,11 @@ export function AdminRoleDefinitionView({
       onBack();
     } catch (err) {
       if (lifetime.current !== life) return;
-      setDeleteError(err instanceof ApiError ? err.message : "Failed to delete the Role");
+      setDeleteError(err instanceof ApiError ? err.message : t("roleDef.deleteFailed"));
     } finally {
       if (lifetime.current === life) setDeletePending(false);
     }
-  }, [deletePending, token, roleCode, onBack]);
+  }, [deletePending, token, roleCode, onBack, t]);
 
   const confirmLifecycle = useCallback(async () => {
     if (lifecyclePending || !definition) return;
@@ -342,25 +344,25 @@ export function AdminRoleDefinitionView({
       setLifecycleOpen(false);
       setSaved(
         updated.isActive
-          ? `Reactivated at version ${updated.version}. It can be assigned again.`
-          : `Deactivated at version ${updated.version}. It can no longer be assigned, and existing grants stop authorizing.`,
+          ? t("roleDef.reactivatedSuccess", { version: updated.version })
+          : t("roleDef.deactivatedSuccess", { version: updated.version }),
       );
     } catch (err) {
       if (lifetime.current !== life) return;
       setLifecycleError(
-        err instanceof ApiError ? err.message : "Failed to change the Role lifecycle",
+        err instanceof ApiError ? err.message : t("roleDef.lifecycleFailed"),
       );
     } finally {
       if (lifetime.current === life) setLifecyclePending(false);
     }
-  }, [lifecyclePending, definition, token, roleCode]);
+  }, [lifecyclePending, definition, token, roleCode, t]);
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button variant="ghost" onClick={onBack}>
-            Back to roles
+            {t("roleDef.backRoles")}
           </Button>
           <code className="font-mono text-xs text-ink-dim">{roleCode}</code>
         </div>
@@ -374,7 +376,7 @@ export function AdminRoleDefinitionView({
                 setLifecycleOpen(true);
               }}
             >
-              {definition.isActive ? "Deactivate role" : "Reactivate role"}
+              {definition.isActive ? t("roleDef.deactivateRole") : t("roleDef.reactivateRole")}
             </Button>
             <Button
               variant="secondary"
@@ -383,7 +385,7 @@ export function AdminRoleDefinitionView({
                 setDeleteOpen(true);
               }}
             >
-              Delete role
+              {t("roleDef.deleteRole")}
             </Button>
           </div>
         )}
@@ -391,7 +393,7 @@ export function AdminRoleDefinitionView({
 
       <AdminSectionState
         loading={loadState === "loading"}
-        loadingLabel="Loading the Role definition…"
+        loadingLabel={t("roleDef.loadingDefinition")}
         denied={loadState === "denied" || !canRead}
         sessionExpired={loadState === "session-expired"}
         error={loadError}
@@ -406,29 +408,31 @@ export function AdminRoleDefinitionView({
             <Card>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-ink">Role</h2>
+                  <h2 className="text-sm font-semibold text-ink">{t("roleDef.roleHeading")}</h2>
                   <p className="mt-0.5 text-sm text-ink-dim">
-                    Code <code className="font-mono text-xs">{definition.code}</code> is fixed after
-                    creation. Version{" "}
-                    <span className="tabular-nums">{definition.version}</span> is the concurrency
-                    token: a stale Save is refused rather than merged.
+                    {t("roleDef.roleCodeFixed", {
+                      code: <code className="font-mono text-xs">{definition.code}</code>,
+                      version: <span className="tabular-nums">{definition.version}</span>,
+                    })}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  {definition.isFullAccess && <StatusPill tone="warning">Full access</StatusPill>}
+                  {definition.isFullAccess && (
+                    <StatusPill tone="warning">{t("roleDef.fullAccess")}</StatusPill>
+                  )}
                   {definition.isActive ? (
-                    <StatusPill tone="success">Active</StatusPill>
+                    <StatusPill tone="success">{t("roleDef.active")}</StatusPill>
                   ) : (
-                    <StatusPill tone="neutral">Inactive</StatusPill>
+                    <StatusPill tone="neutral">{t("roleDef.inactive")}</StatusPill>
                   )}
                   <StatusPill tone={dirty ? "warning" : "neutral"}>
-                    {dirty ? "Unsaved changes" : "Matches stored version"}
+                    {dirty ? t("roleDef.unsavedChanges") : t("roleDef.matchesStored")}
                   </StatusPill>
                 </div>
               </div>
 
               <div className="mt-4 max-w-md space-y-3">
-                <Field label="Name" required hint="Shown wherever this Role is assigned.">
+                <Field label={t("roleDef.fieldName")} required hint={t("roleDef.fieldNameHint")}>
                   <Input
                     value={draft.name}
                     onChange={(event) =>
@@ -442,8 +446,8 @@ export function AdminRoleDefinitionView({
                   />
                 </Field>
                 <Field
-                  label="Description"
-                  hint="Optional. What this Role is for, in the operator's own words. Never affects what the Role grants."
+                  label={t("roleDef.fieldDescription")}
+                  hint={t("roleDef.fieldDescriptionHint")}
                 >
                   <textarea
                     value={draft.description}
@@ -459,38 +463,29 @@ export function AdminRoleDefinitionView({
                   />
                 </Field>
                 <p className="text-xs text-ink-dim tabular-nums">
-                  <span>{draft.description.length}</span>/500
+                  {t("roleDef.charCount", { current: draft.description.length })}
                 </p>
               </div>
 
               {definition.enforcementStatus === "enforced" ? (
                 <div className="mt-4 rounded border border-status-ok bg-status-ok-soft p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusPill tone="success">Enforced</StatusPill>
+                    <StatusPill tone="success">{t("roleDef.enforcedPill")}</StatusPill>
                     <span className="text-sm font-medium text-status-ok">
-                      Window read-only mode is enforced on the server.
+                      {t("roleDef.enforcedTitle")}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-status-ok">
-                    Every mutating API Resource is either mapped to a Window or exempt for a stated
-                    reason. A read-only Window still opens; its writes are refused with 403. A Role
-                    with several assignments keeps write access as soon as one of them grants it.
-                  </p>
+                  <p className="mt-1 text-sm text-status-ok">{t("roleDef.enforcedBody")}</p>
                 </div>
               ) : (
                 <div className="mt-4 rounded border border-status-warn bg-status-warn-soft p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusPill tone="warning">Partly enforced</StatusPill>
+                    <StatusPill tone="warning">{t("roleDef.partialPill")}</StatusPill>
                     <span className="text-sm font-medium text-status-warn">
-                      Read-only holds wherever an API Resource is mapped to a Window.
+                      {t("roleDef.partialTitle")}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-status-warn">
-                    At least one mutating route this server serves resolves to no Window and carries
-                    no exemption, so writes through it stay open. Until that route is mapped or
-                    exempted this setting cannot be called complete. Permissions remain in force
-                    throughout.
-                  </p>
+                  <p className="mt-1 text-sm text-status-warn">{t("roleDef.partialBody")}</p>
                 </div>
               )}
             </Card>
@@ -559,10 +554,11 @@ export function AdminRoleDefinitionView({
             {canManage && (
               <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded border border-line bg-panel px-3 py-2">
                 <p className="text-sm text-ink-dim" role="status" aria-live="polite">
-                  <span className="tabular-nums">{draft.permissionCodes.length}</span> permissions
-                  {" · "}
-                  <span className="tabular-nums">{orderedWindowCodes.length}</span> windows
-                  {dirty ? " · unsaved changes" : " · no changes to save"}
+                  {t("roleDef.statusBar", {
+                    permissions: <span className="tabular-nums">{draft.permissionCodes.length}</span>,
+                    windows: <span className="tabular-nums">{orderedWindowCodes.length}</span>,
+                  })}
+                  {dirty ? t("roleDef.statusUnsaved") : t("roleDef.statusClean")}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -571,10 +567,10 @@ export function AdminRoleDefinitionView({
                     disabled={!dirty || saveState !== "idle"}
                     onClick={() => definition && setDraft(draftFromDefinition(definition))}
                   >
-                    Discard changes
+                    {t("roleDef.discardChanges")}
                   </Button>
                   <Button type="submit" disabled={!dirty || saveState !== "idle"}>
-                    {saveState === "idle" ? "Review impact" : "Checking…"}
+                    {saveState === "idle" ? t("roleDef.reviewImpact") : t("roleDef.checking")}
                   </Button>
                 </div>
               </div>
@@ -582,9 +578,7 @@ export function AdminRoleDefinitionView({
 
             {!canManage && (
               <Alert tone="info">
-                Viewing only. Changing a Role definition requires <code>role.manage</code> on a
-                tenant-scoped assignment. Every field below is shown read-only so the current
-                configuration stays inspectable.
+                {t("roleDef.viewOnlyAlert")}
               </Alert>
             )}
           </form>
@@ -593,8 +587,8 @@ export function AdminRoleDefinitionView({
 
       <OverlayDialog
         open={preview !== null}
-        title="Review before saving"
-        description="Nothing has been written yet. This is what the Role would hold, and how many assignments it already affects."
+        title={t("roleDef.previewTitle")}
+        description={t("roleDef.previewDescription")}
         pending={saveState === "committing"}
         onClose={() => setPreview(null)}
         footer={
@@ -604,10 +598,10 @@ export function AdminRoleDefinitionView({
               onClick={() => setPreview(null)}
               disabled={saveState === "committing"}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={() => void commit()} disabled={saveState === "committing"}>
-              {saveState === "committing" ? "Saving…" : "Confirm and save"}
+              {saveState === "committing" ? t("roleDef.saving") : t("roleDef.confirmSave")}
             </Button>
           </>
         }
@@ -615,39 +609,46 @@ export function AdminRoleDefinitionView({
         {preview && draft && (
           <div className="space-y-3">
             <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-ink-dim">Name</dt>
+              <dt className="text-ink-dim">{t("roleDef.previewName")}</dt>
               <dd className="wrap-break-word text-ink">{draft.name.trim()}</dd>
-              <dt className="text-ink-dim">Description</dt>
+              <dt className="text-ink-dim">{t("roleDef.previewDesc")}</dt>
               <dd className="wrap-break-word text-ink">
-                {toDescription(draft.description) ?? <span className="text-ink-faint">none</span>}
+                {toDescription(draft.description) ?? (
+                  <span className="text-ink-faint">{t("roleDef.previewNone")}</span>
+                )}
               </dd>
-              <dt className="text-ink-dim">Permissions</dt>
+              <dt className="text-ink-dim">{t("roleDef.previewPermissions")}</dt>
               <dd className="tabular-nums text-ink">{draft.permissionCodes.length}</dd>
-              <dt className="text-ink-dim">Windows</dt>
+              <dt className="text-ink-dim">{t("roleDef.previewWindows")}</dt>
               <dd className="tabular-nums text-ink">{orderedWindowCodes.length}</dd>
-              <dt className="text-ink-dim">Read-only windows</dt>
+              <dt className="text-ink-dim">{t("roleDef.previewReadOnly")}</dt>
               <dd className="tabular-nums text-ink">
                 {orderedWindowCodes.filter((code) => !draft.windows[code]!.isReadWrite).length}
               </dd>
-              <dt className="text-ink-dim">Inactive windows</dt>
+              <dt className="text-ink-dim">{t("roleDef.previewInactive")}</dt>
               <dd className="tabular-nums text-ink">
                 {orderedWindowCodes.filter((code) => !draft.windows[code]!.isActive).length}
               </dd>
-              <dt className="text-ink-dim">Users already assigned</dt>
+              <dt className="text-ink-dim">{t("roleDef.previewUsers")}</dt>
               <dd className="tabular-nums text-ink">{preview.affectedUserCount}</dd>
             </dl>
 
             {preview.affectedUserCount > 0 && (
               <Alert tone="warning">
-                <span className="tabular-nums">{preview.affectedUserCount}</span> user assignment(s)
-                already hold this Role. They receive the new definition the moment it is saved.
+                {t("roleDef.previewImpactWarning", {
+                  count: <span className="tabular-nums">{preview.affectedUserCount}</span>,
+                })}
               </Alert>
             )}
 
             <p className="text-xs text-ink-faint">
-              Preview reference{" "}
-              <code className="font-mono text-ink-dim">{preview.previewHash.slice(0, 16)}</code>.
-              The server refuses the save if the Role changed after this preview.
+              {t("roleDef.previewRef", {
+                ref: (
+                  <code className="font-mono text-ink-dim">
+                    {preview.previewHash.slice(0, 16)}
+                  </code>
+                ),
+              })}
             </p>
           </div>
         )}
@@ -655,8 +656,8 @@ export function AdminRoleDefinitionView({
 
       <OverlayDialog
         open={deleteOpen}
-        title={`Delete ${roleCode}?`}
-        description="Deleting removes this Role definition. It is refused while any user assignment still references the Role, including invalidated ones."
+        title={t("roleDef.deleteTitle", { code: roleCode })}
+        description={t("roleDef.deleteDescription")}
         pending={deletePending}
         onClose={() => setDeleteOpen(false)}
         footer={
@@ -666,10 +667,10 @@ export function AdminRoleDefinitionView({
               onClick={() => setDeleteOpen(false)}
               disabled={deletePending}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={() => void confirmDelete()} disabled={deletePending}>
-              {deletePending ? "Deleting…" : "Delete role"}
+              {deletePending ? t("roleDef.deleting") : t("roleDef.deleteRole")}
             </Button>
           </>
         }
@@ -680,11 +681,15 @@ export function AdminRoleDefinitionView({
       {definition && (
         <OverlayDialog
           open={lifecycleOpen}
-          title={definition.isActive ? `Deactivate ${roleCode}?` : `Reactivate ${roleCode}?`}
+          title={
+            definition.isActive
+              ? t("roleDef.deactivateTitle", { code: roleCode })
+              : t("roleDef.reactivateTitle", { code: roleCode })
+          }
           description={
             definition.isActive
-              ? "A deactivated Role keeps its definition and history: existing grants stay listed but stop authorizing, and it can no longer be assigned. Refused while any live assignment still references the Role."
-              : "Reactivating makes the Role assignable again. Grants that referenced it while inactive start authorizing on their next permission check."
+              ? t("roleDef.deactivateDescription")
+              : t("roleDef.reactivateDescription")
           }
           pending={lifecyclePending}
           onClose={() => setLifecycleOpen(false)}
@@ -695,14 +700,14 @@ export function AdminRoleDefinitionView({
                 onClick={() => setLifecycleOpen(false)}
                 disabled={lifecyclePending}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button onClick={() => void confirmLifecycle()} disabled={lifecyclePending}>
                 {lifecyclePending
-                  ? "Saving…"
+                  ? t("roleDef.saving")
                   : definition.isActive
-                    ? "Deactivate role"
-                    : "Reactivate role"}
+                    ? t("roleDef.deactivateRole")
+                    : t("roleDef.reactivateRole")}
               </Button>
             </>
           }
@@ -741,6 +746,7 @@ function PermissionPicker({
   onToggle: (code: string) => void;
   onClear: () => void;
 }) {
+  const t = useT();
   const modules = useMemo(() => {
     const seen = new Map<string, number>();
     for (const option of options) {
@@ -770,38 +776,42 @@ function PermissionPicker({
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-ink">Permissions</h2>
+          <h2 className="text-sm font-semibold text-ink">{t("roleDef.permissionsHeading")}</h2>
           <p className="mt-0.5 text-sm text-ink-dim">
-            Grants are checked after saving, so a code you cannot grant is refused with the reason
-            rather than silently dropped.
+            {t("roleDef.permissionsDescription")}
           </p>
         </div>
         <p className="text-sm tabular-nums text-ink-dim" role="status" aria-live="polite">
-          <span className="tabular-nums">{selected.length}</span> selected ·{" "}
-          <span className="tabular-nums">{visible.length}</span> shown
+          {t("roleDef.permSelected", {
+            count: <span className="tabular-nums">{selected.length}</span>,
+          })}{" "}
+          ·{" "}
+          {t("roleDef.permShown", {
+            count: <span className="tabular-nums">{visible.length}</span>,
+          })}
         </p>
       </div>
 
       <div className="mt-3 flex flex-wrap items-end gap-2">
-        <Field label="Search">
+        <Field label={t("roleDef.permSearchLabel")}>
           <Input
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Code or description"
+            placeholder={t("roleDef.permSearchPlaceholder")}
             autoComplete="off"
-            aria-label="Search permissions"
+            aria-label={t("roleDef.permSearchAria")}
             className="sm:w-64"
           />
         </Field>
-        <Field label="Module">
+        <Field label={t("roleDef.permModuleLabel")}>
           <select
             value={module}
             onChange={(event) => onModuleChange(event.target.value)}
-            aria-label="Filter permissions by module"
+            aria-label={t("roleDef.permModuleAria")}
             className="mt-1 min-h-[44px] rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent-soft sm:min-h-[36px]"
           >
-            <option value="all">All modules</option>
+            <option value="all">{t("roleDef.permModuleAll")}</option>
             {modules.map(([code, count]) => (
               <option key={code} value={code}>
                 {code} ({count})
@@ -816,12 +826,14 @@ function PermissionPicker({
             onChange={(event) => onSelectedOnlyChange(event.target.checked)}
             className="h-4 w-4 accent-(--accent)"
           />
-          Selected only
+          {t("roleDef.permSelectedOnly")}
         </label>
         <div className="flex flex-1 items-center justify-end gap-2">
           {unselectable > 0 && (
             <p className="text-xs text-ink-faint">
-              <span className="tabular-nums">{unselectable}</span> not grantable by your access
+              {t("roleDef.permNotGrantable", {
+                count: <span className="tabular-nums">{unselectable}</span>,
+              })}
             </p>
           )}
           <Button
@@ -830,14 +842,14 @@ function PermissionPicker({
             onClick={onClear}
             disabled={disabled || selected.length === 0}
           >
-            Clear selection
+            {t("roleDef.permClearSelection")}
           </Button>
         </div>
       </div>
 
       {visible.length === 0 ? (
         <p className="mt-3 rounded border border-dashed border-line-strong bg-panel-2 px-4 py-6 text-center text-sm text-ink-dim">
-          No permission matches this filter.
+          {t("roleDef.permEmpty")}
         </p>
       ) : (
         <div className="mt-3 overflow-x-auto rounded border border-line">
@@ -845,16 +857,16 @@ function PermissionPicker({
             <thead>
               <tr className="border-b border-line-strong">
                 <th scope="col" className="w-10 px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  <span className="sr-only">Grant</span>
+                  <span className="sr-only">{t("roleDef.permColGrant")}</span>
                 </th>
                 <th scope="col" className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  Permission
+                  {t("roleDef.permColPermission")}
                 </th>
                 <th scope="col" className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  Module
+                  {t("roleDef.permColModule")}
                 </th>
                 <th scope="col" className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  Availability
+                  {t("roleDef.permColAvailability")}
                 </th>
               </tr>
             </thead>
@@ -863,10 +875,10 @@ function PermissionPicker({
                 const isSelected = selectedSet.has(option.code);
                 const reason = !option.selectable
                   ? option.moduleCode === null
-                    ? "No module attribution"
+                    ? t("roleDef.permReasonNoModule")
                     : !option.isActive
-                      ? "Not registered for this tenant"
-                      : "Outside your delegation limit or its module is inactive"
+                      ? t("roleDef.permReasonNotRegistered")
+                      : t("roleDef.permReasonOutside")
                   : null;
                 return (
                   <tr
@@ -881,7 +893,7 @@ function PermissionPicker({
                         checked={isSelected}
                         disabled={disabled || !option.selectable}
                         onChange={() => onToggle(option.code)}
-                        aria-label={`Grant ${option.code}`}
+                        aria-label={t("roleDef.permGrantAria", { code: option.code })}
                         className="h-4 w-4 accent-(--accent)"
                       />
                     </td>
@@ -898,7 +910,7 @@ function PermissionPicker({
                       {reason ? (
                         <span className="text-ink-faint">{reason}</span>
                       ) : (
-                        <span className="text-ink-dim">Grantable</span>
+                        <span className="text-ink-dim">{t("roleDef.permGrantable")}</span>
                       )}
                     </td>
                   </tr>
@@ -941,6 +953,7 @@ function WindowPicker({
   onToggleWindow: (code: string) => void;
   onToggleFlag: (windowCode: string, flag: WindowFlag) => void;
 }) {
+  const t = useT();
   const modules = useMemo(() => {
     const seen = new Map<string, number>();
     for (const option of options) {
@@ -968,39 +981,38 @@ function WindowPicker({
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-ink">Windows</h2>
-          <p className="mt-0.5 text-sm text-ink-dim">
-            Choose from the Window dictionary this tenant has registered. Route wildcards and
-            unregistered entries are not offered, so no free-form Window code can be submitted.
-          </p>
+          <h2 className="text-sm font-semibold text-ink">{t("roleDef.windowsHeading")}</h2>
+          <p className="mt-0.5 text-sm text-ink-dim">{t("roleDef.windowsDescription")}</p>
         </div>
         <p className="text-sm text-ink-dim" role="status" aria-live="polite">
-          <span className="tabular-nums">{orderedCodes.length}</span> selected ·{" "}
-          <span className="tabular-nums">{readOnlyCount}</span> read-only ·{" "}
-          <span className="tabular-nums">{inactiveCount}</span> inactive
+          {t("roleDef.winSelected", { count: <span className="tabular-nums">{orderedCodes.length}</span> })}
+          {" · "}
+          {t("roleDef.winReadOnly", { count: <span className="tabular-nums">{readOnlyCount}</span> })}
+          {" · "}
+          {t("roleDef.winInactive", { count: <span className="tabular-nums">{inactiveCount}</span> })}
         </p>
       </div>
 
       <div className="mt-3 flex flex-wrap items-end gap-2">
-        <Field label="Search">
+        <Field label={t("roleDef.winSearchLabel")}>
           <Input
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Code, name, or required permission"
+            placeholder={t("roleDef.winSearchPlaceholder")}
             autoComplete="off"
-            aria-label="Search windows"
+            aria-label={t("roleDef.winSearchAria")}
             className="sm:w-72"
           />
         </Field>
-        <Field label="Module">
+        <Field label={t("roleDef.winModuleLabel")}>
           <select
             value={module}
             onChange={(event) => onModuleChange(event.target.value)}
-            aria-label="Filter windows by module"
+            aria-label={t("roleDef.winModuleAria")}
             className="mt-1 min-h-[44px] rounded border border-line-strong bg-panel-2 px-2 py-1.5 text-sm text-ink focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent-soft sm:min-h-[36px]"
           >
-            <option value="all">All modules</option>
+            <option value="all">{t("roleDef.winModuleAll")}</option>
             {modules.map(([code, count]) => (
               <option key={code} value={code}>
                 {code} ({count})
@@ -1015,13 +1027,13 @@ function WindowPicker({
             onChange={(event) => onSelectedOnlyChange(event.target.checked)}
             className="h-4 w-4 accent-(--accent)"
           />
-          Selected only
+          {t("roleDef.winSelectedOnly")}
         </label>
       </div>
 
       {visible.length === 0 ? (
         <p className="mt-3 rounded border border-dashed border-line-strong bg-panel-2 px-4 py-6 text-center text-sm text-ink-dim">
-          No Window matches this filter.
+          {t("roleDef.winEmpty")}
         </p>
       ) : (
         <div className="mt-3 overflow-x-auto rounded border border-line">
@@ -1029,19 +1041,19 @@ function WindowPicker({
             <thead>
               <tr className="border-b border-line-strong">
                 <th scope="col" className="w-10 px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  <span className="sr-only">Include</span>
+                  <span className="sr-only">{t("roleDef.winColInclude")}</span>
                 </th>
                 <th scope="col" className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  Window
+                  {t("roleDef.winColWindow")}
                 </th>
                 <th scope="col" className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  Required permission
+                  {t("roleDef.winColRequired")}
                 </th>
                 <th scope="col" className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  Write
+                  {t("roleDef.winColWrite")}
                 </th>
                 <th scope="col" className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.055em] text-ink-faint">
-                  Active
+                  {t("roleDef.winColActive")}
                 </th>
               </tr>
             </thead>
@@ -1062,7 +1074,7 @@ function WindowPicker({
                         checked={included}
                         disabled={disabled || !option.selectable}
                         onChange={() => onToggleWindow(option.code)}
-                        aria-label={`Include ${option.code}`}
+                        aria-label={t("roleDef.winIncludeAria", { code: option.code })}
                         className="h-4 w-4 accent-(--accent)"
                       />
                     </td>
@@ -1072,8 +1084,10 @@ function WindowPicker({
                       </code>
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-dim">
                         <span>{option.name}</span>
-                        {option.isDetail && <Badge>Detail</Badge>}
-                        {!option.selectable && <span className="text-ink-faint">Not grantable</span>}
+                        {option.isDetail && <Badge>{t("roleDef.winDetail")}</Badge>}
+                        {!option.selectable && (
+                          <span className="text-ink-faint">{t("roleDef.winNotGrantable")}</span>
+                        )}
                       </div>
                     </td>
                     <td className="min-h-row px-3 align-middle text-xs text-ink-dim">
@@ -1090,10 +1104,10 @@ function WindowPicker({
                           checked={state?.isReadWrite ?? false}
                           disabled={disabled || !included}
                           onChange={() => onToggleFlag(option.code, "isReadWrite")}
-                          aria-label={`Allow writes in ${option.code}`}
+                          aria-label={t("roleDef.winWriteAria", { code: option.code })}
                           className="h-4 w-4 accent-(--accent)"
                         />
-                        {state ? (state.isReadWrite ? "Read/write" : "Read-only") : "—"}
+                        {state ? (state.isReadWrite ? t("roleDef.winReadWrite") : t("roleDef.winReadOnlyLabel")) : "—"}
                       </label>
                     </td>
                     <td className="min-h-row px-3 align-middle">
@@ -1103,10 +1117,10 @@ function WindowPicker({
                           checked={state ? state.isActive : false}
                           disabled={disabled || !included}
                           onChange={() => onToggleFlag(option.code, "isActive")}
-                          aria-label={`Keep ${option.code} active`}
+                          aria-label={t("roleDef.winActiveAria", { code: option.code })}
                           className="h-4 w-4 accent-(--accent)"
                         />
-                        {state ? (state.isActive ? "Active" : "Inactive") : "—"}
+                        {state ? (state.isActive ? t("roleDef.winActiveLabel") : t("roleDef.winInactiveLabel")) : "—"}
                       </label>
                     </td>
                   </tr>
@@ -1139,6 +1153,7 @@ export function CreateRoleDialog({
   onCreated: (roleCode: string) => void;
 }) {
   const { session } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
   const formRef = useRef<HTMLFormElement>(null);
   const lifetime = useRef(0);
@@ -1167,7 +1182,7 @@ export function CreateRoleDialog({
       const name = String(data.get("name") ?? "").trim();
       const description = toDescription(String(data.get("description") ?? ""));
       if (code.length === 0 || name.length === 0) {
-        setError("A Role needs both a code and a name.");
+        setError(t("roleDef.createValidation"));
         return;
       }
       const life = lifetime.current;
@@ -1191,46 +1206,46 @@ export function CreateRoleDialog({
         onCreated(code);
       } catch (err) {
         if (lifetime.current !== life) return;
-        setError(err instanceof ApiError ? err.message : "Failed to create the Role");
+        setError(err instanceof ApiError ? err.message : t("roleDef.createFailed"));
       } finally {
         if (lifetime.current === life) setPending(false);
       }
     },
-    [pending, canManage, mode, sourceCode, token, onCreated],
+    [pending, canManage, mode, sourceCode, token, onCreated, t],
   );
 
   return (
     <OverlayDialog
       open={open}
-      title={mode === "copy" ? "Copy role" : "New role"}
+      title={mode === "copy" ? t("roleDef.copyTitle") : t("roleDef.createTitle")}
       description={
         mode === "copy"
-          ? `Copies the definition of ${sourceCode} — permissions, Window modes, and its description — with no user assignments.`
-          : "Creates an empty Role definition. You choose permissions and Windows next, on the Role screen."
+          ? t("roleDef.copyDescription", { source: sourceCode ?? "" })
+          : t("roleDef.createDescription")
       }
       pending={pending}
       onClose={onClose}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={pending}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" form="create-role-form" disabled={pending || !canManage}>
-            {pending ? "Creating…" : mode === "copy" ? "Copy role" : "Create role"}
+            {pending ? t("roleDef.creating") : mode === "copy" ? t("roleDef.copyBtn") : t("roleDef.createBtn")}
           </Button>
         </>
       }
     >
       <form id="create-role-form" ref={formRef} onSubmit={submit} className="space-y-3">
         {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Code" required hint="Unique within this tenant. Cannot change later.">
+        <Field label={t("roleDef.fieldCode")} required hint={t("roleDef.fieldCodeHint")}>
           <Input name="code" maxLength={100} autoComplete="off" required disabled={pending} />
         </Field>
-        <Field label="Name" required>
+        <Field label={t("roleDef.fieldName")} required>
           <Input name="name" maxLength={200} autoComplete="off" required disabled={pending} />
         </Field>
         {mode === "create" && (
-          <Field label="Description" hint="Optional. A copy carries its source's description.">
+          <Field label={t("roleDef.fieldDescription")} hint={t("roleDef.fieldDescHintCopy")}>
             <textarea
               name="description"
               maxLength={500}

@@ -17,6 +17,7 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort } from "../complaints/format";
+import { useT } from "../../i18n/LocaleProvider";
 
 function statusTone(s: string): "neutral" | "info" | "success" | "warning" {
   if (s === "submitted") return "success";
@@ -26,6 +27,7 @@ function statusTone(s: string): "neutral" | "info" | "success" | "warning" {
 }
 
 export function MySurveysPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -40,42 +42,42 @@ export function MySurveysPage() {
     try {
       setRows(await api.mySurveyAssignments(token));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load your surveys");
+      setError(err instanceof ApiError ? err.message : t("mySurveys.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const columns: Column<MySurveyItem>[] = [
-    { header: "Survey", cell: (i) => i.surveyName ?? "—" },
-    { header: "Version", cell: (i) => (i.versionNumber != null ? `v${i.versionNumber}` : "—") },
+    { header: t("mySurveys.colSurvey"), cell: (i) => i.surveyName ?? t("common.notAvailable") },
+    { header: t("mySurveys.colVersion"), cell: (i) => (i.versionNumber != null ? `v${i.versionNumber}` : t("common.notAvailable")) },
     {
-      header: "Status",
+      header: t("mySurveys.colStatus"),
       cell: (i) => <StatusPill tone={statusTone(i.assignment.status)}>{i.assignment.status}</StatusPill>,
     },
-    { header: "Due", cell: (i) => formatDateShort(i.assignment.dueAt) },
+    { header: t("mySurveys.colDue"), cell: (i) => formatDateShort(i.assignment.dueAt) },
     {
-      header: "Submitted",
+      header: t("mySurveys.colSubmitted"),
       cell: (i) =>
         i.assignment.submittedAt ? (
           <Badge>{formatDateShort(i.assignment.submittedAt)}</Badge>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-ink-faint">{t("common.notAvailable")}</span>
         ),
     },
   ];
 
   return (
     <div>
-      <PageHeader title="My Surveys" subtitle="Surveys assigned to you. Respond and submit." />
+      <PageHeader title={t("mySurveys.title")} subtitle={t("mySurveys.subtitle")} />
       {error ? (
         <Alert tone="error">{error}</Alert>
       ) : loading ? (
-        <Spinner label="Loading your surveys…" />
+        <Spinner label={t("mySurveys.loading")} />
       ) : (
         <DataTable
           columns={columns}
@@ -84,8 +86,8 @@ export function MySurveysPage() {
           onRowClick={(i) => navigate(`/my-surveys/${i.assignment.id}`)}
           empty={
             <EmptyState
-              title="No surveys assigned"
-              description="When a survey is assigned to you it will appear here."
+              title={t("mySurveys.emptyTitle")}
+              description={t("mySurveys.emptyDesc")}
             />
           }
         />

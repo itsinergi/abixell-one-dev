@@ -7051,9 +7051,11 @@ export type SurveyDistributionToken = {
   createdAt: string;
 };
 
-export type CreatedSurveyDistributionToken = SurveyDistributionToken & {
-  token: string;
-  publicUrl?: string;
+// Mint returns the row plus the one-time secret; the secret is never stored,
+// only the SHA-256 hash is, so it can be shown once and never again.
+export type CreatedSurveyDistributionToken = {
+  token: SurveyDistributionToken;
+  rawToken: string;
 };
 
 export type CreateSurveyDistributionTokenBody = {
@@ -7085,52 +7087,71 @@ export type UpsertSurveyTranslationBody = {
   translatedText: string;
 };
 
+// Field names mirror the analytics service payload exactly. A mismatch here
+// compiles fine and only fails at render (`.map` of undefined), so keep them
+// in step with `SurveyAnalyticsOverview` in the API domain entity.
 export type SurveyAnalyticsOverview = {
-  surveyCode: string;
-  completionRate: number;
-  assignmentCount: number;
+  surveyDefinitionId: string;
+  surveyDefinitionCode: string;
+  surveyDefinitionName: string;
+  totalAssignments: number;
   submittedCount: number;
-  averageTotalScore: number | null;
-  sectionScores: Array<{
-    sectionId: string | null;
-    sectionCode: string | null;
-    sectionTitle: string | null;
-    averageScore: number | null;
-    averagePercentage: number | null;
-    respondentCount: number;
+  inProgressCount: number;
+  expiredCount: number;
+  completionRatePercent: number;
+  averageScore: number | null;
+  nps: {
+    totalNpsResponses: number;
+    promoterCount: number;
+    passiveCount: number;
+    detractorCount: number;
+    promoterPercent: number;
+    passivePercent: number;
+    detractorPercent: number;
+    netPromoterScore: number | null;
+  };
+  sectionAverages: Array<{
+    sectionId: string;
+    sectionCode: string;
+    sectionTitle: string;
+    averagePercentageScore: number | null;
+    averageWeightedScore: number | null;
   }>;
-  dropOff: Array<{
+  questionDropOff: Array<{
     questionId: string;
     questionCode: string;
     questionText: string;
-    answeredCount: number;
-    skippedCount: number;
-    dropOffRate: number;
+    viewCount: number;
+    answerCount: number;
+    dropOffRatePercent: number;
   }>;
-  nps: {
-    score: number;
-    promoters: number;
-    passives: number;
-    detractors: number;
-    totalResponses: number;
-  } | null;
+  smallCellSuppressed: boolean;
 };
 
 export type SurveyBenchmarkResult = {
-  surveyCode: string;
-  benchmarks: Array<{
-    dimension: string;
-    label: string;
+  surveyDefinitionId: string;
+  benchmarkDimension: "category" | "organization_unit" | "time_period";
+  items: Array<{
+    contextEntityType: string;
+    contextEntityId: string;
+    contextLabel: string;
     responseCount: number;
-    completionRate: number;
     averageScore: number | null;
-    averageNps: number | null;
+    npsScore: number | null;
+    completionRatePercent: number;
   }>;
+  generatedAt: string;
 };
 
+// Flat shape as the public route actually sends it: no `definition` or
+// `version` objects, and no ids beyond the ones a public respondent needs.
 export type PublicSurveyView = {
-  definition: SurveyDefinition;
-  version: SurveyVersion;
+  definitionCode: string;
+  definitionName: string;
+  description: string | null;
+  versionNumber: number;
+  defaultLocale: string;
+  locale: string;
   sections: SurveySection[];
   questions: (SurveyQuestion & { options: SurveyQuestionOption[]; matrixRows: SurveyMatrixRow[] })[];
   branchingRules: SurveyBranchingRule[];

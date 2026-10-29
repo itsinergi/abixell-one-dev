@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "../../../auth/AuthContext";
+import { useT } from "../../../i18n/LocaleProvider";
 import {
   api,
   ApiError,
@@ -40,32 +41,34 @@ import { errorMessage } from "./AdminAssignmentControls";
 /** Mirrors the API's `revokeAssignmentSchema` ceiling (§4.4 Wave 3 step 18). */
 const MAX_REVOKE_REASON_LENGTH = 500;
 
-function assignmentScopeName(assignment: AdminRoleAssignmentSummary): string {
-  if (assignment.scopeType === "tenant") return "Tenant-wide";
+type Translate = ReturnType<typeof useT>;
+
+function assignmentScopeName(t: Translate, assignment: AdminRoleAssignmentSummary): string {
+  if (assignment.scopeType === "tenant") return t("adminAssignments.scopeTenantWide");
   if (assignment.scopeType === "legal_entity") {
     return assignment.scopeState === "available"
-      ? assignment.scopeLegalEntityName ?? "Unavailable legal entity"
-      : "Unavailable legal entity";
+      ? assignment.scopeLegalEntityName ?? t("adminAssignments.legalEntityUnavailable")
+      : t("adminAssignments.legalEntityUnavailable");
   }
   if (assignment.scopeType === "organization_unit") {
     return assignment.scopeState === "available"
-      ? assignment.scopeOrganizationUnitName ?? "Unavailable organization unit"
-      : "Unavailable organization unit";
+      ? assignment.scopeOrganizationUnitName ?? t("adminAssignments.orgUnitUnavailable")
+      : t("adminAssignments.orgUnitUnavailable");
   }
   return assignment.scopeState === "available"
-    ? assignment.scopeCustomerName ?? "Unavailable customer"
-    : "Unavailable customer";
+    ? assignment.scopeCustomerName ?? t("adminAssignments.customerUnavailable")
+    : t("adminAssignments.customerUnavailable");
 }
 
-function assignmentRoleLabel(assignment: AdminRoleAssignmentSummary): string {
+function assignmentRoleLabel(t: Translate, assignment: AdminRoleAssignmentSummary): string {
   return assignment.roleState === "available"
-    ? assignment.roleName ?? assignment.roleCode ?? "Unavailable role"
-    : "Unavailable role";
+    ? assignment.roleName ?? assignment.roleCode ?? t("adminAssignments.roleUnavailable")
+    : t("adminAssignments.roleUnavailable");
 }
 
-function roleSearchText(user: AdminUserAccessSummary): string {
+function roleSearchText(t: Translate, user: AdminUserAccessSummary): string {
   return user.roleAssignments
-    .map((assignment) => `${assignmentRoleLabel(assignment)} ${assignment.roleCode ?? ""}`)
+    .map((assignment) => `${assignmentRoleLabel(t, assignment)} ${assignment.roleCode ?? ""}`)
     .join(" ");
 }
 
@@ -76,16 +79,16 @@ function assignmentStateTone(assignment: AdminRoleAssignmentSummary): "success" 
 /** Wave 3 — one label per lifecycle state, so an operator reads WHY the grant
  * is inert: revoked by hand, invalidated by the system, or unavailable because
  * its role/scope no longer resolves. */
-function assignmentStateLabel(assignment: AdminRoleAssignmentSummary): string {
+function assignmentStateLabel(t: Translate, assignment: AdminRoleAssignmentSummary): string {
   switch (assignment.assignmentState) {
     case "active":
-      return "Active";
+      return t("adminAssignments.stateActive");
     case "revoked":
-      return "Revoked";
+      return t("adminAssignments.stateRevoked");
     case "invalidated":
-      return "Invalidated";
+      return t("adminAssignments.stateInvalidated");
     default:
-      return "Unavailable";
+      return t("adminAssignments.stateUnavailable");
   }
 }
 
@@ -101,10 +104,11 @@ export function AdminUsersView({
 }: {
   canManageAccess: boolean;
 }) {
+  const t = useT();
   const { data, loading, error, denied, sessionExpired, reload } =
     useAdminResource<AdminUserAccessSummary[]>(
       (token) => api.adminUsers(token),
-      "Failed to load users and access assignments",
+      t("adminUsers.loadFailed"),
     );
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -121,11 +125,11 @@ export function AdminUsersView({
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return data ?? [];
     return (data ?? []).filter((user) =>
-      `${user.fullName} ${user.email} ${user.status} ${roleSearchText(user)}`
+      `${user.fullName} ${user.email} ${user.status} ${roleSearchText(t, user)}`
         .toLocaleLowerCase()
         .includes(normalized),
     );
-  }, [data, query]);
+  }, [data, query, t]);
 
   const totalPages = Math.ceil(filteredUsers.length / PAGE_SIZE);
   const clampedPage = Math.max(1, Math.min(page, totalPages || 1));
@@ -157,7 +161,7 @@ export function AdminUsersView({
     <>
       <AdminSectionState
         loading={loading}
-        loadingLabel="Loading tenant users and access…"
+        loadingLabel={t("adminUsers.loading")}
         denied={denied}
         sessionExpired={sessionExpired}
         error={error}
@@ -170,18 +174,18 @@ export function AdminUsersView({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>{feedback}</span>
                 <Button variant="ghost" onClick={() => setFeedback(null)}>
-                  Dismiss
+                  {t("adminUsers.dismiss")}
                 </Button>
               </div>
             </Alert>
           )}
         </div>
         <AdminPanel
-          title="Users and access"
+          title={t("adminUsers.title")}
           description={
             canManageAccess
-              ? "Inspect user access, create governed users, and add assignments through a server preview."
-              : "Inspect current role assignments. Your current access is read only."
+              ? t("adminUsers.descriptionManage")
+              : t("adminUsers.descriptionRead")
           }
           actions={
             canManageAccess ? (
@@ -191,13 +195,13 @@ export function AdminUsersView({
                   setCreateOpen(true);
                 }}
               >
-                Create user
+                {t("adminUsers.createUser")}
               </Button>
             ) : undefined
           }
         >
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <Field label="Search users">
+            <Field label={t("adminUsers.searchLabel")}>
               <Input
                 type="search"
                 value={query}
@@ -205,14 +209,17 @@ export function AdminUsersView({
                   setQuery(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Name, email, status, or role"
+                placeholder={t("adminUsers.searchPlaceholder")}
                 autoComplete="off"
-                aria-label="Search users by name, email, status, or role"
+                aria-label={t("adminUsers.searchAria")}
                 className="sm:w-80"
               />
             </Field>
             <p className="text-sm tabular-nums text-ink-dim" role="status" aria-live="polite">
-              Showing {filteredUsers.length} of {(data ?? []).length}
+              {t("adminUsers.showing", {
+                shown: filteredUsers.length,
+                total: (data ?? []).length,
+              })}
             </p>
           </div>
 
@@ -222,16 +229,14 @@ export function AdminUsersView({
             mobileBreakpoint="md"
             empty={
               <EmptyState
-                title={query ? "No matching users" : "No users found"}
+                title={query ? t("adminUsers.emptySearchTitle") : t("adminUsers.emptyTitle")}
                 description={
-                  query
-                    ? "Try a different name, email address, status, or role."
-                    : "No user access summaries were returned for this tenant."
+                  query ? t("adminUsers.emptySearchBody") : t("adminUsers.emptyBody")
                 }
                 action={
                   query ? (
                     <Button variant="secondary" onClick={() => setQuery("")}>
-                      Clear search
+                      {t("adminUsers.clearSearch")}
                     </Button>
                   ) : undefined
                 }
@@ -239,7 +244,7 @@ export function AdminUsersView({
             }
             columns={[
               {
-                header: "User",
+                header: t("adminUsers.columnUser"),
                 mobileRole: "title",
                 cell: (user) => (
                   <div>
@@ -249,7 +254,7 @@ export function AdminUsersView({
                 ),
               },
               {
-                header: "Status",
+                header: t("adminUsers.columnStatus"),
                 mobileRole: "status",
                 cell: (user) => (
                   <StatusPill tone={user.status === "active" ? "success" : "neutral"}>
@@ -258,7 +263,7 @@ export function AdminUsersView({
                 ),
               },
               {
-                header: "Assignments",
+                header: t("adminUsers.columnAssignments"),
                 cell: (user) => (
                   <span className="tabular-nums text-ink-dim">
                     {user.roleAssignments.length}
@@ -266,26 +271,31 @@ export function AdminUsersView({
                 ),
               },
               {
-                header: "Roles",
+                header: t("adminUsers.columnRoles"),
                 cell: (user) => (
                   <div className="flex max-w-xl flex-wrap gap-1.5">
                     {user.roleAssignments.length === 0 ? (
-                      <span className="text-ink-dim">No role assignments</span>
+                      <span className="text-ink-dim">{t("adminUsers.noRoleAssignments")}</span>
                     ) : (
                       user.roleAssignments.slice(0, 3).map((assignment) => (
                         <Badge key={assignment.id}>
-                          {assignmentRoleLabel(assignment)} · {assignmentScopeName(assignment)}
+                          {assignmentRoleLabel(t, assignment)} ·{" "}
+                          {assignmentScopeName(t, assignment)}
                         </Badge>
                       ))
                     )}
                     {user.roleAssignments.length > 3 && (
-                      <Badge>+{user.roleAssignments.length - 3} more</Badge>
+                      <Badge>
+                        {t("adminUsers.moreCount", {
+                          count: user.roleAssignments.length - 3,
+                        })}
+                      </Badge>
                     )}
                   </div>
                 ),
               },
               {
-                header: "Access",
+                header: t("adminUsers.columnAccess"),
                 className: "text-right",
                 cell: (user) => (
                   <div className="flex flex-wrap justify-end gap-2">
@@ -294,14 +304,14 @@ export function AdminUsersView({
                       className="min-h-[44px]"
                       onClick={(event) => openDetail(user, event.currentTarget)}
                     >
-                      View access
+                      {t("adminUsers.viewAccess")}
                     </Button>
                     {canManageAccess && (
                       <Button
                         className="min-h-[44px]"
                         onClick={(event) => openAssign(user, event.currentTarget)}
                       >
-                        Assign access
+                        {t("adminUsers.assignAccess")}
                       </Button>
                     )}
                   </div>
@@ -313,7 +323,10 @@ export function AdminUsersView({
           {filteredUsers.length > 0 && (
             <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm tabular-nums text-ink-dim" role="status" aria-live="polite">
-                Page {clampedPage} of {totalPages || 1}
+                {t("adminUsers.page", {
+                  page: clampedPage,
+                  total: totalPages || 1,
+                })}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -321,14 +334,14 @@ export function AdminUsersView({
                   disabled={clampedPage <= 1}
                   onClick={() => setPage(Math.max(1, clampedPage - 1))}
                 >
-                  Previous
+                  {t("adminUsers.previous")}
                 </Button>
                 <Button
                   variant="secondary"
                   disabled={clampedPage >= totalPages}
                   onClick={() => setPage(Math.min(totalPages, clampedPage + 1))}
                 >
-                  Next
+                  {t("adminUsers.next")}
                 </Button>
               </div>
             </div>
@@ -397,6 +410,7 @@ function UserAccessDialog({
   restoreFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const { session } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
   const [detail, setDetail] = useState<AdminUserAccessSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -416,11 +430,13 @@ function UserAccessDialog({
       setDetail(result);
     } catch (err) {
       if (requestGeneration !== generation.current) return;
-      setLoadError(err instanceof ApiError ? err.message : "Failed to load user access.");
+      setLoadError(
+        err instanceof ApiError ? err.message : t("adminUsers.loadAccessFailed"),
+      );
     } finally {
       if (requestGeneration === generation.current) setLoading(false);
     }
-  }, [token, user.id]);
+  }, [token, user.id, t]);
 
   useEffect(() => {
     void loadDetail();
@@ -437,7 +453,7 @@ function UserAccessDialog({
     <>
       <OverlayDialog
         open
-        title={`Access · ${user.fullName}`}
+        title={t("adminUsers.detailAccess", { name: user.fullName })}
         description={<span className="break-all">{user.email}</span>}
         stacked={bodyStacked}
         onClose={onClose}
@@ -446,14 +462,14 @@ function UserAccessDialog({
         footer={
           <>
             <Button variant="secondary" className="min-h-[44px]" onClick={onClose}>
-              Close
+              {t("common.close")}
             </Button>
             {canManageAccess && detail && (
               <Button
                 className="min-h-[44px]"
                 onClick={(event) => onAssign(detail, event.currentTarget)}
               >
-                Assign access
+                {t("adminUsers.assignAccess")}
               </Button>
             )}
           </>
@@ -461,13 +477,13 @@ function UserAccessDialog({
       >
         <div aria-hidden={bodyStacked || undefined} {...(bodyStacked ? { inert: true } : {})}>
         {loading ? (
-          <Spinner label="Loading user access…" />
+          <Spinner label={t("adminUsers.loadingAccess")} />
         ) : loadError ? (
           <Alert tone="error">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span>{loadError}</span>
               <Button variant="secondary" onClick={() => void loadDetail()}>
-                Retry
+                {t("adminUsers.retry")}
               </Button>
             </div>
           </Alert>
@@ -475,15 +491,15 @@ function UserAccessDialog({
           <div className="space-y-5">
             <section aria-labelledby="user-access-summary-title">
               <div className="grid gap-3 text-sm sm:grid-cols-3">
-                <SummaryItem label="Status">
+                <SummaryItem label={t("adminUsers.statusLabel")}>
                   <StatusPill tone={detail.status === "active" ? "success" : "neutral"}>
                     {detail.status}
                   </StatusPill>
                 </SummaryItem>
-                <SummaryItem label="User ID">
+                <SummaryItem label={t("adminUsers.userIdLabel")}>
                   <code className="break-all font-mono text-[11.5px]">{detail.id}</code>
                 </SummaryItem>
-                <SummaryItem label="Assignments">
+                <SummaryItem label={t("adminUsers.assignmentsLabel")}>
                   <span className="tabular-nums">{detail.roleAssignments.length}</span>
                 </SummaryItem>
               </div>
@@ -491,14 +507,14 @@ function UserAccessDialog({
             <section aria-labelledby="current-access-title">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 id="current-access-title" className="text-sm font-semibold text-ink">
-                  Current access
+                  {t("adminUsers.currentAccess")}
                 </h3>
-                {!canManageAccess && <Badge>Read only</Badge>}
+                {!canManageAccess && <Badge>{t("adminUsers.readOnly")}</Badge>}
               </div>
               {detail.roleAssignments.length === 0 ? (
                 <EmptyState
-                  title="No role assignments"
-                  description="This user currently has no effective internal access."
+                  title={t("adminUsers.noAssignmentsTitle")}
+                  description={t("adminUsers.noAssignmentsBody")}
                 />
               ) : (
                 <ul className="mt-3 divide-y divide-line rounded border border-line">
@@ -507,14 +523,14 @@ function UserAccessDialog({
                       key={assignment.id}
                       className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <AssignmentBlock assignment={assignment} />
+                      <AssignmentBlock assignment={assignment} t={t} />
                       {canManageAccess && assignment.assignmentState === "active" && (
                         <Button
                           variant="secondary"
                           className="min-h-[44px] shrink-0"
                           onClick={() => setRemoving(assignment)}
                         >
-                          Review revocation
+                          {t("adminUsers.reviewRevocation")}
                         </Button>
                       )}
                     </li>
@@ -542,42 +558,53 @@ function UserAccessDialog({
   );
 }
 
-function AssignmentBlock({ assignment }: { assignment: AdminRoleAssignmentSummary }) {
+function AssignmentBlock({
+  assignment,
+  t,
+}: {
+  assignment: AdminRoleAssignmentSummary;
+  t: Translate;
+}) {
   return (
     <div className="min-w-0 space-y-1">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-sm font-medium text-ink">{assignmentRoleLabel(assignment)}</span>
+        <span className="text-sm font-medium text-ink">
+          {assignmentRoleLabel(t, assignment)}
+        </span>
         {assignment.roleCode && (
           <code className="break-all font-mono text-[11.5px] text-ink-dim">
             {assignment.roleCode}
           </code>
         )}
         <StatusPill tone={assignmentStateTone(assignment)}>
-          {assignmentStateLabel(assignment)}
+          {assignmentStateLabel(t, assignment)}
         </StatusPill>
       </div>
-      <div className="text-sm text-ink-dim">{assignmentScopeName(assignment)}</div>
+      <div className="text-sm text-ink-dim">{assignmentScopeName(t, assignment)}</div>
       <code className="break-all font-mono text-[11.5px] text-ink-faint">
         {assignment.id}
       </code>
       {assignment.assignmentState === "revoked" && (
         <p className="text-xs text-status-warn">
-          Revoked {formatTimestamp(assignment.revokedAt)}. This record is kept for history and
-          grants no access.
+          {t("adminUsers.revokedNote", {
+            timestamp: formatTimestamp(assignment.revokedAt),
+          })}
         </p>
       )}
       {assignment.assignmentState === "invalidated" && (
         <p className="text-xs text-status-warn">
-          The system invalidated this assignment because its Role or scope no longer resolves.
+          {t("adminUsers.invalidatedNote")}
         </p>
       )}
       {assignment.assignmentState === "unavailable" && (
         <p className="text-xs text-status-warn">
-          This retained assignment currently grants no access.
+          {t("adminUsers.unavailableNote")}
         </p>
       )}
       {assignment.revokeReason && (
-        <p className="text-xs text-ink-dim">Reason: {assignment.revokeReason}</p>
+        <p className="text-xs text-ink-dim">
+          {t("adminUsers.reasonLine", { reason: assignment.revokeReason })}
+        </p>
       )}
     </div>
   );
@@ -595,6 +622,7 @@ function RevokeAssignmentDialog({
   onRevoked: (message: string) => void;
 }) {
   const { session } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
@@ -621,11 +649,16 @@ function RevokeAssignmentDialog({
         (candidate) => candidate.id === assignment.id,
       );
       if (!reloaded || reloaded.assignmentState !== "revoked" || !reloaded.revokedAt) {
-        throw new Error("The authoritative reload does not show this assignment as revoked.");
+        throw new Error(t("adminUsers.reloadMismatch"));
       }
-      onRevoked(`Revoked ${assignmentRoleLabel(assignment)} access from ${user.fullName}.`);
+      onRevoked(
+        t("adminUsers.revokedMessage", {
+          role: assignmentRoleLabel(t, assignment),
+          name: user.fullName,
+        }),
+      );
     } catch (err) {
-      setError(errorMessage(err, "The assignment could not be revoked."));
+      setError(errorMessage(t, err, t("adminUsers.revokeFailed")));
       setPending(false);
     } finally {
       inFlight.current = false;
@@ -635,22 +668,22 @@ function RevokeAssignmentDialog({
   return (
     <OverlayDialog
       open
-      title="Review revocation"
-      description="This revokes one exact assignment record. The user and the role are untouched."
+      title={t("adminUsers.revokeTitle")}
+      description={t("adminUsers.revokeDescription")}
       pending={pending}
       onClose={onClose}
       size="md"
       footer={
         <>
           <Button variant="secondary" className="min-h-[44px]" disabled={pending} onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             className="min-h-[44px]"
             disabled={pending || reasonInvalid}
             onClick={() => void confirmRevocation()}
           >
-            {pending ? "Revoking…" : "Confirm revoke"}
+            {pending ? t("adminUsers.revoking") : t("adminUsers.confirmRevoke")}
           </Button>
         </>
       }
@@ -658,28 +691,31 @@ function RevokeAssignmentDialog({
       <div className="space-y-4">
         {error && <Alert tone="error">{error}</Alert>}
         <section className="rounded border border-line-strong bg-panel-2 p-4">
-          <h3 className="text-sm font-semibold text-ink">What will change</h3>
+          <h3 className="text-sm font-semibold text-ink">
+            {t("adminUsers.whatWillChange")}
+          </h3>
           <dl className="mt-3 grid gap-x-5 gap-y-3 text-sm sm:grid-cols-2">
-            <SummaryItem label="User">
+            <SummaryItem label={t("adminUsers.userLabel")}>
               {user.fullName} · {user.email}
             </SummaryItem>
-            <SummaryItem label="Role">{assignmentRoleLabel(assignment)}</SummaryItem>
-            <SummaryItem label="Scope">{assignmentScopeName(assignment)}</SummaryItem>
-            <SummaryItem label="Assignment ID">
+            <SummaryItem label={t("adminUsers.roleLabel")}>
+              {assignmentRoleLabel(t, assignment)}
+            </SummaryItem>
+            <SummaryItem label={t("adminUsers.scopeLabel")}>
+              {assignmentScopeName(t, assignment)}
+            </SummaryItem>
+            <SummaryItem label={t("adminUsers.assignmentIdLabel")}>
               <code className="break-all font-mono text-[11.5px]">{assignment.id}</code>
             </SummaryItem>
           </dl>
-          <p className="mt-3 text-sm text-ink-dim">
-            Access from this assignment stops on the next authorization check. The record
-            stays, marked as revoked, with your name and reason on it.
-          </p>
+          <p className="mt-3 text-sm text-ink-dim">{t("adminUsers.revokeEffect")}</p>
         </section>
         <div>
           <label
             htmlFor="revoke-reason"
             className="block text-xs font-semibold uppercase tracking-wide text-ink-dim"
           >
-            Reason
+            {t("adminUsers.reasonField")}
           </label>
           <textarea
             id="revoke-reason"
@@ -691,14 +727,15 @@ function RevokeAssignmentDialog({
             onChange={(event) => setReason(event.target.value)}
           />
           <p id="revoke-reason-help" className="mt-1 text-xs text-ink-dim">
-            Required. Stored on the audit entry. {trimmedReason.length}/
-            {MAX_REVOKE_REASON_LENGTH} characters.
+            {t("adminUsers.reasonHelp", {
+              count: trimmedReason.length,
+              max: MAX_REVOKE_REASON_LENGTH,
+            })}
           </p>
         </div>
         {pending && (
           <Alert tone="info">
-            The server is revoking the assignment and then reloading the user with
-            GET so the result can be verified. This dialog cannot be closed yet.
+            {t("adminUsers.revokePending")}
           </Alert>
         )}
       </div>

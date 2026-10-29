@@ -27,6 +27,8 @@ import { WorkflowPanel } from "../../WorkflowPanel";
 import { SharedServicesPanel } from "../../SharedServicesPanel";
 import { OrganizationPanel } from "./OrganizationPanel";
 import { UserAccessPanel } from "./UserAccessPanel";
+import { useT } from "../../../i18n/LocaleProvider";
+import type { MessageKey } from "../../../i18n/dictionaries/en";
 
 /* ============================================================================
    Types & Constants
@@ -44,8 +46,8 @@ type CategoryKey =
 
 interface Category {
   key: CategoryKey;
-  label: string;
-  description: string;
+  labelKey: MessageKey;
+  descriptionKey: MessageKey;
   permissionRead: string;
   permissionManage: string;
 }
@@ -53,57 +55,57 @@ interface Category {
 const CATEGORIES: Category[] = [
   {
     key: "module",
-    label: "Module",
-    description: "Aktivasi module dan feature flag",
+    labelKey: "panelAdmin.categoryModule",
+    descriptionKey: "panelAdmin.categoryModuleDesc",
     permissionRead: PERMISSIONS.configModuleRead,
     permissionManage: PERMISSIONS.configModuleManage,
   },
   {
     key: "platform",
-    label: "Platform",
-    description: "Profil tenant dan terminology",
+    labelKey: "panelAdmin.categoryPlatform",
+    descriptionKey: "panelAdmin.categoryPlatformDesc",
     permissionRead: PERMISSIONS.configPlatformRead,
     permissionManage: PERMISSIONS.configPlatformManage,
   },
   {
     key: "organization",
-    label: "Organization",
-    description: "Legal entity, unit, hierarki, department",
+    labelKey: "panelAdmin.categoryOrganization",
+    descriptionKey: "panelAdmin.categoryOrgDesc",
     permissionRead: PERMISSIONS.configOrgRead,
     permissionManage: PERMISSIONS.configOrgManage,
   },
   {
     key: "system",
-    label: "System",
-    description: "Data referensi, penomoran, parameter",
+    labelKey: "panelAdmin.categorySystem",
+    descriptionKey: "panelAdmin.categorySystemDesc",
     permissionRead: PERMISSIONS.configSystemRead,
     permissionManage: PERMISSIONS.configSystemManage,
   },
   {
     key: "user",
-    label: "User & Access",
-    description: "User, role, permission, assignment",
+    labelKey: "panelAdmin.categoryUser",
+    descriptionKey: "panelAdmin.categoryUserDesc",
     permissionRead: PERMISSIONS.configUserRead,
     permissionManage: PERMISSIONS.configUserManage,
   },
   {
     key: "workflow",
-    label: "Workflow & Approval",
-    description: "Definisi workflow dan jalur persetujuan",
+    labelKey: "panelAdmin.categoryWorkflow",
+    descriptionKey: "panelAdmin.categoryWorkflowDesc",
     permissionRead: PERMISSIONS.configWorkflowRead,
     permissionManage: PERMISSIONS.configWorkflowManage,
   },
   {
     key: "notification",
-    label: "Notification & Channel",
-    description: "Mesin notifikasi dan kanal pengiriman",
+    labelKey: "panelAdmin.categoryNotification",
+    descriptionKey: "panelAdmin.categoryNotificationDesc",
     permissionRead: PERMISSIONS.configNotificationRead,
     permissionManage: PERMISSIONS.configNotificationManage,
   },
   {
     key: "document",
-    label: "Document",
-    description: "Manajemen dokumen dan layanan berkas",
+    labelKey: "panelAdmin.categoryDocument",
+    descriptionKey: "panelAdmin.categoryDocumentDesc",
     permissionRead: PERMISSIONS.configDocumentRead,
     permissionManage: PERMISSIONS.configDocumentManage,
   },
@@ -168,16 +170,17 @@ function Sidebar({
   onSelect: (key: CategoryKey) => void;
   canRead: (category: Category) => boolean;
 }) {
+  const t = useT();
   const visibleCategories = categories.filter(canRead);
 
   return (
     <nav
-      aria-label="Kategori konfigurasi"
+      aria-label={t("panelAdmin.navCategoryLabel")}
       className="w-full shrink-0 border-b border-line bg-panel-2 sm:w-72 sm:border-b-0 sm:border-r"
     >
       <ul className="flex gap-1 overflow-x-auto p-2 sm:flex-col sm:overflow-visible">
         {visibleCategories.length === 0 ? (
-          <li className="px-2 py-3 text-xs text-ink-faint">Tidak ada kategori yang dapat diakses.</li>
+          <li className="px-2 py-3 text-xs text-ink-faint">{t("panelAdmin.noCategories")}</li>
         ) : (
           visibleCategories.map((category) => (
             <li key={category.key} className="shrink-0 sm:shrink">
@@ -191,7 +194,7 @@ function Sidebar({
                     : "text-ink-dim hover:bg-panel hover:text-ink"
                 }`}
               >
-                {category.label}
+                {t(category.labelKey)}
               </button>
             </li>
           ))
@@ -286,6 +289,7 @@ function CategoryBody({
    ============================================================================ */
 
 export function PanelAdminPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { activeModuleCodes } = useShell();
@@ -315,7 +319,7 @@ export function PanelAdminPage() {
   // as `null` when the caller cannot read it.
   const overview = useAdminResource(
     api.adminOverview,
-    "Gagal memuat ringkasan administrasi.",
+    t("panelAdmin.loadOverviewFailed"),
   );
 
   const canRead = (category: Category) =>
@@ -337,10 +341,10 @@ export function PanelAdminPage() {
   const sections = overview.data?.sections;
 
   const dashboardTiles: DashboardTile[] = [
-    { label: "Module aktif", value: sections?.modules.activeCount ?? null, target: "module" },
-    { label: "Workflow", value: sections?.workflows.count ?? null, target: "workflow" },
-    { label: "User", value: sections?.users.count ?? null, target: "user" },
-    { label: "Role", value: sections?.roles.count ?? null, target: "user" },
+    { label: t("panelAdmin.activeModules"), value: sections?.modules.activeCount ?? null, target: "module" },
+    { label: t("panelAdmin.workflowCount"), value: sections?.workflows.count ?? null, target: "workflow" },
+    { label: t("panelAdmin.userCount"), value: sections?.users.count ?? null, target: "user" },
+    { label: t("panelAdmin.roleCount"), value: sections?.roles.count ?? null, target: "user" },
   ];
 
   const category = CATEGORIES.find((c) => c.key === selectedCategory);
@@ -349,14 +353,13 @@ export function PanelAdminPage() {
   return (
     <div className="flex min-h-full flex-col">
       <PageHeader
-        title="Administrasi"
-        subtitle="Konfigurasi tenant: module, platform, organisasi, pengguna, dan layanan bersama."
+        title={t("panelAdmin.title")}
+        subtitle={t("panelAdmin.subtitle")}
       />
 
       {activeModuleCodes.length === 0 && (
         <Alert tone="warning">
-          Belum ada module aktif untuk tenant ini. Aktifkan module terlebih dahulu agar menu dan
-          kategori konfigurasinya tersedia.
+          {t("panelAdmin.noModulesWarning")}
         </Alert>
       )}
 
@@ -380,8 +383,8 @@ export function PanelAdminPage() {
           {!category || !canRead(category) ? (
             <Alert tone="info">
               {readableCategories.length === 0
-                ? "Anda belum memiliki izin baca untuk kategori konfigurasi mana pun."
-                : "Kategori ini memerlukan izin baca yang belum Anda miliki."}
+                ? t("panelAdmin.noReadPermission")
+                : t("panelAdmin.noCategoryPermission")}
             </Alert>
           ) : (
             <CategoryBody

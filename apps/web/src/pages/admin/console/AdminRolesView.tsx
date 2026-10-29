@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { MouseEvent } from "react";
 import { useAuth } from "../../../auth/AuthContext";
+import { useT } from "../../../i18n/LocaleProvider";
 import {
   api,
   ApiError,
@@ -39,6 +40,7 @@ export function AdminRolesView({
   canRead: boolean;
 }) {
   const { session, logout } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
@@ -46,7 +48,7 @@ export function AdminRolesView({
   const { data, loading, error, denied, sessionExpired, reload } =
     useAdminResource<AdminRoleSummary[]>(
       (accessToken) => api.adminRoles(accessToken),
-      "Failed to load roles",
+      t("adminRoles.loadFailed"),
     );
   const [selectedRole, setSelectedRole] = useState<AdminRoleSummary | null>(null);
   const [details, setDetails] = useState<AdminRolePermissions | null>(null);
@@ -96,12 +98,14 @@ export function AdminRolesView({
         } else if (err instanceof ApiError && err.status === 401) {
           setDetailState("session-expired");
         } else {
-          setDetailError(err instanceof ApiError ? err.message : "Failed to load role permissions");
+          setDetailError(
+          err instanceof ApiError ? err.message : t("adminRoles.detailLoadFailed"),
+        );
           setDetailState("error");
         }
       }
     },
-    [token],
+    [token, t],
   );
 
   const filteredPermissions = useMemo(() => {
@@ -115,18 +119,18 @@ export function AdminRolesView({
 
   const columns: Column<AdminRoleSummary>[] = [
     {
-      header: "Code",
+      header: t("adminRoles.columnCode"),
       cell: (role) => <code className="font-mono text-xs font-medium text-ink">{role.code}</code>,
       mobileRole: "title",
     },
-    { header: "Name", cell: (role) => role.name },
+    { header: t("adminRoles.columnName"), cell: (role) => role.name },
     {
-      header: "Access",
+      header: t("adminRoles.columnAccess"),
       cell: (role) =>
         role.isFullAccess ? (
-          <StatusPill tone="warning">Full access</StatusPill>
+          <StatusPill tone="warning">{t("adminRoles.fullAccess")}</StatusPill>
         ) : (
-          <StatusPill tone="neutral">Scoped</StatusPill>
+          <StatusPill tone="neutral">{t("adminRoles.scoped")}</StatusPill>
         ),
     },
     {
@@ -134,27 +138,27 @@ export function AdminRolesView({
       // so it gets its own column rather than overloading the Access pill. A
       // deactivated Role still appears here (it owns assignment history); what
       // changes is that it can no longer be granted.
-      header: "Status",
+      header: t("adminRoles.columnStatus"),
       cell: (role) =>
         role.isActive ? (
-          <StatusPill tone="success">Active</StatusPill>
+          <StatusPill tone="success">{t("adminRoles.active")}</StatusPill>
         ) : (
-          <StatusPill tone="neutral">Inactive</StatusPill>
+          <StatusPill tone="neutral">{t("adminRoles.inactive")}</StatusPill>
         ),
       mobileRole: "status",
     },
     {
-      header: "Permissions",
+      header: t("adminRoles.columnPermissions"),
       cell: (role) => <span className="tabular-nums">{role.permissionCount}</span>,
       className: "text-right tabular-nums",
     },
     {
-      header: "Users",
+      header: t("adminRoles.columnUsers"),
       cell: (role) => <span className="tabular-nums">{role.assignedUserCount}</span>,
       className: "text-right tabular-nums",
     },
     {
-      header: "Details",
+      header: t("adminRoles.columnDetails"),
       cell: (role) => (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
@@ -167,7 +171,7 @@ export function AdminRolesView({
               void loadRoleDetails(role);
             }}
           >
-            View permissions
+            {t("adminRoles.viewPermissions")}
           </Button>
           {canRead && (
             <Link
@@ -175,7 +179,7 @@ export function AdminRolesView({
               onClick={(event: MouseEvent<HTMLAnchorElement>) => event.stopPropagation()}
               className="inline-flex min-h-[44px] items-center justify-center rounded border border-line-strong bg-panel px-3 py-1.5 text-sm font-medium text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent sm:min-h-[36px]"
             >
-              Definition
+              {t("adminRoles.definition")}
             </Link>
           )}
           {canManage && (
@@ -187,7 +191,7 @@ export function AdminRolesView({
                 setCopySource(role);
               }}
             >
-              Copy
+              {t("adminRoles.copy")}
             </Button>
           )}
         </div>
@@ -200,7 +204,7 @@ export function AdminRolesView({
     <>
       <AdminSectionState
         loading={loading}
-        loadingLabel="Loading tenant roles…"
+        loadingLabel={t("adminRoles.loading")}
         denied={denied}
         sessionExpired={sessionExpired}
         error={error}
@@ -208,11 +212,11 @@ export function AdminRolesView({
         onRetry={reload}
       >
         <AdminPanel
-          title="Roles"
-          description="Tenant-local roles, access breadth, permission totals, and assignment totals. Open one role to inspect its current grants."
+          title={t("adminRoles.title")}
+          description={t("adminRoles.description")}
           actions={
             canManage && (
-              <Button onClick={() => setCreateOpen(true)}>New role</Button>
+              <Button onClick={() => setCreateOpen(true)}>{t("adminRoles.newRole")}</Button>
             )
           }
         >
@@ -226,8 +230,8 @@ export function AdminRolesView({
             }
             empty={
               <AdminEmpty
-                title="No roles configured"
-                description="No tenant-local role definitions were returned for this tenant."
+                title={t("adminRoles.emptyTitle")}
+                description={t("adminRoles.emptyBody")}
               />
             }
           />
@@ -261,34 +265,36 @@ export function AdminRolesView({
 
       <OverlayDialog
         open={selectedRole !== null}
-        title={selectedRole ? `${selectedRole.name} permissions` : "Role permissions"}
+        title={
+          selectedRole
+            ? t("adminRoles.detailTitle", { name: selectedRole.name })
+            : t("adminRoles.detailFallbackTitle")
+        }
         description={
-          selectedRole ? (
-            <>
-              On-demand grants for <code className="font-mono text-xs">{selectedRole.code}</code>.
-            </>
-          ) : undefined
+          selectedRole
+            ? t("adminRoles.detailDescription", { code: selectedRole.code })
+            : undefined
         }
         onClose={closeDetails}
         restoreFocusRef={detailTriggerRef}
         footer={
           <Button variant="secondary" className="min-h-[44px]" onClick={closeDetails}>
-            Close
+            {t("common.close")}
           </Button>
         }
       >
-        {detailState === "loading" && <Spinner label="Loading role permissions…" />}
+        {detailState === "loading" && <Spinner label={t("adminRoles.loadingPermissions")} />}
         {detailState === "denied" && (
           <EmptyState
-            title="Permission details are restricted"
-            description="You can see the role summary, but your access does not allow its permission membership to be inspected."
+            title={t("adminRoles.deniedTitle")}
+            description={t("adminRoles.deniedBody")}
           />
         )}
         {detailState === "session-expired" && (
           <EmptyState
-            title="Your session has expired"
-            description="Sign in again to inspect this role."
-            action={<Button onClick={logout}>Sign in again</Button>}
+            title={t("adminRoles.sessionExpiredTitle")}
+            description={t("adminRoles.sessionExpiredBody")}
+            action={<Button onClick={logout}>{t("adminRoles.signInAgain")}</Button>}
           />
         )}
         {detailState === "error" && (
@@ -297,7 +303,7 @@ export function AdminRolesView({
               <span>{detailError}</span>
               {selectedRole && (
                 <Button variant="secondary" onClick={() => void loadRoleDetails(selectedRole)}>
-                  Retry
+                  {t("adminUsers.retry")}
                 </Button>
               )}
             </div>
@@ -311,27 +317,27 @@ export function AdminRolesView({
                 <code className="font-mono text-xs text-ink-dim">{details.roleCode}</code>
               </div>
               {details.isFullAccess ? (
-                <StatusPill tone="warning">Full access</StatusPill>
+                <StatusPill tone="warning">{t("adminRoles.fullAccess")}</StatusPill>
               ) : (
-                <StatusPill tone="neutral">Scoped access</StatusPill>
+                <StatusPill tone="neutral">{t("adminRoles.scopedAccess")}</StatusPill>
               )}
             </div>
             {details.permissions.length === 0 ? (
               <EmptyState
-                title="No permissions assigned"
-                description="This role currently has no listed permission grants."
+                title={t("adminRoles.noPermissionsTitle")}
+                description={t("adminRoles.noPermissionsBody")}
               />
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <Field label="Filter permissions">
+                  <Field label={t("adminRoles.filterLabel")}>
                     <Input
                       type="search"
                       value={permissionQuery}
                       onChange={(e) => setPermissionQuery(e.target.value)}
-                      placeholder="Search by code or description"
+                      placeholder={t("adminRoles.filterPlaceholder")}
                       autoComplete="off"
-                      aria-label="Filter role permissions"
+                      aria-label={t("adminRoles.filterAria")}
                       className="sm:w-80"
                     />
                   </Field>
@@ -341,19 +347,22 @@ export function AdminRolesView({
                       role="status"
                       aria-live="polite"
                     >
-                      Showing {filteredPermissions.length} of {details.permissions.length}
+                      {t("adminRoles.showing", {
+                        shown: filteredPermissions.length,
+                        total: details.permissions.length,
+                      })}
                     </p>
                     {permissionQuery.trim() !== "" && (
                       <Button variant="ghost" onClick={() => setPermissionQuery("")}>
-                        Clear search
+                        {t("adminRoles.clearSearch")}
                       </Button>
                     )}
                   </div>
                 </div>
                 {filteredPermissions.length === 0 ? (
                   <EmptyState
-                    title="No matching permissions"
-                    description="Try a different search term or clear the filter."
+                    title={t("adminRoles.noMatchTitle")}
+                    description={t("adminRoles.noMatchBody")}
                   />
                 ) : (
                   <ul className="divide-y divide-line rounded border border-line">

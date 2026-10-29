@@ -5,6 +5,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { useT } from "../../i18n/LocaleProvider";
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(
@@ -81,6 +82,7 @@ export function OverlayDialog({
   restoreFocusRef?: React.RefObject<HTMLElement | null>;
   size?: "md" | "lg";
 }) {
+  const t = useT();
   const generatedId = useId();
   const titleId = `${generatedId}-title`;
   const descriptionId = `${generatedId}-description`;
@@ -211,7 +213,7 @@ export function OverlayDialog({
             type="button"
             onClick={onClose}
             disabled={pending}
-            aria-label="Close dialog"
+            aria-label={t("dialog.close")}
             className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-xl leading-none text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
             ×

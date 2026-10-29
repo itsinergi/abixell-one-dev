@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const rowIdCounter = { current: 0 };
 import { useAuth } from "../../../auth/AuthContext";
+import { useT } from "../../../i18n/LocaleProvider";
 import {
   api,
   ApiError,
@@ -40,6 +41,7 @@ export interface AssignmentOptionsState {
 
 export function useAssignmentOptions(enabled: boolean): AssignmentOptionsState {
   const { session } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
   const [status, setStatus] = useState<AssignmentOptionsStatus>(
     enabled ? "loading" : "idle",
@@ -67,12 +69,12 @@ export function useAssignmentOptions(enabled: boolean): AssignmentOptionsState {
         setStatus("session-expired");
       } else {
         setError(
-          err instanceof ApiError ? err.message : "Failed to load assignment options",
+          err instanceof ApiError ? err.message : t("pairEditor.optionsFailed"),
         );
         setStatus("error");
       }
     }
-  }, [enabled, token]);
+  }, [enabled, token, t]);
 
   useEffect(() => {
     void run();
@@ -180,13 +182,14 @@ export function AssignmentPairEditor({
   options,
   pairs,
   onChange,
-  addLabel = "Add assignment",
+  addLabel,
 }: {
   options: AdminAssignmentOptions;
   pairs: AdminRoleAssignmentInput[];
   onChange: (pairs: AdminRoleAssignmentInput[]) => void;
-  addLabel?: string;
+  addLabel: string;
 }) {
+  const t = useT();
   const selectableRoles = options.roles.filter((role) => role.selectable);
   const hasSelectableScope =
     options.canAssignTenantScope ||
@@ -247,19 +250,16 @@ export function AssignmentPairEditor({
   return (
     <div className="space-y-3">
       {nothingSelectable && (
-        <Alert tone="warning">
-          No role and scope combination is assignable with your current access.
-          The list below shows the boundary of your delegation as context.
-        </Alert>
+        <Alert tone="warning">{t("pairEditor.noneSelectable")}</Alert>
       )}
       {pairs.length === 0 ? (
-        <p className="text-sm text-ink-dim">No assignments selected yet.</p>
+        <p className="text-sm text-ink-dim">{t("pairEditor.empty")}</p>
       ) : (
         <ul className="space-y-3">
           {pairs.map((pair, index) => (
             <li key={rowIds[index] ?? index} className="rounded border border-line bg-panel-2 p-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label={`Role ${index + 1}`} required>
+                <Field label={t("pairEditor.roleLabel", { index: index + 1 })} required>
                   <Select
                     value={pair.roleCode}
                     onChange={(event) =>
@@ -273,12 +273,12 @@ export function AssignmentPairEditor({
                     {options.roles.map((role) => (
                       <option key={role.code} value={role.code} disabled={!role.selectable}>
                         {role.name} ({role.code})
-                        {!role.selectable ? " — outside your delegation" : ""}
+                        {!role.selectable ? t("pairEditor.outsideDelegation") : ""}
                       </option>
                     ))}
                   </Select>
                 </Field>
-                <Field label={`Scope ${index + 1}`} required>
+                <Field label={t("pairEditor.scopeLabel", { index: index + 1 })} required>
                   <Select
                     value={scopeKeyOf(pair)}
                     onChange={(event) =>
@@ -286,7 +286,8 @@ export function AssignmentPairEditor({
                     }
                   >
                     <option value="tenant" disabled={!options.canAssignTenantScope}>
-                      Tenant-wide{!options.canAssignTenantScope ? " — not permitted for your access" : ""}
+                      {t("pairEditor.tenantWide")}
+                      {!options.canAssignTenantScope ? t("pairEditor.tenantNotPermitted") : ""}
                     </option>
                     {options.legalEntities.map((legalEntity) => (
                       <option
@@ -294,7 +295,7 @@ export function AssignmentPairEditor({
                         value={`le:${legalEntity.id}`}
                         disabled={!legalEntity.selectable}
                       >
-                        {`${legalEntity.name}${legalEntity.selectable ? "" : " — context"}`}
+                        {`${legalEntity.name}${legalEntity.selectable ? "" : t("pairEditor.contextSuffix")}`}
                       </option>
                     ))}
                     {options.organizationUnits.map((unit) => (
@@ -303,23 +304,21 @@ export function AssignmentPairEditor({
                         value={`ou:${unit.id}`}
                         disabled={!unit.selectable}
                       >
-                        {`${"— ".repeat(unit.depth)}${unit.name}${unit.selectable ? "" : " — context"}`}
+                        {`${"— ".repeat(unit.depth)}${unit.name}${unit.selectable ? "" : t("pairEditor.contextSuffix")}`}
                       </option>
                     ))}
                   </Select>
                 </Field>
               </div>
               {duplicateKeys.has(assignmentPairKey(pair)) && (
-                <p className="mt-1 text-xs text-status-warn">
-                  This role and scope combination appears more than once in the batch.
-                </p>
+                <p className="mt-1 text-xs text-status-warn">{t("pairEditor.duplicate")}</p>
               )}
               <Button
                 variant="ghost"
                 className="mt-2"
                 onClick={() => removePair(index)}
               >
-                Remove pair
+                {t("pairEditor.remove")}
               </Button>
             </li>
           ))}
@@ -336,17 +335,19 @@ export function AssignmentPairEditor({
 
 /* ---------------------------------------------------------- error message */
 
+type Translate = ReturnType<typeof useT>;
+
 /** Shared refusal wording for governed access mutations. */
-export function errorMessage(err: unknown, fallback: string): string {
+export function errorMessage(t: Translate, err: unknown, fallback: string): string {
   if (!(err instanceof ApiError)) return fallback;
   if (err.status === 401) {
-    return "Your session expired. Sign in again before changing access.";
+    return t("pairEditor.sessionExpired");
   }
   if (err.status === 403) {
-    return "Your current access does not allow this change.";
+    return t("pairEditor.forbidden");
   }
   if (err.status === 400 || err.status === 409 || err.status === 422) {
-    return `The server rejected this access context: ${err.message}`;
+    return t("pairEditor.rejected", { message: err.message });
   }
   return err.message || fallback;
 }

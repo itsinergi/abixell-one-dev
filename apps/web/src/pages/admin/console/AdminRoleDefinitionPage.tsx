@@ -8,6 +8,7 @@
  * write re-checks `role.manage` inside the tenant-locked transaction.
  */
 import { useNavigate, useParams } from "react-router-dom";
+import { useT } from "../../../i18n/LocaleProvider";
 import { PageHeader, PermissionDeniedState, EmptyState } from "../../../shell/components/ui";
 import { isInternalScope, PERMISSIONS } from "../../../lib/capabilities";
 import { useShell } from "../../../shell/layout/AppShell";
@@ -21,6 +22,7 @@ const ROLE_MANAGE = "role.manage";
 export function AdminRoleDefinitionPage() {
   const { permissions, scopeTypes } = useShell();
   const navigate = useNavigate();
+  const t = useT();
   const { roleCode } = useParams<{ roleCode: string }>();
 
   const back = () => navigate("/admin?section=roles");
@@ -28,7 +30,7 @@ export function AdminRoleDefinitionPage() {
   if (!permissions.includes(PERMISSIONS.adminConsoleRead)) {
     return (
       <>
-        <PageHeader title="Role definition" />
+        <PageHeader title={t("adminRoleDef.title")} />
         <PermissionDeniedState permission={PERMISSIONS.adminConsoleRead} />
       </>
     );
@@ -37,10 +39,10 @@ export function AdminRoleDefinitionPage() {
   if (!isInternalScope(scopeTypes)) {
     return (
       <>
-        <PageHeader title="Role definition" />
+        <PageHeader title={t("adminRoleDef.title")} />
         <EmptyState
-          title="An internal data scope is required"
-          description="Role definitions are tenant-local. Backend authorization remains authoritative."
+          title={t("adminRoleDef.error.noScope")}
+          description={t("adminRoleDef.error.noScopeDesc")}
         />
       </>
     );
@@ -49,10 +51,10 @@ export function AdminRoleDefinitionPage() {
   if (!roleCode) {
     return (
       <>
-        <PageHeader title="Role definition" />
+        <PageHeader title={t("adminRoleDef.title")} />
         <EmptyState
-          title="No role was named"
-          description="Open a Role from the Admin Console roles list to view or change its definition."
+          title={t("adminRoleDef.error.noRole")}
+          description={t("adminRoleDef.error.noRoleDesc")}
         />
       </>
     );
@@ -60,10 +62,7 @@ export function AdminRoleDefinitionPage() {
 
   return (
     <>
-      <PageHeader
-        title="Role definition"
-        subtitle="Permissions and Window access recorded for this Role, with impact preview before any change is saved."
-      />
+      <PageHeader title={t("adminRoleDef.title")} subtitle={t("adminRoleDef.subtitle")} />
       <AdminRoleDefinitionView
         roleCode={roleCode}
         canRead={permissions.includes("config.read")}
