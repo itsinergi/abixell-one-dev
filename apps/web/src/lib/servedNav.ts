@@ -67,7 +67,7 @@ function isPage(node: MenuNode): boolean {
  * (sidebar, Overview cards, nav search) sees the same text and search matches
  * what is on screen.
  */
-export function servedNavGroups(menu: MenuNode[], locale: Locale): ServedNavGroup[] {
+export function servedNavGroups(menu: MenuNode[], locale: Locale = "en"): ServedNavGroup[] {
   const label = (code: string, name: string) => resolveNavLabel(code, name, locale);
   const description = (code: string, text: string | undefined) =>
     resolveNavLabel(code, text ?? "", locale, "description");
