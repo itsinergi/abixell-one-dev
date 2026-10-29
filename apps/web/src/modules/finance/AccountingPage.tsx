@@ -35,6 +35,8 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDate, formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 
 type LegalEntityOption = { id: string; name: string };
 
@@ -46,15 +48,17 @@ const PERIOD_TONES: Record<AccountingPeriodRecord["status"], "neutral" | "info" 
   tombstone: "danger",
 };
 
-const PERIOD_LABELS: Record<AccountingPeriodRecord["status"], string> = {
-  draft: "Draft",
-  open: "Open",
-  closed: "Closed",
-  reopenable: "Reopenable",
-  tombstone: "Tombstone",
+/** The stored status stays the API's; only the word on screen changes. */
+const PERIOD_LABEL_KEYS: Record<AccountingPeriodRecord["status"], MessageKey> = {
+  draft: "finAcct.periodDraft",
+  open: "finAcct.periodOpen",
+  closed: "finAcct.periodClosed",
+  reopenable: "finAcct.periodReopenable",
+  tombstone: "finAcct.periodTombstone",
 };
 
 export function AccountingPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -105,11 +109,11 @@ export function AccountingPage() {
       setCharts(chartList);
       setAccounts(accountList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the accounting records.");
+      setError(err instanceof ApiError ? err.message : t("finAcct.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void load();
@@ -122,87 +126,121 @@ export function AccountingPage() {
 
   const periodColumns: Column<AccountingPeriodRecord>[] = [
     {
-      header: "Period",
+      header: t("finAcct.period"),
       mobileRole: "title",
       cell: (row) => <span className="font-medium text-ink">{row.periodName}</span>,
     },
-    { header: "Year", cell: (row) => row.fiscalYearCode },
-    { header: "Type", cell: (row) => <Badge>{row.periodType}</Badge> },
-    { header: "From", className: "tabular-nums", cell: (row) => formatDate(row.dateFrom) },
-    { header: "To", className: "tabular-nums", cell: (row) => formatDate(row.dateTo) },
+    { header: t("finAcct.year"), cell: (row) => row.fiscalYearCode },
+    { header: t("fin.common.type"), cell: (row) => <Badge>{row.periodType}</Badge> },
+    { header: t("fin.common.from"), className: "tabular-nums", cell: (row) => formatDate(row.dateFrom) },
+    { header: t("fin.common.to"), className: "tabular-nums", cell: (row) => formatDate(row.dateTo) },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={PERIOD_TONES[row.status]}>{PERIOD_LABELS[row.status]}</StatusPill>,
+      cell: (row) => (
+        <StatusPill tone={PERIOD_TONES[row.status]}>{t(PERIOD_LABEL_KEYS[row.status])}</StatusPill>
+      ),
     },
   ];
 
   const closingColumns: Column<AccountingFiscalClosingRecord>[] = [
-    { header: "Period", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{periodLabel(row.periodId)}</span> },
-    { header: "Close", cell: (row) => <Badge>{row.closeKind === "year_end" ? "Year end" : "Month end"}</Badge> },
-    { header: "Closed", className: "tabular-nums", cell: (row) => formatDate(row.closedAt) },
     {
-      header: "Retained earnings",
+      header: t("finAcct.period"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{periodLabel(row.periodId)}</span>,
+    },
+    {
+      header: t("finAcct.close"),
+      cell: (row) => (
+        <Badge>{row.closeKind === "year_end" ? t("finAcct.yearEnd") : t("finAcct.monthEnd")}</Badge>
+      ),
+    },
+    { header: t("finAcct.closed"), className: "tabular-nums", cell: (row) => formatDate(row.closedAt) },
+    {
+      header: t("finAcct.retainedEarnings"),
       className: "text-right tabular-nums",
       mobileRole: "detail",
-      cell: (row) => (row.retainedEarningsDelta === null ? "—" : formatMoney(row.retainedEarningsDelta)),
+      cell: (row) =>
+        row.retainedEarningsDelta === null
+          ? t("fin.common.notAvailable")
+          : formatMoney(row.retainedEarningsDelta),
     },
   ];
 
   const ledgerColumns: Column<AccountingLedgerRecord>[] = [
-    { header: "Ledger", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{row.ledgerName}</span> },
-    { header: "Code", className: "font-mono text-xs", cell: (row) => row.ledgerCode },
-    { header: "Currency", cell: (row) => row.currency },
     {
-      header: "Role",
+      header: t("finAcct.ledger"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{row.ledgerName}</span>,
+    },
+    { header: t("fin.common.code"), className: "font-mono text-xs", cell: (row) => row.ledgerCode },
+    { header: t("fin.common.currency"), cell: (row) => row.currency },
+    {
+      header: t("finAcct.role"),
       mobileRole: "status",
       cell: (row) =>
-        row.isPrimary ? <StatusPill tone="success">Primary</StatusPill> : <StatusPill>{row.ledgerRole}</StatusPill>,
+        row.isPrimary ? (
+          <StatusPill tone="success">{t("finAcct.primary")}</StatusPill>
+        ) : (
+          <StatusPill>{row.ledgerRole}</StatusPill>
+        ),
     },
   ];
 
   const chartColumns: Column<AccountingChartRecord>[] = [
-    { header: "Version", mobileRole: "title", cell: (row) => <span className="font-mono text-xs text-ink">{row.coaVersionCode}</span> },
-    { header: "Date", className: "tabular-nums", cell: (row) => formatDate(row.coaVersionDate) },
-    { header: "Template", cell: (row) => (row.templateType ? <Badge>{row.templateType}</Badge> : "Custom") },
     {
-      header: "Status",
+      header: t("finAcct.version"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-mono text-xs text-ink">{row.coaVersionCode}</span>,
+    },
+    { header: t("fin.common.date"), className: "tabular-nums", cell: (row) => formatDate(row.coaVersionDate) },
+    {
+      header: t("finAcct.template"),
+      cell: (row) => (row.templateType ? <Badge>{row.templateType}</Badge> : t("finAcct.custom")),
+    },
+    {
+      header: t("fin.common.status"),
       mobileRole: "status",
       cell: (row) =>
         row.coaStatus === "approved" ? (
-          <StatusPill tone="success">Approved</StatusPill>
+          <StatusPill tone="success">{t("finAcct.approved")}</StatusPill>
         ) : (
-          <StatusPill tone="warning">Draft</StatusPill>
+          <StatusPill tone="warning">{t("finAcct.periodDraft")}</StatusPill>
         ),
     },
   ];
 
   const accountColumns: Column<AccountingAccountRecord>[] = [
-    { header: "Code", className: "font-mono text-xs", cell: (row) => row.accountCode },
-    { header: "Account", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{row.accountName}</span> },
-    { header: "Class", cell: (row) => <Badge>{row.accountClass}</Badge> },
-    { header: "Normal", cell: (row) => row.normalBalance },
+    { header: t("fin.common.code"), className: "font-mono text-xs", cell: (row) => row.accountCode },
     {
-      header: "Active",
+      header: t("fin.common.account"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{row.accountName}</span>,
+    },
+    { header: t("finAcct.class"), cell: (row) => <Badge>{row.accountClass}</Badge> },
+    { header: t("finAcct.normal"), cell: (row) => row.normalBalance },
+    {
+      header: t("fin.state.active"),
       mobileRole: "status",
       cell: (row) =>
-        row.isActive ? <StatusPill tone="success">Active</StatusPill> : <StatusPill>Inactive</StatusPill>,
+        row.isActive ? (
+          <StatusPill tone="success">{t("fin.state.active")}</StatusPill>
+        ) : (
+          <StatusPill>{t("fin.state.inactive")}</StatusPill>
+        ),
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Accounting"
-        subtitle="The periods you keep, the ledgers behind them, and the chart of accounts in force."
-      />
+      <PageHeader title={t("finAcct.title")} subtitle={t("finAcct.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
       <Card>
-        <Field label="Legal entity" required>
+        <Field label={t("fin.common.legalEntity")} required>
           <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-            <option value="">Choose a legal entity</option>
+            <option value="">{t("fin.common.chooseLegalEntity")}</option>
             {entities.map((entity) => (
               <option key={entity.id} value={entity.id}>
                 {entity.name}
@@ -213,72 +251,59 @@ export function AccountingPage() {
       </Card>
 
       {!legalEntityId ? (
-        <EmptyState
-          title="Choose a legal entity"
-          description="Accounting records belong to one legal entity, so nothing is shown until one is chosen."
-        />
+        <EmptyState title={t("fin.common.chooseLegalEntity")} description={t("finAcct.chooseEntityDesc")} />
       ) : loading ? (
         <Spinner />
       ) : (
         <>
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Periods</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAcct.periods")}</h2>
             <DataTable
               columns={periodColumns}
               rows={periods}
               keyOf={(row) => row.id}
-              empty={
-                <EmptyState
-                  title="No periods yet"
-                  description="A legal entity needs at least one accounting period before journals can be posted."
-                />
-              }
+              empty={<EmptyState title={t("finAcct.noPeriodsTitle")} description={t("finAcct.noPeriodsDesc")} />}
             />
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Fiscal closings</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAcct.fiscalClosings")}</h2>
             <DataTable
               columns={closingColumns}
               rows={closings}
               keyOf={(row) => row.id}
-              empty={
-                <EmptyState
-                  title="Nothing closed yet"
-                  description="Month-end and year-end close runs appear here once they are recorded."
-                />
-              }
+              empty={<EmptyState title={t("finAcct.noClosingsTitle")} description={t("finAcct.noClosingsDesc")} />}
             />
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div>
-              <h2 className="mb-2 text-sm font-semibold text-ink">Ledgers</h2>
+              <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAcct.ledgers")}</h2>
               <DataTable
                 columns={ledgerColumns}
                 rows={ledgers}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No ledger" description="This entity has no ledger in force yet." />}
+                empty={<EmptyState title={t("finAcct.noLedgerTitle")} description={t("finAcct.noLedgerDesc")} />}
               />
             </div>
             <div>
-              <h2 className="mb-2 text-sm font-semibold text-ink">Chart versions</h2>
+              <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAcct.chartVersions")}</h2>
               <DataTable
                 columns={chartColumns}
                 rows={charts}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No chart" description="No chart of accounts version exists for this entity." />}
+                empty={<EmptyState title={t("finAcct.noChartTitle")} description={t("finAcct.noChartDesc")} />}
               />
             </div>
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Accounts</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("fin.common.accounts")}</h2>
             <DataTable
               columns={accountColumns}
               rows={accounts}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No accounts" description="Instantiate a chart template to create the account list." />}
+              empty={<EmptyState title={t("finCashflow.noAccountsTitle")} description={t("finAcct.noAccountsDesc")} />}
             />
           </div>
         </>

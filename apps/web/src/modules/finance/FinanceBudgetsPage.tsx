@@ -38,6 +38,8 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import { isValidAmount4Input } from "./money";
 import { newIdempotencyKey, useLegalEntities } from "./useLegalEntities";
 
@@ -48,11 +50,27 @@ const VERSION_TONES: Record<string, "neutral" | "success" | "warning" | "danger"
   rejected: "danger",
 };
 
+/** The stored status stays the API's; only the word on screen is translated. */
+const VERSION_STATUS_KEYS: Record<string, MessageKey> = {
+  draft: "finBudget.statusDraft",
+  active: "finBudget.statusActive",
+  superseded: "finBudget.statusSuperseded",
+  rejected: "finBudget.statusRejected",
+};
+
+const CONSUME_KIND_KEYS: Record<"actual" | "commitment" | "adjustment" | "release", MessageKey> = {
+  actual: "finBudget.consumeActual",
+  commitment: "finBudget.consumeCommitment",
+  adjustment: "finBudget.consumeAdjustment",
+  release: "finBudget.consumeRelease",
+};
+
 type DraftWeight = { periodCode: string; weight: string };
 
 const EMPTY_WEIGHT: DraftWeight = { periodCode: "", weight: "" };
 
 export function FinanceBudgetsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { entities, legalEntityId, setLegalEntityId } = useLegalEntities(token);
@@ -93,11 +111,11 @@ export function FinanceBudgetsPage() {
       setBudgets(list);
       setSelectedId((current) => (list.some((b) => b.id === current) ? current : list[0]?.id ?? ""));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load budgets.");
+      setError(err instanceof ApiError ? err.message : t("finBudget.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void load();
@@ -117,9 +135,9 @@ export function FinanceBudgetsPage() {
       setVersions(versionList);
       setUtilization(util);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load this budget.");
+      setError(err instanceof ApiError ? err.message : t("finBudget.detailLoadFailed"));
     }
-  }, [token, selectedId]);
+  }, [token, selectedId, t]);
 
   useEffect(() => {
     void loadDetail();
@@ -139,12 +157,12 @@ export function FinanceBudgetsPage() {
         currency,
         name: name.trim(),
       });
-      setNotice(`${created.name} created for ${created.fiscalYearCode}. Add a draft version next.`);
+      setNotice(t("finBudget.created", { name: created.name, year: created.fiscalYearCode }));
       setName("");
       await load();
       setSelectedId(created.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the budget.");
+      setError(err instanceof ApiError ? err.message : t("finBudget.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -164,13 +182,13 @@ export function FinanceBudgetsPage() {
           .map((w) => ({ periodCode: w.periodCode.trim(), weight: w.weight.trim() })),
         note: note.trim() || null,
       });
-      setNotice(`Version ${created.versionNumber} drafted. It becomes the baseline once approved.`);
+      setNotice(t("finBudget.versionDrafted", { version: created.versionNumber }));
       setTotalAmount("");
       setNote("");
       setWeights([{ ...EMPTY_WEIGHT }]);
       await loadDetail();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not draft the version.");
+      setError(err instanceof ApiError ? err.message : t("finBudget.versionFailed"));
     } finally {
       setBusy(false);
     }
@@ -186,13 +204,13 @@ export function FinanceBudgetsPage() {
         comment: null,
       });
       setNotice(
-        actionCode === "approve"
-          ? `Version ${updated.versionNumber} approved and now active.`
-          : `Version ${updated.versionNumber} rejected.`,
+        t(actionCode === "approve" ? "finBudget.approved" : "finBudget.rejected", {
+          version: updated.versionNumber,
+        }),
       );
       await loadDetail();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the decision.");
+      setError(err instanceof ApiError ? err.message : t("finBudget.decisionFailed"));
     } finally {
       setBusy(false);
     }
@@ -213,13 +231,17 @@ export function FinanceBudgetsPage() {
         note: consumeNote.trim() || null,
       });
       setNotice(
-        `Recorded ${result.kind} of ${formatMoney(result.amount)} against ${result.periodCode}.`,
+        t("finBudget.consumed", {
+          kind: result.kind,
+          amount: formatMoney(result.amount),
+          period: result.periodCode,
+        }),
       );
       setConsumeAmount("");
       setConsumeNote("");
       await loadDetail();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the consumption.");
+      setError(err instanceof ApiError ? err.message : t("finBudget.consumeFailed"));
     } finally {
       setBusy(false);
     }
@@ -230,49 +252,50 @@ export function FinanceBudgetsPage() {
 
   const versionColumns: Column<AccountingBudgetVersionRecord>[] = [
     {
-      header: "Version",
+      header: t("finBudget.version"),
       mobileRole: "title",
       cell: (row) => <span className="font-medium text-ink">v{row.versionNumber}</span>,
     },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={VERSION_TONES[row.status] ?? "neutral"}>{row.status}</StatusPill>,
+      cell: (row) => (
+        <StatusPill tone={VERSION_TONES[row.status] ?? "neutral"}>
+          {t(VERSION_STATUS_KEYS[row.status] ?? "fin.common.notAvailable")}
+        </StatusPill>
+      ),
     },
-    { header: "Note", mobileRole: "detail", cell: (row) => row.note ?? "—" },
+    { header: t("finBudget.note"), mobileRole: "detail", cell: (row) => row.note ?? t("fin.common.notAvailable") },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       cell: (row) =>
         row.status === "draft" ? (
           <div className="flex flex-wrap gap-1">
             <Button disabled={busy} onClick={() => void act(row, "approve")}>
-              Approve
+              {t("finBudget.approve")}
             </Button>
             <Button variant="secondary" disabled={busy} onClick={() => void act(row, "reject")}>
-              Reject
+              {t("finBudget.reject")}
             </Button>
           </div>
         ) : (
-          <span className="text-ink-faint">—</span>
+          <span className="text-ink-faint">{t("fin.common.notAvailable")}</span>
         ),
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Budgets"
-        subtitle="Set a baseline per legal entity and fiscal year, then measure spending against it."
-      />
+      <PageHeader title={t("finBudget.title")} subtitle={t("finBudget.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Legal entity" required>
+          <Field label={t("fin.common.legalEntity")} required>
             <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-              <option value="">Choose a legal entity</option>
+              <option value="">{t("fin.common.chooseLegalEntity")}</option>
               {entities.map((entity) => (
                 <option key={entity.id} value={entity.id}>
                   {entity.name}
@@ -280,20 +303,24 @@ export function FinanceBudgetsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Fiscal year" required>
+          <Field label={t("finBudget.fiscalYear")} required>
             <Input value={fiscalYearCode} onChange={(e) => setFiscalYearCode(e.target.value)} placeholder="2026" />
           </Field>
-          <Field label="Scenario" required>
+          <Field label={t("finBudget.scenario")} required>
             <Select value={scenario} onChange={(e) => setScenario(e.target.value as typeof scenario)}>
-              <option value="original">Original</option>
-              <option value="revision">Revision</option>
-              <option value="forecast">Forecast</option>
+              <option value="original">{t("finBudget.scenarioOriginal")}</option>
+              <option value="revision">{t("finBudget.scenarioRevision")}</option>
+              <option value="forecast">{t("finBudget.scenarioForecast")}</option>
             </Select>
           </Field>
-          <Field label="Name" required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Operating budget 2026" />
+          <Field label={t("fin.common.name")} required>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("finBudget.namePlaceholder")}
+            />
           </Field>
-          <Field label="Currency" required>
+          <Field label={t("fin.common.currency")} required>
             <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
           </Field>
         </div>
@@ -302,7 +329,7 @@ export function FinanceBudgetsPage() {
             disabled={busy || !legalEntityId || !name.trim() || fiscalYearCode.trim() === ""}
             onClick={() => void createBudget()}
           >
-            Create budget
+            {t("finBudget.createBudget")}
           </Button>
         </div>
       </Card>
@@ -310,15 +337,15 @@ export function FinanceBudgetsPage() {
       {!legalEntityId ? null : loading ? (
         <Spinner />
       ) : budgets.length === 0 ? (
-        <EmptyState title="No budgets yet" description="Create one above; versions and spending hang off it." />
+        <EmptyState title={t("finBudget.noBudgetsTitle")} description={t("finBudget.noBudgetsDesc")} />
       ) : (
         <>
           <Card>
-            <Field label="Budget" required>
+            <Field label={t("finBudget.budget")} required>
               <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
                 {budgets.map((budget) => (
                   <option key={budget.id} value={budget.id}>
-                    {budget.name} — {budget.fiscalYearCode} ({budget.scenario})
+                    {budget.name} · {budget.fiscalYearCode} ({budget.scenario})
                   </option>
                 ))}
               </Select>
@@ -326,8 +353,8 @@ export function FinanceBudgetsPage() {
             <p className="mt-2 text-sm text-ink-dim">
               {selectedBudget
                 ? activeVersion
-                  ? `Active baseline: version ${activeVersion.versionNumber}.`
-                  : "No version is active yet — nothing can be consumed against this budget."
+                  ? t("finBudget.activeBaseline", { version: activeVersion.versionNumber })
+                  : t("finBudget.noActiveVersion")
                 : null}
             </p>
           </Card>
@@ -335,20 +362,13 @@ export function FinanceBudgetsPage() {
           {selectedBudget ? (
             <>
               <Card>
-                <h2 className="mb-3 text-sm font-semibold text-ink">Draft a version</h2>
-                <p className="mb-3 text-sm text-ink-dim">
-                  One total for the year, then a weight per period. The service spreads the total by those weights,
-                  so the weights only have to be in proportion — they are not amounts.
-                </p>
+                <h2 className="mb-3 text-sm font-semibold text-ink">{t("finBudget.draftTitle")}</h2>
+                <p className="mb-3 text-sm text-ink-dim">{t("finBudget.draftNote")}</p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field
-                    label="Total amount"
+                    label={t("finBudget.totalAmount")}
                     required
-                    hint={
-                      totalAmount && !isValidAmount4Input(totalAmount)
-                        ? "Digits with at most four decimals"
-                        : undefined
-                    }
+                    hint={totalAmount && !isValidAmount4Input(totalAmount) ? t("finBudget.amountHint") : undefined}
                   >
                     <Input
                       inputMode="decimal"
@@ -358,18 +378,22 @@ export function FinanceBudgetsPage() {
                       aria-invalid={totalAmount !== "" && !isValidAmount4Input(totalAmount)}
                     />
                   </Field>
-                  <Field label="Note">
-                    <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why this revision" />
+                  <Field label={t("finBudget.note")}>
+                    <Input
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder={t("finBudget.notePlaceholder")}
+                    />
                   </Field>
                 </div>
 
-                <h3 className="mb-2 mt-4 text-sm font-semibold text-ink">Period weights</h3>
+                <h3 className="mb-2 mt-4 text-sm font-semibold text-ink">{t("finBudget.periodWeights")}</h3>
                 <div className="space-y-2">
                   {weights.map((weight, index) => (
                     <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
                       <div className="sm:col-span-4">
                         <Input
-                          aria-label={`Period code for weight ${index + 1}`}
+                          aria-label={t("finBudget.periodCodeFor", { n: index + 1 })}
                           placeholder="2026-01"
                           value={weight.periodCode}
                           onChange={(e) =>
@@ -381,7 +405,7 @@ export function FinanceBudgetsPage() {
                       </div>
                       <div className="sm:col-span-4">
                         <Input
-                          aria-label={`Weight for period ${index + 1}`}
+                          aria-label={t("finBudget.weightFor", { n: index + 1 })}
                           inputMode="decimal"
                           placeholder="1.0000"
                           value={weight.weight}
@@ -397,7 +421,7 @@ export function FinanceBudgetsPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => setWeights((current) => [...current, { ...EMPTY_WEIGHT }])}>
-                    Add period
+                    {t("finBudget.addPeriod")}
                   </Button>
                   <Button
                     disabled={
@@ -407,40 +431,37 @@ export function FinanceBudgetsPage() {
                     }
                     onClick={() => void createVersion()}
                   >
-                    Draft version
+                    {t("finBudget.draftVersion")}
                   </Button>
                 </div>
               </Card>
 
               <div>
-                <h2 className="mb-2 text-sm font-semibold text-ink">Versions</h2>
+                <h2 className="mb-2 text-sm font-semibold text-ink">{t("finBudget.versions")}</h2>
                 <DataTable
                   columns={versionColumns}
                   rows={versions}
                   keyOf={(row) => row.id}
-                  empty={<EmptyState title="No versions" description="Draft one above." />}
+                  empty={<EmptyState title={t("finBudget.noVersionsTitle")} description={t("finBudget.noVersionsDesc")} />}
                 />
                 {draftVersions.length > 0 ? (
-                  <p className="mt-2 text-xs text-ink-faint">
-                    Approving needs an approval assignment to exist on the version, and the permission to act on it.
-                    If the button fails, the version has not entered its approval yet.
-                  </p>
+                  <p className="mt-2 text-xs text-ink-faint">{t("finBudget.approvalNote")}</p>
                 ) : null}
               </div>
 
               {utilization ? (
                 <Card>
-                  <h2 className="mb-3 text-sm font-semibold text-ink">Utilization</h2>
+                  <h2 className="mb-3 text-sm font-semibold text-ink">{t("finBudget.utilization")}</h2>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-                          <th className="py-2 pr-3">Period</th>
-                          <th className="py-2 pr-3 text-right">Baseline</th>
-                          <th className="py-2 pr-3 text-right">Actual</th>
-                          <th className="py-2 pr-3 text-right">Committed</th>
-                          <th className="py-2 pr-3 text-right">Available</th>
-                          <th className="py-2 text-right">Variance</th>
+                          <th className="py-2 pr-3">{t("finBudget.period")}</th>
+                          <th className="py-2 pr-3 text-right">{t("finBudget.baseline")}</th>
+                          <th className="py-2 pr-3 text-right">{t("finBudget.actual")}</th>
+                          <th className="py-2 pr-3 text-right">{t("finBudget.committed")}</th>
+                          <th className="py-2 pr-3 text-right">{t("finBudget.available")}</th>
+                          <th className="py-2 text-right">{t("finBudget.variance")}</th>
                         </tr>
                       </thead>
                       <tbody className="tabular-nums">
@@ -457,7 +478,7 @@ export function FinanceBudgetsPage() {
                       </tbody>
                       <tfoot>
                         <tr className="font-medium">
-                          <td className="py-2 pr-3">Total</td>
+                          <td className="py-2 pr-3">{t("finBudget.total")}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{formatMoney(utilization.total.baseline)}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{formatMoney(utilization.total.actual)}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{formatMoney(utilization.total.committed)}</td>
@@ -471,31 +492,29 @@ export function FinanceBudgetsPage() {
               ) : null}
 
               <Card>
-                <h2 className="mb-3 text-sm font-semibold text-ink">Record spending</h2>
-                <p className="mb-3 text-sm text-ink-dim">
-                  A consumption is what the budget is measured against. It does not post to the ledger by itself —
-                  the journal does that. Recording one twice with the same key records it once.
-                </p>
+                <h2 className="mb-3 text-sm font-semibold text-ink">{t("finBudget.recordSpending")}</h2>
+                <p className="mb-3 text-sm text-ink-dim">{t("finBudget.spendingNote")}</p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Field label="Period" required>
+                  <Field label={t("finBudget.period")} required>
                     <Input
                       value={consumePeriod}
                       onChange={(e) => setConsumePeriod(e.target.value)}
                       placeholder="2026-01"
                     />
                   </Field>
-                  <Field label="Kind" required>
+                  <Field label={t("finBudget.kind")} required>
                     <Select value={consumeKind} onChange={(e) => setConsumeKind(e.target.value as typeof consumeKind)}>
-                      <option value="actual">Actual — already spent</option>
-                      <option value="commitment">Commitment — reserved</option>
-                      <option value="adjustment">Adjustment</option>
-                      <option value="release">Release</option>
+                      {(["actual", "commitment", "adjustment", "release"] as const).map((kind) => (
+                        <option key={kind} value={kind}>
+                          {t(CONSUME_KIND_KEYS[kind])}
+                        </option>
+                      ))}
                     </Select>
                   </Field>
                   <Field
-                    label="Amount"
+                    label={t("fin.common.amount")}
                     required
-                    hint={consumeAmount && !isValidAmount4Input(consumeAmount) ? "Digits with at most four decimals" : undefined}
+                    hint={consumeAmount && !isValidAmount4Input(consumeAmount) ? t("finBudget.amountHint") : undefined}
                   >
                     <Input
                       inputMode="decimal"
@@ -505,7 +524,7 @@ export function FinanceBudgetsPage() {
                       aria-invalid={consumeAmount !== "" && !isValidAmount4Input(consumeAmount)}
                     />
                   </Field>
-                  <Field label="Note">
+                  <Field label={t("finBudget.note")}>
                     <Input value={consumeNote} onChange={(e) => setConsumeNote(e.target.value)} />
                   </Field>
                 </div>
@@ -514,13 +533,11 @@ export function FinanceBudgetsPage() {
                     disabled={busy || !activeVersion || consumePeriod.trim() === "" || !isValidAmount4Input(consumeAmount)}
                     onClick={() => void consume()}
                   >
-                    Record
+                    {t("finBudget.record")}
                   </Button>
                 </div>
                 {!activeVersion ? (
-                  <p className="mt-2 text-xs text-ink-faint">
-                    A version has to be approved before anything can be recorded against it.
-                  </p>
+                  <p className="mt-2 text-xs text-ink-faint">{t("finBudget.needsApproval")}</p>
                 ) : null}
               </Card>
             </>

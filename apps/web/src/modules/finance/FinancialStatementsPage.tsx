@@ -38,6 +38,8 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDate, formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import { monthRange } from "./money";
 
 const JOURNAL_TONES: Record<AccountingJournalRecord["status"], "neutral" | "success" | "warning" | "danger"> = {
@@ -47,7 +49,16 @@ const JOURNAL_TONES: Record<AccountingJournalRecord["status"], "neutral" | "succ
   reversed: "neutral",
 };
 
+/** The stored status stays the API's; only the word on screen is translated. */
+const JOURNAL_STATUS_KEYS: Record<AccountingJournalRecord["status"], MessageKey> = {
+  pending: "finJournals.statusPending",
+  posted: "finJournals.statusPosted",
+  failed: "finJournals.statusFailed",
+  reversed: "finJournals.statusReversed",
+};
+
 export function FinancialStatementsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -87,11 +98,11 @@ export function FinancialStatementsPage() {
       setEliminations(eliminationList);
       setFsvVersions(fsvList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the financial statements.");
+      setError(err instanceof ApiError ? err.message : t("finStmt.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, side, asOfDate, currency]);
+  }, [token, side, asOfDate, currency, t]);
 
   useEffect(() => {
     void load();
@@ -100,15 +111,22 @@ export function FinancialStatementsPage() {
   const groupName = (groupId: string) => groups.find((g) => g.id === groupId)?.name ?? groupId;
 
   const agingColumns: Column<AccountingAgingResult["buckets"][number]>[] = [
-    { header: "Bucket", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{row.label}</span> },
     {
-      header: "Days",
-      className: "tabular-nums",
-      cell: (row) => (row.toDays === null ? `${row.fromDays}+` : `${row.fromDays} to ${row.toDays}`),
+      header: t("finStmt.bucket"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{row.label}</span>,
     },
-    { header: "Items", className: "text-right tabular-nums", cell: (row) => row.itemCount },
     {
-      header: "Amount",
+      header: t("finStmt.days"),
+      className: "tabular-nums",
+      cell: (row) =>
+        row.toDays === null
+          ? t("finStmt.daysFrom", { from: row.fromDays })
+          : t("finStmt.daysRange", { from: row.fromDays, to: row.toDays }),
+    },
+    { header: t("finStmt.items"), className: "text-right tabular-nums", cell: (row) => row.itemCount },
+    {
+      header: t("fin.common.amount"),
       className: "text-right tabular-nums",
       mobileRole: "status",
       cell: (row) => <span className="font-medium">{formatMoney(row.amount)}</span>,
@@ -117,51 +135,71 @@ export function FinancialStatementsPage() {
 
   const journalColumns: Column<AccountingJournalRecord>[] = [
     {
-      header: "Journal",
+      header: t("finStmt.journal"),
       mobileRole: "title",
       cell: (row) => <span className="font-mono text-xs text-ink">{row.journalNumber}</span>,
     },
-    { header: "Date", className: "tabular-nums", cell: (row) => formatDate(row.accountingDate) },
-    { header: "Currency", cell: (row) => row.currency },
+    { header: t("fin.common.date"), className: "tabular-nums", cell: (row) => formatDate(row.accountingDate) },
+    { header: t("fin.common.currency"), cell: (row) => row.currency },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={JOURNAL_TONES[row.status]}>{row.status}</StatusPill>,
+      cell: (row) => (
+        <StatusPill tone={JOURNAL_TONES[row.status]}>{t(JOURNAL_STATUS_KEYS[row.status])}</StatusPill>
+      ),
     },
     {
-      header: "Balanced",
+      header: t("finJournals.balanced"),
       mobileRole: "detail",
       cell: (row) =>
-        row.isBalanced ? <StatusPill tone="success">Yes</StatusPill> : <StatusPill tone="danger">No</StatusPill>,
+        row.isBalanced ? (
+          <StatusPill tone="success">{t("finStmt.yes")}</StatusPill>
+        ) : (
+          <StatusPill tone="danger">{t("finStmt.no")}</StatusPill>
+        ),
     },
   ];
 
   const glColumns: Column<AccountingGlEntryRecord>[] = [
-    { header: "Posted", mobileRole: "title", className: "tabular-nums", cell: (row) => formatDate(row.postingDate) },
     {
-      header: "Debit",
-      className: "text-right tabular-nums",
-      cell: (row) => (Number(row.debit) === 0 ? "—" : formatMoney(row.debit)),
+      header: t("finStmt.posted"),
+      mobileRole: "title",
+      className: "tabular-nums",
+      cell: (row) => formatDate(row.postingDate),
     },
     {
-      header: "Credit",
+      header: t("finJournals.debit"),
+      className: "text-right tabular-nums",
+      cell: (row) => (Number(row.debit) === 0 ? t("fin.common.notAvailable") : formatMoney(row.debit)),
+    },
+    {
+      header: t("finJournals.credit"),
       className: "text-right tabular-nums",
       mobileRole: "status",
-      cell: (row) => (Number(row.credit) === 0 ? "—" : formatMoney(row.credit)),
+      cell: (row) => (Number(row.credit) === 0 ? t("fin.common.notAvailable") : formatMoney(row.credit)),
     },
-    { header: "Document", className: "font-mono text-xs", mobileRole: "detail", cell: (row) => row.documentType ?? "—" },
+    {
+      header: t("finStmt.document"),
+      className: "font-mono text-xs",
+      mobileRole: "detail",
+      cell: (row) => row.documentType ?? t("fin.common.notAvailable"),
+    },
   ];
 
   const runColumns: Column<AccountingTranslationRunRecord>[] = [
-    { header: "Group", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{groupName(row.groupId)}</span> },
-    { header: "Currency", cell: (row) => row.reportingCurrency },
     {
-      header: "Translated",
+      header: t("finStmt.group"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{groupName(row.groupId)}</span>,
+    },
+    { header: t("fin.common.currency"), cell: (row) => row.reportingCurrency },
+    {
+      header: t("finStmt.translated"),
       className: "text-right tabular-nums",
       cell: (row) => formatMoney(row.translatedTotal),
     },
     {
-      header: "Residual",
+      header: t("finStmt.residual"),
       className: "text-right tabular-nums",
       mobileRole: "status",
       cell: (row) => formatMoney(row.residualAmount),
@@ -169,61 +207,62 @@ export function FinancialStatementsPage() {
   ];
 
   const eliminationColumns: Column<AccountingEliminationRecord>[] = [
-    { header: "Description", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{row.description}</span> },
-    { header: "Group", cell: (row) => groupName(row.groupId) },
     {
-      header: "Amount",
+      header: t("fin.common.description"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{row.description}</span>,
+    },
+    { header: t("finStmt.group"), cell: (row) => groupName(row.groupId) },
+    {
+      header: t("fin.common.amount"),
       className: "text-right tabular-nums",
       mobileRole: "status",
       cell: (row) => formatMoney(row.amount),
     },
-    { header: "Status", cell: (row) => <Badge>{row.status}</Badge> },
+    { header: t("fin.common.status"), cell: (row) => <Badge>{row.status}</Badge> },
   ];
 
   const groupColumns: Column<AccountingConsolidationGroupRecord>[] = [
-    { header: "Group", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{row.name}</span> },
-    { header: "Code", className: "font-mono text-xs", cell: (row) => row.groupCode },
-    { header: "Currency", cell: (row) => row.reportingCurrency },
-    { header: "Status", mobileRole: "status", cell: (row) => <Badge>{row.status}</Badge> },
+    {
+      header: t("finStmt.group"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{row.name}</span>,
+    },
+    { header: t("fin.common.code"), className: "font-mono text-xs", cell: (row) => row.groupCode },
+    { header: t("fin.common.currency"), cell: (row) => row.reportingCurrency },
+    { header: t("fin.common.status"), mobileRole: "status", cell: (row) => <Badge>{row.status}</Badge> },
   ];
 
   const fsvColumns: Column<AccountingFsvVersionRecord>[] = [
     {
-      header: "Statement",
+      header: t("finStmt.statement"),
       mobileRole: "title",
       cell: (row) => <span className="font-mono text-xs text-ink">{row.fsvCode}</span>,
     },
-    { header: "Version", className: "tabular-nums", cell: (row) => row.versionNumber },
-    { header: "From", className: "tabular-nums", cell: (row) => formatDate(row.effectiveFrom) },
-    { header: "Status", mobileRole: "status", cell: (row) => <Badge>{row.status}</Badge> },
+    { header: t("finAcct.version"), className: "tabular-nums", cell: (row) => row.versionNumber },
+    { header: t("fin.common.from"), className: "tabular-nums", cell: (row) => formatDate(row.effectiveFrom) },
+    { header: t("fin.common.status"), mobileRole: "status", cell: (row) => <Badge>{row.status}</Badge> },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Financial Statements"
-        subtitle="What is still owed, what has been posted, and how the group reports."
-      />
+      <PageHeader title={t("finStmt.title")} subtitle={t("finStmt.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Side" required>
+          <Field label={t("finStmt.side")} required>
             <Select value={side} onChange={(e) => setSide(e.target.value as "AR" | "AP")}>
-              <option value="AR">Receivable (AR)</option>
-              <option value="AP">Payable (AP)</option>
+              <option value="AR">{t("finStmt.sideAr")}</option>
+              <option value="AP">{t("finStmt.sideAp")}</option>
             </Select>
           </Field>
-          <Field label="As of" required>
+          <Field label={t("finStmt.asOf")} required>
             <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
           </Field>
-          <Field label="Currency" required>
-            <Input
-              value={currency}
-              maxLength={3}
-              onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-            />
+          <Field label={t("fin.common.currency")} required>
+            <Input value={currency} maxLength={3} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
           </Field>
         </div>
       </Card>
@@ -235,86 +274,86 @@ export function FinancialStatementsPage() {
           {aging ? (
             <div>
               <h2 className="mb-2 text-sm font-semibold text-ink">
-                Aging {aging.side === "AR" ? "receivable" : "payable"} as of {formatDate(aging.asOfDate)}
+                {t(aging.side === "AR" ? "finStmt.agingAr" : "finStmt.agingAp", {
+                  date: formatDate(aging.asOfDate),
+                })}
               </h2>
               <Card className="mb-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Still open</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t("finStmt.stillOpen")}</p>
                 <p className="mt-1 text-xl font-semibold tabular-nums text-ink">
-                  {formatMoney(aging.totalOpen)} <span className="text-sm font-normal text-ink-dim">{aging.currency}</span>
+                  {formatMoney(aging.totalOpen)}{" "}
+                  <span className="text-sm font-normal text-ink-dim">{aging.currency}</span>
                 </p>
               </Card>
               <DataTable
                 columns={agingColumns}
                 rows={aging.buckets}
                 keyOf={(row) => row.label}
-                empty={<EmptyState title="Nothing open" description="No open items fall in this side and currency." />}
+                empty={<EmptyState title={t("finStmt.noOpenTitle")} description={t("finStmt.noOpenDesc")} />}
               />
             </div>
           ) : null}
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Journals</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finJournals.title")}</h2>
             <DataTable
               columns={journalColumns}
               rows={journals}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No journals" description="Nothing has been recorded in the general ledger yet." />}
+              empty={<EmptyState title={t("finStmt.noJournalsTitle")} description={t("finStmt.noJournalsDesc")} />}
             />
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Posted entries</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finStmt.postedEntries")}</h2>
             <DataTable
               columns={glColumns}
               rows={glEntries}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No postings" description="Post a journal to see its general ledger entries here." />}
+              empty={<EmptyState title={t("finStmt.noPostingsTitle")} description={t("finStmt.noPostingsDesc")} />}
             />
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Consolidation groups</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finStmt.consolidationGroups")}</h2>
             <DataTable
               columns={groupColumns}
               rows={groups}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No groups" description="No consolidation group is defined for this tenant." />}
+              empty={<EmptyState title={t("finStmt.noGroupsTitle")} description={t("finStmt.noGroupsDesc")} />}
             />
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div>
-              <h2 className="mb-2 text-sm font-semibold text-ink">Translation runs</h2>
+              <h2 className="mb-2 text-sm font-semibold text-ink">{t("finStmt.translationRuns")}</h2>
               <DataTable
                 columns={runColumns}
                 rows={runs}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No runs" description="No translation run has been executed." />}
+                empty={<EmptyState title={t("finStmt.noRunsTitle")} description={t("finStmt.noRunsDesc")} />}
               />
             </div>
             <div>
-              <h2 className="mb-2 text-sm font-semibold text-ink">Eliminations</h2>
+              <h2 className="mb-2 text-sm font-semibold text-ink">{t("finStmt.eliminations")}</h2>
               <DataTable
                 columns={eliminationColumns}
                 rows={eliminations}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No eliminations" description="No intercompany elimination has been recorded." />}
+                empty={
+                  <EmptyState title={t("finStmt.noEliminationsTitle")} description={t("finStmt.noEliminationsDesc")} />
+                }
               />
             </div>
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Statement line versions</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finStmt.statementVersions")}</h2>
             <DataTable
               columns={fsvColumns}
               rows={fsvVersions}
               keyOf={(row) => row.id}
-              empty={
-                <EmptyState
-                  title="No statement versions"
-                  description="A financial statement version defines the lines the group reports through."
-                />
-              }
+              empty={<EmptyState title={t("finStmt.noVersionsTitle")} description={t("finStmt.noVersionsDesc")} />}
             />
           </div>
         </>

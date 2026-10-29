@@ -38,10 +38,12 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort, formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
 import { isValidAmount4Input } from "./money";
 import { newIdempotencyKey, useLegalEntities } from "./useLegalEntities";
 
 export function FinanceOpenItemsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { entities, legalEntityId, setLegalEntityId } = useLegalEntities(token);
@@ -94,11 +96,11 @@ export function FinanceOpenItemsPage() {
     try {
       setItems(await api.accountingOpenItems(token, { legalEntityId }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load open items.");
+      setError(err instanceof ApiError ? err.message : t("finOpen.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void load();
@@ -138,13 +140,18 @@ export function FinanceOpenItemsPage() {
         // Verbatim text at 4 decimals — never parsed to a number.
         originalAmount: originalAmount.trim(),
       });
-      setNotice(`Open item ${created.documentNo} recorded for ${formatMoney(created.originalAmount)} ${created.currency}.`);
+      setNotice(
+        t("finOpen.recorded", {
+          number: created.documentNo,
+          amount: `${formatMoney(created.originalAmount)} ${created.currency}`,
+        }),
+      );
       setDocumentNo("");
       setSourceRefId("");
       setOriginalAmount("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the open item.");
+      setError(err instanceof ApiError ? err.message : t("finOpen.recordFailed"));
     } finally {
       setBusy(false);
     }
@@ -163,46 +170,47 @@ export function FinanceOpenItemsPage() {
         allocationDate,
         idempotencyKey: newIdempotencyKey(),
       });
-      setNotice("Allocation recorded. Both items now show the reduced open amount.");
+      setNotice(t("finOpen.allocated"));
       setAllocationAmount("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the allocation.");
+      setError(err instanceof ApiError ? err.message : t("finOpen.allocateFailed"));
     } finally {
       setBusy(false);
     }
   }
 
   const columns: Column<AccountingOpenItemRecord>[] = [
-    { header: "Document", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{row.documentNo}</span> },
-    { header: "Side", cell: (row) => <Badge>{row.side}</Badge> },
-    { header: "Direction", cell: (row) => row.direction },
-    { header: "Party", cell: (row) => partyLabel(row) },
-    { header: "Document date", className: "tabular-nums", cell: (row) => formatDateShort(row.documentDate) },
-    { header: "Due", className: "tabular-nums", cell: (row) => formatDateShort(row.dueDate) },
     {
-      header: "Original",
+      header: t("finOpen.document"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{row.documentNo}</span>,
+    },
+    { header: t("finOpen.side"), cell: (row) => <Badge>{row.side}</Badge> },
+    { header: t("fin.common.direction"), cell: (row) => row.direction },
+    { header: t("finOpen.party"), cell: (row) => partyLabel(row) },
+    { header: t("finOpen.documentDate"), className: "tabular-nums", cell: (row) => formatDateShort(row.documentDate) },
+    { header: t("finOpen.due"), className: "tabular-nums", cell: (row) => formatDateShort(row.dueDate) },
+    {
+      header: t("finOpen.original"),
       className: "text-right tabular-nums whitespace-nowrap",
       mobileRole: "detail",
       cell: (row) => `${formatMoney(row.originalAmount)} ${row.currency}`,
     },
-    { header: "Source", mobileRole: "status", cell: (row) => <StatusPill>{row.sourceKind}</StatusPill> },
+    { header: t("finOpen.source"), mobileRole: "status", cell: (row) => <StatusPill>{row.sourceKind}</StatusPill> },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Open items"
-        subtitle="What is still owed and what is still owed to you, and how much of each has been settled."
-      />
+      <PageHeader title={t("finOpen.title")} subtitle={t("finOpen.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <Field label="Legal entity" required>
+        <Field label={t("fin.common.legalEntity")} required>
           <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-            <option value="">Choose a legal entity</option>
+            <option value="">{t("fin.common.chooseLegalEntity")}</option>
             {entities.map((entity) => (
               <option key={entity.id} value={entity.id}>
                 {entity.name}
@@ -213,13 +221,13 @@ export function FinanceOpenItemsPage() {
       </Card>
 
       {!legalEntityId ? (
-        <EmptyState title="Choose a legal entity" description="Open items are held per legal entity." />
+        <EmptyState title={t("fin.common.chooseLegalEntity")} description={t("finOpen.chooseEntityDesc")} />
       ) : (
         <>
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Record an open item</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finOpen.recordTitle")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Side" required>
+              <Field label={t("finOpen.side")} required>
                 <Select
                   value={side}
                   onChange={(e) => {
@@ -229,30 +237,30 @@ export function FinanceOpenItemsPage() {
                     setSourceRefTable(next === "AR" ? "customer_invoices" : "scm_vendor_invoices");
                   }}
                 >
-                  <option value="AR">Receivable — owed to you</option>
-                  <option value="AP">Payable — owed by you</option>
+                  <option value="AR">{t("finOpen.sideAr")}</option>
+                  <option value="AP">{t("finOpen.sideAp")}</option>
                 </Select>
               </Field>
-              <Field label="Direction" required hint="Debit instruments are settled; credit instruments settle them.">
+              <Field label={t("fin.common.direction")} required hint={t("finOpen.directionHint")}>
                 <Select value={direction} onChange={(e) => setDirection(e.target.value as "debit" | "credit")}>
-                  <option value="debit">Debit</option>
-                  <option value="credit">Credit</option>
+                  <option value="debit">{t("finOpen.debit")}</option>
+                  <option value="credit">{t("finOpen.credit")}</option>
                 </Select>
               </Field>
-              <Field label="Kind" required>
+              <Field label={t("finOpen.kind")} required>
                 <Select value={sourceKind} onChange={(e) => setSourceKind(e.target.value as typeof sourceKind)}>
-                  <option value="invoice">Invoice</option>
-                  <option value="payment">Payment</option>
-                  <option value="credit_note">Credit note</option>
-                  <option value="debit_note">Debit note</option>
-                  <option value="down_payment">Down payment</option>
-                  <option value="withholding">Withholding</option>
-                  <option value="unapplied">Unapplied</option>
+                  <option value="invoice">{t("finOpen.kindInvoice")}</option>
+                  <option value="payment">{t("finOpen.kindPayment")}</option>
+                  <option value="credit_note">{t("finOpen.kindCreditNote")}</option>
+                  <option value="debit_note">{t("finOpen.kindDebitNote")}</option>
+                  <option value="down_payment">{t("finOpen.kindDownPayment")}</option>
+                  <option value="withholding">{t("finOpen.kindWithholding")}</option>
+                  <option value="unapplied">{t("finOpen.kindUnapplied")}</option>
                 </Select>
               </Field>
-              <Field label={side === "AR" ? "Customer" : "Supplier"} required>
+              <Field label={side === "AR" ? t("fin.common.customer") : t("finOpen.supplier")} required>
                 <Select value={partyId} onChange={(e) => setPartyId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {parties.map((party) => (
                     <option key={party.id} value={party.id}>
                       {party.name}
@@ -260,23 +268,19 @@ export function FinanceOpenItemsPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Document number" required>
+              <Field label={t("finOpen.documentNo")} required>
                 <Input value={documentNo} onChange={(e) => setDocumentNo(e.target.value)} placeholder="INV-2026-0001" />
               </Field>
-              <Field label="Document date" required>
+              <Field label={t("finOpen.documentDate")} required>
                 <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
               </Field>
-              <Field label="Due date">
+              <Field label={t("finOpen.dueDate")}>
                 <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
               </Field>
               <Field
-                label="Amount"
+                label={t("fin.common.amount")}
                 required
-                hint={
-                  originalAmount && !isValidAmount4Input(originalAmount)
-                    ? "Digits with at most four decimals, e.g. 1250.7500"
-                    : undefined
-                }
+                hint={originalAmount && !isValidAmount4Input(originalAmount) ? t("finOpen.amountHint") : undefined}
               >
                 <Input
                   inputMode="decimal"
@@ -286,13 +290,13 @@ export function FinanceOpenItemsPage() {
                   aria-invalid={originalAmount !== "" && !isValidAmount4Input(originalAmount)}
                 />
               </Field>
-              <Field label="Currency" required>
+              <Field label={t("fin.common.currency")} required>
                 <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
               </Field>
-              <Field label="Source table" required hint="The table the source document lives in.">
+              <Field label={t("finOpen.sourceTable")} required hint={t("finOpen.sourceTableHint")}>
                 <Input value={sourceRefTable} onChange={(e) => setSourceRefTable(e.target.value)} />
               </Field>
-              <Field label="Source id" required hint="The source document's own identifier.">
+              <Field label={t("finOpen.sourceId")} required hint={t("finOpen.sourceIdHint")}>
                 <Input value={sourceRefId} onChange={(e) => setSourceRefId(e.target.value)} placeholder="UUID" />
               </Field>
             </div>
@@ -308,46 +312,39 @@ export function FinanceOpenItemsPage() {
                 }
                 onClick={() => void createItem()}
               >
-                Record open item
+                {t("finOpen.record")}
               </Button>
             </div>
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Settle one item against another</h2>
-            <p className="mb-3 text-sm text-ink-dim">
-              Pick the credit instrument first, then the debit one it settles. The kernel refuses a pair whose
-              directions do not fit, and refuses an amount larger than what is still open.
-            </p>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finOpen.settleTitle")}</h2>
+            <p className="mb-3 text-sm text-ink-dim">{t("finOpen.settleNote")}</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Settles (credit)" required>
+              <Field label={t("finOpen.settlesCredit")} required>
                 <Select value={sourceItemId} onChange={(e) => setSourceItemId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {creditItems.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.documentNo} — {formatMoney(item.originalAmount)}
+                      {item.documentNo} · {formatMoney(item.originalAmount)}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Settled (debit)" required>
+              <Field label={t("finOpen.settledDebit")} required>
                 <Select value={targetItemId} onChange={(e) => setTargetItemId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {debitItems.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.documentNo} — {formatMoney(item.originalAmount)}
+                      {item.documentNo} · {formatMoney(item.originalAmount)}
                     </option>
                   ))}
                 </Select>
               </Field>
               <Field
-                label="Amount"
+                label={t("fin.common.amount")}
                 required
-                hint={
-                  allocationAmount && !amountValid
-                    ? "Digits with at most four decimals, greater than zero"
-                    : undefined
-                }
+                hint={allocationAmount && !amountValid ? t("finOpen.allocateAmountHint") : undefined}
               >
                 <Input
                   inputMode="decimal"
@@ -357,24 +354,22 @@ export function FinanceOpenItemsPage() {
                   aria-invalid={allocationAmount !== "" && !amountValid}
                 />
               </Field>
-              <Field label="Allocation date" required>
+              <Field label={t("finOpen.allocationDate")} required>
                 <Input type="date" value={allocationDate} onChange={(e) => setAllocationDate(e.target.value)} />
               </Field>
             </div>
             <div className="mt-3">
               <Button disabled={busy || !canAllocate} onClick={() => void allocate()}>
-                Allocate
+                {t("finOpen.allocate")}
               </Button>
             </div>
             {creditItems.length === 0 || debitItems.length === 0 ? (
-              <p className="mt-2 text-xs text-ink-faint">
-                Both a credit instrument and a debit instrument have to exist before anything can be settled.
-              </p>
+              <p className="mt-2 text-xs text-ink-faint">{t("finOpen.bothSidesNeeded")}</p>
             ) : null}
           </Card>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Open items</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finOpen.title")}</h2>
             {loading ? (
               <Spinner />
             ) : (
@@ -382,12 +377,7 @@ export function FinanceOpenItemsPage() {
                 columns={columns}
                 rows={items}
                 keyOf={(row) => row.id}
-                empty={
-                  <EmptyState
-                    title="Nothing open"
-                    description="An open item appears here once an invoice, payment, or note is recorded against it."
-                  />
-                }
+                empty={<EmptyState title={t("finOpen.emptyTitle")} description={t("finOpen.emptyDesc")} />}
               />
             )}
           </div>

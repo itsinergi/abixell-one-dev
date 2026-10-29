@@ -38,9 +38,11 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
 import { formatSigned, isValidAmountInput, monthRange } from "./money";
 
 export function FinanceTransactionsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -87,11 +89,11 @@ export function FinanceTransactionsPage() {
         }),
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load transactions.");
+      setError(err instanceof ApiError ? err.message : t("finTx.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, filterDirection, filterAccount, filterCategory, filterState, filterFrom, filterTo, search]);
+  }, [token, filterDirection, filterAccount, filterCategory, filterState, filterFrom, filterTo, search, t]);
 
   useEffect(() => {
     void load();
@@ -133,91 +135,89 @@ export function FinanceTransactionsPage() {
         reference: reference || null,
         description: description || null,
       });
-      setNotice(
-        `${created.transaction.transactionNumber} recorded and sent for approval. The balance moves once it is approved.`,
-      );
+      setNotice(t("finTx.recorded", { number: created.transaction.transactionNumber }));
       setAmount("");
       setReference("");
       setDescription("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the transaction.");
+      setError(err instanceof ApiError ? err.message : t("finTx.recordFailed"));
     } finally {
       setBusy(false);
     }
   }
 
   const columns: Column<FinanceTransactionRecord>[] = [
-    { header: "Number", cell: (row) => <span className="font-medium">{row.transactionNumber}</span> },
-    { header: "Date", cell: (row) => formatDateShort(row.transactionDate) },
-    { header: "Category", cell: (row) => categoryLabel(row.categoryCode) },
-    { header: "Account", cell: (row) => accountOf(row.accountId)?.code ?? "—" },
+    { header: t("finTx.number"), cell: (row) => <span className="font-medium">{row.transactionNumber}</span> },
+    { header: t("fin.common.date"), cell: (row) => formatDateShort(row.transactionDate) },
+    { header: t("fin.common.category"), cell: (row) => categoryLabel(row.categoryCode) },
+    { header: t("fin.common.account"), cell: (row) => accountOf(row.accountId)?.code ?? t("fin.common.notAvailable") },
     {
-      header: "Amount",
+      header: t("fin.common.amount"),
       className: "text-right tabular-nums whitespace-nowrap",
       cell: (row) => (
-        <span className={row.direction === "income" ? "font-medium text-emerald-700" : "font-medium text-slate-800"}>
+        <span className={row.direction === "income" ? "font-medium text-status-ok" : "font-medium text-ink"}>
           {formatSigned(row.amount, row.direction, row.currency)}
         </span>
       ),
     },
     {
-      header: "State",
+      header: t("fin.common.state"),
       cell: (row) =>
         row.appliedAt ? (
-          <StatusPill tone="success">Took effect</StatusPill>
+          <StatusPill tone="success">{t("fin.state.tookEffect")}</StatusPill>
         ) : (
-          <StatusPill tone="warning">Awaiting approval</StatusPill>
+          <StatusPill tone="warning">{t("fin.state.awaitingApproval")}</StatusPill>
         ),
     },
     {
-      header: "Correction",
+      header: t("fin.state.correction"),
       cell: (row) =>
         row.reversesTransactionId ? (
-          <Badge>Correction</Badge>
+          <Badge>{t("fin.state.correction")}</Badge>
         ) : row.reversedByTransactionId ? (
-          <Badge>Reversed</Badge>
+          <Badge>{t("fin.state.reversed")}</Badge>
         ) : (
-          "—"
+          t("fin.common.notAvailable")
         ),
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Transactions" subtitle="What came in, what went out, and what it was for." />
+      <PageHeader title={t("finTx.title")} subtitle={t("finTx.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Record money in or out</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("finTx.recordTitle")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Direction" required>
+          <Field label={t("fin.common.direction")} required>
             <Select value={direction} onChange={(e) => setDirection(e.target.value as TransactionDirection)}>
-              <option value="income">Money in</option>
-              <option value="expense">Money out</option>
+              <option value="income">{t("fin.money.in")}</option>
+              <option value="expense">{t("fin.money.out")}</option>
             </Select>
           </Field>
           <Field
-            label="Amount"
+            label={t("fin.common.amount")}
             required
-            hint={amount && !amountValid ? "Use digits with at most two decimals, e.g. 1250.75" : undefined}
+            hint={amount && !amountValid ? t("finTx.amountHint") : undefined}
           >
             <Input
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="1250.75"
+              placeholder={t("finTx.amountPlaceholder")}
               aria-invalid={amount !== "" && !amountValid}
             />
           </Field>
-          <Field label="Date" required>
+          <Field label={t("fin.common.date")} required>
             <Input type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} />
           </Field>
-          <Field label="Account" required>
+          <Field label={t("fin.common.account")} required>
             <Select value={accountCode} onChange={(e) => setAccountCode(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("fin.common.select")}</option>
               {accounts
                 .filter((a) => a.isActive)
                 .map((a) => (
@@ -227,9 +227,9 @@ export function FinanceTransactionsPage() {
                 ))}
             </Select>
           </Field>
-          <Field label="Category" required>
+          <Field label={t("fin.common.category")} required>
             <Select value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("fin.common.select")}</option>
               {categories.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.label}
@@ -237,9 +237,9 @@ export function FinanceTransactionsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Customer">
+          <Field label={t("fin.common.customer")}>
             <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">None</option>
+              <option value="">{t("fin.common.none")}</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -247,26 +247,26 @@ export function FinanceTransactionsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Reference">
+          <Field label={t("fin.common.reference")}>
             <Input
               value={reference}
               onChange={(e) => setReference(e.target.value)}
-              placeholder="Receipt or transfer reference"
+              placeholder={t("finTx.referencePlaceholder")}
             />
           </Field>
           <div className="flex items-end">
             <Button disabled={busy || !amountValid || !accountCode || !categoryCode} onClick={() => void record()}>
-              Record
+              {t("finTx.record")}
             </Button>
           </div>
         </div>
         <div className="mt-3">
-          <Field label="Description">
+          <Field label={t("fin.common.description")}>
             <Textarea
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What was this for?"
+              placeholder={t("finTx.descriptionPlaceholder")}
             />
           </Field>
         </div>
@@ -274,19 +274,23 @@ export function FinanceTransactionsPage() {
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Search">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Number, reference, note" />
+          <Field label={t("fin.common.search")}>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("finTx.searchPlaceholder")}
+            />
           </Field>
-          <Field label="Direction">
+          <Field label={t("fin.common.direction")}>
             <Select value={filterDirection} onChange={(e) => setFilterDirection(e.target.value)}>
-              <option value="">Any</option>
-              <option value="income">Money in</option>
-              <option value="expense">Money out</option>
+              <option value="">{t("fin.common.any")}</option>
+              <option value="income">{t("fin.money.in")}</option>
+              <option value="expense">{t("fin.money.out")}</option>
             </Select>
           </Field>
-          <Field label="Account">
+          <Field label={t("fin.common.account")}>
             <Select value={filterAccount} onChange={(e) => setFilterAccount(e.target.value)}>
-              <option value="">All accounts</option>
+              <option value="">{t("fin.common.allAccounts")}</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.code}>
                   {a.name}
@@ -294,9 +298,9 @@ export function FinanceTransactionsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Category">
+          <Field label={t("fin.common.category")}>
             <Select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-              <option value="">All categories</option>
+              <option value="">{t("fin.common.allCategories")}</option>
               {categories.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.label}
@@ -304,17 +308,17 @@ export function FinanceTransactionsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="State">
+          <Field label={t("fin.common.state")}>
             <Select value={filterState} onChange={(e) => setFilterState(e.target.value)}>
-              <option value="">Any</option>
-              <option value="applied">Took effect</option>
-              <option value="pending">Awaiting approval</option>
+              <option value="">{t("fin.common.any")}</option>
+              <option value="applied">{t("fin.state.tookEffect")}</option>
+              <option value="pending">{t("fin.state.awaitingApproval")}</option>
             </Select>
           </Field>
-          <Field label="From">
+          <Field label={t("fin.common.from")}>
             <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
           </Field>
-          <Field label="To">
+          <Field label={t("fin.common.to")}>
             <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
           </Field>
         </div>
@@ -328,12 +332,7 @@ export function FinanceTransactionsPage() {
           rows={transactions}
           keyOf={(row) => row.id}
           onRowClick={(row) => navigate(`/finance/transactions/${row.id}`)}
-          empty={
-            <EmptyState
-              title="No transactions yet"
-              description="Record the first receipt or payment above to start tracking cash."
-            />
-          }
+          empty={<EmptyState title={t("finTx.emptyTitle")} description={t("finTx.emptyDesc")} />}
         />
       )}
     </div>

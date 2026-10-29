@@ -37,6 +37,8 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort, formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import { useLegalEntities } from "./useLegalEntities";
 
 const JOURNAL_TONES: Record<AccountingJournalRecord["status"], "neutral" | "success" | "warning" | "danger"> = {
@@ -46,11 +48,20 @@ const JOURNAL_TONES: Record<AccountingJournalRecord["status"], "neutral" | "succ
   reversed: "neutral",
 };
 
+/** The stored status stays the API's; only the word on screen is translated. */
+const JOURNAL_STATUS_KEYS: Record<AccountingJournalRecord["status"], MessageKey> = {
+  pending: "finJournals.statusPending",
+  posted: "finJournals.statusPosted",
+  failed: "finJournals.statusFailed",
+  reversed: "finJournals.statusReversed",
+};
+
 type DraftLine = { accountId: string; debit: string; credit: string; lineDescription: string };
 
 const EMPTY_LINE: DraftLine = { accountId: "", debit: "", credit: "", lineDescription: "" };
 
 export function FinanceJournalsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { entities, legalEntityId, setLegalEntityId } = useLegalEntities(token);
@@ -98,11 +109,11 @@ export function FinanceJournalsPage() {
       );
       setJournals(perPeriod.flat());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load journals.");
+      setError(err instanceof ApiError ? err.message : t("finJournals.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void load();
@@ -144,13 +155,13 @@ export function FinanceJournalsPage() {
           })),
       };
       const created = await api.accountingCreateJournal(token, body);
-      setNotice(`${created.journalNumber} created as a draft. Validate it, then post.`);
+      setNotice(t("finJournals.draftCreated", { number: created.journalNumber }));
       setJournalNumber("");
       setDescription("");
       setLines([{ ...EMPTY_LINE }, { ...EMPTY_LINE }]);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the journal.");
+      setError(err instanceof ApiError ? err.message : t("finJournals.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -163,12 +174,14 @@ export function FinanceJournalsPage() {
     try {
       const result = await api.accountingValidateJournal(token, row.id);
       setNotice(
-        result.balanced
-          ? `${row.journalNumber} balances: debit ${formatMoney(result.debitTotal)} = credit ${formatMoney(result.creditTotal)}.`
-          : `${row.journalNumber} does not balance: debit ${formatMoney(result.debitTotal)} against credit ${formatMoney(result.creditTotal)}.`,
+        t(result.balanced ? "finJournals.balances" : "finJournals.doesNotBalance", {
+          number: row.journalNumber,
+          debit: formatMoney(result.debitTotal),
+          credit: formatMoney(result.creditTotal),
+        }),
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not validate the journal.");
+      setError(err instanceof ApiError ? err.message : t("finJournals.validateFailed"));
     } finally {
       setBusy(false);
     }
@@ -180,10 +193,10 @@ export function FinanceJournalsPage() {
     setNotice(null);
     try {
       await api.accountingPostJournal(token, row.id);
-      setNotice(`${row.journalNumber} posted to the ledger.`);
+      setNotice(t("finJournals.posted", { number: row.journalNumber }));
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not post the journal.");
+      setError(err instanceof ApiError ? err.message : t("finJournals.postFailed"));
     } finally {
       setBusy(false);
     }
@@ -198,12 +211,14 @@ export function FinanceJournalsPage() {
         type: "reverse_correct",
         reason: reversalReason.trim(),
       });
-      setNotice(`Reversal ${reversal.journalNumber} created. ${row.journalNumber} is now reversed.`);
+      setNotice(
+        t("finJournals.reversed", { reversal: reversal.journalNumber, original: row.journalNumber }),
+      );
       setReversalReason("");
       setSelected(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reverse the journal.");
+      setError(err instanceof ApiError ? err.message : t("finJournals.reverseFailed"));
     } finally {
       setBusy(false);
     }
@@ -218,37 +233,48 @@ export function FinanceJournalsPage() {
     lines.some((line) => line.accountId);
 
   const columns: Column<AccountingJournalRecord>[] = [
-    { header: "Number", mobileRole: "title", cell: (row) => <span className="font-mono text-xs font-medium text-ink">{row.journalNumber}</span> },
-    { header: "Date", className: "tabular-nums", cell: (row) => formatDateShort(row.journalDate) },
-    { header: "Period", cell: (row) => periodLabel(row.periodId) },
-    { header: "Currency", cell: (row) => row.currency },
     {
-      header: "Status",
+      header: t("finJournals.journalNumber"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-mono text-xs font-medium text-ink">{row.journalNumber}</span>,
+    },
+    { header: t("fin.common.date"), className: "tabular-nums", cell: (row) => formatDateShort(row.journalDate) },
+    { header: t("finJournals.period"), cell: (row) => periodLabel(row.periodId) },
+    { header: t("fin.common.currency"), cell: (row) => row.currency },
+    {
+      header: t("fin.common.status"),
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={JOURNAL_TONES[row.status]}>{row.status}</StatusPill>,
+      cell: (row) => (
+        <StatusPill tone={JOURNAL_TONES[row.status]}>{t(JOURNAL_STATUS_KEYS[row.status])}</StatusPill>
+      ),
     },
     {
-      header: "Balanced",
+      header: t("finJournals.balanced"),
       mobileRole: "detail",
-      cell: (row) => (row.isBalanced ? <Badge>Balanced</Badge> : <Badge>Out of balance</Badge>),
+      cell: (row) =>
+        row.isBalanced ? (
+          <Badge>{t("finJournals.balanced")}</Badge>
+        ) : (
+          <Badge>{t("finJournals.outOfBalance")}</Badge>
+        ),
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       cell: (row) => (
         <div className="flex flex-wrap gap-1">
           {row.status === "pending" ? (
             <>
               <Button variant="secondary" disabled={busy} onClick={() => void validate(row)}>
-                Validate
+                {t("finJournals.validate")}
               </Button>
               <Button disabled={busy} onClick={() => void post(row)}>
-                Post
+                {t("finJournals.post")}
               </Button>
             </>
           ) : null}
           {row.status === "posted" ? (
             <Button variant="secondary" disabled={busy} onClick={() => setSelected(row)}>
-              Reverse
+              {t("finJournals.reverse")}
             </Button>
           ) : null}
         </div>
@@ -258,18 +284,15 @@ export function FinanceJournalsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Journals"
-        subtitle="Draft a journal, check that it balances, and post it to the ledger."
-      />
+      <PageHeader title={t("finJournals.title")} subtitle={t("finJournals.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <Field label="Legal entity" required>
+        <Field label={t("fin.common.legalEntity")} required>
           <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-            <option value="">Choose a legal entity</option>
+            <option value="">{t("fin.common.chooseLegalEntity")}</option>
             {entities.map((entity) => (
               <option key={entity.id} value={entity.id}>
                 {entity.name}
@@ -280,27 +303,28 @@ export function FinanceJournalsPage() {
       </Card>
 
       {!legalEntityId ? (
-        <EmptyState
-          title="Choose a legal entity"
-          description="Journals belong to one legal entity and one of its periods."
-        />
+        <EmptyState title={t("finJournals.chooseEntityTitle")} description={t("finJournals.chooseEntityDesc")} />
       ) : (
         <>
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">New journal</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finJournals.newJournal")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Journal number" required>
-                <Input value={journalNumber} onChange={(e) => setJournalNumber(e.target.value)} placeholder="JV-2026-0001" />
+              <Field label={t("finJournals.journalNumber")} required>
+                <Input
+                  value={journalNumber}
+                  onChange={(e) => setJournalNumber(e.target.value)}
+                  placeholder="JV-2026-0001"
+                />
               </Field>
-              <Field label="Journal date" required>
+              <Field label={t("finJournals.journalDate")} required>
                 <Input type="date" value={journalDate} onChange={(e) => setJournalDate(e.target.value)} />
               </Field>
-              <Field label="Accounting date" hint="Defaults to the journal date.">
+              <Field label={t("finJournals.accountingDate")} hint={t("finJournals.accountingDateHint")}>
                 <Input type="date" value={accountingDate} onChange={(e) => setAccountingDate(e.target.value)} />
               </Field>
-              <Field label="Period" required>
+              <Field label={t("finJournals.period")} required>
                 <Select value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {openPeriods.map((period) => (
                     <option key={period.id} value={period.id}>
                       {period.periodName} ({period.periodCode} {period.fiscalYearCode})
@@ -308,56 +332,56 @@ export function FinanceJournalsPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Currency" required>
+              <Field label={t("fin.common.currency")} required>
                 <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
               </Field>
             </div>
             <div className="mt-3">
-              <Field label="Description">
+              <Field label={t("fin.common.description")}>
                 <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
               </Field>
             </div>
 
-            <h3 className="mb-2 mt-4 text-sm font-semibold text-ink">Lines</h3>
+            <h3 className="mb-2 mt-4 text-sm font-semibold text-ink">{t("finJournals.lines")}</h3>
             <div className="space-y-2">
               {lines.map((line, index) => (
                 <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
                   <div className="sm:col-span-5">
                     <Select
-                      aria-label={`Account for line ${index + 1}`}
+                      aria-label={t("finJournals.accountForLine", { n: index + 1 })}
                       value={line.accountId}
                       onChange={(e) => updateLine(index, { accountId: e.target.value })}
                     >
-                      <option value="">Account…</option>
+                      <option value="">{t("finJournals.accountPlaceholder")}</option>
                       {accounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.accountCode} — {account.accountName}
+                          {account.accountCode} · {account.accountName}
                         </option>
                       ))}
                     </Select>
                   </div>
                   <div className="sm:col-span-2">
                     <Input
-                      aria-label={`Debit for line ${index + 1}`}
+                      aria-label={t("finJournals.debitForLine", { n: index + 1 })}
                       inputMode="decimal"
-                      placeholder="Debit"
+                      placeholder={t("finJournals.debit")}
                       value={line.debit}
                       onChange={(e) => updateLine(index, { debit: e.target.value, credit: "" })}
                     />
                   </div>
                   <div className="sm:col-span-2">
                     <Input
-                      aria-label={`Credit for line ${index + 1}`}
+                      aria-label={t("finJournals.creditForLine", { n: index + 1 })}
                       inputMode="decimal"
-                      placeholder="Credit"
+                      placeholder={t("finJournals.credit")}
                       value={line.credit}
                       onChange={(e) => updateLine(index, { credit: e.target.value, debit: "" })}
                     />
                   </div>
                   <div className="sm:col-span-3">
                     <Input
-                      aria-label={`Description for line ${index + 1}`}
-                      placeholder="Line note"
+                      aria-label={t("finJournals.descriptionForLine", { n: index + 1 })}
+                      placeholder={t("finJournals.lineNote")}
                       value={line.lineDescription}
                       onChange={(e) => updateLine(index, { lineDescription: e.target.value })}
                     />
@@ -366,23 +390,20 @@ export function FinanceJournalsPage() {
               ))}
             </div>
 
-            <p className="mt-2 text-xs text-ink-faint">
-              Each line takes a debit or a credit, never both. The kernel decides whether the journal balances when you
-              validate it; this page never adds the figures up itself.
-            </p>
+            <p className="mt-2 text-xs text-ink-faint">{t("finJournals.linesNote")}</p>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setLines((current) => [...current, { ...EMPTY_LINE }])}>
-                Add line
+                {t("finJournals.addLine")}
               </Button>
               <Button disabled={busy || !canCreate} onClick={() => void createJournal()}>
-                Create draft
+                {t("finJournals.createDraft")}
               </Button>
             </div>
           </Card>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Journals in open periods</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finJournals.openPeriods")}</h2>
             {loading ? (
               <Spinner />
             ) : (
@@ -390,32 +411,26 @@ export function FinanceJournalsPage() {
                 columns={columns}
                 rows={journals}
                 keyOf={(row) => row.id}
-                empty={
-                  <EmptyState
-                    title="No journals yet"
-                    description="Draft one above. It stays pending until it is validated and posted."
-                  />
-                }
+                empty={<EmptyState title={t("finJournals.emptyTitle")} description={t("finJournals.emptyDesc")} />}
               />
             )}
           </div>
 
           {selected ? (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-ink">Reverse {selected.journalNumber}</h2>
-              <p className="mb-3 text-sm text-ink-dim">
-                A reversal is a new journal that mirrors this one. The original keeps its history and is marked
-                reversed; nothing is edited in place.
-              </p>
-              <Field label="Reason" required>
+              <h2 className="mb-3 text-sm font-semibold text-ink">
+                {t("finJournals.reverseTitle", { number: selected.journalNumber })}
+              </h2>
+              <p className="mb-3 text-sm text-ink-dim">{t("finJournals.reverseNote")}</p>
+              <Field label={t("finTxDetail.reason")} required>
                 <Input value={reversalReason} onChange={(e) => setReversalReason(e.target.value)} />
               </Field>
               <div className="mt-3 flex gap-2">
                 <Button disabled={busy || reversalReason.trim() === ""} onClick={() => void reverse(selected)}>
-                  Create reversal
+                  {t("finJournals.createReversal")}
                 </Button>
                 <Button variant="ghost" onClick={() => setSelected(null)}>
-                  Cancel
+                  {t("fin.common.cancel")}
                 </Button>
               </div>
             </Card>

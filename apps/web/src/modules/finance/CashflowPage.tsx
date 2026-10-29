@@ -25,11 +25,13 @@ import {
   StatusPill,
   type Column,
 } from "../../shell/components/ui";
+import { useT } from "../../i18n/LocaleProvider";
 import { formatMoney, monthRange } from "./money";
 
 type CategoryLine = CashflowResult["byCategory"][number];
 
 export function CashflowPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const initial = monthRange();
@@ -50,11 +52,11 @@ export function CashflowPage() {
     try {
       setResult(await api.financeCashflow(token, { from, to, accountCode: accountCode || undefined }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the cashflow view.");
+      setError(err instanceof ApiError ? err.message : t("finCashflow.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, from, to, accountCode]);
+  }, [token, from, to, accountCode, t]);
 
   useEffect(() => {
     void load();
@@ -74,27 +76,27 @@ export function CashflowPage() {
   const categoryLabel = (code: string) => categories.find((c) => c.code === code)?.label ?? code;
 
   const categoryColumns: Column<CategoryLine>[] = [
-    { header: "Category", cell: (row) => categoryLabel(row.categoryCode) },
+    { header: t("fin.common.category"), cell: (row) => categoryLabel(row.categoryCode) },
     {
-      header: "Direction",
+      header: t("fin.common.direction"),
       cell: (row) => (
         <StatusPill tone={row.direction === "income" ? "success" : "neutral"}>
-          {row.direction === "income" ? "Money in" : "Money out"}
+          {row.direction === "income" ? t("fin.money.in") : t("fin.money.out")}
         </StatusPill>
       ),
     },
     {
-      header: "Amount",
+      header: t("fin.common.amount"),
       className: "text-right tabular-nums",
       cell: (row) => <span className="font-medium">{formatMoney(row.amount)}</span>,
     },
   ];
 
   const accountColumns: Column<FinanceAccount>[] = [
-    { header: "Account", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { header: "Currency", cell: (row) => row.currency },
+    { header: t("fin.common.account"), cell: (row) => <span className="font-medium">{row.name}</span> },
+    { header: t("fin.common.currency"), cell: (row) => row.currency },
     {
-      header: "Balance",
+      header: t("fin.common.balance"),
       className: "text-right tabular-nums",
       cell: (row) => <span className="font-medium">{formatMoney(row.balance)}</span>,
     },
@@ -102,21 +104,21 @@ export function CashflowPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Cashflow" subtitle="What moved this period, and where you stand now." />
+      <PageHeader title={t("finCashflow.title")} subtitle={t("finCashflow.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="From" required>
+          <Field label={t("fin.common.from")} required>
             <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           </Field>
-          <Field label="To" required>
+          <Field label={t("fin.common.to")} required>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </Field>
-          <Field label="Account">
+          <Field label={t("fin.common.account")}>
             <Select value={accountCode} onChange={(e) => setAccountCode(e.target.value)}>
-              <option value="">All accounts</option>
+              <option value="">{t("fin.common.allAccounts")}</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.code}>
                   {a.name}
@@ -133,50 +135,51 @@ export function CashflowPage() {
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Opening</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{formatMoney(result.opening)}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t("finCashflow.opening")}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{formatMoney(result.opening)}</p>
             </Card>
             <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Money in</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-emerald-700">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t("fin.money.in")}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-status-ok">
                 {formatMoney(result.totals.income)}
               </p>
             </Card>
             <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Money out</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-slate-800">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t("fin.money.out")}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-ink">
                 {formatMoney(result.totals.expense)}
               </p>
             </Card>
             <Card>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Closing</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{formatMoney(result.closing)}</p>
-              <p className="mt-1 text-xs text-slate-500">Net {formatMoney(result.totals.net)}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t("finCashflow.closing")}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{formatMoney(result.closing)}</p>
+              <p className="mt-1 text-xs text-ink-faint">
+                {t("finCashflow.net", { amount: formatMoney(result.totals.net) })}
+              </p>
             </Card>
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">By category</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finCashflow.byCategory")}</h2>
             <DataTable
               columns={categoryColumns}
               rows={result.byCategory}
               keyOf={(row) => `${row.categoryCode}-${row.direction}`}
               empty={
-                <EmptyState
-                  title="Nothing moved in this period"
-                  description="Only transactions that have been approved are counted here."
-                />
+                <EmptyState title={t("finCashflow.emptyTitle")} description={t("finCashflow.emptyDesc")} />
               }
             />
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Account balances</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finCashflow.accountBalances")}</h2>
             <DataTable
               columns={accountColumns}
               rows={result.accounts}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No accounts" description="Add a cash or bank account first." />}
+              empty={
+                <EmptyState title={t("finCashflow.noAccountsTitle")} description={t("finCashflow.noAccountsDesc")} />
+              }
             />
           </div>
         </>
