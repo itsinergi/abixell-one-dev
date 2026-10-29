@@ -43,6 +43,8 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort, formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import { isValidAmountInput } from "./money";
 import { newIdempotencyKey, useLegalEntities } from "./useLegalEntities";
 
@@ -52,11 +54,30 @@ const VERSION_TONES: Record<AccountingTaxRuleVersionRecord["status"], "neutral" 
   superseded: "neutral",
 };
 
-const TAX_TYPE_LABELS: Record<AccountingTaxRuleRecord["taxType"], string> = {
-  ppn: "PPN — value added tax",
-  pph22: "PPh 22 — import / procurement",
-  pph23: "PPh 23 — services and royalties",
-  pph26: "PPh 26 — non-resident",
+/** The stored type stays the API's; only the word on screen is translated. */
+const TAX_TYPE_KEYS: Record<AccountingTaxRuleRecord["taxType"], MessageKey> = {
+  ppn: "finTax.typePpn",
+  pph22: "finTax.typePph22",
+  pph23: "finTax.typePph23",
+  pph26: "finTax.typePph26",
+};
+
+const VERSION_STATUS_KEYS: Record<AccountingTaxRuleVersionRecord["status"], MessageKey> = {
+  draft: "finBudget.statusDraft",
+  approved: "finTax.statusApproved",
+  superseded: "finBudget.statusSuperseded",
+};
+
+const BASIS_KEYS: Record<"gross" | "net" | "dpp", MessageKey> = {
+  gross: "finTax.basisGross",
+  net: "finTax.basisNet",
+  dpp: "finTax.basisDpp",
+};
+
+const ROUNDING_KEYS: Record<"half_up" | "half_even" | "truncate", MessageKey> = {
+  half_up: "finTax.roundHalfUp",
+  half_even: "finTax.roundHalfEven",
+  truncate: "finTax.roundTruncate",
 };
 
 /** A rate is a fraction with at most six decimals. 0.11 is eleven percent. */
@@ -65,6 +86,7 @@ function isValidRateInput(value: string): boolean {
 }
 
 export function FinanceTaxPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { entities, legalEntityId, setLegalEntityId } = useLegalEntities(token);
@@ -126,11 +148,11 @@ export function FinanceTaxPage() {
       setCalculations(calculationList);
       setSelectedRuleId((current) => (ruleList.some((r) => r.id === current) ? current : ruleList[0]?.id ?? ""));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load tax data.");
+      setError(err instanceof ApiError ? err.message : t("finTax.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void load();
@@ -144,9 +166,9 @@ export function FinanceTaxPage() {
     try {
       setVersions(await api.accountingTaxRuleVersions(token, selectedRuleId));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load rule versions.");
+      setError(err instanceof ApiError ? err.message : t("finTax.versionsFailed"));
     }
-  }, [token, selectedRuleId]);
+  }, [token, selectedRuleId, t]);
 
   useEffect(() => {
     void loadVersions();
@@ -166,15 +188,11 @@ export function FinanceTaxPage() {
         effectiveFrom: registrationFrom,
         registrationNumber: registrationNumber.trim() || null,
       });
-      setNotice(
-        created.taxpayerStatus === "pkp"
-          ? "Registered as PKP from this date. PPN rules can now require it."
-          : "Registered as non-PKP from this date.",
-      );
+      setNotice(t(created.taxpayerStatus === "pkp" ? "finTax.registeredPkp" : "finTax.registeredNonPkp"));
       setRegistrationNumber("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the registration.");
+      setError(err instanceof ApiError ? err.message : t("finTax.registerFailed"));
     } finally {
       setBusy(false);
     }
@@ -191,13 +209,13 @@ export function FinanceTaxPage() {
         taxType,
         description: ruleDescription.trim() || null,
       });
-      setNotice(`Rule ${created.ruleCode} created. Attach a rate version before it can calculate.`);
+      setNotice(t("finTax.ruleCreated", { code: created.ruleCode }));
       setRuleCode("");
       setRuleDescription("");
       await load();
       setSelectedRuleId(created.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the rule.");
+      setError(err instanceof ApiError ? err.message : t("finTax.ruleFailed"));
     } finally {
       setBusy(false);
     }
@@ -219,11 +237,11 @@ export function FinanceTaxPage() {
         effectiveFrom: versionFrom,
         effectiveTo: null,
       });
-      setNotice(`Version ${created.versionNumber} drafted at ${created.rate}. Approve it to make it effective.`);
+      setNotice(t("finTax.versionDrafted", { version: created.versionNumber, rate: created.rate }));
       setRate("");
       await loadVersions();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not draft the version.");
+      setError(err instanceof ApiError ? err.message : t("finTax.versionFailed"));
     } finally {
       setBusy(false);
     }
@@ -236,13 +254,11 @@ export function FinanceTaxPage() {
     try {
       const updated = await api.accountingTaxRuleVersionAction(token, version.id, { actionCode, comment: null });
       setNotice(
-        actionCode === "approve"
-          ? `Version ${updated.versionNumber} approved. Calculations from its start date use it.`
-          : `Version ${updated.versionNumber} rejected.`,
+        t(actionCode === "approve" ? "finTax.approved" : "finTax.rejected", { version: updated.versionNumber }),
       );
       await loadVersions();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the decision.");
+      setError(err instanceof ApiError ? err.message : t("finBudget.decisionFailed"));
     } finally {
       setBusy(false);
     }
@@ -263,13 +279,17 @@ export function FinanceTaxPage() {
         idempotencyKey: newIdempotencyKey(),
       });
       setNotice(
-        `${formatMoney(result.taxAmount)} ${result.currency} of tax on ${formatMoney(result.basisAmount)} ` +
-          `at ${result.rate}, as ${result.taxpayerStatus}.`,
+        t("finTax.calculated", {
+          tax: `${formatMoney(result.taxAmount)} ${result.currency}`,
+          basis: formatMoney(result.basisAmount),
+          rate: result.rate,
+          status: result.taxpayerStatus,
+        }),
       );
       setCalcBasis("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not calculate the tax.");
+      setError(err instanceof ApiError ? err.message : t("finTax.calculateFailed"));
     } finally {
       setBusy(false);
     }
@@ -277,69 +297,70 @@ export function FinanceTaxPage() {
 
   const versionColumns: Column<AccountingTaxRuleVersionRecord>[] = [
     {
-      header: "Version",
+      header: t("finBudget.version"),
       mobileRole: "title",
       cell: (row) => <span className="font-medium text-ink">v{row.versionNumber}</span>,
     },
-    { header: "Rate", className: "tabular-nums", cell: (row) => row.rate },
-    { header: "Basis", cell: (row) => row.basis },
-    { header: "Rounding", cell: (row) => row.roundingMode },
-    { header: "From", className: "tabular-nums", cell: (row) => formatDateShort(row.effectiveFrom) },
+    { header: t("finTax.rate"), className: "tabular-nums", cell: (row) => row.rate },
+    { header: t("finTax.basis"), cell: (row) => t(BASIS_KEYS[row.basis]) },
+    { header: t("finTax.rounding"), cell: (row) => t(ROUNDING_KEYS[row.roundingMode]) },
+    { header: t("fin.common.from"), className: "tabular-nums", cell: (row) => formatDateShort(row.effectiveFrom) },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={VERSION_TONES[row.status]}>{row.status}</StatusPill>,
+      cell: (row) => <StatusPill tone={VERSION_TONES[row.status]}>{t(VERSION_STATUS_KEYS[row.status])}</StatusPill>,
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       cell: (row) =>
         row.status === "draft" ? (
           <div className="flex flex-wrap gap-1">
             <Button disabled={busy} onClick={() => void act(row, "approve")}>
-              Approve
+              {t("finBudget.approve")}
             </Button>
             <Button variant="secondary" disabled={busy} onClick={() => void act(row, "reject")}>
-              Reject
+              {t("finBudget.reject")}
             </Button>
           </div>
         ) : (
-          <span className="text-ink-faint">—</span>
+          <span className="text-ink-faint">{t("fin.common.notAvailable")}</span>
         ),
     },
   ];
 
   const calculationColumns: Column<AccountingTaxCalculationRecord>[] = [
     {
-      header: "Date",
+      header: t("fin.common.date"),
       mobileRole: "title",
       className: "tabular-nums",
       cell: (row) => formatDateShort(row.calculationDate),
     },
-    { header: "Basis", className: "text-right tabular-nums", cell: (row) => formatMoney(row.basisAmount) },
-    { header: "Rate", className: "tabular-nums", cell: (row) => row.rate },
     {
-      header: "Tax",
+      header: t("finTax.basis"),
+      className: "text-right tabular-nums",
+      cell: (row) => formatMoney(row.basisAmount),
+    },
+    { header: t("finTax.rate"), className: "tabular-nums", cell: (row) => row.rate },
+    {
+      header: t("finTax.tax"),
       className: "text-right tabular-nums whitespace-nowrap",
       mobileRole: "detail",
       cell: (row) => `${formatMoney(row.taxAmount)} ${row.currency}`,
     },
-    { header: "As", mobileRole: "status", cell: (row) => <Badge>{row.taxpayerStatus}</Badge> },
+    { header: t("finTax.as"), mobileRole: "status", cell: (row) => <Badge>{row.taxpayerStatus}</Badge> },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Tax"
-        subtitle="Register the taxpayer, define the rules and their rates, then calculate what applies to a document."
-      />
+      <PageHeader title={t("finTax.title")} subtitle={t("finTax.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <Field label="Legal entity" required>
+        <Field label={t("fin.common.legalEntity")} required>
           <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-            <option value="">Choose a legal entity</option>
+            <option value="">{t("fin.common.chooseLegalEntity")}</option>
             {entities.map((entity) => (
               <option key={entity.id} value={entity.id}>
                 {entity.name}
@@ -350,63 +371,68 @@ export function FinanceTaxPage() {
       </Card>
 
       {!legalEntityId ? (
-        <EmptyState title="Choose a legal entity" description="Tax registrations and rules are per legal entity." />
+        <EmptyState title={t("fin.common.chooseLegalEntity")} description={t("finTax.chooseEntityDesc")} />
       ) : loading ? (
         <Spinner />
       ) : (
         <>
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Taxpayer status</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finTax.taxpayerStatus")}</h2>
             <p className="mb-3 text-sm text-ink-dim">
               {activeRegistration
-                ? `Currently ${activeRegistration.taxpayerStatus.toUpperCase()}` +
-                  (activeRegistration.registrationNumber ? `, NPWP ${activeRegistration.registrationNumber}` : "") +
-                  `, from ${formatDateShort(activeRegistration.effectiveFrom)}. Recording a new status supersedes this one from its own start date.`
-                : "Not registered yet. Nothing that depends on PKP status can be calculated until this is set."}
+                ? t(
+                    activeRegistration.registrationNumber ? "finTax.currentlyWithNpwp" : "finTax.currently",
+                    {
+                      status: activeRegistration.taxpayerStatus.toUpperCase(),
+                      npwp: activeRegistration.registrationNumber ?? "",
+                      date: formatDateShort(activeRegistration.effectiveFrom),
+                    },
+                  )
+                : t("finTax.notRegistered")}
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label="Status" required>
+              <Field label={t("fin.common.status")} required>
                 <Select value={taxpayerStatus} onChange={(e) => setTaxpayerStatus(e.target.value as "pkp" | "non_pkp")}>
-                  <option value="pkp">PKP — VAT-registered</option>
-                  <option value="non_pkp">Non-PKP</option>
+                  <option value="pkp">{t("finTax.statusPkp")}</option>
+                  <option value="non_pkp">{t("finTax.statusNonPkp")}</option>
                 </Select>
               </Field>
-              <Field label="Registration number" hint="NPWP. Optional, but a PKP registration normally carries one.">
+              <Field label={t("finTax.registrationNumber")} hint={t("finTax.registrationNumberHint")}>
                 <Input value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value)} />
               </Field>
-              <Field label="Effective from" required>
+              <Field label={t("finTax.effectiveFrom")} required>
                 <Input type="date" value={registrationFrom} onChange={(e) => setRegistrationFrom(e.target.value)} />
               </Field>
             </div>
             <div className="mt-3">
               <Button disabled={busy || !registrationFrom} onClick={() => void registerTaxpayer()}>
-                Record status
+                {t("finTax.recordStatus")}
               </Button>
             </div>
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Tax rule</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finTax.taxRule")}</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label="Rule code" required>
+              <Field label={t("finTax.ruleCode")} required>
                 <Input value={ruleCode} onChange={(e) => setRuleCode(e.target.value)} placeholder="PPN-OUT-11" />
               </Field>
-              <Field label="Tax type" required>
+              <Field label={t("finTax.taxType")} required>
                 <Select value={taxType} onChange={(e) => setTaxType(e.target.value as AccountingTaxRuleRecord["taxType"])}>
-                  {(Object.keys(TAX_TYPE_LABELS) as AccountingTaxRuleRecord["taxType"][]).map((type) => (
+                  {(Object.keys(TAX_TYPE_KEYS) as AccountingTaxRuleRecord["taxType"][]).map((type) => (
                     <option key={type} value={type}>
-                      {TAX_TYPE_LABELS[type]}
+                      {t(TAX_TYPE_KEYS[type])}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Description">
+              <Field label={t("fin.common.description")}>
                 <Input value={ruleDescription} onChange={(e) => setRuleDescription(e.target.value)} />
               </Field>
             </div>
             <div className="mt-3">
               <Button disabled={busy || !ruleCode.trim()} onClick={() => void createRule()}>
-                Create rule
+                {t("finTax.createRule")}
               </Button>
             </div>
           </Card>
@@ -414,25 +440,21 @@ export function FinanceTaxPage() {
           {rules.length === 0 ? null : (
             <>
               <Card>
-                <h2 className="mb-3 text-sm font-semibold text-ink">Rate version</h2>
+                <h2 className="mb-3 text-sm font-semibold text-ink">{t("finTax.rateVersion")}</h2>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Field label="Rule" required>
+                  <Field label={t("finTax.rule")} required>
                     <Select value={selectedRuleId} onChange={(e) => setSelectedRuleId(e.target.value)}>
                       {rules.map((rule) => (
                         <option key={rule.id} value={rule.id}>
-                          {rule.ruleCode} — {rule.taxType}
+                          {rule.ruleCode} · {t(TAX_TYPE_KEYS[rule.taxType])}
                         </option>
                       ))}
                     </Select>
                   </Field>
                   <Field
-                    label="Rate"
+                    label={t("finTax.rate")}
                     required
-                    hint={
-                      rate && !isValidRateInput(rate)
-                        ? "A fraction with at most six decimals — 0.11 is 11%"
-                        : "A fraction, not a percentage. 0.11 is 11%."
-                    }
+                    hint={rate && !isValidRateInput(rate) ? t("finTax.rateHintInvalid") : t("finTax.rateHint")}
                   >
                     <Input
                       inputMode="decimal"
@@ -442,37 +464,41 @@ export function FinanceTaxPage() {
                       aria-invalid={rate !== "" && !isValidRateInput(rate)}
                     />
                   </Field>
-                  <Field label="Basis" required hint="What the rate is applied to.">
+                  <Field label={t("finTax.basis")} required hint={t("finTax.basisHint")}>
                     <Select value={basis} onChange={(e) => setBasis(e.target.value as typeof basis)}>
-                      <option value="gross">Gross</option>
-                      <option value="net">Net</option>
-                      <option value="dpp">DPP — tax base</option>
-                    </Select>
-                  </Field>
-                  <Field label="Rounding" required>
-                    <Select value={roundingMode} onChange={(e) => setRoundingMode(e.target.value as typeof roundingMode)}>
-                      <option value="half_up">Half up</option>
-                      <option value="half_even">Half even</option>
-                      <option value="truncate">Truncate</option>
-                    </Select>
-                  </Field>
-                  <Field label="Tax account" required>
-                    <Select value={taxAccountId} onChange={(e) => setTaxAccountId(e.target.value)}>
-                      <option value="">Select…</option>
-                      {accounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.accountCode} — {account.accountName}
+                      {(["gross", "net", "dpp"] as const).map((value) => (
+                        <option key={value} value={value}>
+                          {t(BASIS_KEYS[value])}
                         </option>
                       ))}
                     </Select>
                   </Field>
-                  <Field label="Effective from" required>
+                  <Field label={t("finTax.rounding")} required>
+                    <Select value={roundingMode} onChange={(e) => setRoundingMode(e.target.value as typeof roundingMode)}>
+                      {(["half_up", "half_even", "truncate"] as const).map((value) => (
+                        <option key={value} value={value}>
+                          {t(ROUNDING_KEYS[value])}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t("finTax.taxAccount")} required>
+                    <Select value={taxAccountId} onChange={(e) => setTaxAccountId(e.target.value)}>
+                      <option value="">{t("fin.common.select")}</option>
+                      {accounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.accountCode} · {account.accountName}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t("finTax.effectiveFrom")} required>
                     <Input type="date" value={versionFrom} onChange={(e) => setVersionFrom(e.target.value)} />
                   </Field>
-                  <Field label="PKP only" hint="A calculation for a non-PKP entity skips a rule that requires PKP.">
+                  <Field label={t("finTax.pkpOnly")} hint={t("finTax.pkpOnlyHint")}>
                     <Select value={requiresPkp ? "yes" : "no"} onChange={(e) => setRequiresPkp(e.target.value === "yes")}>
-                      <option value="no">Applies to everyone</option>
-                      <option value="yes">Requires PKP</option>
+                      <option value="no">{t("finTax.appliesToEveryone")}</option>
+                      <option value="yes">{t("finTax.requiresPkp")}</option>
                     </Select>
                   </Field>
                 </div>
@@ -481,46 +507,45 @@ export function FinanceTaxPage() {
                     disabled={busy || !selectedRule || !isValidRateInput(rate) || !taxAccountId || !versionFrom}
                     onClick={() => void createVersion()}
                   >
-                    Draft version
+                    {t("finBudget.draftVersion")}
                   </Button>
                 </div>
               </Card>
 
               <div>
                 <h2 className="mb-2 text-sm font-semibold text-ink">
-                  Versions{selectedRule ? ` — ${selectedRule.ruleCode}` : ""}
+                  {selectedRule
+                    ? t("finTax.versionsFor", { code: selectedRule.ruleCode })
+                    : t("finBudget.versions")}
                 </h2>
                 <DataTable
                   columns={versionColumns}
                   rows={versions}
                   keyOf={(row) => row.id}
-                  empty={<EmptyState title="No versions" description="Draft one above." />}
+                  empty={<EmptyState title={t("finBudget.noVersionsTitle")} description={t("finBudget.noVersionsDesc")} />}
                 />
               </div>
             </>
           )}
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Calculate</h2>
-            <p className="mb-3 text-sm text-ink-dim">
-              The service picks the version effective on the calculation date and applies it to the basis. It returns
-              the tax amount and the rate it used; this page does not multiply.
-            </p>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finTax.calculateTitle")}</h2>
+            <p className="mb-3 text-sm text-ink-dim">{t("finTax.calculateNote")}</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Rule code" required>
+              <Field label={t("finTax.ruleCode")} required>
                 <Select value={calcRuleCode} onChange={(e) => setCalcRuleCode(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {rules.map((rule) => (
                     <option key={rule.id} value={rule.ruleCode}>
-                      {rule.ruleCode} — {rule.taxType}
+                      {rule.ruleCode} · {t(TAX_TYPE_KEYS[rule.taxType])}
                     </option>
                   ))}
                 </Select>
               </Field>
               <Field
-                label="Basis amount"
+                label={t("finTax.basisAmount")}
                 required
-                hint={calcBasis && !isValidAmountInput(calcBasis) ? "Digits with at most two decimals" : undefined}
+                hint={calcBasis && !isValidAmountInput(calcBasis) ? t("finTax.basisAmountHint") : undefined}
               >
                 <Input
                   inputMode="decimal"
@@ -530,10 +555,10 @@ export function FinanceTaxPage() {
                   aria-invalid={calcBasis !== "" && !isValidAmountInput(calcBasis)}
                 />
               </Field>
-              <Field label="Calculation date" required>
+              <Field label={t("finTax.calculationDate")} required>
                 <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} />
               </Field>
-              <Field label="Currency" required>
+              <Field label={t("fin.common.currency")} required>
                 <Input value={calcCurrency} onChange={(e) => setCalcCurrency(e.target.value.toUpperCase())} maxLength={3} />
               </Field>
             </div>
@@ -542,18 +567,20 @@ export function FinanceTaxPage() {
                 disabled={busy || !calcRuleCode || !isValidAmountInput(calcBasis) || !calcDate}
                 onClick={() => void calculate()}
               >
-                Calculate
+                {t("finTax.calculate")}
               </Button>
             </div>
           </Card>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Calculations</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finTax.calculations")}</h2>
             <DataTable
               columns={calculationColumns}
               rows={calculations}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="Nothing calculated yet" description="Calculate one above." />}
+              empty={
+                <EmptyState title={t("finTax.noCalculationsTitle")} description={t("finTax.noCalculationsDesc")} />
+              }
             />
           </div>
         </>

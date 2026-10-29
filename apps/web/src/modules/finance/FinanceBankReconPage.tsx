@@ -43,10 +43,24 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort, formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import { isValidAmountInput } from "./money";
 import { newIdempotencyKey, useLegalEntities } from "./useLegalEntities";
 
+/** The stored value stays the API's; only the word on screen changes. */
+const DIRECTION_KEYS: Record<AccountingBankStatementLineRecord["direction"], MessageKey> = {
+  debit: "finRecon.directionDebit",
+  credit: "finRecon.directionCredit",
+};
+
+const RECON_STATUS_KEYS: Record<AccountingBankReconciliationRecord["status"], MessageKey> = {
+  open: "finAcct.periodOpen",
+  closed: "finAcct.periodClosed",
+};
+
 export function FinanceBankReconPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { entities, legalEntityId, setLegalEntityId } = useLegalEntities(token);
@@ -110,11 +124,11 @@ export function FinanceBankReconPage() {
       setBankAccountId((current) => (accountList.some((a) => a.id === current) ? current : accountList[0]?.id ?? ""));
       setPeriodId((current) => (periodList.some((p) => p.id === current) ? current : periodList[0]?.id ?? ""));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load bank accounts.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.loadAccountsFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void loadEntities();
@@ -135,9 +149,9 @@ export function FinanceBankReconPage() {
       setReconciliations(reconList);
       setReconId((current) => (reconList.some((r) => r.id === current) ? current : reconList[0]?.id ?? ""));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load statement lines.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.loadLinesFailed"));
     }
-  }, [token, bankAccountId]);
+  }, [token, bankAccountId, t]);
 
   useEffect(() => {
     void loadRecon();
@@ -151,9 +165,9 @@ export function FinanceBankReconPage() {
     try {
       setMatches(await api.accountingBankMatches(token, reconId));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load matches.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.matchesFailed"));
     }
-  }, [token, reconId]);
+  }, [token, reconId, t]);
 
   useEffect(() => {
     void loadMatches();
@@ -192,7 +206,7 @@ export function FinanceBankReconPage() {
         reconciliationPolicy: policy,
         effectiveFrom,
       });
-      setNotice(`${created.name} registered. Import a statement to start reconciling.`);
+      setNotice(t("finRecon.accountRegistered", { name: created.name }));
       setBankName("");
       setHouseBankCode("");
       setExternalAccountId("");
@@ -200,7 +214,7 @@ export function FinanceBankReconPage() {
       setAccountName("");
       await loadEntities();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not register the bank account.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.registerFailed"));
     } finally {
       setBusy(false);
     }
@@ -221,13 +235,18 @@ export function FinanceBankReconPage() {
         content,
       });
       setNotice(
-        `${result.lineCount} line${result.lineCount === 1 ? "" : "s"} imported from ${result.sourceFileName}` +
-          (result.duplicateLineCount > 0 ? `; ${result.duplicateLineCount} flagged as possible duplicates.` : "."),
+        result.duplicateLineCount > 0
+          ? t("finRecon.importedWithDuplicates", {
+              count: result.lineCount,
+              file: result.sourceFileName,
+              duplicates: result.duplicateLineCount,
+            })
+          : t("finRecon.imported", { count: result.lineCount, file: result.sourceFileName }),
       );
       setImportName(file.name);
       await loadRecon();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not import the statement.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.importFailed"));
     } finally {
       setBusy(false);
     }
@@ -239,11 +258,11 @@ export function FinanceBankReconPage() {
     setNotice(null);
     try {
       const created = await api.accountingOpenReconciliation(token, { bankAccountId, periodId });
-      setNotice("Reconciliation opened for this account and period.");
+      setNotice(t("finRecon.opened"));
       setReconId(created.id);
       await loadRecon();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not open the reconciliation.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.openFailed"));
     } finally {
       setBusy(false);
     }
@@ -261,11 +280,11 @@ export function FinanceBankReconPage() {
       setMatchAmount(line.amount);
       setNotice(
         list.length === 0
-          ? "No ledger entry looks like this line. It may be a bank charge or an item not yet recorded."
-          : `${list.length} candidate${list.length === 1 ? "" : "s"} proposed for ${formatMoney(line.amount)}.`,
+          ? t("finRecon.noCandidates")
+          : t("finRecon.candidatesFound", { count: list.length, amount: formatMoney(line.amount) }),
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not look for candidates.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.candidatesFailed"));
     } finally {
       setBusy(false);
     }
@@ -288,13 +307,13 @@ export function FinanceBankReconPage() {
         idempotencyKey: newIdempotencyKey(),
         note: null,
       });
-      setNotice("Match recorded.");
+      setNotice(t("finRecon.matchRecorded"));
       setLineId("");
       setCandidates([]);
       setGlEntryId("");
       await Promise.all([loadMatches(), loadMovement()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record the match.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.matchFailed"));
     } finally {
       setBusy(false);
     }
@@ -310,14 +329,15 @@ export function FinanceBankReconPage() {
         statementBalance: closeBalance.trim() || null,
       });
       setNotice(
-        `Reconciliation closed. Book ${formatMoney(closed.closedBookBalance)}, statement ${formatMoney(
-          closed.closedStatementBalance,
-        )}.`,
+        t("finRecon.closed", {
+          book: formatMoney(closed.closedBookBalance),
+          statement: formatMoney(closed.closedStatementBalance),
+        }),
       );
       setCloseBalance("");
       await loadRecon();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not close the reconciliation.");
+      setError(err instanceof ApiError ? err.message : t("finRecon.closeFailed"));
     } finally {
       setBusy(false);
     }
@@ -327,31 +347,36 @@ export function FinanceBankReconPage() {
   const openRecon = activeRecon?.status === "open" ? activeRecon : null;
 
   const lineColumns: Column<AccountingBankStatementLineRecord>[] = [
-    { header: "Value date", mobileRole: "title", className: "tabular-nums", cell: (row) => formatDateShort(row.valueDate) },
-    { header: "Reference", cell: (row) => row.reference ?? "—" },
-    { header: "Counterparty", cell: (row) => row.counterparty ?? "—" },
-    { header: "Direction", cell: (row) => <Badge>{row.direction}</Badge> },
     {
-      header: "Amount",
+      header: t("finRecon.valueDate"),
+      mobileRole: "title",
+      className: "tabular-nums",
+      cell: (row) => formatDateShort(row.valueDate),
+    },
+    { header: t("fin.common.reference"), cell: (row) => row.reference ?? t("fin.common.notAvailable") },
+    { header: t("finRecon.counterparty"), cell: (row) => row.counterparty ?? t("fin.common.notAvailable") },
+    { header: t("fin.common.direction"), cell: (row) => <Badge>{t(DIRECTION_KEYS[row.direction])}</Badge> },
+    {
+      header: t("fin.common.amount"),
       className: "text-right tabular-nums whitespace-nowrap",
       mobileRole: "detail",
       cell: (row) => `${formatMoney(row.amount)} ${row.currency}`,
     },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
       cell: (row) =>
         row.duplicateStatus === "review_queue" ? (
-          <StatusPill tone="warning">Review</StatusPill>
+          <StatusPill tone="warning">{t("finRecon.statusReview")}</StatusPill>
         ) : (
-          <StatusPill tone="neutral">Accepted</StatusPill>
+          <StatusPill tone="neutral">{t("finRecon.statusAccepted")}</StatusPill>
         ),
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       cell: (row) => (
         <Button variant="secondary" disabled={busy || !openRecon} onClick={() => void suggest(row)}>
-          Find match
+          {t("finRecon.findMatch")}
         </Button>
       ),
     },
@@ -359,19 +384,16 @@ export function FinanceBankReconPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Bank reconciliation"
-        subtitle="Pair what the bank reported against what the books recorded, then close the period."
-      />
+      <PageHeader title={t("finRecon.title")} subtitle={t("finRecon.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Legal entity" required>
+          <Field label={t("fin.common.legalEntity")} required>
             <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-              <option value="">Choose a legal entity</option>
+              <option value="">{t("fin.common.chooseLegalEntity")}</option>
               {entities.map((entity) => (
                 <option key={entity.id} value={entity.id}>
                   {entity.name}
@@ -379,19 +401,19 @@ export function FinanceBankReconPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Bank account" required>
+          <Field label={t("finPeriods.bankAccount")} required>
             <Select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("fin.common.select")}</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} — {account.accountNumberMasked}
+                  {account.name} · {account.accountNumberMasked}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Period" required>
+          <Field label={t("finAcct.period")} required>
             <Select value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("fin.common.select")}</option>
               {periods.map((period) => (
                 <option key={period.id} value={period.id}>
                   {period.periodName} ({period.periodCode} {period.fiscalYearCode})
@@ -403,15 +425,15 @@ export function FinanceBankReconPage() {
         {movement ? (
           <div className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
             <div>
-              <span className="text-xs uppercase tracking-wide text-ink-faint">Book movement</span>
+              <span className="text-xs uppercase tracking-wide text-ink-faint">{t("finRecon.bookMovement")}</span>
               <div className="tabular-nums text-ink">{formatMoney(movement.bookMovement)}</div>
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wide text-ink-faint">Statement movement</span>
+              <span className="text-xs uppercase tracking-wide text-ink-faint">{t("finRecon.statementMovement")}</span>
               <div className="tabular-nums text-ink">{formatMoney(movement.statementMovement)}</div>
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wide text-ink-faint">Difference</span>
+              <span className="text-xs uppercase tracking-wide text-ink-faint">{t("finRecon.difference")}</span>
               <div className="tabular-nums text-ink">{formatMoney(movement.difference)}</div>
             </div>
           </div>
@@ -422,47 +444,56 @@ export function FinanceBankReconPage() {
         <Spinner />
       ) : accounts.length === 0 ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Register a bank account</h2>
-          <p className="mb-3 text-sm text-ink-dim">
-            A bank account links one real account to the ledger account that mirrors it. Nothing can be reconciled
-            until that link exists.
-          </p>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("finRecon.registerTitle")}</h2>
+          <p className="mb-3 text-sm text-ink-dim">{t("finRecon.registerNote")}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Bank name" required>
-              <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Bank Central Asia" />
+            <Field label={t("finRecon.bankName")} required>
+              <Input
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                placeholder={t("finRecon.bankNamePlaceholder")}
+              />
             </Field>
-            <Field label="House bank code" required hint="The company's own code for this bank.">
+            <Field label={t("finRecon.houseBankCode")} required hint={t("finRecon.houseBankCodeHint")}>
               <Input value={houseBankCode} onChange={(e) => setHouseBankCode(e.target.value)} placeholder="BCA-01" />
             </Field>
-            <Field label="Account name" required>
-              <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Operating account" />
+            <Field label={t("finRecon.accountName")} required>
+              <Input
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                placeholder={t("finRecon.accountNamePlaceholder")}
+              />
             </Field>
-            <Field label="Account number" required hint="Masked form is fine — never the full number.">
+            <Field label={t("finRecon.accountNumber")} required hint={t("finRecon.accountNumberHint")}>
               <Input value={masked} onChange={(e) => setMasked(e.target.value)} placeholder="****1234" />
             </Field>
-            <Field label="Ledger account" required>
+            <Field label={t("finRecon.ledgerAccount")} required>
               <Select value={ledgerAccountId} onChange={(e) => setLedgerAccountId(e.target.value)}>
-                <option value="">Select…</option>
+                <option value="">{t("fin.common.select")}</option>
                 {ledgerAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.accountCode} — {account.accountName}
+                    {account.accountCode} · {account.accountName}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="Currency" required>
-              <Input value={accountCurrency} onChange={(e) => setAccountCurrency(e.target.value.toUpperCase())} maxLength={3} />
+            <Field label={t("fin.common.currency")} required>
+              <Input
+                value={accountCurrency}
+                onChange={(e) => setAccountCurrency(e.target.value.toUpperCase())}
+                maxLength={3}
+              />
             </Field>
-            <Field label="Effective from" required>
+            <Field label={t("finRecon.effectiveFrom")} required>
               <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
             </Field>
-            <Field label="Policy" hint="Suggested asks the service to propose candidates; manual leaves it to you.">
+            <Field label={t("finRecon.policy")} hint={t("finRecon.policyHint")}>
               <Select value={policy} onChange={(e) => setPolicy(e.target.value as "manual" | "suggested")}>
-                <option value="manual">Manual</option>
-                <option value="suggested">Suggested</option>
+                <option value="manual">{t("finRecon.policyManual")}</option>
+                <option value="suggested">{t("finRecon.policySuggested")}</option>
               </Select>
             </Field>
-            <Field label="Bank's own id" required hint="The identifier the statement file uses.">
+            <Field label={t("finRecon.externalId")} required hint={t("finRecon.externalIdHint")}>
               <Input value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} />
             </Field>
           </div>
@@ -480,18 +511,15 @@ export function FinanceBankReconPage() {
               }
               onClick={() => void registerAccount()}
             >
-              Register
+              {t("finRecon.register")}
             </Button>
           </div>
         </Card>
       ) : (
         <>
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Statement import</h2>
-            <p className="mb-3 text-sm text-ink-dim">
-              CSV only. The file is read in the browser and forwarded as text; the service decides whether the columns
-              match the profile. A line that looks like one already imported is flagged rather than dropped.
-            </p>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finRecon.importTitle")}</h2>
+            <p className="mb-3 text-sm text-ink-dim">{t("finRecon.importNote")}</p>
             <input
               ref={fileInput}
               type="file"
@@ -505,36 +533,40 @@ export function FinanceBankReconPage() {
             />
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="secondary" disabled={busy || !bankAccountId} onClick={() => fileInput.current?.click()}>
-                Choose CSV
+                {t("finRecon.chooseCsv")}
               </Button>
               <Button disabled={busy || !bankAccountId || !periodId} onClick={() => void openReconciliation()}>
-                Open reconciliation
+                {t("finRecon.openReconciliation")}
               </Button>
-              {importName ? <span className="text-xs text-ink-faint">Last file: {importName}</span> : null}
+              {importName ? (
+                <span className="text-xs text-ink-faint">{t("finRecon.lastFile", { file: importName })}</span>
+              ) : null}
             </div>
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Match a statement line</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finRecon.matchTitle")}</h2>
             {lineId === "" ? (
-              <p className="text-sm text-ink-dim">Pick a line below and ask for candidates.</p>
+              <p className="text-sm text-ink-dim">{t("finRecon.pickLine")}</p>
             ) : (
               <>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <Field label="Ledger entry" required>
+                  <Field label={t("finRecon.ledgerEntry")} required>
                     <Select value={glEntryId} onChange={(e) => setGlEntryId(e.target.value)}>
-                      <option value="">Select…</option>
+                      <option value="">{t("fin.common.select")}</option>
                       {candidates.map((candidate) => (
                         <option key={candidate.glEntryId} value={candidate.glEntryId}>
-                          {candidate.postingDate} — {formatMoney(candidate.amount)} ({candidate.score})
+                          {candidate.postingDate} · {formatMoney(candidate.amount)} ({candidate.score})
                         </option>
                       ))}
                     </Select>
                   </Field>
                   <Field
-                    label="Amount"
+                    label={t("fin.common.amount")}
                     required
-                    hint={matchAmount && !isValidAmountInput(matchAmount) ? "Digits with at most two decimals" : undefined}
+                    hint={
+                      matchAmount && !isValidAmountInput(matchAmount) ? t("finAssets.amountHint") : undefined
+                    }
                   >
                     <Input
                       inputMode="decimal"
@@ -548,7 +580,7 @@ export function FinanceBankReconPage() {
                       disabled={busy || !glEntryId || !isValidAmountInput(matchAmount) || !openRecon}
                       onClick={() => void createMatch()}
                     >
-                      Record match
+                      {t("finRecon.recordMatch")}
                     </Button>
                   </div>
                 </div>
@@ -556,7 +588,7 @@ export function FinanceBankReconPage() {
                   <ul className="mt-3 space-y-1 text-xs text-ink-faint">
                     {candidates.slice(0, 3).map((candidate) => (
                       <li key={candidate.glEntryId}>
-                        {candidate.ledgerReference} — score {candidate.score}
+                        {candidate.ledgerReference} · {t("finRecon.score", { score: candidate.score })}
                         {candidate.reasons.length > 0 ? `: ${candidate.reasons.join(", ")}` : ""}
                       </li>
                     ))}
@@ -567,26 +599,23 @@ export function FinanceBankReconPage() {
           </Card>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Statement lines</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finRecon.lines")}</h2>
             <DataTable
               columns={lineColumns}
               rows={lines}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No statement lines" description="Import a CSV above." />}
+              empty={<EmptyState title={t("finRecon.noLinesTitle")} description={t("finRecon.noLinesDesc")} />}
             />
           </div>
 
           {activeRecon ? (
             <Card>
               <h2 className="mb-3 text-sm font-semibold text-ink">
-                Reconciliation — {activeRecon.status}
+                {t("finRecon.activeTitle", { status: t(RECON_STATUS_KEYS[activeRecon.status]) })}
               </h2>
-              <p className="mb-3 text-sm text-ink-dim">
-                {matches.length} match{matches.length === 1 ? "" : "es"} recorded. Closing compares the book balance
-                with the statement balance and refuses while a difference is unexplained.
-              </p>
+              <p className="mb-3 text-sm text-ink-dim">{t("finRecon.activeNote", { count: matches.length })}</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Field label="Statement balance" hint="Optional — the service uses the imported lines when omitted.">
+                <Field label={t("finRecon.statementBalance")} hint={t("finRecon.statementBalanceHint")}>
                   <Input
                     inputMode="decimal"
                     value={closeBalance}
@@ -596,7 +625,7 @@ export function FinanceBankReconPage() {
                 </Field>
                 <div className="flex items-end">
                   <Button disabled={busy || activeRecon.status !== "open"} onClick={() => void close()}>
-                    Close reconciliation
+                    {t("finRecon.closeReconciliation")}
                   </Button>
                 </div>
               </div>

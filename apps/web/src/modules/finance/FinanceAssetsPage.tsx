@@ -42,6 +42,8 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort, formatMoney } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import { isValidAmountInput } from "./money";
 import { newIdempotencyKey, useLegalEntities } from "./useLegalEntities";
 
@@ -51,7 +53,20 @@ const BOOK_TONES: Record<AccountingAssetBookRecord["status"], "neutral" | "succe
   disposed: "neutral",
 };
 
+/** The stored status stays the API's; only the word on screen changes. */
+const BOOK_STATUS_KEYS: Record<AccountingAssetBookRecord["status"], MessageKey> = {
+  draft: "finAcct.periodDraft",
+  active: "fin.state.active",
+  disposed: "finAssets.statusDisposed",
+};
+
+const RUN_STATUS_KEYS: Record<AccountingDepreciationRunRecord["status"], MessageKey> = {
+  posted: "finAssets.statusPosted",
+  reversed: "finAssets.statusReversed",
+};
+
 export function FinanceAssetsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { entities, legalEntityId, setLegalEntityId } = useLegalEntities(token);
@@ -121,11 +136,11 @@ export function FinanceAssetsPage() {
       setLedgerId((current) => (ledgerList.some((l) => l.id === current) ? current : ledgerList[0]?.id ?? ""));
       setRunPeriodId((current) => (periodList.some((p) => p.id === current) ? current : periodList[0]?.id ?? ""));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load asset books.");
+      setError(err instanceof ApiError ? err.message : t("finAssets.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void load();
@@ -151,12 +166,12 @@ export function FinanceAssetsPage() {
         depreciationExpenseAccountId: expenseAccountId,
         accumulatedDepreciationAccountId: accumulatedAccountId,
       });
-      setNotice(`${created.bookCode} book created as a draft. Activate it to start depreciating.`);
+      setNotice(t("finAssets.created", { code: created.bookCode }));
       setAssetClass("");
       setAcquisitionCost("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the asset book.");
+      setError(err instanceof ApiError ? err.message : t("finAssets.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -168,10 +183,10 @@ export function FinanceAssetsPage() {
     setNotice(null);
     try {
       await api.accountingActivateAssetBook(token, book.id);
-      setNotice(`${book.bookCode} book activated. The next run will include it.`);
+      setNotice(t("finAssets.activated", { code: book.bookCode }));
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not activate the book.");
+      setError(err instanceof ApiError ? err.message : t("finAssets.activateFailed"));
     } finally {
       setBusy(false);
     }
@@ -190,11 +205,14 @@ export function FinanceAssetsPage() {
         description: null,
       });
       setNotice(
-        `Depreciation posted for ${created.bookCode}: ${formatMoney(created.totalAmount)} ${created.currency}.`,
+        t("finAssets.runPosted", {
+          code: created.bookCode,
+          amount: `${formatMoney(created.totalAmount)} ${created.currency}`,
+        }),
       );
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not run depreciation.");
+      setError(err instanceof ApiError ? err.message : t("finAssets.runFailed"));
     } finally {
       setBusy(false);
     }
@@ -213,14 +231,14 @@ export function FinanceAssetsPage() {
         note: null,
         idempotencyKey: newIdempotencyKey(),
       });
-      setNotice(`${disposeTarget.bookCode} book disposed.`);
+      setNotice(t("finAssets.disposed", { code: disposeTarget.bookCode }));
       setDisposeTarget(null);
       setDisposeDate("");
       setDisposeEvidence("");
       setDisposeProceeds("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not dispose the book.");
+      setError(err instanceof ApiError ? err.message : t("finAssets.disposeFailed"));
     } finally {
       setBusy(false);
     }
@@ -236,12 +254,12 @@ export function FinanceAssetsPage() {
         idempotencyKey: newIdempotencyKey(),
         reason: reverseReason.trim(),
       });
-      setNotice("Depreciation run reversed.");
+      setNotice(t("finAssets.runReversed"));
       setReverseTarget(null);
       setReverseReason("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reverse the run.");
+      setError(err instanceof ApiError ? err.message : t("finAssets.reverseFailed"));
     } finally {
       setBusy(false);
     }
@@ -249,7 +267,7 @@ export function FinanceAssetsPage() {
 
   const assetLabel = (id: string) => {
     const asset = assets.find((a) => a.id === id);
-    return asset ? `${asset.assetNumber} — ${asset.name}` : id;
+    return asset ? `${asset.assetNumber} · ${asset.name}` : id;
   };
   const periodLabel = (id: string) => {
     const period = periods.find((p) => p.id === id);
@@ -258,41 +276,41 @@ export function FinanceAssetsPage() {
 
   const bookColumns: Column<AccountingAssetBookRecord>[] = [
     {
-      header: "Asset",
+      header: t("finAssets.asset"),
       mobileRole: "title",
       cell: (row) => <span className="font-medium text-ink">{assetLabel(row.assetId)}</span>,
     },
-    { header: "Book", cell: (row) => <Badge>{row.bookCode}</Badge> },
-    { header: "Class", cell: (row) => row.assetClass },
-    { header: "In service", className: "tabular-nums", cell: (row) => formatDateShort(row.inServiceDate) },
+    { header: t("finAssets.book"), cell: (row) => <Badge>{row.bookCode}</Badge> },
+    { header: t("finAssets.assetClass"), cell: (row) => row.assetClass },
+    { header: t("finAssets.inService"), className: "tabular-nums", cell: (row) => formatDateShort(row.inServiceDate) },
     {
-      header: "Cost",
+      header: t("finAssets.cost"),
       className: "text-right tabular-nums whitespace-nowrap",
       mobileRole: "detail",
       cell: (row) => formatMoney(row.acquisitionCost),
     },
     {
-      header: "Accumulated",
+      header: t("finAssets.accumulated"),
       className: "text-right tabular-nums whitespace-nowrap",
       cell: (row) => formatMoney(row.accumulatedDepreciation),
     },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={BOOK_TONES[row.status]}>{row.status}</StatusPill>,
+      cell: (row) => <StatusPill tone={BOOK_TONES[row.status]}>{t(BOOK_STATUS_KEYS[row.status])}</StatusPill>,
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       cell: (row) => (
         <div className="flex flex-wrap gap-1">
           {row.status === "draft" ? (
             <Button disabled={busy} onClick={() => void activate(row)}>
-              Activate
+              {t("finAssets.activate")}
             </Button>
           ) : null}
           {row.status === "active" ? (
             <Button variant="secondary" disabled={busy} onClick={() => setDisposeTarget(row)}>
-              Dispose
+              {t("finAssets.dispose")}
             </Button>
           ) : null}
         </div>
@@ -301,48 +319,51 @@ export function FinanceAssetsPage() {
   ];
 
   const runColumns: Column<AccountingDepreciationRunRecord>[] = [
-    { header: "Book", mobileRole: "title", cell: (row) => <span className="font-medium text-ink">{row.bookCode}</span> },
-    { header: "Period", cell: (row) => periodLabel(row.periodId) },
     {
-      header: "Amount",
+      header: t("finAssets.book"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-medium text-ink">{row.bookCode}</span>,
+    },
+    { header: t("finAcct.period"), cell: (row) => periodLabel(row.periodId) },
+    {
+      header: t("fin.common.amount"),
       className: "text-right tabular-nums whitespace-nowrap",
       mobileRole: "detail",
       cell: (row) => `${formatMoney(row.totalAmount)} ${row.currency}`,
     },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
       cell: (row) => (
-        <StatusPill tone={row.status === "posted" ? "success" : "neutral"}>{row.status}</StatusPill>
+        <StatusPill tone={row.status === "posted" ? "success" : "neutral"}>
+          {t(RUN_STATUS_KEYS[row.status])}
+        </StatusPill>
       ),
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       cell: (row) =>
         row.status === "posted" ? (
           <Button variant="secondary" disabled={busy} onClick={() => setReverseTarget(row)}>
-            Reverse
+            {t("finAssets.reverse")}
           </Button>
         ) : (
-          <span className="text-ink-faint">—</span>
+          <span className="text-ink-faint">{t("fin.common.notAvailable")}</span>
         ),
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Fixed assets"
-        subtitle="Asset books, their depreciation runs, and what has been written off so far."
-      />
+      <PageHeader title={t("finAssets.title")} subtitle={t("finAssets.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <Field label="Legal entity" required>
+        <Field label={t("fin.common.legalEntity")} required>
           <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-            <option value="">Choose a legal entity</option>
+            <option value="">{t("fin.common.chooseLegalEntity")}</option>
             {entities.map((entity) => (
               <option key={entity.id} value={entity.id}>
                 {entity.name}
@@ -353,54 +374,59 @@ export function FinanceAssetsPage() {
       </Card>
 
       {!legalEntityId ? (
-        <EmptyState title="Choose a legal entity" description="Asset books belong to one legal entity." />
+        <EmptyState title={t("fin.common.chooseLegalEntity")} description={t("finAssets.chooseEntityDesc")} />
       ) : loading ? (
         <Spinner />
       ) : (
         <>
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">New asset book</h2>
-            <p className="mb-3 text-sm text-ink-dim">
-              One asset can carry several books — a tax book and a management book usually have different lives. The
-              two accounts below decide where the monthly expense and the accumulated total land.
-            </p>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finAssets.newBook")}</h2>
+            <p className="mb-3 text-sm text-ink-dim">{t("finAssets.newBookNote")}</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Asset" required>
+              <Field label={t("finAssets.asset")} required>
                 <Select value={assetId} onChange={(e) => setAssetId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {assets.map((asset) => (
                     <option key={asset.id} value={asset.id}>
-                      {asset.assetNumber} — {asset.name}
+                      {asset.assetNumber} · {asset.name}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Ledger" required>
+              <Field label={t("finAssets.ledger")} required>
                 <Select value={ledgerId} onChange={(e) => setLedgerId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {ledgers.map((ledger) => (
                     <option key={ledger.id} value={ledger.id}>
-                      {ledger.ledgerCode} — {ledger.ledgerName}
+                      {ledger.ledgerCode} · {ledger.ledgerName}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Book code" required hint="e.g. TAX or MGT — whatever your books are called.">
+              <Field label={t("finAssets.bookCode")} required hint={t("finAssets.bookCodeHint")}>
                 <Input value={bookCode} onChange={(e) => setBookCode(e.target.value)} />
               </Field>
-              <Field label="Asset class" required>
-                <Input value={assetClass} onChange={(e) => setAssetClass(e.target.value)} placeholder="Vehicle" />
+              <Field label={t("finAssets.assetClass")} required>
+                <Input
+                  value={assetClass}
+                  onChange={(e) => setAssetClass(e.target.value)}
+                  placeholder={t("finAssets.assetClassPlaceholder")}
+                />
               </Field>
-              <Field label="Capitalized on" required>
+              <Field label={t("finAssets.capitalizedOn")} required>
                 <Input type="date" value={capitalizationDate} onChange={(e) => setCapitalizationDate(e.target.value)} />
               </Field>
-              <Field label="In service on" required>
+              <Field label={t("finAssets.inServiceOn")} required>
                 <Input type="date" value={inServiceDate} onChange={(e) => setInServiceDate(e.target.value)} />
               </Field>
               <Field
-                label="Acquisition cost"
+                label={t("finAssets.acquisitionCost")}
                 required
-                hint={acquisitionCost && !isValidAmountInput(acquisitionCost) ? "Digits with at most two decimals" : undefined}
+                hint={
+                  acquisitionCost && !isValidAmountInput(acquisitionCost)
+                    ? t("finAssets.amountHint")
+                    : undefined
+                }
               >
                 <Input
                   inputMode="decimal"
@@ -410,32 +436,32 @@ export function FinanceAssetsPage() {
                   aria-invalid={acquisitionCost !== "" && !isValidAmountInput(acquisitionCost)}
                 />
               </Field>
-              <Field label="Residual value" hint="What it is expected to be worth at the end of its life.">
+              <Field label={t("finAssets.residualValue")} hint={t("finAssets.residualHint")}>
                 <Input inputMode="decimal" value={residualValue} onChange={(e) => setResidualValue(e.target.value)} />
               </Field>
-              <Field label="Useful life (months)" required>
+              <Field label={t("finAssets.usefulLife")} required>
                 <Input
                   inputMode="numeric"
                   value={usefulLifeMonths}
                   onChange={(e) => setUsefulLifeMonths(e.target.value)}
                 />
               </Field>
-              <Field label="Expense account" required>
+              <Field label={t("finAssets.expenseAccount")} required>
                 <Select value={expenseAccountId} onChange={(e) => setExpenseAccountId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.accountCode} — {account.accountName}
+                      {account.accountCode} · {account.accountName}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Accumulated account" required>
+              <Field label={t("finAssets.accumulatedAccount")} required>
                 <Select value={accumulatedAccountId} onChange={(e) => setAccumulatedAccountId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.accountCode} — {account.accountName}
+                      {account.accountCode} · {account.accountName}
                     </option>
                   ))}
                 </Select>
@@ -457,34 +483,31 @@ export function FinanceAssetsPage() {
                 }
                 onClick={() => void createBook()}
               >
-                Create book
+                {t("finAssets.createBook")}
               </Button>
             </div>
           </Card>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Asset books</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAssets.books")}</h2>
             <DataTable
               columns={bookColumns}
               rows={books}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No asset books" description="Create one above." />}
+              empty={<EmptyState title={t("finAssets.noBooksTitle")} description={t("finAssets.noBooksDesc")} />}
             />
           </div>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Run depreciation</h2>
-            <p className="mb-3 text-sm text-ink-dim">
-              One run covers every active book with this book code in this period, and posts a single journal. Running
-              the same period twice with the same key posts once.
-            </p>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("finAssets.runTitle")}</h2>
+            <p className="mb-3 text-sm text-ink-dim">{t("finAssets.runNote")}</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label="Book code" required>
+              <Field label={t("finAssets.bookCode")} required>
                 <Input value={runBookCode} onChange={(e) => setRunBookCode(e.target.value)} />
               </Field>
-              <Field label="Period" required>
+              <Field label={t("finAcct.period")} required>
                 <Select value={runPeriodId} onChange={(e) => setRunPeriodId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {periods.map((period) => (
                     <option key={period.id} value={period.id}>
                       {period.periodName} ({period.periodCode} {period.fiscalYearCode})
@@ -497,46 +520,43 @@ export function FinanceAssetsPage() {
                   disabled={busy || !runBookCode.trim() || !runPeriodId || !books.some((b) => b.status === "active")}
                   onClick={() => void runDepreciation()}
                 >
-                  Run
+                  {t("finAssets.run")}
                 </Button>
               </div>
             </div>
             {!books.some((b) => b.status === "active") ? (
-              <p className="mt-2 text-xs text-ink-faint">
-                Nothing is active yet, so a run would post nothing. Activate a book first.
-              </p>
+              <p className="mt-2 text-xs text-ink-faint">{t("finAssets.nothingActive")}</p>
             ) : null}
           </Card>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Depreciation runs</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAssets.runs")}</h2>
             <DataTable
               columns={runColumns}
               rows={runs}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No runs" description="Depreciation has not been run yet." />}
+              empty={<EmptyState title={t("finAssets.noRunsTitle")} description={t("finAssets.noRunsDesc")} />}
             />
           </div>
 
           {disposeTarget ? (
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-ink">Dispose {disposeTarget.bookCode} book</h2>
-              <p className="mb-3 text-sm text-ink-dim">
-                A disposal needs the document that evidences it. Proceeds are optional — leave them out when the asset
-                was scrapped rather than sold.
-              </p>
+              <h2 className="mb-3 text-sm font-semibold text-ink">
+                {t("finAssets.disposeTitle", { code: disposeTarget.bookCode })}
+              </h2>
+              <p className="mb-3 text-sm text-ink-dim">{t("finAssets.disposeNote")}</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Field label="Disposal date" required>
+                <Field label={t("finAssets.disposalDate")} required>
                   <Input type="date" value={disposeDate} onChange={(e) => setDisposeDate(e.target.value)} />
                 </Field>
-                <Field label="Evidence document id" required>
+                <Field label={t("finAssets.evidenceId")} required>
                   <Input
                     value={disposeEvidence}
                     onChange={(e) => setDisposeEvidence(e.target.value)}
                     placeholder="UUID"
                   />
                 </Field>
-                <Field label="Proceeds">
+                <Field label={t("finAssets.proceeds")}>
                   <Input
                     inputMode="decimal"
                     value={disposeProceeds}
@@ -547,10 +567,10 @@ export function FinanceAssetsPage() {
               </div>
               <div className="mt-3 flex gap-2">
                 <Button disabled={busy || !disposeDate || !disposeEvidence.trim()} onClick={() => void dispose()}>
-                  Dispose
+                  {t("finAssets.dispose")}
                 </Button>
                 <Button variant="ghost" onClick={() => setDisposeTarget(null)}>
-                  Cancel
+                  {t("fin.common.cancel")}
                 </Button>
               </div>
             </Card>
@@ -559,20 +579,21 @@ export function FinanceAssetsPage() {
           {reverseTarget ? (
             <Card>
               <h2 className="mb-3 text-sm font-semibold text-ink">
-                Reverse {reverseTarget.bookCode} run for {periodLabel(reverseTarget.periodId)}
+                {t("finAssets.reverseTitle", {
+                  code: reverseTarget.bookCode,
+                  period: periodLabel(reverseTarget.periodId),
+                })}
               </h2>
-              <p className="mb-3 text-sm text-ink-dim">
-                The reversal is a second run that mirrors the first. The original stays in the history.
-              </p>
-              <Field label="Reason" required>
+              <p className="mb-3 text-sm text-ink-dim">{t("finAssets.reverseNote")}</p>
+              <Field label={t("finTxDetail.reason")} required>
                 <Input value={reverseReason} onChange={(e) => setReverseReason(e.target.value)} />
               </Field>
               <div className="mt-3 flex gap-2">
                 <Button disabled={busy || reverseReason.trim() === ""} onClick={() => void reverseRun()}>
-                  Reverse run
+                  {t("finAssets.reverseRun")}
                 </Button>
                 <Button variant="ghost" onClick={() => setReverseTarget(null)}>
-                  Cancel
+                  {t("fin.common.cancel")}
                 </Button>
               </div>
             </Card>

@@ -12,6 +12,7 @@
  */
 
 import { formatMoney } from "../../shared/format";
+import type { Translate } from "../../i18n/LocaleProvider";
 
 export { formatMoney } from "../../shared/format";
 
@@ -39,14 +40,17 @@ export function isValidAmount4Input(value: string): boolean {
   return /^\d{1,16}(\.\d{1,4})?$/.test(value.trim());
 }
 
-export function accountTypeLabel(type: string): string {
+/** The stored value stays the API's (`cash`, `bank`, `petty_cash`); only the
+ *  word on screen is translated. An unknown type falls through as-is rather
+ *  than inventing a label for a value this build does not know. */
+export function accountTypeLabel(t: Translate, type: string): string {
   switch (type) {
     case "cash":
-      return "Cash";
+      return t("finAccounts.typeCash");
     case "bank":
-      return "Bank";
+      return t("finAccounts.typeBank");
     case "petty_cash":
-      return "Petty cash";
+      return t("finAccounts.typePettyCash");
     default:
       return type;
   }

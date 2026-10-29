@@ -39,6 +39,8 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDate, formatMoney } from "../../shared/format";
+import { useT, type Translate } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import { useLegalEntities, newIdempotencyKey } from "./useLegalEntities";
 
 const PERIOD_TONES: Record<AccountingPeriodRecord["status"], "neutral" | "info" | "success" | "warning" | "danger"> = {
@@ -49,25 +51,35 @@ const PERIOD_TONES: Record<AccountingPeriodRecord["status"], "neutral" | "info" 
   tombstone: "danger",
 };
 
-const PERIOD_LABELS: Record<AccountingPeriodRecord["status"], string> = {
-  draft: "Draft",
-  open: "Open",
-  closed: "Closed",
-  reopenable: "Reopenable",
-  tombstone: "Tombstone",
+/** The stored status stays the API's; only the word on screen changes. */
+const PERIOD_LABEL_KEYS: Record<AccountingPeriodRecord["status"], MessageKey> = {
+  draft: "finAcct.periodDraft",
+  open: "finAcct.periodOpen",
+  closed: "finAcct.periodClosed",
+  reopenable: "finAcct.periodReopenable",
+  tombstone: "finAcct.periodTombstone",
 };
 
-const ATTESTATIONS: { key: keyof AccountingCloseAttestation; label: string }[] = [
-  { key: "bankReconConfirmed", label: "Bank reconciliation confirmed" },
-  { key: "apArConfirmed", label: "AP and AR confirmed" },
-  { key: "depreciationConfirmed", label: "Depreciation runs completed" },
-  { key: "accrualsConfirmed", label: "Accruals and deferred items confirmed" },
+const ATTESTATIONS: { key: keyof AccountingCloseAttestation; labelKey: MessageKey }[] = [
+  { key: "bankReconConfirmed", labelKey: "finPeriods.attestBankRecon" },
+  { key: "apArConfirmed", labelKey: "finPeriods.attestApAr" },
+  { key: "depreciationConfirmed", labelKey: "finPeriods.attestDepreciation" },
+  { key: "accrualsConfirmed", labelKey: "finPeriods.attestAccruals" },
 ];
 
+const NO_ATTESTATION: AccountingCloseAttestation = {
+  bankReconConfirmed: false,
+  apArConfirmed: false,
+  depreciationConfirmed: false,
+  accrualsConfirmed: false,
+};
+
 function AttestationChecks({
+  t,
   value,
   onChange,
 }: {
+  t: Translate;
   value: AccountingCloseAttestation;
   onChange: (attest: AccountingCloseAttestation) => void;
 }) {
@@ -79,9 +91,9 @@ function AttestationChecks({
             type="checkbox"
             checked={value[item.key]}
             onChange={(e) => onChange({ ...value, [item.key]: e.target.checked })}
-            className="cursor-pointer rounded border border-border bg-surface"
+            className="cursor-pointer rounded border border-line bg-panel"
           />
-          <span className="text-sm text-ink">{item.label}</span>
+          <span className="text-sm text-ink">{t(item.labelKey)}</span>
         </label>
       ))}
     </div>
@@ -99,6 +111,7 @@ type ModalState =
   | { kind: "reverse-bank-match" };
 
 export function FinancePeriodsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { entities, legalEntityId, setLegalEntityId } = useLegalEntities(token);
@@ -125,12 +138,7 @@ export function FinancePeriodsPage() {
   const [reopenImpactEvidence, setReopenImpactEvidence] = useState("");
 
   // Close month-end/year-end modal state
-  const [closeAttestation, setCloseAttestation] = useState<AccountingCloseAttestation>({
-    bankReconConfirmed: false,
-    apArConfirmed: false,
-    depreciationConfirmed: false,
-    accrualsConfirmed: false,
-  });
+  const [closeAttestation, setCloseAttestation] = useState<AccountingCloseAttestation>(NO_ATTESTATION);
 
   // Create ledger modal state
   const [ledgerCode, setLedgerCode] = useState("");
@@ -168,11 +176,11 @@ export function FinancePeriodsPage() {
       setLedgers(ledgerList);
       setBankAccounts(accountList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load accounting records.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, legalEntityId]);
+  }, [token, legalEntityId, t]);
 
   useEffect(() => {
     void load();
@@ -186,11 +194,11 @@ export function FinancePeriodsPage() {
           const recs = await api.accountingBankReconciliations(token, { bankAccountId: selectedBankAccountId });
           setBankReconciliations(recs);
         } catch (err) {
-          setError(err instanceof ApiError ? err.message : "Could not load reconciliations.");
+          setError(err instanceof ApiError ? err.message : t("finPeriods.reconsFailed"));
         }
       })();
     }
-  }, [modal.kind, selectedBankAccountId, token]);
+  }, [modal.kind, selectedBankAccountId, token, t]);
 
   // Load matches when a reconciliation is selected
   useEffect(() => {
@@ -200,11 +208,11 @@ export function FinancePeriodsPage() {
           const matches = await api.accountingBankMatches(token, selectedReconciliationId);
           setBankMatches(matches);
         } catch (err) {
-          setError(err instanceof ApiError ? err.message : "Could not load matches.");
+          setError(err instanceof ApiError ? err.message : t("finPeriods.matchesFailed"));
         }
       })();
     }
-  }, [modal.kind, selectedReconciliationId, token]);
+  }, [modal.kind, selectedReconciliationId, token, t]);
 
   async function lockPeriod(period: AccountingPeriodRecord) {
     setBusy(true);
@@ -212,12 +220,12 @@ export function FinancePeriodsPage() {
     setNotice(null);
     try {
       await api.accountingLockPeriod(token, period.id, { reason: lockReason.trim() });
-      setNotice(`${period.periodName} locked.`);
+      setNotice(t("finPeriods.locked", { period: period.periodName }));
       setLockReason("");
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not lock the period.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.lockFailed"));
     } finally {
       setBusy(false);
     }
@@ -232,13 +240,13 @@ export function FinancePeriodsPage() {
         reason: reopenReason.trim(),
         impactEvidence: reopenImpactEvidence.trim(),
       });
-      setNotice(`Reopen request submitted for ${period.periodName}.`);
+      setNotice(t("finPeriods.reopenRequested", { period: period.periodName }));
       setReopenReason("");
       setReopenImpactEvidence("");
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not request reopen.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.reopenFailed"));
     } finally {
       setBusy(false);
     }
@@ -250,17 +258,12 @@ export function FinancePeriodsPage() {
     setNotice(null);
     try {
       const closing = await api.accountingCloseMonthEnd(token, period.id, closeAttestation);
-      setNotice(`${period.periodName} month-end closed at ${formatDate(closing.closedAt)}.`);
-      setCloseAttestation({
-        bankReconConfirmed: false,
-        apArConfirmed: false,
-        depreciationConfirmed: false,
-        accrualsConfirmed: false,
-      });
+      setNotice(t("finPeriods.monthClosed", { period: period.periodName, date: formatDate(closing.closedAt) }));
+      setCloseAttestation(NO_ATTESTATION);
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not close the month.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.closeMonthFailed"));
     } finally {
       setBusy(false);
     }
@@ -272,17 +275,12 @@ export function FinancePeriodsPage() {
     setNotice(null);
     try {
       const closing = await api.accountingCloseYearEnd(token, period.id, closeAttestation);
-      setNotice(`${period.periodName} year-end closed at ${formatDate(closing.closedAt)}.`);
-      setCloseAttestation({
-        bankReconConfirmed: false,
-        apArConfirmed: false,
-        depreciationConfirmed: false,
-        accrualsConfirmed: false,
-      });
+      setNotice(t("finPeriods.yearClosed", { period: period.periodName, date: formatDate(closing.closedAt) }));
+      setCloseAttestation(NO_ATTESTATION);
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not close the year.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.closeYearFailed"));
     } finally {
       setBusy(false);
     }
@@ -299,14 +297,14 @@ export function FinancePeriodsPage() {
         ledgerName: ledgerName.trim(),
         currency: ledgerCurrency.toUpperCase(),
       });
-      setNotice(`Ledger ${ledger.ledgerCode} created.`);
+      setNotice(t("finPeriods.ledgerCreated", { code: ledger.ledgerCode }));
       setLedgerCode("");
       setLedgerName("");
       setLedgerCurrency("IDR");
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the ledger.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.ledgerFailed"));
     } finally {
       setBusy(false);
     }
@@ -318,12 +316,12 @@ export function FinancePeriodsPage() {
     setNotice(null);
     try {
       const chart = await api.accountingApproveChart(token, selectedChartId);
-      setNotice(`Chart ${chart.coaVersionCode} approved.`);
+      setNotice(t("finPeriods.chartApproved", { code: chart.coaVersionCode }));
       setSelectedChartId("");
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not approve the chart.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.approveFailed"));
     } finally {
       setBusy(false);
     }
@@ -338,7 +336,7 @@ export function FinancePeriodsPage() {
         idempotencyKey: newIdempotencyKey(),
         note: matchNote.trim() || null,
       });
-      setNotice(`Bank match ${match.id} reversed.`);
+      setNotice(t("finPeriods.matchReversed", { id: match.id }));
       setMatchNote("");
       setSelectedBankAccountId("");
       setSelectedReconciliationId("");
@@ -348,7 +346,7 @@ export function FinancePeriodsPage() {
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reverse the match.");
+      setError(err instanceof ApiError ? err.message : t("finPeriods.reverseFailed"));
     } finally {
       setBusy(false);
     }
@@ -356,21 +354,21 @@ export function FinancePeriodsPage() {
 
   const periodColumns: Column<AccountingPeriodRecord>[] = [
     {
-      header: "Period",
+      header: t("finAcct.period"),
       mobileRole: "title",
       cell: (row) => <span className="font-medium text-ink">{row.periodName}</span>,
     },
-    { header: "Year", cell: (row) => row.fiscalYearCode },
-    { header: "Type", cell: (row) => <Badge>{row.periodType}</Badge> },
-    { header: "From", className: "tabular-nums", cell: (row) => formatDate(row.dateFrom) },
-    { header: "To", className: "tabular-nums", cell: (row) => formatDate(row.dateTo) },
+    { header: t("finAcct.year"), cell: (row) => row.fiscalYearCode },
+    { header: t("fin.common.type"), cell: (row) => <Badge>{row.periodType}</Badge> },
+    { header: t("fin.common.from"), className: "tabular-nums", cell: (row) => formatDate(row.dateFrom) },
+    { header: t("fin.common.to"), className: "tabular-nums", cell: (row) => formatDate(row.dateTo) },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={PERIOD_TONES[row.status]}>{PERIOD_LABELS[row.status]}</StatusPill>,
+      cell: (row) => <StatusPill tone={PERIOD_TONES[row.status]}>{t(PERIOD_LABEL_KEYS[row.status])}</StatusPill>,
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       cell: (row) => (
         <div className="flex flex-wrap gap-1">
           {row.status === "open" ? (
@@ -382,7 +380,7 @@ export function FinancePeriodsPage() {
                 setLockReason("");
               }}
             >
-              Lock
+              {t("finPeriods.lock")}
             </Button>
           ) : null}
           {row.status === "reopenable" ? (
@@ -395,7 +393,7 @@ export function FinancePeriodsPage() {
                 setReopenImpactEvidence("");
               }}
             >
-              Request reopen
+              {t("finPeriods.requestReopen")}
             </Button>
           ) : null}
           {row.status === "open" ? (
@@ -405,30 +403,20 @@ export function FinancePeriodsPage() {
                 disabled={busy}
                 onClick={() => {
                   setModal({ kind: "close-month", period: row });
-                  setCloseAttestation({
-                    bankReconConfirmed: false,
-                    apArConfirmed: false,
-                    depreciationConfirmed: false,
-                    accrualsConfirmed: false,
-                  });
+                  setCloseAttestation(NO_ATTESTATION);
                 }}
               >
-                Close month-end
+                {t("finPeriods.closeMonth")}
               </Button>
               {row.periodType === "annual" ? (
                 <Button
                   disabled={busy}
                   onClick={() => {
                     setModal({ kind: "close-year", period: row });
-                    setCloseAttestation({
-                      bankReconConfirmed: false,
-                      apArConfirmed: false,
-                      depreciationConfirmed: false,
-                      accrualsConfirmed: false,
-                    });
+                    setCloseAttestation(NO_ATTESTATION);
                   }}
                 >
-                  Close year-end
+                  {t("finPeriods.closeYear")}
                 </Button>
               ) : null}
             </>
@@ -439,17 +427,24 @@ export function FinancePeriodsPage() {
   ];
 
   const chartColumns: Column<AccountingChartRecord>[] = [
-    { header: "Version", mobileRole: "title", cell: (row) => <span className="font-mono text-xs text-ink">{row.coaVersionCode}</span> },
-    { header: "Date", className: "tabular-nums", cell: (row) => formatDate(row.coaVersionDate) },
-    { header: "Template", cell: (row) => (row.templateType ? <Badge>{row.templateType}</Badge> : "Custom") },
     {
-      header: "Status",
+      header: t("finAcct.version"),
+      mobileRole: "title",
+      cell: (row) => <span className="font-mono text-xs text-ink">{row.coaVersionCode}</span>,
+    },
+    { header: t("fin.common.date"), className: "tabular-nums", cell: (row) => formatDate(row.coaVersionDate) },
+    {
+      header: t("finAcct.template"),
+      cell: (row) => (row.templateType ? <Badge>{row.templateType}</Badge> : t("finAcct.custom")),
+    },
+    {
+      header: t("fin.common.status"),
       mobileRole: "status",
       cell: (row) =>
         row.coaStatus === "approved" ? (
-          <StatusPill tone="success">Approved</StatusPill>
+          <StatusPill tone="success">{t("finAcct.approved")}</StatusPill>
         ) : (
-          <StatusPill tone="warning">Draft</StatusPill>
+          <StatusPill tone="warning">{t("finAcct.periodDraft")}</StatusPill>
         ),
     },
   ];
@@ -481,18 +476,15 @@ export function FinancePeriodsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Periods and Closing"
-        subtitle="Lock periods, close month-ends and year-ends. Also create ledgers, approve charts, and reverse bank matches."
-      />
+      <PageHeader title={t("finPeriods.title")} subtitle={t("finPeriods.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <Field label="Legal entity" required>
+        <Field label={t("fin.common.legalEntity")} required>
           <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-            <option value="">Choose a legal entity</option>
+            <option value="">{t("fin.common.chooseLegalEntity")}</option>
             {entities.map((entity) => (
               <option key={entity.id} value={entity.id}>
                 {entity.name}
@@ -503,31 +495,23 @@ export function FinancePeriodsPage() {
       </Card>
 
       {!legalEntityId ? (
-        <EmptyState
-          title="Choose a legal entity"
-          description="Periods, ledgers, and charts belong to one legal entity."
-        />
+        <EmptyState title={t("fin.common.chooseLegalEntity")} description={t("finPeriods.chooseEntityDesc")} />
       ) : loading ? (
         <Spinner />
       ) : (
         <>
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Periods</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAcct.periods")}</h2>
             <DataTable
               columns={periodColumns}
               rows={periods}
               keyOf={(row) => row.id}
-              empty={
-                <EmptyState
-                  title="No periods yet"
-                  description="A legal entity needs at least one accounting period."
-                />
-              }
+              empty={<EmptyState title={t("finAcct.noPeriodsTitle")} description={t("finPeriods.noPeriodsDesc")} />}
             />
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Ledgers</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAcct.ledgers")}</h2>
             <div className="mb-3 flex gap-2">
               <Button
                 variant="secondary"
@@ -539,27 +523,28 @@ export function FinancePeriodsPage() {
                   setLedgerCurrency("IDR");
                 }}
               >
-                Create ledger
+                {t("finPeriods.createLedger")}
               </Button>
             </div>
             {ledgers.length === 0 ? (
-              <EmptyState
-                title="No ledgers yet"
-                description="Create one to back a chart of accounts."
-              />
+              <EmptyState title={t("finPeriods.noLedgersTitle")} description={t("finPeriods.noLedgersDesc")} />
             ) : (
               <Card>
                 <div className="space-y-2">
                   {ledgers.map((ledger) => (
-                    <div key={ledger.id} className="flex items-center justify-between border-b border-border pb-2 last:border-b-0">
+                    <div key={ledger.id} className="flex items-center justify-between border-b border-line pb-2 last:border-b-0">
                       <div>
                         <p className="font-medium text-ink">{ledger.ledgerName}</p>
                         <p className="text-xs text-ink-faint">
-                          {ledger.ledgerCode} in {ledger.currency}
-                          {ledger.isPrimary && " (Primary)"}
+                          {ledger.ledgerCode} {t("finPeriods.inCurrency", { currency: ledger.currency })}
+                          {ledger.isPrimary && ` (${t("finAcct.primary")})`}
                         </p>
                       </div>
-                      {ledger.isActive ? <StatusPill tone="success">Active</StatusPill> : <StatusPill>Inactive</StatusPill>}
+                      {ledger.isActive ? (
+                        <StatusPill tone="success">{t("fin.state.active")}</StatusPill>
+                      ) : (
+                        <StatusPill>{t("fin.state.inactive")}</StatusPill>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -568,7 +553,7 @@ export function FinancePeriodsPage() {
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Charts of Accounts</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finAcct.chartVersions")}</h2>
             <div className="mb-3 flex gap-2">
               <Button
                 variant="secondary"
@@ -578,26 +563,23 @@ export function FinancePeriodsPage() {
                   setSelectedChartId("");
                 }}
               >
-                Approve chart
+                {t("finPeriods.approveChart")}
               </Button>
             </div>
             {charts.length === 0 ? (
-              <EmptyState
-                title="No charts yet"
-                description="A chart of accounts defines the account structure for this entity."
-              />
+              <EmptyState title={t("finAcct.noChartTitle")} description={t("finPeriods.noChartsDesc")} />
             ) : (
               <DataTable
                 columns={chartColumns}
                 rows={charts}
                 keyOf={(row) => row.id}
-                empty={<EmptyState title="No charts" description="None found." />}
+                empty={<EmptyState title={t("finAcct.noChartTitle")} description={t("finAcct.noChartDesc")} />}
               />
             )}
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-ink">Bank Reconciliation</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("finPeriods.bankRecon")}</h2>
             <div className="mb-3 flex gap-2">
               <Button
                 variant="secondary"
@@ -612,22 +594,23 @@ export function FinancePeriodsPage() {
                   setBankMatches([]);
                 }}
               >
-                Reverse bank match
+                {t("finPeriods.reverseMatch")}
               </Button>
             </div>
             {bankAccounts.length === 0 ? (
-              <EmptyState
-                title="No bank accounts"
-                description="Set up bank accounts to begin reconciliation."
-              />
+              <EmptyState title={t("finPeriods.noBankAccountsTitle")} description={t("finPeriods.noBankAccountsDesc")} />
             ) : (
               <Card>
                 <div className="space-y-2">
                   {bankAccounts.map((account) => (
-                    <div key={account.id} className="border-b border-border pb-2 last:border-b-0">
+                    <div key={account.id} className="border-b border-line pb-2 last:border-b-0">
                       <p className="font-medium text-ink">{account.name}</p>
                       <p className="text-xs text-ink-faint">
-                        {account.bankName} (Account {account.accountNumberMasked}) in {account.currency}
+                        {t("finPeriods.bankAccountLine", {
+                          bank: account.bankName ?? t("common.notAvailable"),
+                          number: account.accountNumberMasked,
+                          currency: account.currency,
+                        })}
                       </p>
                     </div>
                   ))}
@@ -640,21 +623,23 @@ export function FinancePeriodsPage() {
 
       {modal.kind === "lock" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Lock {modal.period.periodName}</h2>
-          <p className="mb-3 text-sm text-ink-dim">A locked period cannot be written to. It can only be reopened by request.</p>
-          <Field label="Reason" required>
+          <h2 className="mb-3 text-sm font-semibold text-ink">
+            {t("finPeriods.lockTitle", { period: modal.period.periodName })}
+          </h2>
+          <p className="mb-3 text-sm text-ink-dim">{t("finPeriods.lockNote")}</p>
+          <Field label={t("finTxDetail.reason")} required>
             <Input
               value={lockReason}
               onChange={(e) => setLockReason(e.target.value)}
-              placeholder="Audited and verified"
+              placeholder={t("finPeriods.lockReasonPlaceholder")}
             />
           </Field>
           <div className="mt-3 flex gap-2">
-            <Button disabled={busy || !canLock} onClick={() => lockPeriod(modal.period)}>
-              Lock period
+            <Button disabled={busy || !canLock} onClick={() => void lockPeriod(modal.period)}>
+              {t("finPeriods.lock")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("fin.common.cancel")}
             </Button>
           </div>
         </Card>
@@ -662,29 +647,31 @@ export function FinancePeriodsPage() {
 
       {modal.kind === "reopen" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Request reopen of {modal.period.periodName}</h2>
-          <p className="mb-3 text-sm text-ink-dim">A reopen request goes to an approver. The period stays locked until approval.</p>
-          <Field label="Reason" required>
+          <h2 className="mb-3 text-sm font-semibold text-ink">
+            {t("finPeriods.reopenTitle", { period: modal.period.periodName })}
+          </h2>
+          <p className="mb-3 text-sm text-ink-dim">{t("finPeriods.reopenNote")}</p>
+          <Field label={t("finTxDetail.reason")} required>
             <Input
               value={reopenReason}
               onChange={(e) => setReopenReason(e.target.value)}
-              placeholder="Error found in audit"
+              placeholder={t("finPeriods.reopenReasonPlaceholder")}
             />
           </Field>
-          <Field label="Impact evidence" required>
+          <Field label={t("finPeriods.impactEvidence")} required>
             <Textarea
               rows={3}
               value={reopenImpactEvidence}
               onChange={(e) => setReopenImpactEvidence(e.target.value)}
-              placeholder="What accounts or balances will be affected"
+              placeholder={t("finPeriods.impactPlaceholder")}
             />
           </Field>
           <div className="mt-3 flex gap-2">
-            <Button disabled={busy || !canReopen} onClick={() => requestReopen(modal.period)}>
-              Submit request
+            <Button disabled={busy || !canReopen} onClick={() => void requestReopen(modal.period)}>
+              {t("finPeriods.submitRequest")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("fin.common.cancel")}
             </Button>
           </div>
         </Card>
@@ -692,15 +679,17 @@ export function FinancePeriodsPage() {
 
       {modal.kind === "close-month" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Close month-end for {modal.period.periodName}</h2>
-          <p className="mb-3 text-sm text-ink-dim">Confirm all reconciliations and accruals are complete and reviewed.</p>
-          <AttestationChecks value={closeAttestation} onChange={setCloseAttestation} />
+          <h2 className="mb-3 text-sm font-semibold text-ink">
+            {t("finPeriods.closeMonthTitle", { period: modal.period.periodName })}
+          </h2>
+          <p className="mb-3 text-sm text-ink-dim">{t("finPeriods.closeMonthNote")}</p>
+          <AttestationChecks t={t} value={closeAttestation} onChange={setCloseAttestation} />
           <div className="mt-3 flex gap-2">
-            <Button disabled={busy || !canCloseMonth} onClick={() => closeMonthEnd(modal.period)}>
-              Confirm close
+            <Button disabled={busy || !canCloseMonth} onClick={() => void closeMonthEnd(modal.period)}>
+              {t("finPeriods.confirmClose")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("fin.common.cancel")}
             </Button>
           </div>
         </Card>
@@ -708,15 +697,17 @@ export function FinancePeriodsPage() {
 
       {modal.kind === "close-year" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Close year-end for {modal.period.periodName}</h2>
-          <p className="mb-3 text-sm text-ink-dim">Confirm all reconciliations, accruals, and month-ends are complete for the year.</p>
-          <AttestationChecks value={closeAttestation} onChange={setCloseAttestation} />
+          <h2 className="mb-3 text-sm font-semibold text-ink">
+            {t("finPeriods.closeYearTitle", { period: modal.period.periodName })}
+          </h2>
+          <p className="mb-3 text-sm text-ink-dim">{t("finPeriods.closeYearNote")}</p>
+          <AttestationChecks t={t} value={closeAttestation} onChange={setCloseAttestation} />
           <div className="mt-3 flex gap-2">
-            <Button disabled={busy || !canCloseYear} onClick={() => closeYearEnd(modal.period)}>
-              Confirm close
+            <Button disabled={busy || !canCloseYear} onClick={() => void closeYearEnd(modal.period)}>
+              {t("finPeriods.confirmClose")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("fin.common.cancel")}
             </Button>
           </div>
         </Card>
@@ -724,23 +715,19 @@ export function FinancePeriodsPage() {
 
       {modal.kind === "create-ledger" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Create ledger</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("finPeriods.createLedger")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Ledger code" required>
-              <Input
-                value={ledgerCode}
-                onChange={(e) => setLedgerCode(e.target.value)}
-                placeholder="GL-PRIMARY"
-              />
+            <Field label={t("finPeriods.ledgerCode")} required>
+              <Input value={ledgerCode} onChange={(e) => setLedgerCode(e.target.value)} placeholder="GL-PRIMARY" />
             </Field>
-            <Field label="Ledger name" required>
+            <Field label={t("finPeriods.ledgerName")} required>
               <Input
                 value={ledgerName}
                 onChange={(e) => setLedgerName(e.target.value)}
-                placeholder="Primary General Ledger"
+                placeholder={t("finPeriods.ledgerNamePlaceholder")}
               />
             </Field>
-            <Field label="Currency" required>
+            <Field label={t("fin.common.currency")} required>
               <Input
                 value={ledgerCurrency}
                 onChange={(e) => setLedgerCurrency(e.target.value.toUpperCase())}
@@ -749,11 +736,11 @@ export function FinancePeriodsPage() {
             </Field>
           </div>
           <div className="mt-3 flex gap-2">
-            <Button disabled={busy || !canCreateLedger} onClick={() => createLedger()}>
-              Create ledger
+            <Button disabled={busy || !canCreateLedger} onClick={() => void createLedger()}>
+              {t("finPeriods.createLedger")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("fin.common.cancel")}
             </Button>
           </div>
         </Card>
@@ -761,23 +748,26 @@ export function FinancePeriodsPage() {
 
       {modal.kind === "approve-chart" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Approve chart of accounts</h2>
-          <Field label="Chart" required>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("finPeriods.approveChartTitle")}</h2>
+          <Field label={t("finPeriods.chart")} required>
             <Select value={selectedChartId} onChange={(e) => setSelectedChartId(e.target.value)}>
-              <option value="">Select a draft chart</option>
+              <option value="">{t("finPeriods.selectDraftChart")}</option>
               {draftCharts.map((chart) => (
                 <option key={chart.id} value={chart.id}>
-                  {chart.coaVersionCode} (created {formatDate(chart.coaVersionDate)})
+                  {t("finPeriods.chartOption", {
+                    code: chart.coaVersionCode,
+                    date: formatDate(chart.coaVersionDate),
+                  })}
                 </option>
               ))}
             </Select>
           </Field>
           <div className="mt-3 flex gap-2">
-            <Button disabled={busy || !canApproveChart} onClick={() => approveChart()}>
-              Approve chart
+            <Button disabled={busy || !canApproveChart} onClick={() => void approveChart()}>
+              {t("finPeriods.approveChart")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("fin.common.cancel")}
             </Button>
           </div>
         </Card>
@@ -785,9 +775,9 @@ export function FinancePeriodsPage() {
 
       {modal.kind === "reverse-bank-match" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Reverse bank match</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("finPeriods.reverseMatch")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Bank account" required>
+            <Field label={t("finPeriods.bankAccount")} required>
               <Select
                 value={selectedBankAccountId}
                 onChange={(e) => {
@@ -797,7 +787,7 @@ export function FinancePeriodsPage() {
                   setBankMatches([]);
                 }}
               >
-                <option value="">Select a bank account</option>
+                <option value="">{t("finPeriods.selectBankAccount")}</option>
                 {bankAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
@@ -805,7 +795,7 @@ export function FinancePeriodsPage() {
                 ))}
               </Select>
             </Field>
-            <Field label="Reconciliation" required>
+            <Field label={t("finPeriods.reconciliation")} required>
               <Select
                 value={selectedReconciliationId}
                 onChange={(e) => {
@@ -814,20 +804,20 @@ export function FinancePeriodsPage() {
                   setBankMatches([]);
                 }}
               >
-                <option value="">Select a reconciliation</option>
+                <option value="">{t("finPeriods.selectReconciliation")}</option>
                 {bankReconciliations.map((recon) => (
                   <option key={recon.id} value={recon.id}>
-                    {recon.status} (closed at {recon.closedAt ? formatDate(recon.closedAt) : "open"})
+                    {t("finPeriods.reconOption", {
+                      status: recon.status,
+                      date: recon.closedAt ? formatDate(recon.closedAt) : t("finPeriods.open"),
+                    })}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="Match" required>
-              <Select
-                value={selectedMatchId}
-                onChange={(e) => setSelectedMatchId(e.target.value)}
-              >
-                <option value="">Select a match</option>
+            <Field label={t("finPeriods.match")} required>
+              <Select value={selectedMatchId} onChange={(e) => setSelectedMatchId(e.target.value)}>
+                <option value="">{t("finPeriods.selectMatch")}</option>
                 {bankMatches.map((match) => (
                   <option key={match.id} value={match.id}>
                     {formatMoney(match.amount)} ({match.matchKind})
@@ -836,20 +826,20 @@ export function FinancePeriodsPage() {
               </Select>
             </Field>
           </div>
-          <Field label="Note (optional)">
+          <Field label={t("finPeriods.noteOptional")}>
             <Textarea
               rows={2}
               value={matchNote}
               onChange={(e) => setMatchNote(e.target.value)}
-              placeholder="Reason for reversal"
+              placeholder={t("finPeriods.reverseReasonPlaceholder")}
             />
           </Field>
           <div className="mt-3 flex gap-2">
-            <Button disabled={busy || !canReverseMatch} onClick={() => reverseBankMatch()}>
-              Reverse match
+            <Button disabled={busy || !canReverseMatch} onClick={() => void reverseBankMatch()}>
+              {t("finPeriods.reverseMatch")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("fin.common.cancel")}
             </Button>
           </div>
         </Card>

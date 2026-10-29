@@ -23,11 +23,13 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { accountTypeLabel, formatMoney } from "./money";
+import { useT } from "../../i18n/LocaleProvider";
 
 type OrganizationUnitOption = { id: string; name: string };
 type LegalEntityOption = { id: string; name: string };
 
 export function FinanceAccountsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -52,11 +54,11 @@ export function FinanceAccountsPage() {
     try {
       setAccounts(await api.financeAccounts(token));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load accounts.");
+      setError(err instanceof ApiError ? err.message : t("finAccounts.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -82,57 +84,67 @@ export function FinanceAccountsPage() {
       setNotice(successMessage);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("fin.common.actionFailed"));
     } finally {
       setBusy(false);
     }
   }
 
   const columns: Column<FinanceAccount>[] = [
-    { header: "Code", cell: (row) => <span className="font-medium">{row.code}</span> },
-    { header: "Name", cell: (row) => row.name },
-    { header: "Type", cell: (row) => accountTypeLabel(row.accountType) },
-    { header: "Currency", cell: (row) => row.currency },
+    { header: t("fin.common.code"), cell: (row) => <span className="font-medium">{row.code}</span> },
+    { header: t("fin.common.name"), cell: (row) => row.name },
+    { header: t("fin.common.type"), cell: (row) => accountTypeLabel(t, row.accountType) },
+    { header: t("fin.common.currency"), cell: (row) => row.currency },
     {
-      header: "Balance",
+      header: t("fin.common.balance"),
       className: "text-right tabular-nums",
       cell: (row) => <span className="font-medium">{formatMoney(row.balance)}</span>,
     },
     {
-      header: "State",
+      header: t("fin.common.state"),
       cell: (row) => (
-        <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>
+        <StatusPill tone={row.isActive ? "success" : "neutral"}>
+          {row.isActive ? t("fin.state.active") : t("fin.state.inactive")}
+        </StatusPill>
       ),
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Cash & Bank" subtitle="Where the money actually sits." />
+      <PageHeader title={t("finAccounts.title")} subtitle={t("finAccounts.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Add an account</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("finAccounts.addTitle")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Code" required>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. CASH-MAIN" />
+          <Field label={t("fin.common.code")} required>
+            <Input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder={t("finAccounts.codePlaceholder")}
+            />
           </Field>
-          <Field label="Name" required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Main cash" />
+          <Field label={t("fin.common.name")} required>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("finAccounts.namePlaceholder")}
+            />
           </Field>
-          <Field label="Type" required>
+          <Field label={t("fin.common.type")} required>
             <Select
               value={accountType}
               onChange={(e) => setAccountType(e.target.value as "cash" | "bank" | "petty_cash")}
             >
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
-              <option value="petty_cash">Petty cash</option>
+              <option value="cash">{t("finAccounts.typeCash")}</option>
+              <option value="bank">{t("finAccounts.typeBank")}</option>
+              <option value="petty_cash">{t("finAccounts.typePettyCash")}</option>
             </Select>
           </Field>
-          <Field label="Currency" required hint="Three-letter code">
+          <Field label={t("fin.common.currency")} required hint={t("finAccounts.currencyHint")}>
             <Input
               value={currency}
               onChange={(e) => setCurrency(e.target.value.toUpperCase())}
@@ -140,9 +152,9 @@ export function FinanceAccountsPage() {
               placeholder="IDR"
             />
           </Field>
-          <Field label="Legal entity">
+          <Field label={t("fin.common.legalEntity")}>
             <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
-              <option value="">None</option>
+              <option value="">{t("fin.common.none")}</option>
               {legalEntities.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name}
@@ -150,9 +162,9 @@ export function FinanceAccountsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Responsible unit">
+          <Field label={t("finAccounts.responsibleUnit")}>
             <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-              <option value="">Tenant-wide</option>
+              <option value="">{t("finAccounts.tenantWide")}</option>
               {units.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -174,20 +186,17 @@ export function FinanceAccountsPage() {
                       legalEntityId: legalEntityId || null,
                       organizationUnitId: unitId || null,
                     }),
-                  `Account ${code} created.`,
+                  t("finAccounts.created", { code }),
                 );
                 setCode("");
                 setName("");
               }}
             >
-              Create
+              {t("fin.common.create")}
             </Button>
           </div>
         </div>
-        <p className="mt-3 text-xs text-slate-500">
-          A new account starts at zero. Record an opening position as an ordinary income transaction — balances are
-          never typed in directly.
-        </p>
+        <p className="mt-3 text-xs text-ink-faint">{t("finAccounts.note")}</p>
       </Card>
 
       {loading ? (
@@ -198,10 +207,7 @@ export function FinanceAccountsPage() {
           rows={accounts}
           keyOf={(row) => row.id}
           empty={
-            <EmptyState
-              title="No accounts yet"
-              description="Add the cash box or bank account your team actually uses."
-            />
+            <EmptyState title={t("finAccounts.emptyTitle")} description={t("finAccounts.emptyDesc")} />
           }
         />
       )}

@@ -28,9 +28,11 @@ import {
   StatusPill,
 } from "../../shell/components/ui";
 import { formatDate, formatDateShort, statusTone } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
 import { accountTypeLabel, formatSigned } from "./money";
 
 export function FinanceTransactionDetailPage() {
+  const t = useT();
   const { transactionId } = useParams<{ transactionId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -65,11 +67,11 @@ export function FinanceTransactionDetailPage() {
         setDocumentsBlocked(true);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load this transaction.");
+      setError(err instanceof ApiError ? err.message : t("finTxDetail.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, transactionId]);
+  }, [token, transactionId, t]);
 
   useEffect(() => {
     void load();
@@ -91,14 +93,14 @@ export function FinanceTransactionDetailPage() {
       setNotice(successMessage);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("fin.common.actionFailed"));
     } finally {
       setBusy(false);
     }
   }
 
   if (loading) return <Spinner />;
-  if (!detail) return <Alert tone="error">{error ?? "Transaction not found."}</Alert>;
+  if (!detail) return <Alert tone="error">{error ?? t("finTxDetail.notFound")}</Alert>;
 
   const { transaction, account, status, availableActions, isApplied } = detail;
   const categoryLabel = categories.find((c) => c.code === transaction.categoryCode)?.label ?? transaction.categoryCode;
@@ -110,76 +112,72 @@ export function FinanceTransactionDetailPage() {
         subtitle={categoryLabel}
         actions={
           <StatusPill tone={isApplied ? "success" : "warning"}>
-            {isApplied ? "Took effect" : "Awaiting approval"}
+            {isApplied ? t("fin.state.tookEffect") : t("fin.state.awaitingApproval")}
           </StatusPill>
         }
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      {transaction.reversesTransactionId ? (
-        <Alert tone="info">
-          This is a correction of an earlier transaction. The original stays in the record exactly as it was.
-        </Alert>
-      ) : null}
+      {transaction.reversesTransactionId ? <Alert tone="info">{t("finTxDetail.isCorrection")}</Alert> : null}
       {transaction.reversedByTransactionId ? (
         <Alert tone="info">
-          This transaction has been corrected by a later compensating entry.{" "}
+          {t("finTxDetail.wasCorrected")}{" "}
           <button
             type="button"
             className="underline"
             onClick={() => navigate(`/finance/transactions/${transaction.reversedByTransactionId}`)}
           >
-            Open the correction
+            {t("finTxDetail.openCorrection")}
           </button>
         </Alert>
       ) : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Details</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("finTxDetail.details")}</h2>
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <dt className="text-slate-500">Amount</dt>
-            <dd className="text-lg font-semibold tabular-nums text-slate-900">
+            <dt className="text-ink-dim">{t("fin.common.amount")}</dt>
+            <dd className="text-lg font-semibold tabular-nums text-ink">
               {formatSigned(transaction.amount, transaction.direction, transaction.currency)}
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500">Date</dt>
-            <dd className="text-slate-900">{formatDateShort(transaction.transactionDate)}</dd>
+            <dt className="text-ink-dim">{t("fin.common.date")}</dt>
+            <dd className="text-ink">{formatDateShort(transaction.transactionDate)}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Account</dt>
-            <dd className="text-slate-900">
-              {account ? `${account.name} · ${accountTypeLabel(account.accountType)}` : "—"}
+            <dt className="text-ink-dim">{t("fin.common.account")}</dt>
+            <dd className="text-ink">
+              {account ? `${account.name} · ${accountTypeLabel(t, account.accountType)}` : t("fin.common.notAvailable")}
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500">Category</dt>
-            <dd className="text-slate-900">{categoryLabel}</dd>
+            <dt className="text-ink-dim">{t("fin.common.category")}</dt>
+            <dd className="text-ink">{categoryLabel}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Reference</dt>
-            <dd className="text-slate-900">{transaction.reference ?? "—"}</dd>
+            <dt className="text-ink-dim">{t("fin.common.reference")}</dt>
+            <dd className="text-ink">{transaction.reference ?? t("fin.common.notAvailable")}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Took effect</dt>
-            <dd className="text-slate-900">{transaction.appliedAt ? formatDate(transaction.appliedAt) : "Not yet"}</dd>
+            <dt className="text-ink-dim">{t("finTxDetail.tookEffectAt")}</dt>
+            <dd className="text-ink">
+              {transaction.appliedAt ? formatDate(transaction.appliedAt) : t("finTxDetail.notYet")}
+            </dd>
           </div>
         </dl>
-        {transaction.description ? (
-          <p className="mt-3 text-sm text-slate-700">{transaction.description}</p>
-        ) : null}
+        {transaction.description ? <p className="mt-3 text-sm text-ink-dim">{transaction.description}</p> : null}
         {account ? (
-          <p className="mt-3 text-sm text-slate-500">
-            Account balance now: <span className="font-medium tabular-nums text-slate-800">{account.currency} {account.balance}</span>
+          <p className="mt-3 text-sm text-ink-dim">
+            {t("finTxDetail.balanceNow", { amount: `${account.currency} ${account.balance}` })}
           </p>
         ) : null}
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">
-          Approval{" "}
+        <h2 className="mb-3 text-sm font-semibold text-ink">
+          {t("finTxDetail.approval")}{" "}
           {status ? (
             <StatusPill tone={statusTone(status.instanceStatus)}>
               {status.stepName ?? status.instanceStatus}
@@ -187,10 +185,7 @@ export function FinanceTransactionDetailPage() {
           ) : null}
         </h2>
         {isApplied ? (
-          <p className="text-sm text-slate-600">
-            This transaction has taken effect. Its amount, date, account, and category can no longer change — correct
-            it with a compensating entry instead.
-          </p>
+          <p className="text-sm text-ink-dim">{t("finTxDetail.appliedNote")}</p>
         ) : availableActions.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {availableActions.map((action) => (
@@ -201,7 +196,7 @@ export function FinanceTransactionDetailPage() {
                 onClick={() =>
                   run(
                     () => api.actOnFinanceTransaction(token, transaction.id, action.actionCode),
-                    `${action.name} recorded.`,
+                    t("finTxDetail.actionRecorded", { action: action.name }),
                   )
                 }
               >
@@ -210,22 +205,20 @@ export function FinanceTransactionDetailPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">No decision is waiting for you on this transaction.</p>
+          <p className="text-sm text-ink-dim">{t("finTxDetail.noDecision")}</p>
         )}
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Evidence</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("finTxDetail.evidence")}</h2>
         {documentsBlocked ? (
-          <Alert tone="info">
-            Financial evidence needs a separate permission. Ask an administrator if you need access.
-          </Alert>
+          <Alert tone="info">{t("finTxDetail.evidenceBlocked")}</Alert>
         ) : (
           <>
             {documents.length === 0 ? (
-              <p className="mb-3 text-sm text-slate-500">No evidence attached.</p>
+              <p className="mb-3 text-sm text-ink-dim">{t("finTxDetail.noEvidence")}</p>
             ) : (
-              <ul className="mb-3 space-y-1 text-sm text-slate-800">
+              <ul className="mb-3 space-y-1 text-sm text-ink">
                 {documents.map((doc) => (
                   <li key={doc.id}>{doc.fileName}</li>
                 ))}
@@ -234,15 +227,15 @@ export function FinanceTransactionDetailPage() {
             <input
               ref={fileInputRef}
               type="file"
-              aria-label="Attach evidence"
-              className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
+              aria-label={t("finTxDetail.attachEvidence")}
+              className="block w-full text-sm text-ink-dim file:mr-3 file:rounded-md file:border-0 file:bg-panel-2 file:px-3 file:py-2 file:text-sm"
               disabled={busy}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
                   void run(
                     () => api.uploadDocument(token, "finance_transaction", transaction.id, file),
-                    "Evidence attached.",
+                    t("finTxDetail.evidenceAttached"),
                   );
                 }
                 if (fileInputRef.current) fileInputRef.current.value = "";
@@ -254,31 +247,35 @@ export function FinanceTransactionDetailPage() {
 
       {isApplied && !transaction.reversedByTransactionId ? (
         <Card>
-          <h2 className="mb-1 text-sm font-semibold text-slate-800">Correct this transaction</h2>
-          <p className="mb-3 text-sm text-slate-600">
-            Nothing is edited or deleted. A compensating entry of{" "}
-            <Badge>{transaction.direction === "income" ? "money out" : "money in"}</Badge> for the same amount is
-            created and goes through the same approval before the balance moves back.
+          <h2 className="mb-1 text-sm font-semibold text-ink">{t("finTxDetail.correctTitle")}</h2>
+          <p className="mb-3 text-sm text-ink-dim">
+            {t("finTxDetail.correctNote", {
+              direction: (
+                <Badge>
+                  {transaction.direction === "income" ? t("fin.money.out") : t("fin.money.in")}
+                </Badge>
+              ),
+            })}
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="sm:col-span-2">
-              <Field label="Reason">
+              <Field label={t("finTxDetail.reason")}>
                 <Input
                   value={reversalReason}
                   onChange={(e) => setReversalReason(e.target.value)}
-                  placeholder="e.g. Duplicate entry"
+                  placeholder={t("finTxDetail.reasonPlaceholder")}
                 />
               </Field>
             </div>
             <div className="flex items-end">
-              <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
+              <label className="flex items-center gap-2 pb-2 text-sm text-ink-dim">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300"
+                  className="h-4 w-4 rounded border-line"
                   checked={confirmReversal}
                   onChange={(e) => setConfirmReversal(e.target.checked)}
                 />
-                I confirm this correction
+                {t("finTxDetail.confirmCorrection")}
               </label>
             </div>
           </div>
@@ -295,14 +292,14 @@ export function FinanceTransactionDetailPage() {
                   });
                   navigate(`/finance/transactions/${reversal.transaction.id}`);
                 } catch (err) {
-                  setError(err instanceof ApiError ? err.message : "Could not create the correction.");
+                  setError(err instanceof ApiError ? err.message : t("finTxDetail.correctionFailed"));
                 } finally {
                   setBusy(false);
                   setConfirmReversal(false);
                 }
               }}
             >
-              Create compensating entry
+              {t("finTxDetail.createCorrection")}
             </Button>
           </div>
         </Card>
