@@ -1,4 +1,5 @@
 /** Phase 8 — Project Delivery Core (PRJ-CORE-001…010). */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -16,6 +17,7 @@ import {
 } from "../../shell/components/ui";
 
 export function ProjectDeliveryPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -29,21 +31,21 @@ export function ProjectDeliveryPage() {
     try {
       setProjects(await api.projectDeliveryProjects(token));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load project delivery records.");
+      setError(err instanceof ApiError ? err.message : t("pd.main.msg.couldNotLoadProjectDeliveryRecords"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const columns: Column<ProjectDeliveryProjectSummary>[] = [
-    { header: "Project", cell: (row) => <span className="font-medium">{row.project.name}</span> },
-    { header: "Code", cell: (row) => row.project.code },
+    { header: t("pd.main.h.project"), cell: (row) => <span className="font-medium">{row.project.name}</span> },
+    { header: t("pd.main.h.code"), cell: (row) => row.project.code },
     {
-      header: "Progress",
+      header: t("pd.main.h.progress"),
       cell: (row) => (
         <div className="min-w-[140px]">
           <div className="h-2 rounded bg-slate-100">
@@ -54,21 +56,21 @@ export function ProjectDeliveryPage() {
       ),
     },
     {
-      header: "Activities",
+      header: t("pd.main.h.activities"),
       cell: (row) => `${row.progress.completedActivityCount}/${row.progress.activityCount}`,
     },
     {
-      header: "Milestones",
+      header: t("pd.main.h.milestones"),
       cell: (row) => `${row.progress.achievedMilestoneCount}/${row.progress.milestoneCount}`,
     },
-    { header: "Status", cell: (row) => <StatusPill tone="info">{row.project.status}</StatusPill> },
+    { header: t("pd.main.h.status"), cell: (row) => <StatusPill tone="info">{row.project.status}</StatusPill> },
   ];
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Project Delivery"
-        subtitle="Delivery activities, milestones, PICs, dates, status, and progress over existing projects."
+        title={t("pd.main.title.projectDelivery")}
+        subtitle={t("pd.main.sub.deliveryActivitiesMilestonesPicsDatesSta")}
       />
       {error ? <Alert tone="error">{error}</Alert> : null}
       <Card>
@@ -87,9 +89,9 @@ export function ProjectDeliveryPage() {
           onRowClick={(row) => navigate(`/project-delivery/${row.project.id}`)}
           empty={
             <EmptyState
-              title="No project delivery records yet"
-              description="Create activities or milestones from a project detail view once a project is available."
-              action={<Button onClick={load}>Refresh</Button>}
+              title={t("pd.main.title.noProjectDeliveryRecordsYet")}
+              description={t("pd.main.d.createActivitiesOrMilestonesFromAProject")}
+              action={<Button onClick={load}>{t("pd.main.t.refresh")}</Button>}
             />
           }
         />

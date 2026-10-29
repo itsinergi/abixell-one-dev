@@ -6,6 +6,7 @@
  * available action comes from the backend's authoritative Workflow state —
  * this page never recomputes lifecycle or SLA rules.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -34,6 +35,7 @@ import {
 import { dueIndicator, formatDateShort, statusTone } from "../../shared/format";
 
 export function WorkOrderQueuePage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -64,11 +66,11 @@ export function WorkOrderQueuePage() {
       setCustomers(customerList);
       setServiceTypes(definitions.filter((d) => d.isActive));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load work orders.");
+      setError(err instanceof ApiError ? err.message : t("mo.woq.msg.couldNotLoadWorkOrders"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   async function createWorkOrder() {
     setBusy(true);
@@ -81,12 +83,12 @@ export function WorkOrderQueuePage() {
         title,
         dueAt: dueAt ? new Date(dueAt).toISOString() : null,
       });
-      setNotice("Work order created.");
+      setNotice(t("mo.woq.msg.workOrderCreated"));
       setTitle("");
       setDueAt("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the work order.");
+      setError(err instanceof ApiError ? err.message : t("mo.woq.msg.couldNotCreateTheWorkOrder"));
     } finally {
       setBusy(false);
     }
@@ -98,12 +100,12 @@ export function WorkOrderQueuePage() {
 
   const columns: Column<WorkOrderRow>[] = [
     {
-      header: "Number",
+      header: t("mo.woq.h.number"),
       cell: (row) => <span className="font-medium">{row.workOrder.workOrderNumber}</span>,
     },
-    { header: "Work", cell: (row) => row.workOrder.title },
+    { header: t("mo.woq.h.work"), cell: (row) => row.workOrder.title },
     {
-      header: "Status",
+      header: t("mo.woq.h.status"),
       cell: (row) => (
         <StatusPill tone={statusTone(row.status?.instanceStatus)}>
           {row.status?.stepName ?? row.status?.stepCode ?? "—"}
@@ -111,11 +113,11 @@ export function WorkOrderQueuePage() {
       ),
     },
     {
-      header: "Assignment",
+      header: t("mo.woq.h.assignment"),
       cell: (row) => <Badge>{row.workOrder.assignedToUserId ? "Assigned" : "Unassigned"}</Badge>,
     },
     {
-      header: "Due",
+      header: t("mo.woq.h.due"),
       cell: (row) => {
         const indicator = dueIndicator(row.workOrder.dueAt);
         return (
@@ -131,18 +133,18 @@ export function WorkOrderQueuePage() {
   return (
     <div>
       <PageHeader
-        title="Work Orders"
-        subtitle="Plan, assign, and follow the work your teams are delivering."
+        title={t("mo.woq.title.workOrders")}
+        subtitle={t("mo.woq.sub.planAssignAndFollowTheWorkYourTeamsAreDe")}
       />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card className="mb-4">
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Create work order</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mo.woq.t.createWorkOrder")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Customer" required>
+          <Field label={t("mo.woq.f.customer")} required>
             <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("mo.woq.t.select")}</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -150,9 +152,9 @@ export function WorkOrderQueuePage() {
               ))}
             </Select>
           </Field>
-          <Field label="Service type" required>
+          <Field label={t("mo.woq.f.serviceType")} required>
             <Select value={serviceCode} onChange={(e) => setServiceCode(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("mo.woq.t.select")}</option>
               {serviceTypes.map((d) => (
                 <option key={d.id} value={d.code}>
                   {d.name}
@@ -160,11 +162,11 @@ export function WorkOrderQueuePage() {
               ))}
             </Select>
           </Field>
-          <Field label="Title" required>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing" />
+          <Field label={t("mo.woq.f.title")} required>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("mo.woq.p.whatNeedsDoing")} />
           </Field>
           <div className="flex items-end gap-3">
-            <Field label="Due">
+            <Field label={t("mo.woq.f.due")}>
               <Input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
             </Field>
             <Button disabled={busy || !customerId || !serviceCode || !title} onClick={() => void createWorkOrder()}>
@@ -184,8 +186,8 @@ export function WorkOrderQueuePage() {
           onRowClick={(row) => navigate(`/work-orders/${row.workOrder.id}`)}
           empty={
             <EmptyState
-              title="No work orders yet"
-              description="Work orders appear here once a request is accepted, or when work is created directly."
+              title={t("mo.woq.title.noWorkOrdersYet")}
+              description={t("mo.woq.d.workOrdersAppearHereOnceARequestIsAccept")}
             />
           }
         />

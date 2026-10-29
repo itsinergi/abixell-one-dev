@@ -7,6 +7,7 @@
  * tells the whole story. There is no maintenance tab: maintenance is
  * Advanced.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -41,6 +42,7 @@ import { assetStatusLabel, assetStatusTone } from "./status";
 type OrganizationUnitOption = { id: string; name: string };
 
 export function AssetDetailPage() {
+  const t = useT();
   const { assetId } = useParams<{ assetId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -105,11 +107,11 @@ export function AssetDetailPage() {
         setDocumentsBlocked(true);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load this asset.");
+      setError(err instanceof ApiError ? err.message : t("ast.detail.msg.couldNotLoadThisAsset"));
     } finally {
       setLoading(false);
     }
-  }, [token, assetId]);
+  }, [token, assetId, t]);
 
   useEffect(() => {
     void load();
@@ -140,7 +142,7 @@ export function AssetDetailPage() {
       setNotice(successMessage);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("ast.detail.msg.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -185,7 +187,7 @@ export function AssetDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <Link to={`/asset-maintenance/assets/${asset.id}`}>
-              <Button variant="secondary">Meters &amp; Reliability</Button>
+              <Button variant="secondary">{t("ast.detail.t.metersReliability")}</Button>
             </Link>
             <StatusPill tone={assetStatusTone(asset.status)}>{assetStatusLabel(asset.status)}</StatusPill>
           </div>
@@ -202,37 +204,37 @@ export function AssetDetailPage() {
       ) : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Overview</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("ast.detail.t.overview")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Name">
+          <Field label={t("ast.detail.f.name")}>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Physical tag">
+          <Field label={t("ast.detail.f.physicalTag")}>
             <Input value={assetTag} onChange={(e) => setAssetTag(e.target.value)} />
           </Field>
-          <Field label="Category">
+          <Field label={t("ast.detail.f.category")}>
             <Input value={category} onChange={(e) => setCategory(e.target.value)} />
           </Field>
-          <Field label="Acquisition reference">
+          <Field label={t("ast.detail.f.acquisitionReference")}>
             <Input value={acquisitionReference} onChange={(e) => setAcquisitionReference(e.target.value)} />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Description">
+            <Field label={t("ast.detail.f.description")}>
               <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
             </Field>
           </div>
         </div>
         <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-slate-500">Acquired</dt>
+            <dt className="text-slate-500">{t("ast.detail.f.acquired")}</dt>
             <dd className="text-slate-900">{formatDateShort(asset.acquiredAt)}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Movements recorded</dt>
+            <dt className="text-slate-500">{t("ast.detail.f.movementsRecorded")}</dt>
             <dd className="text-slate-900">{asset.version}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Retired</dt>
+            <dt className="text-slate-500">{t("ast.detail.f.retired")}</dt>
             <dd className="text-slate-900">{asset.retiredAt ? formatDate(asset.retiredAt) : "—"}</dd>
           </div>
         </dl>
@@ -259,22 +261,22 @@ export function AssetDetailPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Location &amp; custodian</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("ast.detail.t.locationCustodian")}</h2>
         <dl className="mb-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <dt className="text-slate-500">Responsible unit</dt>
+            <dt className="text-slate-500">{t("ast.detail.f.responsibleUnit")}</dt>
             <dd className="text-slate-900">{unitName(asset.organizationUnitId)}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Custodian</dt>
+            <dt className="text-slate-500">{t("ast.detail.f.custodian")}</dt>
             <dd className="text-slate-900">{custodian ? custodian.fullName : "Unassigned"}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Site</dt>
+            <dt className="text-slate-500">{t("ast.detail.f.site")}</dt>
             <dd className="text-slate-900">{asset.siteId ? siteName(asset.siteId) : "—"}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Location detail</dt>
+            <dt className="text-slate-500">{t("ast.detail.f.locationDetail")}</dt>
             <dd className="text-slate-900">{asset.locationDetail ?? "—"}</dd>
           </div>
         </dl>
@@ -315,11 +317,11 @@ export function AssetDetailPage() {
 
         {!isTerminal && !pendingMovement ? (
           <>
-            <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Move this asset</h3>
+            <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("ast.detail.t.moveThisAsset")}</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Responsible unit">
+              <Field label={t("ast.detail.f.responsibleUnit")}>
                 <Select value={moveUnit} onChange={(e) => setMoveUnit(e.target.value)}>
-                  <option value="">Keep current</option>
+                  <option value="">{t("ast.detail.t.keepCurrent")}</option>
                   {units.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
@@ -327,9 +329,9 @@ export function AssetDetailPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Custodian">
+              <Field label={t("ast.detail.f.custodian")}>
                 <Select value={moveCustodian} onChange={(e) => setMoveCustodian(e.target.value)}>
-                  <option value="">Keep current</option>
+                  <option value="">{t("ast.detail.t.keepCurrent")}</option>
                   {employees.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.fullName}
@@ -337,9 +339,9 @@ export function AssetDetailPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Site">
+              <Field label={t("ast.detail.f.site")}>
                 <Select value={moveSite} onChange={(e) => setMoveSite(e.target.value)}>
-                  <option value="">Keep current</option>
+                  <option value="">{t("ast.detail.t.keepCurrent")}</option>
                   {sites.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
@@ -347,9 +349,9 @@ export function AssetDetailPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Project">
+              <Field label={t("ast.detail.f.project")}>
                 <Select value={moveProject} onChange={(e) => setMoveProject(e.target.value)}>
-                  <option value="">Keep current</option>
+                  <option value="">{t("ast.detail.t.keepCurrent")}</option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -357,22 +359,22 @@ export function AssetDetailPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Location detail">
+              <Field label={t("ast.detail.f.locationDetail")}>
                 <Input
                   value={moveLocationDetail}
                   onChange={(e) => setMoveLocationDetail(e.target.value)}
-                  placeholder="Keep current"
+                  placeholder={t("ast.detail.p.keepCurrent")}
                 />
               </Field>
-              <Field label="Effective date">
+              <Field label={t("ast.detail.f.effectiveDate")}>
                 <Input
                   type="date"
                   value={moveEffectiveDate}
                   onChange={(e) => setMoveEffectiveDate(e.target.value)}
                 />
               </Field>
-              <Field label="Reason">
-                <Input value={moveReason} onChange={(e) => setMoveReason(e.target.value)} placeholder="Why is it moving?" />
+              <Field label={t("ast.detail.f.reason")}>
+                <Input value={moveReason} onChange={(e) => setMoveReason(e.target.value)} placeholder={t("ast.detail.p.whyIsItMoving")} />
               </Field>
             </div>
             <div className="mt-3">
@@ -405,12 +407,12 @@ export function AssetDetailPage() {
               </Button>
             </div>
 
-            <h3 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500">Change status</h3>
+            <h3 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("ast.detail.t.changeStatus")}</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label="New status">
+              <Field label={t("ast.detail.f.newStatus")}>
                 <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-                  <option value="in_use">In use</option>
-                  <option value="idle">Idle</option>
+                  <option value="in_use">{t("ast.detail.t.inUse")}</option>
+                  <option value="idle">{t("ast.detail.t.idle")}</option>
                 </Select>
               </Field>
               <div className="flex items-end">
@@ -438,26 +440,26 @@ export function AssetDetailPage() {
 
       {!isTerminal ? (
         <Card>
-          <h2 className="mb-1 text-sm font-semibold text-slate-800">Retire or dispose</h2>
+          <h2 className="mb-1 text-sm font-semibold text-slate-800">{t("ast.detail.t.retireOrDispose")}</h2>
           <p className="mb-3 text-sm text-slate-600">
             This is permanent. The asset stops moving, but the record and its full history stay readable — nothing is
             deleted.
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Outcome">
+            <Field label={t("ast.detail.f.outcome")}>
               <Select
                 value={retirementStatus}
                 onChange={(e) => setRetirementStatus(e.target.value as "retired" | "disposed")}
               >
-                <option value="retired">Retired</option>
-                <option value="disposed">Disposed</option>
+                <option value="retired">{t("ast.detail.t.retired")}</option>
+                <option value="disposed">{t("ast.detail.t.disposed")}</option>
               </Select>
             </Field>
-            <Field label="Reason">
+            <Field label={t("ast.detail.f.reason")}>
               <Input
                 value={retirementReason}
                 onChange={(e) => setRetirementReason(e.target.value)}
-                placeholder="e.g. End of life"
+                placeholder={t("ast.detail.p.eGEndOfLife")}
               />
             </Field>
             <div className="flex items-end">
@@ -495,7 +497,7 @@ export function AssetDetailPage() {
       ) : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Documents</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("ast.detail.t.documents")}</h2>
         {documentsBlocked ? (
           <Alert tone="info">
             Asset documents need a separate permission. Ask an administrator if you need access.
@@ -503,7 +505,7 @@ export function AssetDetailPage() {
         ) : (
           <>
             {documents.length === 0 ? (
-              <p className="mb-3 text-sm text-slate-500">No documents attached.</p>
+              <p className="mb-3 text-sm text-slate-500">{t("ast.detail.n.noDocumentsAttached")}</p>
             ) : (
               <ul className="mb-3 space-y-1 text-sm text-slate-800">
                 {documents.map((doc) => (
@@ -514,7 +516,7 @@ export function AssetDetailPage() {
             <input
               ref={fileInputRef}
               type="file"
-              aria-label="Attach asset document"
+              aria-label={t("ast.detail.f.attachAssetDocument")}
               className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
               disabled={busy}
               onChange={(e) => {
@@ -530,9 +532,9 @@ export function AssetDetailPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Movement history</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("ast.detail.t.movementHistory")}</h2>
         {movements.length === 0 ? (
-          <p className="text-sm text-slate-500">No movements recorded.</p>
+          <p className="text-sm text-slate-500">{t("ast.detail.n.noMovementsRecorded")}</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {movements.map((m) => (

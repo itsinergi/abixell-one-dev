@@ -6,6 +6,7 @@
  * disposed assets are hidden by default but never deleted — one toggle
  * brings them back.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -39,6 +40,7 @@ import { assetStatusLabel, assetStatusTone } from "./status";
 type OrganizationUnitOption = { id: string; name: string };
 
 export function AssetsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -83,11 +85,11 @@ export function AssetsPage() {
       setAssets(result.assets);
       setCustodians(result.custodians);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the asset register.");
+      setError(err instanceof ApiError ? err.message : t("ast.list.msg.couldNotLoadTheAssetRegister"));
     } finally {
       setLoading(false);
     }
-  }, [token, search, statusFilter, categoryFilter, includeTerminal]);
+  }, [token, search, statusFilter, categoryFilter, includeTerminal, t]);
 
   useEffect(() => {
     void load();
@@ -138,46 +140,46 @@ export function AssetsPage() {
       setAcquiredAt("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not register the asset.");
+      setError(err instanceof ApiError ? err.message : t("ast.list.msg.couldNotRegisterTheAsset"));
     } finally {
       setBusy(false);
     }
   }
 
   const columns: Column<AssetRecord>[] = [
-    { header: "Number", cell: (row) => <span className="font-medium">{row.assetNumber}</span> },
-    { header: "Name", cell: (row) => row.name },
-    { header: "Tag", cell: (row) => (row.assetTag ? <Badge>{row.assetTag}</Badge> : "—") },
-    { header: "Category", cell: (row) => row.category ?? "—" },
-    { header: "Custodian", cell: (row) => custodianName(row.custodianEmployeeId) },
+    { header: t("ast.list.h.number"), cell: (row) => <span className="font-medium">{row.assetNumber}</span> },
+    { header: t("ast.list.h.name"), cell: (row) => row.name },
+    { header: t("ast.list.h.tag"), cell: (row) => (row.assetTag ? <Badge>{row.assetTag}</Badge> : "—") },
+    { header: t("ast.list.h.category"), cell: (row) => row.category ?? "—" },
+    { header: t("ast.list.h.custodian"), cell: (row) => custodianName(row.custodianEmployeeId) },
     {
-      header: "Status",
+      header: t("ast.list.h.status"),
       cell: (row) => <StatusPill tone={assetStatusTone(row.status)}>{assetStatusLabel(row.status)}</StatusPill>,
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Assets" subtitle="What you own, where it is, and who holds it." />
+      <PageHeader title={t("ast.list.title.assets")} subtitle={t("ast.list.sub.whatYouOwnWhereItIsAndWhoHoldsIt")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Register an asset</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("ast.list.t.registerAnAsset")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Name" required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Compressor 40kW" />
+          <Field label={t("ast.list.f.name")} required>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("ast.list.p.eGCompressor40kw")} />
           </Field>
-          <Field label="Physical tag">
-            <Input value={assetTag} onChange={(e) => setAssetTag(e.target.value)} placeholder="Optional" />
+          <Field label={t("ast.list.f.physicalTag")}>
+            <Input value={assetTag} onChange={(e) => setAssetTag(e.target.value)} placeholder={t("ast.list.p.optional")} />
           </Field>
-          <Field label="Category">
-            <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. machinery" />
+          <Field label={t("ast.list.f.category")}>
+            <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t("ast.list.p.eGMachinery")} />
           </Field>
-          <Field label="Responsible unit">
+          <Field label={t("ast.list.f.responsibleUnit")}>
             <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-              <option value="">Tenant-wide</option>
+              <option value="">{t("ast.list.t.tenantWide")}</option>
               {units.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -185,9 +187,9 @@ export function AssetsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Custodian">
+          <Field label={t("ast.list.f.custodian")}>
             <Select value={custodianId} onChange={(e) => setCustodianId(e.target.value)}>
-              <option value="">Unassigned</option>
+              <option value="">{t("ast.list.t.unassigned")}</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.fullName}
@@ -195,9 +197,9 @@ export function AssetsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Site">
+          <Field label={t("ast.list.f.site")}>
             <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-              <option value="">None</option>
+              <option value="">{t("ast.list.t.none")}</option>
               {sites.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -205,9 +207,9 @@ export function AssetsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Project">
+          <Field label={t("ast.list.f.project")}>
             <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">None</option>
+              <option value="">{t("ast.list.t.none")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -215,21 +217,21 @@ export function AssetsPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Location detail">
+          <Field label={t("ast.list.f.locationDetail")}>
             <Input
               value={locationDetail}
               onChange={(e) => setLocationDetail(e.target.value)}
-              placeholder="e.g. Utility room"
+              placeholder={t("ast.list.p.eGUtilityRoom")}
             />
           </Field>
-          <Field label="Acquisition reference">
+          <Field label={t("ast.list.f.acquisitionReference")}>
             <Input
               value={acquisitionReference}
               onChange={(e) => setAcquisitionReference(e.target.value)}
-              placeholder="Order or document reference"
+              placeholder={t("ast.list.p.orderOrDocumentReference")}
             />
           </Field>
-          <Field label="Acquired on">
+          <Field label={t("ast.list.f.acquiredOn")}>
             <Input type="date" value={acquiredAt} onChange={(e) => setAcquiredAt(e.target.value)} />
           </Field>
           <div className="flex items-end">
@@ -242,23 +244,23 @@ export function AssetsPage() {
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Search">
+          <Field label={t("ast.list.f.search")}>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name, number, or tag"
+              placeholder={t("ast.list.p.nameNumberOrTag")}
             />
           </Field>
-          <Field label="Category">
+          <Field label={t("ast.list.f.category")}>
             <Input value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} />
           </Field>
-          <Field label="Status">
+          <Field label={t("ast.list.f.status")}>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">Any</option>
-              <option value="in_use">In use</option>
-              <option value="idle">Idle</option>
-              <option value="retired">Retired</option>
-              <option value="disposed">Disposed</option>
+              <option value="">{t("ast.list.t.any")}</option>
+              <option value="in_use">{t("ast.list.t.inUse")}</option>
+              <option value="idle">{t("ast.list.t.idle")}</option>
+              <option value="retired">{t("ast.list.t.retired")}</option>
+              <option value="disposed">{t("ast.list.t.disposed")}</option>
             </Select>
           </Field>
           <div className="flex items-end">
@@ -285,8 +287,8 @@ export function AssetsPage() {
           onRowClick={(row) => navigate(`/assets/${row.id}`)}
           empty={
             <EmptyState
-              title="No assets yet"
-              description="Register one above to start tracking where it is and who holds it."
+              title={t("ast.list.title.noAssetsYet")}
+              description={t("ast.list.d.registerOneAboveToStartTrackingWhereItIs")}
             />
           }
         />

@@ -7,6 +7,7 @@
  * Money fields are exact-decimal strings, never JS numbers (ADR-0026).
  */
 
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -82,6 +83,7 @@ function formatIndex(value: number): string {
 }
 
 export function ProjectDeliveryAdvancedCostEVPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session?.accessToken ?? "";
 
@@ -129,11 +131,11 @@ export function ProjectDeliveryAdvancedCostEVPage() {
       setEarnedValue(evResp || null);
       setEvSnapshots(snapshotsResp || []);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load cost and EV data.");
+      setError(err instanceof ApiError ? err.message : t("pd.cost.msg.failedToLoadCostAndEvData"));
     } finally {
       setLoading(false);
     }
-  }, [projectId, token, asOfDate]);
+  }, [projectId, token, asOfDate, t]);
 
   const openCostEntryModal = () => {
     setModal({
@@ -179,11 +181,11 @@ export function ProjectDeliveryAdvancedCostEVPage() {
         entryDate: form.entryDate,
         note: form.note.trim() || null,
       });
-      setNotice("Cost entry recorded.");
+      setNotice(t("pd.cost.msg.costEntryRecorded"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create cost entry.");
+      setError(err instanceof ApiError ? err.message : t("pd.cost.msg.failedToCreateCostEntry"));
     } finally {
       setBusy(false);
     }
@@ -194,10 +196,10 @@ export function ProjectDeliveryAdvancedCostEVPage() {
     setError(null);
     try {
       await api.reverseProjectDeliveryCostEntry(token, entryId);
-      setNotice("Cost entry reversed.");
+      setNotice(t("pd.cost.msg.costEntryReversed"));
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to reverse cost entry.");
+      setError(err instanceof ApiError ? err.message : t("pd.cost.msg.failedToReverseCostEntry"));
     } finally {
       setBusy(false);
     }
@@ -208,10 +210,10 @@ export function ProjectDeliveryAdvancedCostEVPage() {
     setError(null);
     try {
       await api.postProjectDeliveryCostEntry(token, entryId);
-      setNotice("Cost entry posted to accounting kernel.");
+      setNotice(t("pd.cost.msg.costEntryPostedToAccountingKernel"));
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to post cost entry.");
+      setError(err instanceof ApiError ? err.message : t("pd.cost.msg.failedToPostCostEntry"));
     } finally {
       setBusy(false);
     }
@@ -219,7 +221,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
 
   const createEvSnapshot = async () => {
     if (modal.kind !== "create-ev-snapshot" || !modal.snapshotDate) {
-      setError("Snapshot date is required.");
+      setError(t("pd.cost.msg.snapshotDateIsRequired"));
       return;
     }
     setBusy(true);
@@ -228,11 +230,11 @@ export function ProjectDeliveryAdvancedCostEVPage() {
       await api.createProjectDeliveryEarnedValueSnapshot(token, projectId, {
         snapshotDate: modal.snapshotDate,
       });
-      setNotice("EV snapshot recorded.");
+      setNotice(t("pd.cost.msg.evSnapshotRecorded"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create EV snapshot.");
+      setError(err instanceof ApiError ? err.message : t("pd.cost.msg.failedToCreateEvSnapshot"));
     } finally {
       setBusy(false);
     }
@@ -245,7 +247,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
 
   const costEntryColumns: Column<ProjectCostEntry>[] = [
     {
-      header: "Type",
+      header: t("pd.cost.h.type"),
       cell: (row) => (
         <StatusPill tone={COST_ENTRY_TYPE_TONE[row.entryType] ?? "neutral"}>
           {COST_ENTRY_TYPE_LABEL[row.entryType] || row.entryType}
@@ -253,20 +255,20 @@ export function ProjectDeliveryAdvancedCostEVPage() {
       ),
     },
     {
-      header: "Activity",
+      header: t("pd.cost.h.activity"),
       cell: (row) => <span className="text-sm">{activityLabel(row.activityId)}</span>,
     },
     {
-      header: "Amount",
+      header: t("pd.cost.h.amount"),
       className: "tabular-nums text-right",
       cell: (row) => <span>{formatMoney(row.amount)}</span>,
     },
     {
-      header: "Entry Date",
+      header: t("pd.cost.h.entryDate"),
       cell: (row) => <span>{formatDate(row.entryDate)}</span>,
     },
     {
-      header: "Status",
+      header: t("pd.cost.h.status"),
       cell: (row) =>
         row.postingStatus ? (
           <StatusPill tone={POSTING_STATUS_TONE[row.postingStatus] ?? "neutral"}>
@@ -277,7 +279,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
         ),
     },
     {
-      header: "Actions",
+      header: t("pd.cost.h.actions"),
       mobileRole: "status",
       cell: (row) => (
         <div className="space-y-1">
@@ -299,7 +301,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
   type EvActivity = EarnedValueResult["activities"][number];
   const evActivityColumns: Column<EvActivity>[] = [
     {
-      header: "Activity",
+      header: t("pd.cost.h.activity"),
       cell: (row) => (
         <span className="text-sm">
           <span className="font-mono">{row.code}</span> {row.name}
@@ -307,22 +309,22 @@ export function ProjectDeliveryAdvancedCostEVPage() {
       ),
     },
     {
-      header: "% Complete",
+      header: t("pd.cost.h.complete"),
       className: "text-right",
       cell: (row) => <span>{(row.percentComplete * 100).toFixed(1)}%</span>,
     },
     {
-      header: "Planned Value",
+      header: t("pd.cost.h.plannedValue"),
       className: "tabular-nums text-right",
       cell: (row) => <span>{formatMoney(row.plannedValue)}</span>,
     },
     {
-      header: "Earned Value",
+      header: t("pd.cost.h.earnedValue"),
       className: "tabular-nums text-right",
       cell: (row) => <span>{formatMoney(row.earnedValue)}</span>,
     },
     {
-      header: "Actual Cost",
+      header: t("pd.cost.h.actualCost"),
       className: "tabular-nums text-right",
       cell: (row) => <span>{formatMoney(row.actualCost)}</span>,
     },
@@ -330,7 +332,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
 
   const snapshotColumns: Column<ProjectEarnedValueSnapshot>[] = [
     {
-      header: "Date",
+      header: t("pd.cost.h.date"),
       cell: (row) => <span>{formatDate(row.snapshotDate)}</span>,
     },
     {
@@ -363,19 +365,19 @@ export function ProjectDeliveryAdvancedCostEVPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Cost & Earned Value"
-        subtitle="Track cost entries, analyze project cost performance, and measure earned value."
+        title={t("pd.cost.title.costEarnedValue")}
+        subtitle={t("pd.cost.sub.trackCostEntriesAnalyzeProjectCostPerfor")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="success">{notice}</Alert>}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Select Project</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("pd.cost.t.selectProject")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Project" required>
+          <Field label={t("pd.cost.f.project")} required>
             <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">Select a project</option>
+              <option value="">{t("pd.cost.t.selectAProject")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -383,7 +385,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
               ))}
             </Select>
           </Field>
-          <Field label="As Of Date" required>
+          <Field label={t("pd.cost.f.asOfDate")} required>
             <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
           </Field>
           <div className="flex items-end gap-2">
@@ -395,7 +397,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
       </Card>
 
       {!projectId ? (
-        <EmptyState title="No project selected" description="Pick a project to see cost and EV data." />
+        <EmptyState title={t("pd.cost.title.noProjectSelected")} description={t("pd.cost.d.pickAProjectToSeeCostAndEvData")} />
       ) : loading ? (
         <div className="flex items-center justify-center p-8">
           <Spinner />
@@ -405,27 +407,27 @@ export function ProjectDeliveryAdvancedCostEVPage() {
           {costPosition ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Card>
-                <div className="text-sm font-semibold text-ink">Actual Cost</div>
+                <div className="text-sm font-semibold text-ink">{t("pd.cost.t.actualCost")}</div>
                 <div className="mt-1 text-lg font-mono">{formatMoney(costPosition.actualCost)}</div>
               </Card>
               <Card>
-                <div className="text-sm font-semibold text-ink">Commitment</div>
+                <div className="text-sm font-semibold text-ink">{t("pd.cost.t.commitment")}</div>
                 <div className="mt-1 text-lg font-mono">{formatMoney(costPosition.commitmentCost)}</div>
               </Card>
               <Card>
-                <div className="text-sm font-semibold text-ink">Budget at Completion</div>
+                <div className="text-sm font-semibold text-ink">{t("pd.cost.t.budgetAtCompletion")}</div>
                 <div className="mt-1 text-lg font-mono">{formatMoney(costPosition.budgetAtCompletion)}</div>
               </Card>
               <Card>
-                <div className="text-sm font-semibold text-ink">Estimate at Completion</div>
+                <div className="text-sm font-semibold text-ink">{t("pd.cost.t.estimateAtCompletion")}</div>
                 <div className="mt-1 text-lg font-mono">{formatMoney(costPosition.estimateAtCompletion)}</div>
               </Card>
               <Card>
-                <div className="text-sm font-semibold text-ink">Estimate to Complete</div>
+                <div className="text-sm font-semibold text-ink">{t("pd.cost.t.estimateToComplete")}</div>
                 <div className="mt-1 text-lg font-mono">{formatMoney(costPosition.estimateToComplete)}</div>
               </Card>
               <Card>
-                <div className="text-sm font-semibold text-ink">Cost Variance</div>
+                <div className="text-sm font-semibold text-ink">{t("pd.cost.t.costVariance")}</div>
                 <div
                   className={`mt-1 text-lg font-mono ${costPosition.costVariance.startsWith("-") ? "text-error" : "text-success"}`}
                 >
@@ -438,27 +440,27 @@ export function ProjectDeliveryAdvancedCostEVPage() {
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Cost Entries</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("pd.cost.t.costEntries")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy || activities.length === 0}
                 onClick={openCostEntryModal}
               >
-                + Entry
+              {t("pd.cost.t.entry")}
               </Button>
             </div>
             <DataTable
               columns={costEntryColumns}
               rows={costEntries}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No cost entries" description="Record the first cost entry." />}
+              empty={<EmptyState title={t("pd.cost.title.noCostEntries")} description={t("pd.cost.d.recordTheFirstCostEntry")} />}
             />
           </div>
 
           {earnedValue ? (
             <div>
               <div className="mb-3">
-                <h2 className="text-sm font-semibold text-ink">Earned Value Analysis</h2>
+                <h2 className="text-sm font-semibold text-ink">{t("pd.cost.t.earnedValueAnalysis")}</h2>
                 <p className="mt-1 text-sm text-ink-dim">
                   PV {formatMoney(earnedValue.plannedValue)} · EV {formatMoney(earnedValue.earnedValue)} · AC{" "}
                   {formatMoney(earnedValue.actualCost)} · SV {formatMoney(earnedValue.scheduleVariance)} · CV{" "}
@@ -471,14 +473,14 @@ export function ProjectDeliveryAdvancedCostEVPage() {
                 columns={evActivityColumns}
                 rows={earnedValue.activities || []}
                 keyOf={(row) => row.code}
-                empty={<EmptyState title="No activity data" description="No activities have progress recorded." />}
+                empty={<EmptyState title={t("pd.cost.title.noActivityData")} description={t("pd.cost.d.noActivitiesHaveProgressRecorded")} />}
               />
             </div>
           ) : null}
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">EV Snapshots</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("pd.cost.t.evSnapshots")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -491,7 +493,7 @@ export function ProjectDeliveryAdvancedCostEVPage() {
               columns={snapshotColumns}
               rows={evSnapshots}
               keyOf={(row) => row.snapshotDate}
-              empty={<EmptyState title="No snapshots" description="Create the first EV snapshot." />}
+              empty={<EmptyState title={t("pd.cost.title.noSnapshots")} description={t("pd.cost.d.createTheFirstEvSnapshot")} />}
             />
           </div>
         </div>
@@ -499,11 +501,11 @@ export function ProjectDeliveryAdvancedCostEVPage() {
 
       {modal.kind === "create-cost-entry" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Record Cost Entry</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("pd.cost.t.recordCostEntry")}</h2>
           <div className="space-y-3">
-            <Field label="Activity" required>
+            <Field label={t("pd.cost.f.activity")} required>
               <Select value={modal.form.activityId} onChange={(e) => patchCostForm({ activityId: e.target.value })}>
-                <option value="">Select activity</option>
+                <option value="">{t("pd.cost.t.selectActivity")}</option>
                 {activities.map((a) => (
                   <option key={a.activityId} value={a.activityId}>
                     {a.code} — {a.name}
@@ -511,14 +513,14 @@ export function ProjectDeliveryAdvancedCostEVPage() {
                 ))}
               </Select>
             </Field>
-            <Field label="Entry Type" required>
+            <Field label={t("pd.cost.f.entryType")} required>
               <Select value={modal.form.entryType} onChange={(e) => patchCostForm({ entryType: e.target.value })}>
-                <option value="actual">Actual</option>
-                <option value="commitment">Commitment</option>
-                <option value="adjustment">Adjustment</option>
+                <option value="actual">{t("pd.cost.t.actual")}</option>
+                <option value="commitment">{t("pd.cost.t.commitment")}</option>
+                <option value="adjustment">{t("pd.cost.t.adjustment")}</option>
               </Select>
             </Field>
-            <Field label="Amount" required>
+            <Field label={t("pd.cost.f.amount")} required>
               <Input
                 inputMode="decimal"
                 placeholder="0.00"
@@ -526,23 +528,23 @@ export function ProjectDeliveryAdvancedCostEVPage() {
                 onChange={(e) => patchCostForm({ amount: e.target.value })}
               />
             </Field>
-            <Field label="Entry Date" required>
+            <Field label={t("pd.cost.f.entryDate")} required>
               <Input
                 type="date"
                 value={modal.form.entryDate}
                 onChange={(e) => patchCostForm({ entryDate: e.target.value })}
               />
             </Field>
-            <Field label="Idempotency Key" required>
+            <Field label={t("pd.cost.f.idempotencyKey")} required>
               <Input
                 value={modal.form.idempotencyKey}
                 onChange={(e) => patchCostForm({ idempotencyKey: e.target.value })}
               />
             </Field>
-            <Field label="Notes">
+            <Field label={t("pd.cost.f.notes")}>
               <Textarea
                 rows={2}
-                placeholder="Optional notes"
+                placeholder={t("pd.cost.p.optionalNotes")}
                 value={modal.form.note}
                 onChange={(e) => patchCostForm({ note: e.target.value })}
               />
@@ -561,9 +563,9 @@ export function ProjectDeliveryAdvancedCostEVPage() {
 
       {modal.kind === "create-ev-snapshot" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Record EV Snapshot</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("pd.cost.t.recordEvSnapshot")}</h2>
           <div className="space-y-3">
-            <Field label="Snapshot Date" required>
+            <Field label={t("pd.cost.f.snapshotDate")} required>
               <Input
                 type="date"
                 value={modal.snapshotDate}

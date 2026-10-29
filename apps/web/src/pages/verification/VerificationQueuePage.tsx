@@ -4,6 +4,7 @@
  * new endpoint — section 6). Shows complaints awaiting independent
  * verification; the backend decides visibility and eligibility.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -26,6 +27,7 @@ const VERIFICATION_STEP = "VERIFICATION";
 const QUEUE_LIMIT = 200;
 
 export function VerificationQueuePage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -53,11 +55,11 @@ export function VerificationQueuePage() {
       setMineCount(all.items.filter((i) => i.assignment?.isMine).length);
       setItems(filtered.items);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load the verification queue");
+      setError(err instanceof ApiError ? err.message : t("ver.queue.msg.failedToLoadTheVerificationQueue"));
     } finally {
       setLoading(false);
     }
-  }, [token, mineOnly]);
+  }, [token, mineOnly, t]);
 
   useEffect(() => {
     load();
@@ -65,13 +67,13 @@ export function VerificationQueuePage() {
 
   const columns: Column<OperationalQueueItem>[] = [
     {
-      header: "Number",
+      header: t("ver.queue.h.number"),
       cell: (i) => <span className="font-mono font-medium text-slate-800">{i.complaint.complaintNumber}</span>,
     },
-    { header: "Customer", cell: (i) => i.customerName ?? "—" },
-    { header: "Category", cell: (i) => <Badge>{i.complaint.category}</Badge> },
+    { header: t("ver.queue.h.customer"), cell: (i) => i.customerName ?? "—" },
+    { header: t("ver.queue.h.category"), cell: (i) => <Badge>{i.complaint.category}</Badge> },
     {
-      header: "Severity",
+      header: t("ver.queue.h.severity"),
       cell: (i) => <StatusPill tone={severityTone(i.complaint.severity)}>{i.complaint.severity}</StatusPill>,
     },
     {
@@ -82,27 +84,27 @@ export function VerificationQueuePage() {
       },
     },
     {
-      header: "For you",
+      header: t("ver.queue.h.forYou"),
       cell: (i) =>
         i.assignment?.isMine ? (
-          <StatusPill tone="info">Awaiting your review</StatusPill>
+          <StatusPill tone="info">{t("ver.queue.t.awaitingYourReview")}</StatusPill>
         ) : (
           <span className="text-slate-500">{i.assignment?.roleCode ?? "—"}</span>
         ),
     },
-    { header: "Updated", cell: (i) => formatDateShort(i.complaint.updatedAt) },
+    { header: t("ver.queue.h.updated"), cell: (i) => formatDateShort(i.complaint.updatedAt) },
   ];
 
   return (
     <div>
       <PageHeader
-        title="Verification"
-        subtitle="Independently verify corrective actions awaiting sign-off."
+        title={t("ver.queue.title.verification")}
+        subtitle={t("ver.queue.sub.independentlyVerifyCorrectiveActionsAwai")}
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Card className="p-3">
-          <div className="text-xs text-slate-400">Awaiting your verification</div>
+          <div className="text-xs text-slate-400">{t("ver.queue.t.awaitingYourVerification")}</div>
           <div className="text-2xl font-semibold text-slate-800">{mineCount}</div>
         </Card>
       </div>
@@ -116,7 +118,7 @@ export function VerificationQueuePage() {
       {error ? (
         <Alert tone="error">{error}</Alert>
       ) : loading ? (
-        <Spinner label="Loading verification queue…" />
+        <Spinner label={t("ver.queue.f.loadingVerificationQueue")} />
       ) : (
         <DataTable
           columns={columns}
@@ -125,8 +127,8 @@ export function VerificationQueuePage() {
           onRowClick={(i) => navigate(`/verification/${i.complaint.id}`)}
           empty={
             <EmptyState
-              title="Nothing to verify"
-              description="No complaints are currently awaiting verification in your scope."
+              title={t("ver.queue.title.nothingToVerify")}
+              description={t("ver.queue.d.noComplaintsAreCurrentlyAwaitingVerifica")}
             />
           }
         />

@@ -1,4 +1,5 @@
 /** Phase 8 — Project Delivery detail and progress view. */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -28,6 +29,7 @@ import {
 } from "../../shell/components/ui";
 
 export function ProjectDeliveryDetailPage() {
+  const t = useT();
   const { projectId } = useParams<{ projectId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -61,11 +63,11 @@ export function ProjectDeliveryDetailPage() {
     try {
       setDetail(await api.projectDeliveryDetail(token, projectId));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load project delivery detail.");
+      setError(err instanceof ApiError ? err.message : t("pd.detail.msg.couldNotLoadProjectDeliveryDetail"));
     } finally {
       setLoading(false);
     }
-  }, [token, projectId]);
+  }, [token, projectId, t]);
 
   useEffect(() => {
     void load();
@@ -96,7 +98,7 @@ export function ProjectDeliveryDetailPage() {
       setActivityDescription("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create activity.");
+      setError(err instanceof ApiError ? err.message : t("pd.detail.msg.couldNotCreateActivity"));
     } finally {
       setBusy(false);
     }
@@ -109,7 +111,7 @@ export function ProjectDeliveryDetailPage() {
       await api.updateProjectDeliveryActivity(token, activity.id, { status, progressPercent });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update activity.");
+      setError(err instanceof ApiError ? err.message : t("pd.detail.msg.couldNotUpdateActivity"));
     } finally {
       setBusy(false);
     }
@@ -130,7 +132,7 @@ export function ProjectDeliveryDetailPage() {
       setMilestoneDescription("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create milestone.");
+      setError(err instanceof ApiError ? err.message : t("pd.detail.msg.couldNotCreateMilestone"));
     } finally {
       setBusy(false);
     }
@@ -146,7 +148,7 @@ export function ProjectDeliveryDetailPage() {
       });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update milestone.");
+      setError(err instanceof ApiError ? err.message : t("pd.detail.msg.couldNotUpdateMilestone"));
     } finally {
       setBusy(false);
     }
@@ -170,7 +172,7 @@ export function ProjectDeliveryDetailPage() {
       await api.uploadDocument(token, documentEntity.type, documentEntity.id, file);
       await openDocuments(documentEntity.type, documentEntity.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not upload document.");
+      setError(err instanceof ApiError ? err.message : t("pd.detail.msg.couldNotUploadDocument"));
     } finally {
       setBusy(false);
     }
@@ -186,7 +188,7 @@ export function ProjectDeliveryDetailPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Download failed");
+      setError(err instanceof ApiError ? err.message : t("pd.detail.msg.downloadFailed"));
     }
   }
 
@@ -194,31 +196,31 @@ export function ProjectDeliveryDetailPage() {
   if (!detail) return <Alert tone="error">{error || "Project delivery detail not found"}</Alert>;
 
   const activityColumns: Column<ProjectDeliveryActivity>[] = [
-    { header: "Activity", cell: (row) => <span className="font-medium">{row.title}</span> },
-    { header: "Status", cell: (row) => <StatusPill tone={row.status === "completed" ? "success" : "info"}>{row.status}</StatusPill> },
-    { header: "Planned", cell: (row) => `${row.plannedStartDate ?? "—"} → ${row.plannedEndDate ?? "—"}` },
-    { header: "Progress", cell: (row) => `${row.progressPercent}%` },
+    { header: t("pd.detail.h.activity"), cell: (row) => <span className="font-medium">{row.title}</span> },
+    { header: t("pd.detail.h.status"), cell: (row) => <StatusPill tone={row.status === "completed" ? "success" : "info"}>{row.status}</StatusPill> },
+    { header: t("pd.detail.h.planned"), cell: (row) => `${row.plannedStartDate ?? "—"} → ${row.plannedEndDate ?? "—"}` },
+    { header: t("pd.detail.h.progress"), cell: (row) => `${row.progressPercent}%` },
     {
-      header: "Actions",
+      header: t("pd.detail.h.actions"),
       cell: (row) => (
         <div className="flex gap-2">
-          <Button variant="secondary" disabled={busy} onClick={() => void updateActivity(row, "completed", 100)}>Complete</Button>
-          <Button variant="ghost" disabled={busy} onClick={() => void openDocuments("project_delivery_activity", row.id)}>Docs</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => void updateActivity(row, "completed", 100)}>{t("pd.detail.t.complete")}</Button>
+          <Button variant="ghost" disabled={busy} onClick={() => void openDocuments("project_delivery_activity", row.id)}>{t("pd.detail.t.docs")}</Button>
         </div>
       ),
     },
   ];
 
   const milestoneColumns: Column<ProjectDeliveryMilestone>[] = [
-    { header: "Milestone", cell: (row) => <span className="font-medium">{row.title}</span> },
-    { header: "Planned", cell: (row) => row.plannedDate ?? "—" },
-    { header: "Status", cell: (row) => <StatusPill tone={row.status === "achieved" ? "success" : "warning"}>{row.status}</StatusPill> },
+    { header: t("pd.detail.h.milestone"), cell: (row) => <span className="font-medium">{row.title}</span> },
+    { header: t("pd.detail.h.planned"), cell: (row) => row.plannedDate ?? "—" },
+    { header: t("pd.detail.h.status"), cell: (row) => <StatusPill tone={row.status === "achieved" ? "success" : "warning"}>{row.status}</StatusPill> },
     {
-      header: "Actions",
+      header: t("pd.detail.h.actions"),
       cell: (row) => (
         <div className="flex gap-2">
-          {row.status !== "achieved" && <Button variant="secondary" disabled={busy} onClick={() => void achieveMilestone(row)}>Achieve</Button>}
-          <Button variant="ghost" disabled={busy} onClick={() => void openDocuments("project_delivery_milestone", row.id)}>Docs</Button>
+          {row.status !== "achieved" && <Button variant="secondary" disabled={busy} onClick={() => void achieveMilestone(row)}>{t("pd.detail.t.achieve")}</Button>}
+          <Button variant="ghost" disabled={busy} onClick={() => void openDocuments("project_delivery_milestone", row.id)}>{t("pd.detail.t.docs")}</Button>
         </div>
       ),
     },
@@ -233,7 +235,7 @@ export function ProjectDeliveryDetailPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-3xl font-semibold text-slate-900">{detail.progress.progressPercent}%</div>
-            <div className="text-sm text-slate-500">Derived from activity progress</div>
+            <div className="text-sm text-slate-500">{t("pd.detail.t.derivedFromActivityProgress")}</div>
           </div>
           <div className="flex gap-2 text-sm">
             <Badge>{detail.progress.completedActivityCount}/{detail.progress.activityCount} activities complete</Badge>
@@ -247,73 +249,73 @@ export function ProjectDeliveryDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Activity</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("pd.detail.t.createActivity")}</h2>
           <div className="space-y-3">
-            <Field label="Title" required><Input value={activityTitle} onChange={(e) => setActivityTitle(e.target.value)} disabled={busy} /></Field>
-            <Field label="Description"><Textarea rows={2} value={activityDescription} onChange={(e) => setActivityDescription(e.target.value)} disabled={busy} /></Field>
+            <Field label={t("pd.detail.f.title")} required><Input value={activityTitle} onChange={(e) => setActivityTitle(e.target.value)} disabled={busy} /></Field>
+            <Field label={t("pd.detail.f.description")}><Textarea rows={2} value={activityDescription} onChange={(e) => setActivityDescription(e.target.value)} disabled={busy} /></Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="PIC user ID" required={!activityPicEmployeeId}><Input value={activityPicUserId} onChange={(e) => setActivityPicUserId(e.target.value)} disabled={busy || Boolean(activityPicEmployeeId)} placeholder="User UUID" /></Field>
-              <Field label="PIC employee ID" required={!activityPicUserId}><Input value={activityPicEmployeeId} onChange={(e) => setActivityPicEmployeeId(e.target.value)} disabled={busy || Boolean(activityPicUserId)} placeholder="Employee UUID" /></Field>
-              <Field label="Planned start"><Input type="date" value={activityStart} onChange={(e) => setActivityStart(e.target.value)} disabled={busy} /></Field>
-              <Field label="Planned end"><Input type="date" value={activityEnd} onChange={(e) => setActivityEnd(e.target.value)} disabled={busy} /></Field>
-              <Field label="Status">
+              <Field label={t("pd.detail.f.picUserId")} required={!activityPicEmployeeId}><Input value={activityPicUserId} onChange={(e) => setActivityPicUserId(e.target.value)} disabled={busy || Boolean(activityPicEmployeeId)} placeholder={t("pd.detail.p.userUuid")} /></Field>
+              <Field label={t("pd.detail.f.picEmployeeId")} required={!activityPicUserId}><Input value={activityPicEmployeeId} onChange={(e) => setActivityPicEmployeeId(e.target.value)} disabled={busy || Boolean(activityPicUserId)} placeholder={t("pd.detail.p.employeeUuid")} /></Field>
+              <Field label={t("pd.detail.f.plannedStart")}><Input type="date" value={activityStart} onChange={(e) => setActivityStart(e.target.value)} disabled={busy} /></Field>
+              <Field label={t("pd.detail.f.plannedEnd")}><Input type="date" value={activityEnd} onChange={(e) => setActivityEnd(e.target.value)} disabled={busy} /></Field>
+              <Field label={t("pd.detail.f.status")}>
                 <Select value={activityStatus} onChange={(e) => setActivityStatus(e.target.value)} disabled={busy}>
-                  <option value="planned">Planned</option>
-                  <option value="in_progress">In progress</option>
-                  <option value="on_hold">On hold</option>
-                  <option value="completed">Completed</option>
+                  <option value="planned">{t("pd.detail.t.planned")}</option>
+                  <option value="in_progress">{t("pd.detail.t.inProgress")}</option>
+                  <option value="on_hold">{t("pd.detail.t.onHold")}</option>
+                  <option value="completed">{t("pd.detail.t.completed")}</option>
                 </Select>
               </Field>
-              <Field label="Progress %"><Input type="number" min={0} max={100} value={activityProgress} onChange={(e) => setActivityProgress(Number(e.target.value))} disabled={busy} /></Field>
+              <Field label={t("pd.detail.f.progress")}><Input type="number" min={0} max={100} value={activityProgress} onChange={(e) => setActivityProgress(Number(e.target.value))} disabled={busy} /></Field>
             </div>
-            <Button disabled={busy || !activityTitle || (!activityPicUserId && !activityPicEmployeeId)} onClick={() => void createActivity()}>Add Activity</Button>
+            <Button disabled={busy || !activityTitle || (!activityPicUserId && !activityPicEmployeeId)} onClick={() => void createActivity()}>{t("pd.detail.t.addActivity")}</Button>
           </div>
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Create Milestone</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("pd.detail.t.createMilestone")}</h2>
           <div className="space-y-3">
-            <Field label="Title" required><Input value={milestoneTitle} onChange={(e) => setMilestoneTitle(e.target.value)} disabled={busy} /></Field>
-            <Field label="Description"><Textarea rows={2} value={milestoneDescription} onChange={(e) => setMilestoneDescription(e.target.value)} disabled={busy} /></Field>
-            <Field label="Planned date"><Input type="date" value={milestoneDate} onChange={(e) => setMilestoneDate(e.target.value)} disabled={busy} /></Field>
-            <Button disabled={busy || !milestoneTitle} onClick={() => void createMilestone()}>Add Milestone</Button>
+            <Field label={t("pd.detail.f.title")} required><Input value={milestoneTitle} onChange={(e) => setMilestoneTitle(e.target.value)} disabled={busy} /></Field>
+            <Field label={t("pd.detail.f.description")}><Textarea rows={2} value={milestoneDescription} onChange={(e) => setMilestoneDescription(e.target.value)} disabled={busy} /></Field>
+            <Field label={t("pd.detail.f.plannedDate")}><Input type="date" value={milestoneDate} onChange={(e) => setMilestoneDate(e.target.value)} disabled={busy} /></Field>
+            <Button disabled={busy || !milestoneTitle} onClick={() => void createMilestone()}>{t("pd.detail.t.addMilestone")}</Button>
           </div>
         </Card>
       </div>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Activities</h2>
-        <DataTable columns={activityColumns} rows={detail.activities} keyOf={(row) => row.id} empty={<EmptyState title="No activities yet" />} />
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("pd.detail.t.activities")}</h2>
+        <DataTable columns={activityColumns} rows={detail.activities} keyOf={(row) => row.id} empty={<EmptyState title={t("pd.detail.title.noActivitiesYet")} />} />
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Milestones</h2>
-        <DataTable columns={milestoneColumns} rows={detail.milestones} keyOf={(row) => row.id} empty={<EmptyState title="No milestones yet" />} />
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("pd.detail.t.milestones")}</h2>
+        <DataTable columns={milestoneColumns} rows={detail.milestones} keyOf={(row) => row.id} empty={<EmptyState title={t("pd.detail.title.noMilestonesYet")} />} />
       </Card>
 
       {documentEntity ? (
         <Card>
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-800">Documents</h2>
-            <Button variant="ghost" onClick={() => setDocumentEntity(null)}>Close</Button>
+            <h2 className="text-sm font-semibold text-slate-800">{t("pd.detail.t.documents")}</h2>
+            <Button variant="ghost" onClick={() => setDocumentEntity(null)}>{t("pd.detail.t.close")}</Button>
           </div>
           {documentsBlocked ? (
             <Alert tone="info">Project Delivery documents require project_delivery.documents.read or project_delivery.manage.</Alert>
           ) : (
             <>
-              {documents.length === 0 ? <p className="mb-3 text-sm text-slate-500">No documents attached.</p> : null}
+              {documents.length === 0 ? <p className="mb-3 text-sm text-slate-500">{t("pd.detail.n.noDocumentsAttached")}</p> : null}
               <ul className="mb-3 space-y-1 text-sm">
                 {documents.map((doc) => (
                   <li key={doc.id} className="flex items-center justify-between rounded border border-slate-100 p-2">
                     <span>{doc.fileName}</span>
-                    <Button variant="ghost" onClick={() => void downloadDocument(doc)}>Download</Button>
+                    <Button variant="ghost" onClick={() => void downloadDocument(doc)}>{t("pd.detail.t.download")}</Button>
                   </li>
                 ))}
               </ul>
               <input
                 ref={fileInputRef}
                 type="file"
-                aria-label="Attach project delivery document"
+                aria-label={t("pd.detail.f.attachProjectDeliveryDocument")}
                 className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
                 disabled={busy}
                 onChange={(e) => {

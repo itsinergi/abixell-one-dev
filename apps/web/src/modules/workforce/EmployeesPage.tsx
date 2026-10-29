@@ -5,6 +5,7 @@
  * and authorization are enforced by the backend, which returns exactly the
  * employees this user may see.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -37,6 +38,7 @@ function statusTone(status: string): "success" | "neutral" | "warning" {
 }
 
 export function EmployeesPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -75,11 +77,11 @@ export function EmployeesPage() {
       setLegalEntities(legalEntityList);
       setUnits(unitList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load employees.");
+      setError(err instanceof ApiError ? err.message : t("mw.emp.msg.couldNotLoadEmployees"));
     } finally {
       setLoading(false);
     }
-  }, [token, search, statusFilter]);
+  }, [token, search, statusFilter, t]);
 
   useEffect(() => {
     void load();
@@ -98,46 +100,46 @@ export function EmployeesPage() {
         organizationUnitId: organizationUnitId || null,
         joinedAt: joinedAt || null,
       });
-      setNotice("Employee created.");
+      setNotice(t("mw.emp.msg.employeeCreated"));
       setFullName("");
       setEmail("");
       setJoinedAt("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the employee.");
+      setError(err instanceof ApiError ? err.message : t("mw.emp.msg.couldNotCreateTheEmployee"));
     } finally {
       setBusy(false);
     }
   }
 
   const columns: Column<Employee>[] = [
-    { header: "Number", cell: (row) => <span className="font-medium">{row.employeeNumber}</span> },
-    { header: "Name", cell: (row) => row.fullName },
+    { header: t("mw.emp.h.number"), cell: (row) => <span className="font-medium">{row.employeeNumber}</span> },
+    { header: t("mw.emp.h.name"), cell: (row) => row.fullName },
     {
-      header: "Status",
+      header: t("mw.emp.h.status"),
       cell: (row) => <StatusPill tone={statusTone(row.employmentStatus)}>{row.employmentStatus}</StatusPill>,
     },
-    { header: "Joined", cell: (row) => formatDateShort(row.joinedAt) },
-    { header: "Account", cell: (row) => (row.userId ? "Linked" : "—") },
+    { header: t("mw.emp.h.joined"), cell: (row) => formatDateShort(row.joinedAt) },
+    { header: t("mw.emp.h.account"), cell: (row) => (row.userId ? "Linked" : "—") },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Employees" subtitle="Who works here, and where they belong in the organisation." />
+      <PageHeader title={t("mw.emp.title.employees")} subtitle={t("mw.emp.sub.whoWorksHereAndWhereTheyBelongInTheOrgan")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Add an employee</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mw.emp.t.addAnEmployee")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Full name" required>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" />
+          <Field label={t("mw.emp.f.fullName")} required>
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={t("mw.emp.p.fullName")} />
           </Field>
-          <Field label="Email">
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" />
+          <Field label={t("mw.emp.f.email")}>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("mw.emp.p.optional")} />
           </Field>
-          <Field label="Position">
+          <Field label={t("mw.emp.f.position")}>
             <Select value={positionCode} onChange={(e) => setPositionCode(e.target.value)}>
               <option value="">—</option>
               {positions.map((p) => (
@@ -147,7 +149,7 @@ export function EmployeesPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Legal entity">
+          <Field label={t("mw.emp.f.legalEntity")}>
             <Select value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>
               <option value="">—</option>
               {legalEntities.map((l) => (
@@ -157,7 +159,7 @@ export function EmployeesPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Organization unit">
+          <Field label={t("mw.emp.f.organizationUnit")}>
             <Select value={organizationUnitId} onChange={(e) => setOrganizationUnitId(e.target.value)}>
               <option value="">—</option>
               {units.map((u) => (
@@ -168,7 +170,7 @@ export function EmployeesPage() {
             </Select>
           </Field>
           <div className="flex items-end gap-3">
-            <Field label="Joined">
+            <Field label={t("mw.emp.f.joined")}>
               <Input type="date" value={joinedAt} onChange={(e) => setJoinedAt(e.target.value)} />
             </Field>
             <Button disabled={busy || !fullName} onClick={() => void createEmployee()}>
@@ -180,19 +182,19 @@ export function EmployeesPage() {
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Search">
+          <Field label={t("mw.emp.f.search")}>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name or employee number"
+              placeholder={t("mw.emp.p.nameOrEmployeeNumber")}
             />
           </Field>
-          <Field label="Status">
+          <Field label={t("mw.emp.f.status")}>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="ended">Ended</option>
+              <option value="">{t("mw.emp.t.all")}</option>
+              <option value="active">{t("mw.emp.t.active")}</option>
+              <option value="inactive">{t("mw.emp.t.inactive")}</option>
+              <option value="ended">{t("mw.emp.t.ended")}</option>
             </Select>
           </Field>
         </div>
@@ -206,7 +208,7 @@ export function EmployeesPage() {
           rows={rows}
           keyOf={(row) => row.id}
           onRowClick={(row) => navigate(`/employees/${row.id}`)}
-          empty={<EmptyState title="No employees found" description="Add one above, or adjust your search." />}
+          empty={<EmptyState title={t("mw.emp.title.noEmployeesFound")} description={t("mw.emp.d.addOneAboveOrAdjustYourSearch")} />}
         />
       )}
     </div>

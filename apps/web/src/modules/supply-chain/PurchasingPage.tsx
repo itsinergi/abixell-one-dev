@@ -8,6 +8,7 @@
  * Lifecycle buttons are rendered from the backend's `availableActions` —
  * never from a hardcoded status rule.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -39,6 +40,7 @@ import {
 import { formatDateShort, statusTone } from "../../shared/format";
 
 export function PurchasingPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -75,11 +77,11 @@ export function PurchasingPage() {
       setItems(itemList.filter((i) => i.isActive));
       setSuppliers(supplierList.filter((s) => s.isActive));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load purchasing data.");
+      setError(err instanceof ApiError ? err.message : t("msc.purch.msg.couldNotLoadPurchasingData"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -91,10 +93,10 @@ export function PurchasingPage() {
       try {
         setRequestDetail(await api.purchaseRequest(token, id));
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not load the request.");
+        setError(err instanceof ApiError ? err.message : t("msc.purch.msg.couldNotLoadTheRequest"));
       }
     },
-    [token],
+    [token, t],
   );
 
   const openOrder = useCallback(
@@ -105,10 +107,10 @@ export function PurchasingPage() {
         setOrderDetail(detail);
         setReceiptLineId(detail.lines[0]?.id ?? "");
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not load the order.");
+        setError(err instanceof ApiError ? err.message : t("msc.purch.msg.couldNotLoadTheOrder"));
       }
     },
-    [token],
+    [token, t],
   );
 
   async function run(action: () => Promise<unknown>, successMessage: string) {
@@ -122,7 +124,7 @@ export function PurchasingPage() {
       if (requestDetail) await openRequest(requestDetail.request.id);
       if (orderDetail) await openOrder(orderDetail.order.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("msc.purch.msg.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -131,42 +133,42 @@ export function PurchasingPage() {
   const itemName = (itemId: string) => items.find((i) => i.id === itemId)?.name ?? itemId.slice(0, 8);
 
   const requestColumns: Column<PurchaseRequestRecord>[] = [
-    { header: "Number", cell: (row) => <span className="font-medium">{row.requestNumber}</span> },
-    { header: "Justification", cell: (row) => row.justification },
-    { header: "Required", cell: (row) => formatDateShort(row.requiredDate) },
+    { header: t("msc.purch.h.number"), cell: (row) => <span className="font-medium">{row.requestNumber}</span> },
+    { header: t("msc.purch.h.justification"), cell: (row) => row.justification },
+    { header: t("msc.purch.h.required"), cell: (row) => formatDateShort(row.requiredDate) },
     {
-      header: "Order",
-      cell: (row) => (row.convertedPurchaseOrderId ? <Badge>Ordered</Badge> : "—"),
+      header: t("msc.purch.h.order"),
+      cell: (row) => (row.convertedPurchaseOrderId ? <Badge>{t("msc.purch.t.ordered")}</Badge> : "—"),
     },
   ];
 
   const orderColumns: Column<PurchaseOrderRecord>[] = [
-    { header: "Number", cell: (row) => <span className="font-medium">{row.orderNumber}</span> },
+    { header: t("msc.purch.h.number"), cell: (row) => <span className="font-medium">{row.orderNumber}</span> },
     {
-      header: "State",
+      header: t("msc.purch.h.state"),
       cell: (row) => (
         <StatusPill tone={row.cancelledAt ? "neutral" : row.issuedAt ? "success" : "warning"}>
           {row.cancelledAt ? "Cancelled" : row.issuedAt ? "Issued" : "Draft"}
         </StatusPill>
       ),
     },
-    { header: "Expected", cell: (row) => formatDateShort(row.expectedDate) },
-    { header: "Currency", cell: (row) => row.currency ?? "—" },
+    { header: t("msc.purch.h.expected"), cell: (row) => formatDateShort(row.expectedDate) },
+    { header: t("msc.purch.h.currency"), cell: (row) => row.currency ?? "—" },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Purchasing" subtitle="Request, order, and receive what your teams need." />
+      <PageHeader title={t("msc.purch.title.purchasing")} subtitle={t("msc.purch.sub.requestOrderAndReceiveWhatYourTeamsNeed")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Raise a purchase request</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("msc.purch.t.raiseAPurchaseRequest")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Item" required>
+          <Field label={t("msc.purch.f.item")} required>
             <Select value={prItem} onChange={(e) => setPrItem(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{t("msc.purch.t.select")}</option>
               {items.map((i) => (
                 <option key={i.id} value={i.code}>
                   {i.name}
@@ -174,7 +176,7 @@ export function PurchasingPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Quantity" required>
+          <Field label={t("msc.purch.f.quantity")} required>
             <Input
               type="number"
               min="0"
@@ -183,7 +185,7 @@ export function PurchasingPage() {
               onChange={(e) => setPrQuantity(e.target.value)}
             />
           </Field>
-          <Field label="Justification" required>
+          <Field label={t("msc.purch.f.justification")} required>
             <Textarea rows={1} value={justification} onChange={(e) => setJustification(e.target.value)} />
           </Field>
           <div className="flex items-end">
@@ -213,24 +215,24 @@ export function PurchasingPage() {
       ) : (
         <>
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Purchase requests</h2>
+            <h2 className="mb-2 text-sm font-semibold text-slate-800">{t("msc.purch.t.purchaseRequests")}</h2>
             <DataTable
               columns={requestColumns}
               rows={requests}
               keyOf={(row) => row.id}
               onRowClick={(row) => void openRequest(row.id)}
-              empty={<EmptyState title="No purchase requests" description="Raise one above to get started." />}
+              empty={<EmptyState title={t("msc.purch.title.noPurchaseRequests")} description={t("msc.purch.d.raiseOneAboveToGetStarted")} />}
             />
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Purchase orders</h2>
+            <h2 className="mb-2 text-sm font-semibold text-slate-800">{t("msc.purch.t.purchaseOrders")}</h2>
             <DataTable
               columns={orderColumns}
               rows={orders}
               keyOf={(row) => row.id}
               onRowClick={(row) => void openOrder(row.id)}
-              empty={<EmptyState title="No purchase orders" description="Approve a request, then place an order." />}
+              empty={<EmptyState title={t("msc.purch.title.noPurchaseOrders")} description={t("msc.purch.d.approveARequestThenPlaceAnOrder")} />}
             />
           </div>
         </>
@@ -276,9 +278,9 @@ export function PurchasingPage() {
 
           {requestDetail.status?.instanceStatus === "approved" && !requestDetail.request.convertedPurchaseOrderId ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label="Supplier" required>
+              <Field label={t("msc.purch.f.supplier")} required>
                 <Select value={supplierCode} onChange={(e) => setSupplierCode(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t("msc.purch.t.select")}</option>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.code}>
                       {s.name}
@@ -334,7 +336,7 @@ export function PurchasingPage() {
 
           {orderDetail.state === "issued" ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label="Line" required>
+              <Field label={t("msc.purch.f.line")} required>
                 <Select value={receiptLineId} onChange={(e) => setReceiptLineId(e.target.value)}>
                   {orderDetail.lines.map((line) => (
                     <option key={line.id} value={line.id}>
@@ -343,7 +345,7 @@ export function PurchasingPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Quantity received" required>
+              <Field label={t("msc.purch.f.quantityReceived")} required>
                 <Input
                   type="number"
                   min="0"
