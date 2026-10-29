@@ -244,8 +244,8 @@ export function WorkforcePlanningPage() {
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      {!canManage ? <Alert tone="info">Creating and computing scenarios require <code className="font-mono text-xs">workforce.planning.manage</code>.</Alert> : null}
-      {!canApply ? <Alert tone="info">Applying planning decisions requires <code className="font-mono text-xs">workforce.planning.apply</code>.</Alert> : null}
+      {!canManage ? <Alert tone="info">{t("wf.plan.msg.creatingAndComputingScenariosRequirePerm", { perm: <code className="font-mono text-xs">workforce.planning.manage</code> })}</Alert> : null}
+      {!canApply ? <Alert tone="info">{t("wf.plan.msg.applyingPlanningDecisionsRequiresPerm", { perm: <code className="font-mono text-xs">workforce.planning.apply</code> })}</Alert> : null}
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("wf.plan.t.scenarioFilters")}</h2>
@@ -271,7 +271,7 @@ export function WorkforcePlanningPage() {
             <Field label={t("wf.plan.f.planYear")} required><Input type="number" min="2000" max="2100" value={planYear} onChange={(event) => setPlanYear(event.target.value)} /></Field>
             <Field label={t("wf.plan.f.organizationUnitId")}><Input value={planUnitId} onChange={(event) => setPlanUnitId(event.target.value)} placeholder={t("wf.plan.p.optionalUnitScope")} /></Field>
           </div>
-          <Button className="mt-3" disabled={busy || !planTitle.trim()} onClick={() => void createPlan()}>Create scenario</Button>
+          <Button className="mt-3" disabled={busy || !planTitle.trim()} onClick={() => void createPlan()}>{t("wf.plan.t.createScenario")}</Button>
         </Card>
       ) : null}
 
@@ -312,7 +312,7 @@ export function WorkforcePlanningPage() {
 
               {canManage && selectedPlan.status !== "applied" ? (
                 <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <h4 className="mb-2 text-sm font-semibold text-slate-800">Simulate Target Headcount by Role</h4>
+                  <h4 className="mb-2 text-sm font-semibold text-slate-800">{t("wf.plan.t.simulateTargetHeadcountByRole")}</h4>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {positions.map((position) => (
                       <Field key={position.id} label={position.name}>
@@ -332,7 +332,7 @@ export function WorkforcePlanningPage() {
                 </div>
               ) : null}
 
-              <h4 className="mb-2 text-sm font-semibold text-slate-800">Headcount &amp; Budget Gap Breakdown</h4>
+              <h4 className="mb-2 text-sm font-semibold text-slate-800">{t("wf.plan.t.headcountBudgetGapBreakdown")}</h4>
               <DataTable
                 columns={gapColumns}
                 rows={selectedPlan.gapAnalysis ?? []}

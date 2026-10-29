@@ -400,7 +400,7 @@ export function ReceivingQualityPanel() {
               rows={selected.lines}
               keyOf={(l) => l.id}
               mobileBreakpoint="md"
-              empty={<p className="py-4 text-center text-sm text-ink-dim">This receipt has no lines.</p>}
+              empty={<p className="py-4 text-center text-sm text-ink-dim">{t("scm.rq.n.thisReceiptHasNoLines")}</p>}
             />
             <p className="mt-3 text-xs text-ink-dim">
               Payment eligible = accepted − returned − reversed. A complaint does not change it; only
@@ -532,7 +532,7 @@ export function ReceivingQualityPanel() {
               columns={complaintColumns}
               rows={discrepancies.filter((d) => lineMap.has(d.receivingLineId))}
               keyOf={(d) => d.id}
-              empty={<p className="py-4 text-center text-sm text-ink-dim">No open complaints on this receipt.</p>}
+              empty={<p className="py-4 text-center text-sm text-ink-dim">{t("scm.rq.n.noOpenComplaintsOnThisReceipt")}</p>}
             />
           </Card>
         </>

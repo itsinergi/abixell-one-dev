@@ -293,9 +293,9 @@ export function WorkforceAttendancePage() {
       header: t("wf.attend.h.variances"),
       cell: (row) => (
         <div className="text-xs space-y-0.5">
-          {row.lateMinutes > 0 && <Badge className="bg-amber-50 text-amber-700">Late: {row.lateMinutes}m</Badge>}
-          {row.earlyOutMinutes > 0 && <Badge className="bg-red-50 text-red-700">Early out: {row.earlyOutMinutes}m</Badge>}
-          {row.lateMinutes === 0 && row.earlyOutMinutes === 0 && <span className="text-slate-400">On time</span>}
+          {row.lateMinutes > 0 && <Badge className="bg-amber-50 text-amber-700">{t("wf.attend.t.lateNM", { n: row.lateMinutes })}</Badge>}
+          {row.earlyOutMinutes > 0 && <Badge className="bg-red-50 text-red-700">{t("wf.attend.t.earlyOutNM", { n: row.earlyOutMinutes })}</Badge>}
+          {row.lateMinutes === 0 && row.earlyOutMinutes === 0 && <span className="text-slate-400">{t("wf.attend.t.onTime")}</span>}
         </div>
       ),
     },
@@ -368,10 +368,7 @@ export function WorkforceAttendancePage() {
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {!canManage ? (
-        <Alert tone="info">
-          You are viewing in read-only mode. Creating shifts, updating rosters, and recording attendance requires{" "}
-          <code className="font-mono text-xs">workforce.attendance.manage</code>.
-        </Alert>
+        <Alert tone="info">{t("wf.attend.msg.youAreViewingInReadOnlyModeCreatingShift", { perm: <code className="font-mono text-xs">workforce.attendance.manage</code> })}</Alert>
       ) : null}
 
       <div className="flex border-b border-slate-200 text-sm font-medium">
@@ -565,7 +562,7 @@ export function WorkforceAttendancePage() {
                       onChange={(e) => setShiftIsOvernight(e.target.checked)}
                       className="rounded border-slate-300"
                     />
-                    <span>Is Overnight Shift</span>
+                    <span>{t("wf.attend.t.isOvernightShift")}</span>
                   </label>
                 </div>
               </div>

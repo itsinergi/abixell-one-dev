@@ -568,7 +568,7 @@ export function SalesPipelinePage() {
                       {pipe.stageCode}
                     </div>
                     <div className="text-xl font-bold text-slate-900 mt-1">
-                      {pipe.count} <span className="text-xs font-normal text-slate-500">deals</span>
+                      {pipe.count} <span className="text-xs font-normal text-slate-500">{t("sc.sales.t.deals")}</span>
                     </div>
                     <div className="text-xs text-slate-600 mt-0.5">
                       IDR {Number(pipe.totalEstimatedValue || 0).toLocaleString()}
@@ -612,7 +612,7 @@ export function SalesPipelinePage() {
                     columns={oppColumns}
                     rows={opportunities}
                     keyOf={(r) => r.id}
-                    empty={<div className="p-6 text-center text-sm text-slate-500">No opportunities found.</div>}
+                    empty={<div className="p-6 text-center text-sm text-slate-500">{t("sc.sales.t.noOpportunitiesFound")}</div>}
                   />
                 </div>
 
@@ -640,27 +640,27 @@ export function SalesPipelinePage() {
 
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500">Customer:</span>
+                          <span className="text-slate-500">{t("sc.sales.t.customer")}</span>
                           <span className="font-medium text-slate-800">
                             {opportunityDetail.customer?.name ?? "—"}
                           </span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500">Stage:</span>
+                          <span className="text-slate-500">{t("sc.sales.t.stage")}</span>
                           <StatusPill tone={stageTone(opportunityDetail.opportunity.stageCode)}>
                             {opportunityDetail.opportunity.stageCode}
                           </StatusPill>
                         </div>
                         {opportunityDetail.opportunity.outcome && (
                           <div className="flex justify-between py-1 border-b border-slate-100">
-                            <span className="text-slate-500">Outcome:</span>
+                            <span className="text-slate-500">{t("sc.sales.t.outcome")}</span>
                             <StatusPill tone={outcomeTone(opportunityDetail.opportunity.outcome)}>
                               {opportunityDetail.opportunity.outcome}
                             </StatusPill>
                           </div>
                         )}
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500">Est. Value:</span>
+                          <span className="text-slate-500">{t("sc.sales.t.estValue")}</span>
                           <span className="font-medium text-slate-800">
                             {opportunityDetail.opportunity.estimatedValue
                               ? `${opportunityDetail.opportunity.currency} ${Number(
@@ -723,7 +723,7 @@ export function SalesPipelinePage() {
                     </Card>
                   ) : canManageSales ? (
                     <Card className="space-y-4">
-                      <h4 className="font-semibold text-slate-900">New Opportunity</h4>
+                      <h4 className="font-semibold text-slate-900">{t("sc.sales.t.newOpportunity")}</h4>
                       <form onSubmit={handleCreateOpportunity} className="space-y-3">
                         <Field label={t("sc.sales.f.code")} required>
                           <Input name="code" placeholder="OPP-2026-001" required />
@@ -770,7 +770,7 @@ export function SalesPipelinePage() {
                   columns={quoteColumns}
                   rows={quotations}
                   keyOf={(r) => r.id}
-                  empty={<div className="p-6 text-center text-sm text-slate-500">No quotations generated yet.</div>}
+                  empty={<div className="p-6 text-center text-sm text-slate-500">{t("sc.sales.t.noQuotationsGeneratedYet")}</div>}
                 />
               </div>
 
@@ -797,19 +797,19 @@ export function SalesPipelinePage() {
 
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span className="text-slate-500">Customer:</span>
+                        <span className="text-slate-500">{t("sc.sales.t.customer")}</span>
                         <span className="font-medium text-slate-800">
                           {quotationDetail.customer?.name ?? "—"}
                         </span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span className="text-slate-500">Status:</span>
+                        <span className="text-slate-500">{t("sc.sales.t.status")}</span>
                         <StatusPill tone={quotationStatusTone(quotationDetail.quotation.status)}>
                           {quotationDetail.quotation.status}
                         </StatusPill>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span className="text-slate-500">Total:</span>
+                        <span className="text-slate-500">{t("sc.sales.t.total")}</span>
                         <span className="font-bold text-slate-900">
                           {quotationDetail.quotation.currency}{" "}
                           {Number(quotationDetail.quotation.totalAmount).toLocaleString()}
@@ -846,7 +846,7 @@ export function SalesPipelinePage() {
                   </Card>
                 ) : canManageSales ? (
                   <Card className="space-y-4">
-                    <h4 className="font-semibold text-slate-900">Draft Quotation</h4>
+                    <h4 className="font-semibold text-slate-900">{t("sc.sales.t.draftQuotation")}</h4>
                     <form onSubmit={handleCreateQuotation} className="space-y-3">
                       <Field label={t("sc.sales.f.quotationCode")} required>
                         <Input name="code" placeholder="QUO-2026-001" required />
@@ -928,7 +928,7 @@ export function SalesPipelinePage() {
                       <div className="flex justify-between items-start">
                         <div className="font-semibold text-slate-900">{pb.name}</div>
                         {pb.isStandard && (
-                          <StatusPill tone="info">Standard</StatusPill>
+                          <StatusPill tone="info">{t("sc.sales.t.standard")}</StatusPill>
                         )}
                       </div>
                       <div className="text-xs text-slate-500 mt-1">
@@ -940,7 +940,7 @@ export function SalesPipelinePage() {
 
                 {canManageSales && (
                   <Card className="space-y-3 mt-4">
-                    <div className="font-semibold text-slate-900 text-sm">Add Price Book</div>
+                    <div className="font-semibold text-slate-900 text-sm">{t("sc.sales.t.addPriceBook")}</div>
                     <form onSubmit={handleCreatePriceBook} className="space-y-2">
                       <Input name="code" placeholder={t("sc.sales.p.codeEGPbEnt2026")} required />
                       <Input name="name" placeholder={t("sc.sales.p.nameEGEnterpriseTier")} required />
@@ -966,9 +966,9 @@ export function SalesPipelinePage() {
                         <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
                           <tr>
                             <th className="p-3">SKU</th>
-                            <th className="p-3">Unit Price</th>
-                            <th className="p-3">Min Qty</th>
-                            <th className="p-3">Max Qty</th>
+                            <th className="p-3">{t("sc.sales.h.unitPrice")}</th>
+                            <th className="p-3">{t("sc.sales.h.minQty")}</th>
+                            <th className="p-3">{t("sc.sales.h.maxQty")}</th>
                             <th className="p-3">UOM</th>
                           </tr>
                         </thead>

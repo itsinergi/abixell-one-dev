@@ -312,7 +312,7 @@ export function WorkforceRecruitmentPage() {
       <PageHeader title={t("wf.recruit.title.recruitment")} subtitle={t("wf.recruit.sub.publishOpeningsSourceCandidatesRunInterv")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      {!canManage ? <Alert tone="info">Posting openings and advancing candidates require <code className="font-mono text-xs">workforce.recruitment.manage</code>.</Alert> : null}
+      {!canManage ? <Alert tone="info">{t("wf.recruit.msg.postingOpeningsAndAdvancingCandidatesReq", { perm: <code className="font-mono text-xs">workforce.recruitment.manage</code> })}</Alert> : null}
 
       <div className="flex border-b border-slate-200 text-sm">
         <button
@@ -371,7 +371,7 @@ export function WorkforceRecruitmentPage() {
             <Field label={t("wf.recruit.f.employmentType")}><Select value={employmentType} onChange={(event) => setEmploymentType(event.target.value)}><option value="full_time">{t("wf.recruit.t.fullTime")}</option><option value="contract">{t("wf.recruit.t.contract")}</option><option value="temporary">{t("wf.recruit.t.temporary")}</option></Select></Field>
             <div className="sm:col-span-2 lg:col-span-4"><Field label={t("wf.recruit.f.jobDescription")}><Textarea rows={2} value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} /></Field></div>
           </div>
-          <Button className="mt-3" disabled={busy || !postingTitle.trim()} onClick={() => void createPosting()}>Publish opening</Button>
+          <Button className="mt-3" disabled={busy || !postingTitle.trim()} onClick={() => void createPosting()}>{t("wf.recruit.t.publishOpening")}</Button>
         </Card>
       ) : null}
 
@@ -390,7 +390,7 @@ export function WorkforceRecruitmentPage() {
             <Field label={t("wf.recruit.f.candidatePhone")}><Input value={candidatePhone} onChange={(event) => setCandidatePhone(event.target.value)} /></Field>
             <Field label={t("wf.recruit.f.resumeDocumentId")}><Input value={resumeId} onChange={(event) => setResumeId(event.target.value)} placeholder={t("wf.recruit.p.optionalDocumentId")} /></Field>
           </div>
-          <Button className="mt-3" disabled={busy || !selectedPostingId || !candidateName.trim()} onClick={() => void createApplication()}>Record application</Button>
+          <Button className="mt-3" disabled={busy || !selectedPostingId || !candidateName.trim()} onClick={() => void createApplication()}>{t("wf.recruit.t.recordApplication")}</Button>
         </Card>
       ) : null}
 

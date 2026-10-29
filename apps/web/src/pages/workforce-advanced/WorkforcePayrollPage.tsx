@@ -315,13 +315,13 @@ export function WorkforcePayrollPage() {
       <PageHeader title={t("wf.payroll.title.payroll")} subtitle={t("wf.payroll.sub.manageIndonesianStatutoryPayrollPolicies")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      {!canManage ? <Alert tone="info">Setting profiles, running payroll, and recalculations require <code className="font-mono text-xs">workforce.payroll.manage</code>.</Alert> : null}
-      {!canApprove ? <Alert tone="info">Payroll approvals and closing periods require <code className="font-mono text-xs">workforce.payroll.approve</code>.</Alert> : null}
+      {!canManage ? <Alert tone="info">{t("wf.payroll.msg.settingProfilesRunningPayrollAndRecalcul", { perm: <code className="font-mono text-xs">workforce.payroll.manage</code> })}</Alert> : null}
+      {!canApprove ? <Alert tone="info">{t("wf.payroll.msg.payrollApprovalsAndClosingPeriodsRequire", { perm: <code className="font-mono text-xs">workforce.payroll.approve</code> })}</Alert> : null}
 
       <div className="flex overflow-x-auto border-b border-slate-200">
-        {tabButton("runs", `Payroll runs (${runs.length})`)}
-        {tabButton("profiles", "Salary profiles")}
-        {tabButton("policies", `Statutory policies (${policies.length})`)}
+        {tabButton("runs", t("wf.payroll.t.payrollRunsCount", { count: runs.length }))}
+        {tabButton("profiles", t("wf.payroll.t.salaryProfiles"))}
+        {tabButton("policies", t("wf.payroll.t.statutoryPoliciesCount", { count: policies.length }))}
       </div>
 
       <Card>
@@ -340,7 +340,7 @@ export function WorkforcePayrollPage() {
             <Field label={t("wf.payroll.f.year")} required><Input type="number" min="2000" max="2100" value={runYear} onChange={(event) => setRunYear(event.target.value)} /></Field>
             <Field label={t("wf.payroll.f.organizationUnitId")}><Input value={runUnit} onChange={(event) => setRunUnit(event.target.value)} placeholder={t("wf.payroll.p.optionalScope")} /></Field>
           </div>
-          <Button className="mt-3" disabled={busy || !runMonth || !runYear} onClick={() => void createRun()}>Create payroll period</Button>
+          <Button className="mt-3" disabled={busy || !runMonth || !runYear} onClick={() => void createRun()}>{t("wf.payroll.t.createPayrollPeriod")}</Button>
         </Card>
       ) : null}
 
@@ -358,12 +358,12 @@ export function WorkforcePayrollPage() {
             <Field label={t("wf.payroll.f.effectiveFrom")} required><Input type="date" value={profileEffectiveFrom} onChange={(event) => setProfileEffectiveFrom(event.target.value)} /></Field>
             <Field label={t("wf.payroll.f.bankName")}><Input value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder={t("wf.payroll.p.bcaMandiriBni")} /></Field>
             <Field label={t("wf.payroll.f.bankAccountNumber")}><Input value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} /></Field>
-            <div className="flex items-center pt-6"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={hasNpwp} onChange={(event) => setHasNpwp(event.target.checked)} />Has registered NPWP</label></div>
+            <div className="flex items-center pt-6"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={hasNpwp} onChange={(event) => setHasNpwp(event.target.checked)} />{t("wf.payroll.f.hasRegisteredNpwp")}</label></div>
           </div>
-          <Button className="mt-3" disabled={busy || !profileEmployee || Number(baseSalary) <= 0 || !profileEffectiveFrom} onClick={() => void saveProfile()}>Save salary profile</Button>
+          <Button className="mt-3" disabled={busy || !profileEmployee || Number(baseSalary) <= 0 || !profileEffectiveFrom} onClick={() => void saveProfile()}>{t("wf.payroll.t.saveSalaryProfile")}</Button>
           {profileEmployee && savedProfiles[profileEmployee] ? (
             <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-              <span className="font-semibold">Last saved profile:</span> Base {money(savedProfiles[profileEmployee].baseSalary)} | Allowance {money(savedProfiles[profileEmployee].fixedAllowance)} | PTKP {savedProfiles[profileEmployee].ptkpStatus}
+              <span className="font-semibold">{t("wf.payroll.t.lastSavedProfile")}</span> Base {money(savedProfiles[profileEmployee].baseSalary)} | Allowance {money(savedProfiles[profileEmployee].fixedAllowance)} | PTKP {savedProfiles[profileEmployee].ptkpStatus}
             </div>
           ) : null}
         </Card>
@@ -377,7 +377,7 @@ export function WorkforcePayrollPage() {
             <Field label={t("wf.payroll.f.policyName")} required><Input value={policyName} onChange={(event) => setPolicyName(event.target.value)} placeholder={t("wf.payroll.p.indonesiaStandard2026")} /></Field>
             <Field label={t("wf.payroll.f.effectiveFrom")} required><Input type="date" value={effectiveFromPolicy} onChange={(event) => setEffectiveFromPolicy(event.target.value)} /></Field>
           </div>
-          <Button className="mt-3" disabled={busy || !policyCode.trim() || !policyName.trim()} onClick={() => void createPolicy()}>Create statutory policy</Button>
+          <Button className="mt-3" disabled={busy || !policyCode.trim() || !policyName.trim()} onClick={() => void createPolicy()}>{t("wf.payroll.t.createStatutoryPolicy")}</Button>
         </Card>
       ) : null}
 

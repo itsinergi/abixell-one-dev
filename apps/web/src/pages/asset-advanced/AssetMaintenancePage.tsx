@@ -270,10 +270,7 @@ export function AssetMaintenancePage() {
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {!canManage ? (
-        <Alert tone="info">
-          You can view maintenance records. Creating schedules or work orders requires permission{" "}
-          <code className="font-mono text-xs">asset.maintenance.manage</code>.
-        </Alert>
+        <Alert tone="info">{t("sca.maint.msg.youCanViewMaintenanceRecordsCreatingSche", { perm: <code className="font-mono text-xs">asset.maintenance.manage</code> })}</Alert>
       ) : null}
 
       <Card>
