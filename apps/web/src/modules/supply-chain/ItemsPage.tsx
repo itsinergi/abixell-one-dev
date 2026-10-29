@@ -5,6 +5,7 @@
  * quantity shown comes from the backend's authoritative balance; this page
  * never computes stock itself.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -31,6 +32,7 @@ import {
 import { formatDate } from "../../shared/format";
 
 export function ItemsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -61,11 +63,11 @@ export function ItemsPage() {
       setItems(itemList);
       setBalances(balanceList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load items.");
+      setError(err instanceof ApiError ? err.message : t("msc.items.msg.couldNotLoadItems"));
     } finally {
       setLoading(false);
     }
-  }, [token, search]);
+  }, [token, search, t]);
 
   useEffect(() => {
     void load();
@@ -78,10 +80,10 @@ export function ItemsPage() {
       try {
         setMovements(await api.stockMovements(token, { itemCode: item.code }));
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not load movements.");
+        setError(err instanceof ApiError ? err.message : t("msc.items.msg.couldNotLoadMovements"));
       }
     },
-    [token],
+    [token, t],
   );
 
   async function run(action: () => Promise<unknown>, successMessage: string) {
@@ -94,7 +96,7 @@ export function ItemsPage() {
       await load();
       if (selected) await openItem(selected);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("msc.items.msg.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -106,12 +108,12 @@ export function ItemsPage() {
   }
 
   const columns: Column<ScmItem>[] = [
-    { header: "Code", cell: (row) => <span className="font-medium">{row.code}</span> },
-    { header: "Name", cell: (row) => row.name },
-    { header: "Unit", cell: (row) => row.unitOfMeasure },
-    { header: "On hand", cell: (row) => <Badge>{totalFor(row)}</Badge> },
+    { header: t("msc.items.h.code"), cell: (row) => <span className="font-medium">{row.code}</span> },
+    { header: t("msc.items.h.name"), cell: (row) => row.name },
+    { header: t("msc.items.h.unit"), cell: (row) => row.unitOfMeasure },
+    { header: t("msc.items.h.onHand"), cell: (row) => <Badge>{totalFor(row)}</Badge> },
     {
-      header: "State",
+      header: t("msc.items.h.state"),
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>
       ),
@@ -120,21 +122,21 @@ export function ItemsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Items & Stock" subtitle="What exists, how much of it, and what moved." />
+      <PageHeader title={t("msc.items.title.itemsStock")} subtitle={t("msc.items.sub.whatExistsHowMuchOfItAndWhatMoved")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Add an item</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("msc.items.t.addAnItem")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Code" required>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. bolt-m8" />
+          <Field label={t("msc.items.f.code")} required>
+            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("msc.items.p.eGBoltM8")} />
           </Field>
-          <Field label="Name" required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Display name" />
+          <Field label={t("msc.items.f.name")} required>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("msc.items.p.displayName")} />
           </Field>
-          <Field label="Unit of measure" required>
+          <Field label={t("msc.items.f.unitOfMeasure")} required>
             <Input value={uom} onChange={(e) => setUom(e.target.value)} placeholder="EA / KG / L / BOX" />
           </Field>
           <div className="flex items-end">
@@ -156,8 +158,8 @@ export function ItemsPage() {
       </Card>
 
       <Card>
-        <Field label="Search">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or code" />
+        <Field label={t("msc.items.f.search")}>
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("msc.items.p.nameOrCode")} />
         </Field>
       </Card>
 
@@ -169,7 +171,7 @@ export function ItemsPage() {
           rows={items}
           keyOf={(row) => row.id}
           onRowClick={(row) => void openItem(row)}
-          empty={<EmptyState title="No items yet" description="Create one above to start tracking stock." />}
+          empty={<EmptyState title={t("msc.items.title.noItemsYet")} description={t("msc.items.d.createOneAboveToStartTrackingStock")} />}
         />
       )}
 
@@ -180,7 +182,7 @@ export function ItemsPage() {
               Move stock — <Badge>{selected.code}</Badge>
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label="Quantity" required>
+              <Field label={t("msc.items.f.quantity")} required>
                 <Input
                   type="number"
                   min="0"
@@ -189,8 +191,8 @@ export function ItemsPage() {
                   onChange={(e) => setQuantity(e.target.value)}
                 />
               </Field>
-              <Field label="Reference">
-                <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" />
+              <Field label={t("msc.items.f.reference")}>
+                <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t("msc.items.p.optional")} />
               </Field>
               <div className="flex items-end gap-2">
                 <Button
@@ -233,9 +235,9 @@ export function ItemsPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Movement history</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("msc.items.t.movementHistory")}</h2>
             {movements.length === 0 ? (
-              <p className="text-sm text-slate-500">No movements recorded.</p>
+              <p className="text-sm text-slate-500">{t("msc.items.n.noMovementsRecorded")}</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {movements.map((m) => (

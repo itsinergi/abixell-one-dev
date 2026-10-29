@@ -1,4 +1,5 @@
 /** Wave A1 — Service Quality Advanced (SQ-ADV-001…SQ-ADV-004). */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -67,6 +68,7 @@ function proposalStatusTone(status: string): "neutral" | "info" | "success" | "w
 }
 
 export function ServiceQualityPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -144,12 +146,12 @@ export function ServiceQualityPage() {
         setSelectedRuleId(recRes[0].id);
       }
     } catch (err) {
-      const text = err instanceof ApiError ? err.message : "Failed to load service quality data.";
+      const text = err instanceof ApiError ? err.message : t("sq.main.msg.failedToLoadServiceQualityData");
       setMessage({ type: "error", text });
     } finally {
       setLoading(false);
     }
-  }, [token, selectedRuleId]);
+  }, [token, selectedRuleId, t]);
 
   useEffect(() => {
     loadData();
@@ -199,7 +201,7 @@ export function ServiceQualityPage() {
       (e.target as HTMLFormElement).reset();
       loadData();
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to create calendar." });
+      setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("sq.main.msg.failedToCreateCalendar") });
     }
   }
 
@@ -217,7 +219,7 @@ export function ServiceQualityPage() {
       (e.target as HTMLFormElement).reset();
       loadData();
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to create RCA Category." });
+      setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("sq.main.msg.failedToCreateRcaCategory") });
     }
   }
 
@@ -228,9 +230,9 @@ export function ServiceQualityPage() {
       setMessage({ type: "success", text: `CAPA marked as ${verdict}.` });
       loadData();
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to verify CAPA." });
+      setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("sq.main.msg.failedToVerifyCapa") });
     }
-  }, [loadData, token]);
+  }, [loadData, token, t]);
 
   // Handle Create Recurrence Rule
   async function handleCreateRecurrenceRule(e: FormEvent<HTMLFormElement>) {
@@ -249,7 +251,7 @@ export function ServiceQualityPage() {
       setSelectedRuleId(created.id);
       loadData();
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Failed to create rule." });
+      setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("sq.main.msg.failedToCreateRule") });
     }
   }
 
@@ -276,7 +278,7 @@ export function ServiceQualityPage() {
   const capaColumns: Column<SqCapaActionRecord>[] = useMemo(
     () => [
       {
-        header: "CAPA Number / Title",
+        header: t("sq.main.h.capaNumberTitle"),
         cell: (r: SqCapaActionRecord) => (
           <div>
             <div className="font-medium text-slate-900">{r.title}</div>
@@ -285,13 +287,13 @@ export function ServiceQualityPage() {
         ),
       },
       {
-        header: "Status",
+        header: t("sq.main.h.status"),
         cell: (r: SqCapaActionRecord) => (
           <StatusPill tone={capaStatusTone(r.status)}>{r.status}</StatusPill>
         ),
       },
       {
-        header: "Verdict",
+        header: t("sq.main.h.verdict"),
         cell: (r: SqCapaActionRecord) =>
           r.effectivenessVerdict ? (
             <StatusPill tone={r.effectivenessVerdict === "effective" ? "success" : "danger"}>
@@ -302,11 +304,11 @@ export function ServiceQualityPage() {
           ),
       },
       {
-        header: "Due Date",
+        header: t("sq.main.h.dueDate"),
         cell: (r: SqCapaActionRecord) => r.dueDate || "—",
       },
       {
-        header: "Actions",
+        header: t("sq.main.h.actions"),
         cell: (r: SqCapaActionRecord) => (
           <div className="flex gap-1">
             {canConfigure && r.status === "completed" && (
@@ -331,13 +333,13 @@ export function ServiceQualityPage() {
         ),
       },
     ],
-    [canConfigure, handleVerifyCapa],
+    [canConfigure, handleVerifyCapa, t],
   );
 
   const proposalColumns: Column<SqAutomationProposalRecord>[] = useMemo(
     () => [
       {
-        header: "Trigger / Rule",
+        header: t("sq.main.h.triggerRule"),
         cell: (r: SqAutomationProposalRecord) => (
           <div>
             <div className="font-medium text-slate-900">{r.triggerEvent}</div>
@@ -346,7 +348,7 @@ export function ServiceQualityPage() {
         ),
       },
       {
-        header: "Proposed Action",
+        header: t("sq.main.h.proposedAction"),
         cell: (r: SqAutomationProposalRecord) => (
           <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
             {r.proposedAction}
@@ -354,19 +356,19 @@ export function ServiceQualityPage() {
         ),
       },
       {
-        header: "Status",
+        header: t("sq.main.h.status"),
         cell: (r: SqAutomationProposalRecord) => (
           <StatusPill tone={proposalStatusTone(r.status)}>{r.status}</StatusPill>
         ),
       },
       {
-        header: "Gated",
+        header: t("sq.main.h.gated"),
         cell: () => (
-          <StatusPill tone="warning">Founder Gated</StatusPill>
+          <StatusPill tone="warning">{t("sq.main.t.founderGated")}</StatusPill>
         ),
       },
       {
-        header: "Review",
+        header: t("sq.main.h.review"),
         cell: (r: SqAutomationProposalRecord) => (
           <div className="flex gap-1">
             <Button
@@ -398,14 +400,14 @@ export function ServiceQualityPage() {
         ),
       },
     ],
-    [canConfigure, handleProposalDecision],
+    [canConfigure, handleProposalDecision, t],
   );
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Service Quality Advanced"
-        subtitle="Multidimensional SLA matrix, structured RCA taxonomy, CAPA tracking, recurrence analytics, and founder-gated automation."
+        title={t("sq.main.title.serviceQualityAdvanced")}
+        subtitle={t("sq.main.sub.multidimensionalSlaMatrixStructuredRcaTa")}
       />
 
       {message && (
@@ -477,7 +479,7 @@ export function ServiceQualityPage() {
                       {perf.status}
                     </div>
                     <div className="text-xl font-bold text-slate-900 mt-1">
-                      {perf.count} <span className="text-xs font-normal text-slate-500">targets</span>
+                      {perf.count} <span className="text-xs font-normal text-slate-500">{t("sq.main.t.targets")}</span>
                     </div>
                     <div className="text-xs text-slate-600 mt-0.5">
                       Response: {perf.metResponseCount} met | Resolution: {perf.metResolutionCount} met
@@ -489,7 +491,7 @@ export function ServiceQualityPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Policies & Rules */}
                 <div className="lg:col-span-2 space-y-4">
-                  <h3 className="text-base font-semibold text-slate-900">SLA Policies & Matrix Rules</h3>
+                  <h3 className="text-base font-semibold text-slate-900">{t("sq.main.t.slaPoliciesMatrixRules")}</h3>
                   <div className="space-y-3">
                     {slaPolicies.map(({ policy, calendar, rules }) => (
                       <Card key={policy.id} className="space-y-3">
@@ -508,11 +510,11 @@ export function ServiceQualityPage() {
                           <table className="w-full text-xs text-left">
                             <thead className="bg-slate-50 text-slate-600 font-medium">
                               <tr>
-                                <th className="p-2">Rule Code</th>
-                                <th className="p-2">Severity / Category</th>
-                                <th className="p-2">Response SLA</th>
-                                <th className="p-2">Resolution SLA</th>
-                                <th className="p-2">Priority</th>
+                                <th className="p-2">{t("sq.main.h.ruleCode")}</th>
+                                <th className="p-2">{t("sq.main.h.severityCategory")}</th>
+                                <th className="p-2">{t("sq.main.h.responseSla")}</th>
+                                <th className="p-2">{t("sq.main.h.resolutionSla")}</th>
+                                <th className="p-2">{t("sq.main.h.priority")}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -541,13 +543,13 @@ export function ServiceQualityPage() {
 
                 {/* Calendars */}
                 <div className="space-y-4">
-                  <h3 className="text-base font-semibold text-slate-900">Business Calendars</h3>
+                  <h3 className="text-base font-semibold text-slate-900">{t("sq.main.t.businessCalendars")}</h3>
                   <div className="space-y-2">
                     {calendars.map(({ calendar, windows, holidays }) => (
                       <Card key={calendar.id} className="p-3 space-y-1">
                         <div className="flex justify-between font-semibold text-slate-900 text-sm">
                           <span>{calendar.name}</span>
-                          {calendar.isDefault && <StatusPill tone="success">Default</StatusPill>}
+                          {calendar.isDefault && <StatusPill tone="success">{t("sq.main.t.default")}</StatusPill>}
                         </div>
                         <div className="text-xs text-slate-500">
                           {calendar.timeZone} ({calendar.isContinuous ? "Continuous 24/7" : `${windows.length} Work Windows`})
@@ -561,14 +563,14 @@ export function ServiceQualityPage() {
 
                   {canConfigure && (
                     <Card className="space-y-3">
-                      <div className="font-semibold text-slate-900 text-sm">Create Workweek Calendar</div>
+                      <div className="font-semibold text-slate-900 text-sm">{t("sq.main.t.createWorkweekCalendar")}</div>
                       <form onSubmit={handleCreateCalendar} className="space-y-2">
-                        <Input name="code" placeholder="Code (e.g. CAL-W5-JKT)" required />
-                        <Input name="name" placeholder="Name (e.g. Mon-Fri 08:00-17:00)" required />
+                        <Input name="code" placeholder={t("sq.main.p.codeEGCalW5Jkt")} required />
+                        <Input name="name" placeholder={t("sq.main.p.nameEGMonFri08001700")} required />
                         <Input name="timeZone" defaultValue="Asia/Jakarta" required />
                         <Button type="submit" variant="secondary" className="w-full text-xs">
-                          Create Calendar
-                        </Button>
+              {t("sq.main.t.createCalendar")}
+              </Button>
                       </form>
                     </Card>
                   )}
@@ -582,10 +584,10 @@ export function ServiceQualityPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left Column: RCA Categories */}
               <div className="space-y-4">
-                <h3 className="text-base font-semibold text-slate-900">Root Cause Categories</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("sq.main.t.rootCauseCategories")}</h3>
                 <Card className="space-y-2 p-3">
                   {rcaCategories.length === 0 ? (
-                    <div className="text-xs text-slate-400">No categories configured.</div>
+                    <div className="text-xs text-slate-400">{t("sq.main.t.noCategoriesConfigured")}</div>
                   ) : (
                     rcaCategories.map((rca) => (
                       <div key={rca.id} className="p-2 rounded bg-slate-50 border border-slate-100 text-xs">
@@ -599,21 +601,21 @@ export function ServiceQualityPage() {
 
                 {canConfigure && (
                   <Card className="space-y-3">
-                    <div className="font-semibold text-slate-900 text-sm">Add RCA Category</div>
+                    <div className="font-semibold text-slate-900 text-sm">{t("sq.main.t.addRcaCategory")}</div>
                     <form onSubmit={handleCreateRcaCategory} className="space-y-2">
-                      <Input name="code" placeholder="Code (e.g. RCA-NET-FIBER)" required />
-                      <Input name="name" placeholder="Name (e.g. Physical Fiber Cut)" required />
-                      <Input name="description" placeholder="Description (optional)" />
+                      <Input name="code" placeholder={t("sq.main.p.codeEGRcaNetFiber")} required />
+                      <Input name="name" placeholder={t("sq.main.p.nameEGPhysicalFiberCut")} required />
+                      <Input name="description" placeholder={t("sq.main.p.descriptionOptional")} />
                       <Button type="submit" variant="secondary" className="w-full text-xs">
-                        Add Category
-                      </Button>
+              {t("sq.main.t.addCategory")}
+              </Button>
                     </form>
                   </Card>
                 )}
 
                 {/* CAPA Summary */}
                 <Card className="p-3 space-y-2">
-                  <div className="text-xs font-semibold uppercase text-slate-600">CAPA Effectiveness</div>
+                  <div className="text-xs font-semibold uppercase text-slate-600">{t("sq.main.t.capaEffectiveness")}</div>
                   {capaSummary.map((sum) => (
                     <div key={sum.status} className="flex justify-between text-xs py-1 border-b border-slate-100">
                       <span className="text-slate-600">{sum.status}:</span>
@@ -625,12 +627,12 @@ export function ServiceQualityPage() {
 
               {/* Right Columns: CAPA Actions */}
               <div className="lg:col-span-2 space-y-4">
-                <h3 className="text-base font-semibold text-slate-900">CAPA Actions</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("sq.main.t.capaActions")}</h3>
                 <DataTable
                   columns={capaColumns}
                   rows={capaActions}
                   keyOf={(r) => r.id}
-                  empty={<div className="p-6 text-center text-sm text-slate-500">No CAPA actions registered.</div>}
+                  empty={<div className="p-6 text-center text-sm text-slate-500">{t("sq.main.t.noCapaActionsRegistered")}</div>}
                 />
               </div>
             </div>
@@ -641,7 +643,7 @@ export function ServiceQualityPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left Column: Rules */}
               <div className="space-y-4">
-                <h3 className="text-base font-semibold text-slate-900">Recurrence Rules</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("sq.main.t.recurrenceRules")}</h3>
                 <div className="space-y-2">
                   {recurrenceRules.map((rule) => (
                     <div
@@ -663,25 +665,25 @@ export function ServiceQualityPage() {
 
                 {canConfigure && (
                   <Card className="space-y-3">
-                    <div className="font-semibold text-slate-900 text-sm">Create Recurrence Rule</div>
+                    <div className="font-semibold text-slate-900 text-sm">{t("sq.main.t.createRecurrenceRule")}</div>
                     <form onSubmit={handleCreateRecurrenceRule} className="space-y-2">
-                      <Input name="code" placeholder="Code (e.g. REC-CAT-30D)" required />
-                      <Input name="name" placeholder="Name (e.g. Same Category Cluster)" required />
+                      <Input name="code" placeholder={t("sq.main.p.codeEGRecCat30d")} required />
+                      <Input name="name" placeholder={t("sq.main.p.nameEGSameCategoryCluster")} required />
                       <Select name="groupBy" defaultValue="category">
-                        <option value="category">Category</option>
-                        <option value="severity">Severity</option>
-                        <option value="customer">Customer</option>
-                        <option value="site">Site</option>
-                        <option value="service">Service</option>
-                        <option value="root_cause">Root Cause</option>
+                        <option value="category">{t("sq.main.t.category")}</option>
+                        <option value="severity">{t("sq.main.t.severity")}</option>
+                        <option value="customer">{t("sq.main.t.customer")}</option>
+                        <option value="site">{t("sq.main.t.site")}</option>
+                        <option value="service">{t("sq.main.t.service")}</option>
+                        <option value="root_cause">{t("sq.main.t.rootCause")}</option>
                       </Select>
                       <div className="grid grid-cols-2 gap-2">
-                        <Input type="number" name="windowDays" defaultValue="30" placeholder="Days" required />
-                        <Input type="number" name="minimumOccurrences" defaultValue="3" placeholder="Min Occurrences" required />
+                        <Input type="number" name="windowDays" defaultValue="30" placeholder={t("sq.main.p.days")} required />
+                        <Input type="number" name="minimumOccurrences" defaultValue="3" placeholder={t("sq.main.p.minOccurrences")} required />
                       </div>
                       <Button type="submit" variant="secondary" className="w-full text-xs">
-                        Create Rule
-                      </Button>
+              {t("sq.main.t.createRule")}
+              </Button>
                     </form>
                   </Card>
                 )}
@@ -689,9 +691,7 @@ export function ServiceQualityPage() {
 
               {/* Right Columns: Detection Results */}
               <div className="lg:col-span-2 space-y-4">
-                <h3 className="text-base font-semibold text-slate-900">
-                  Detected Recurrence Clusters
-                </h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("sq.main.t.detectedRecurrenceClusters")}</h3>
 
                 {detectionResult ? (
                   <div className="space-y-4">
@@ -707,8 +707,8 @@ export function ServiceQualityPage() {
                     <div className="space-y-3">
                       {detectionResult.clusters.length === 0 ? (
                         <EmptyState
-                          title="No recurring patterns detected"
-                          description="No groups exceeded the minimum recurrence threshold within the lookback window."
+                          title={t("sq.main.title.noRecurringPatternsDetected")}
+                          description={t("sq.main.d.noGroupsExceededTheMinimumRecurrenceThre")}
                         />
                       ) : (
                         detectionResult.clusters.map((cluster, idx) => (
@@ -731,7 +731,7 @@ export function ServiceQualityPage() {
                     </div>
                   </div>
                 ) : (
-                  <EmptyState title="Select a recurrence rule" description="Choose a rule on the left to evaluate recurring patterns." />
+                  <EmptyState title={t("sq.main.title.selectARecurrenceRule")} description={t("sq.main.d.chooseARuleOnTheLeftToEvaluateRecurringP")} />
                 )}
               </div>
             </div>
@@ -742,12 +742,12 @@ export function ServiceQualityPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Proposals Table */}
               <div className="lg:col-span-2 space-y-4">
-                <h3 className="text-base font-semibold text-slate-900">Automation Review Queue</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("sq.main.t.automationReviewQueue")}</h3>
                 <DataTable
                   columns={proposalColumns}
                   rows={proposals}
                   keyOf={(r) => r.id}
-                  empty={<div className="p-6 text-center text-sm text-slate-500">No pending automation proposals.</div>}
+                  empty={<div className="p-6 text-center text-sm text-slate-500">{t("sq.main.t.noPendingAutomationProposals")}</div>}
                 />
               </div>
 
@@ -775,26 +775,26 @@ export function ServiceQualityPage() {
 
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span className="text-slate-500">Trigger:</span>
+                        <span className="text-slate-500">{t("sq.main.t.trigger")}</span>
                         <span className="font-medium text-slate-800">
                           {proposalDetail.triggerEvent}
                         </span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span className="text-slate-500">Proposed Action:</span>
+                        <span className="text-slate-500">{t("sq.main.t.proposedAction")}</span>
                         <span className="font-mono text-slate-900">
                           {proposalDetail.proposedAction}
                         </span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span className="text-slate-500">Status:</span>
+                        <span className="text-slate-500">{t("sq.main.t.status")}</span>
                         <StatusPill tone={proposalStatusTone(proposalDetail.status)}>
                           {proposalDetail.status}
                         </StatusPill>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span className="text-slate-500">Gating:</span>
-                        <span className="text-amber-700 font-medium">Founder Approval Required</span>
+                        <span className="text-slate-500">{t("sq.main.t.gating")}</span>
+                        <span className="text-amber-700 font-medium">{t("sq.main.t.founderApprovalRequired")}</span>
                       </div>
                     </div>
 
@@ -844,7 +844,7 @@ export function ServiceQualityPage() {
                     Configured Automation Rules
                   </div>
                   {automationRules.length === 0 ? (
-                    <p className="text-xs text-slate-500">No automation rules configured.</p>
+                    <p className="text-xs text-slate-500">{t("sq.main.n.noAutomationRulesConfigured")}</p>
                   ) : (
                     <ul className="space-y-2">
                       {automationRules.map((rule) => (

@@ -6,6 +6,7 @@
  * Evidence uploads reuse Document Core (`entityType: work_order`), so no
  * attachment subsystem exists here. Nothing is cached offline (PWA policy).
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -24,6 +25,7 @@ import {
 import { formatDate, formatDateShort, statusTone } from "../../shared/format";
 
 export function MyWorkDetailPage() {
+  const t = useT();
   const { workOrderId } = useParams<{ workOrderId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -43,11 +45,11 @@ export function MyWorkDetailPage() {
     try {
       setDetail(await api.workOrder(token, workOrderId));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load this job.");
+      setError(err instanceof ApiError ? err.message : t("mo.mwd.msg.couldNotLoadThisJob"));
     } finally {
       setLoading(false);
     }
-  }, [token, workOrderId]);
+  }, [token, workOrderId, t]);
 
   useEffect(() => {
     void load();
@@ -62,7 +64,7 @@ export function MyWorkDetailPage() {
       setNotice(successMessage);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("mo.mwd.msg.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -100,7 +102,7 @@ export function MyWorkDetailPage() {
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">What to do</h2>
+        <h2 className="mb-2 text-sm font-semibold text-slate-800">{t("mo.mwd.t.whatToDo")}</h2>
         <p className="text-sm text-slate-700">{workOrder.description ?? "No description provided."}</p>
         <p className="mt-2 text-sm text-slate-500">Due {formatDateShort(workOrder.dueAt)}</p>
       </Card>
@@ -112,7 +114,7 @@ export function MyWorkDetailPage() {
         </Alert>
       ) : (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Execution</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mo.mwd.t.execution")}</h2>
           {workOrder.startedAt ? (
             <p className="text-sm text-slate-600">Started {formatDate(workOrder.startedAt)}.</p>
           ) : (
@@ -131,7 +133,7 @@ export function MyWorkDetailPage() {
           </Badge>
         </h2>
         {checklist.length === 0 ? (
-          <p className="text-sm text-slate-500">No checklist for this job.</p>
+          <p className="text-sm text-slate-500">{t("mo.mwd.n.noChecklistForThisJob")}</p>
         ) : (
           <ul className="space-y-2">
             {checklist.map((item) => (
@@ -164,11 +166,11 @@ export function MyWorkDetailPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Evidence</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mo.mwd.t.evidence")}</h2>
         <input
           ref={fileInputRef}
           type="file"
-          aria-label="Attach evidence"
+          aria-label={t("mo.mwd.f.attachEvidence")}
           className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
           disabled={busy || isCompleted}
           onChange={(e) => {
@@ -177,23 +179,23 @@ export function MyWorkDetailPage() {
             if (fileInputRef.current) fileInputRef.current.value = "";
           }}
         />
-        <p className="mt-2 text-xs text-slate-500">Photos or documents proving the work was carried out.</p>
+        <p className="mt-2 text-xs text-slate-500">{t("mo.mwd.n.photosOrDocumentsProvingTheWorkWasCarrie")}</p>
       </Card>
 
       {!isCompleted ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Complete</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mo.mwd.t.complete")}</h2>
           {requiredOutstanding.length > 0 ? (
             <Alert tone="info">
               Complete the required checklist items first: {requiredOutstanding.map((c) => c.label).join(", ")}.
             </Alert>
           ) : null}
-          <Field label="Completion notes">
+          <Field label={t("mo.mwd.f.completionNotes")}>
             <Textarea
               rows={3}
               value={completionNotes}
               onChange={(e) => setCompletionNotes(e.target.value)}
-              placeholder="Anything the supervisor should know"
+              placeholder={t("mo.mwd.p.anythingTheSupervisorShouldKnow")}
             />
           </Field>
           <div className="mt-3">

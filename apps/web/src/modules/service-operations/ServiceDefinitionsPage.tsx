@@ -4,6 +4,7 @@
  * seeding. Deliberately NOT a low-code service designer: it maintains
  * finite, structured Client Configuration only.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError, type ServiceChecklistTemplateItem, type ServiceDefinition } from "../../lib/api";
@@ -23,6 +24,7 @@ import {
 } from "../../shell/components/ui";
 
 export function ServiceDefinitionsPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -46,11 +48,11 @@ export function ServiceDefinitionsPage() {
     try {
       setDefinitions(await api.serviceDefinitions(token));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load service types.");
+      setError(err instanceof ApiError ? err.message : t("mo.defs.msg.couldNotLoadServiceTypes"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -64,10 +66,10 @@ export function ServiceDefinitionsPage() {
         const detail = await api.serviceDefinition(token, definitionCode);
         setChecklist(detail.checklist);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not load the checklist.");
+        setError(err instanceof ApiError ? err.message : t("mo.defs.msg.couldNotLoadTheChecklist"));
       }
     },
-    [token],
+    [token, t],
   );
 
   async function run(action: () => Promise<unknown>, successMessage: string) {
@@ -78,18 +80,18 @@ export function ServiceDefinitionsPage() {
       await action();
       setNotice(successMessage);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed.");
+      setError(err instanceof ApiError ? err.message : t("mo.defs.msg.actionFailed"));
     } finally {
       setBusy(false);
     }
   }
 
   const columns: Column<ServiceDefinition>[] = [
-    { header: "Code", cell: (row) => <span className="font-medium">{row.code}</span> },
-    { header: "Name", cell: (row) => row.name },
-    { header: "Category", cell: (row) => row.category ?? "—" },
+    { header: t("mo.defs.h.code"), cell: (row) => <span className="font-medium">{row.code}</span> },
+    { header: t("mo.defs.h.name"), cell: (row) => row.name },
+    { header: t("mo.defs.h.category"), cell: (row) => row.category ?? "—" },
     {
-      header: "State",
+      header: t("mo.defs.h.state"),
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>
       ),
@@ -98,19 +100,19 @@ export function ServiceDefinitionsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Service Types" subtitle="Define the reusable services your teams deliver." />
+      <PageHeader title={t("mo.defs.title.serviceTypes")} subtitle={t("mo.defs.sub.defineTheReusableServicesYourTeamsDelive")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Add a service type</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mo.defs.t.addAServiceType")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Code" required>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. site_cleaning" />
+          <Field label={t("mo.defs.f.code")} required>
+            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("mo.defs.p.eGSiteCleaning")} />
           </Field>
-          <Field label="Name" required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Display name" />
+          <Field label={t("mo.defs.f.name")} required>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("mo.defs.p.displayName")} />
           </Field>
           <div className="flex items-end">
             <Button
@@ -136,7 +138,7 @@ export function ServiceDefinitionsPage() {
           rows={definitions}
           keyOf={(row) => row.id}
           onRowClick={(row) => void openDefinition(row.code)}
-          empty={<EmptyState title="No service types yet" description="Create one above to start planning work." />}
+          empty={<EmptyState title={t("mo.defs.title.noServiceTypesYet")} description={t("mo.defs.d.createOneAboveToStartPlanningWork")} />}
         />
       )}
 
@@ -146,21 +148,21 @@ export function ServiceDefinitionsPage() {
             Checklist for <Badge>{selected}</Badge>
           </h2>
           {checklist.length === 0 ? (
-            <p className="text-sm text-slate-500">No checklist items yet.</p>
+            <p className="text-sm text-slate-500">{t("mo.defs.n.noChecklistItemsYet")}</p>
           ) : (
             <ul className="mb-4 space-y-1 text-sm text-slate-800">
               {checklist.map((item) => (
                 <li key={item.id}>
-                  {item.label} {item.isRequired ? <Badge>Required</Badge> : null}
+                  {item.label} {item.isRequired ? <Badge>{t("mo.defs.t.required")}</Badge> : null}
                 </li>
               ))}
             </ul>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Item code" required>
+            <Field label={t("mo.defs.f.itemCode")} required>
               <Input value={itemCode} onChange={(e) => setItemCode(e.target.value)} />
             </Field>
-            <Field label="Label" required>
+            <Field label={t("mo.defs.f.label")} required>
               <Input value={itemLabel} onChange={(e) => setItemLabel(e.target.value)} />
             </Field>
             <div className="flex items-end gap-3">

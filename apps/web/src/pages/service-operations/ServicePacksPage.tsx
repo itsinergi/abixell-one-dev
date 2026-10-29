@@ -4,6 +4,7 @@
  * Provides complete user-facing pack cards, preset checklist inspection,
  * and explicit human activation / deactivation with optional preset seeding.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -33,6 +34,7 @@ const PACK_BADGES: Record<ServicePackCode, { code: string; title: string }> = {
 };
 
 export function ServicePacksPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -52,11 +54,11 @@ export function ServicePacksPage() {
       const list = await api.servicePacks(token);
       setPacks(list);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load service packs.");
+      setError(err instanceof ApiError ? err.message : t("so.packs.msg.couldNotLoadServicePacks"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -69,7 +71,7 @@ export function ServicePacksPage() {
       const detail = await api.servicePack(token, code);
       setSelectedPack(detail);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not inspect service pack.");
+      setError(err instanceof ApiError ? err.message : t("so.packs.msg.couldNotInspectServicePack"));
     } finally {
       setLoadingDetail(false);
     }
@@ -96,7 +98,7 @@ export function ServicePacksPage() {
         await inspectPack(pack.packCode);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not change pack activation.");
+      setError(err instanceof ApiError ? err.message : t("so.packs.msg.couldNotChangePackActivation"));
     } finally {
       setBusy(false);
     }
@@ -105,8 +107,8 @@ export function ServicePacksPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Vertical Service Packs"
-        subtitle="Turnkey configuration packages (PACK-001…PACK-004) composing generic Service Operations capability without duplicating engines."
+        title={t("so.packs.title.verticalServicePacks")}
+        subtitle={t("so.packs.sub.turnkeyConfigurationPackagesPack001Pack0")}
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
@@ -115,7 +117,7 @@ export function ServicePacksPage() {
       <Card>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-800">Preset provisioning policy</h2>
+            <h2 className="text-sm font-semibold text-slate-800">{t("so.packs.t.presetProvisioningPolicy")}</h2>
             <p className="text-xs text-slate-500">
               When activating a pack, standard service definitions and structured checklists can be
               automatically created in Service Operations.
@@ -128,17 +130,17 @@ export function ServicePacksPage() {
               checked={seedPresets}
               onChange={(e) => setSeedPresets(e.target.checked)}
             />
-            <span>Auto-seed standard service presets</span>
+            <span>{t("so.packs.t.autoSeedStandardServicePresets")}</span>
           </label>
         </div>
       </Card>
 
       {loading ? (
-        <Spinner label="Loading service packs…" />
+        <Spinner label={t("so.packs.f.loadingServicePacks")} />
       ) : packs.length === 0 ? (
         <EmptyState
-          title="No service packs found"
-          description="Service pack definitions are currently not available for this workspace."
+          title={t("so.packs.title.noServicePacksFound")}
+          description={t("so.packs.d.servicePackDefinitionsAreCurrentlyNotAva")}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -167,11 +169,11 @@ export function ServicePacksPage() {
 
                 <dl className="mt-4 grid grid-cols-1 gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600 sm:grid-cols-2">
                   <div>
-                    <dt className="font-medium text-slate-400">Preset service types</dt>
+                    <dt className="font-medium text-slate-400">{t("so.packs.f.presetServiceTypes")}</dt>
                     <dd className="font-semibold text-slate-800">{pack.presetServiceCount} services</dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-400">Last activation</dt>
+                    <dt className="font-medium text-slate-400">{t("so.packs.f.lastActivation")}</dt>
                     <dd className="text-slate-800">
                       {pack.activatedAt ? formatDate(pack.activatedAt) : "Not yet activated"}
                     </dd>
@@ -248,9 +250,9 @@ export function ServicePacksPage() {
                           <span>{item.label}</span>
                         </div>
                         {item.isRequired ? (
-                          <Badge className="bg-rose-50 text-rose-700">Mandatory</Badge>
+                          <Badge className="bg-rose-50 text-rose-700">{t("so.packs.t.mandatory")}</Badge>
                         ) : (
-                          <Badge className="bg-slate-100 text-slate-500">Optional</Badge>
+                          <Badge className="bg-slate-100 text-slate-500">{t("so.packs.t.optional")}</Badge>
                         )}
                       </li>
                     ))}

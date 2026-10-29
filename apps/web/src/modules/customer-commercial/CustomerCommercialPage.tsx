@@ -1,4 +1,5 @@
 /** Phase 10 — Customer & Commercial completion (CUS.4). */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -71,6 +72,7 @@ function maintenanceStatus(status: string): { label: string; next: string } {
 }
 
 export function CustomerCommercialPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -126,13 +128,13 @@ export function CustomerCommercialPage() {
       } catch (err) {
         setMessage({
           type: "error",
-          text: err instanceof ApiError ? err.message : "Could not load customer commercial detail.",
+          text: err instanceof ApiError ? err.message : t("cc.main.msg.couldNotLoadCustomerCommercialDetail"),
         });
       } finally {
         setDetailLoading(false);
       }
     },
-    [token],
+    [token, t],
   );
 
   const load = useCallback(async () => {
@@ -157,11 +159,11 @@ export function CustomerCommercialPage() {
       setOrgUnits(unitList);
       await loadDetail(nextCustomerId, me.permissions);
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Could not load customers." });
+      setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.couldNotLoadCustomers") });
     } finally {
       setLoading(false);
     }
-  }, [loadDetail, selectedCustomerId, token]);
+  }, [loadDetail, selectedCustomerId, token, t]);
 
   useEffect(() => {
     void load();
@@ -194,19 +196,19 @@ export function CustomerCommercialPage() {
       await action(new FormData(e.currentTarget));
       e.currentTarget.reset();
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Request failed." });
+      setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.requestFailed") });
     }
   }
 
   const customerColumns: Column<Customer>[] = [
-    { header: "Customer", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { header: "Code", cell: (row) => row.code },
-    { header: "Owner OU", cell: (row) => orgUnits.find((unit) => unit.id === row.ownerOrganizationUnitId)?.name ?? "—" },
-    { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    { header: t("cc.main.h.customer"), cell: (row) => <span className="font-medium">{row.name}</span> },
+    { header: t("cc.main.h.code"), cell: (row) => row.code },
+    { header: t("cc.main.h.ownerOu"), cell: (row) => orgUnits.find((unit) => unit.id === row.ownerOrganizationUnitId)?.name ?? "—" },
+    { header: t("cc.main.h.status"), cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
     ...(canManageCustomer
       ? [
           {
-            header: "Actions",
+            header: t("cc.main.h.actions"),
             cell: (row) => {
               const transition = maintenanceStatus(row.status);
               return (
@@ -218,7 +220,7 @@ export function CustomerCommercialPage() {
                     void api
                       .updateCustomer(token, row.id, { status: transition.next })
                       .then(() => reloadSelected(`Customer ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
-                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Status update failed." }));
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.statusUpdateFailed") }));
                   }}
                 >
                   {transition.label}
@@ -231,14 +233,14 @@ export function CustomerCommercialPage() {
   ];
 
   const contactColumns: Column<CustomerContact>[] = [
-    { header: "Name", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { header: "Email", cell: (row) => row.email ?? "—" },
-    { header: "Phone", cell: (row) => row.phone ?? "—" },
-    { header: "Primary", cell: (row) => (row.isPrimary ? <StatusPill tone="success">Primary</StatusPill> : "—") },
+    { header: t("cc.main.h.name"), cell: (row) => <span className="font-medium">{row.name}</span> },
+    { header: t("cc.main.h.email"), cell: (row) => row.email ?? "—" },
+    { header: t("cc.main.h.phone"), cell: (row) => row.phone ?? "—" },
+    { header: t("cc.main.h.primary"), cell: (row) => (row.isPrimary ? <StatusPill tone="success">{t("cc.main.t.primary")}</StatusPill> : "—") },
     ...(canManageCustomer
       ? [
           {
-            header: "Actions",
+            header: t("cc.main.h.actions"),
             cell: (row) => (
               <Button
                 type="button"
@@ -248,7 +250,7 @@ export function CustomerCommercialPage() {
                   void api
                     .updateCustomerContact(token, row.id, { isPrimary: !row.isPrimary })
                     .then(() => reloadSelected("Contact updated."))
-                    .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Contact update failed." }));
+                    .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.contactUpdateFailed") }));
                 }}
               >
                 {row.isPrimary ? "Unset primary" : "Set primary"}
@@ -260,14 +262,14 @@ export function CustomerCommercialPage() {
   ];
 
   const contractColumns: Column<ContractRecord>[] = [
-    { header: "Contract", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { header: "Code", cell: (row) => row.code },
-    { header: "Period", cell: (row) => `${row.startDate ?? "—"} → ${row.endDate ?? "—"}` },
-    { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    { header: t("cc.main.h.contract"), cell: (row) => <span className="font-medium">{row.name}</span> },
+    { header: t("cc.main.h.code"), cell: (row) => row.code },
+    { header: t("cc.main.h.period"), cell: (row) => `${row.startDate ?? "—"} → ${row.endDate ?? "—"}` },
+    { header: t("cc.main.h.status"), cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
     ...(canManageContract
       ? [
           {
-            header: "Actions",
+            header: t("cc.main.h.actions"),
             cell: (row) => {
               const transition = maintenanceStatus(row.status);
               return (
@@ -278,7 +280,7 @@ export function CustomerCommercialPage() {
                     void api
                       .updateContract(token, row.id, { status: transition.next })
                       .then(() => reloadSelected(`Contract ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
-                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Contract update failed." }))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.contractUpdateFailed") }))
                   }
                 >
                   {transition.label}
@@ -291,14 +293,14 @@ export function CustomerCommercialPage() {
   ];
 
   const projectColumns: Column<ProjectRecord>[] = [
-    { header: "Project", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { header: "Code", cell: (row) => row.code },
-    { header: "Contract", cell: (row) => detail.contracts.find((contract) => contract.id === row.contractId)?.code ?? "—" },
-    { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    { header: t("cc.main.h.project"), cell: (row) => <span className="font-medium">{row.name}</span> },
+    { header: t("cc.main.h.code"), cell: (row) => row.code },
+    { header: t("cc.main.h.contract"), cell: (row) => detail.contracts.find((contract) => contract.id === row.contractId)?.code ?? "—" },
+    { header: t("cc.main.h.status"), cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
     ...(canManageProject
       ? [
           {
-            header: "Actions",
+            header: t("cc.main.h.actions"),
             cell: (row) => {
               const transition = maintenanceStatus(row.status);
               return (
@@ -309,7 +311,7 @@ export function CustomerCommercialPage() {
                     void api
                       .updateProject(token, row.id, { status: transition.next })
                       .then(() => reloadSelected(`Project ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
-                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Project update failed." }))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.projectUpdateFailed") }))
                   }
                 >
                   {transition.label}
@@ -322,15 +324,15 @@ export function CustomerCommercialPage() {
   ];
 
   const siteColumns: Column<SiteRecord>[] = [
-    { header: "Site / Location", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { header: "Code", cell: (row) => row.code },
-    { header: "Project", cell: (row) => detail.projects.find((project) => project.id === row.projectId)?.code ?? "—" },
-    { header: "Address", cell: (row) => row.address ?? "—" },
-    { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    { header: t("cc.main.h.siteLocation"), cell: (row) => <span className="font-medium">{row.name}</span> },
+    { header: t("cc.main.h.code"), cell: (row) => row.code },
+    { header: t("cc.main.h.project"), cell: (row) => detail.projects.find((project) => project.id === row.projectId)?.code ?? "—" },
+    { header: t("cc.main.h.address"), cell: (row) => row.address ?? "—" },
+    { header: t("cc.main.h.status"), cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
     ...(canManageSite
       ? [
           {
-            header: "Actions",
+            header: t("cc.main.h.actions"),
             cell: (row) => {
               const transition = maintenanceStatus(row.status);
               return (
@@ -341,7 +343,7 @@ export function CustomerCommercialPage() {
                     void api
                       .updateSite(token, row.id, { status: transition.next })
                       .then(() => reloadSelected(`Site ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
-                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Site update failed." }))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.siteUpdateFailed") }))
                   }
                 >
                   {transition.label}
@@ -354,14 +356,14 @@ export function CustomerCommercialPage() {
   ];
 
   const serviceColumns: Column<CommercialService>[] = [
-    { header: "Service", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { header: "Code", cell: (row) => row.code },
-    { header: "Description", cell: (row) => row.description ?? "—" },
-    { header: "Active", cell: (row) => <StatusPill tone={row.isActive ? "success" : "danger"}>{row.isActive ? "Active" : "Inactive"}</StatusPill> },
+    { header: t("cc.main.h.service"), cell: (row) => <span className="font-medium">{row.name}</span> },
+    { header: t("cc.main.h.code"), cell: (row) => row.code },
+    { header: t("cc.main.h.description"), cell: (row) => row.description ?? "—" },
+    { header: t("cc.main.h.active"), cell: (row) => <StatusPill tone={row.isActive ? "success" : "danger"}>{row.isActive ? "Active" : "Inactive"}</StatusPill> },
     ...(canManageService
       ? [
           {
-            header: "Actions",
+            header: t("cc.main.h.actions"),
             cell: (row) => (
               <Button
                 type="button"
@@ -370,7 +372,7 @@ export function CustomerCommercialPage() {
                   void api
                     .updateCommercialService(token, row.id, { isActive: !row.isActive })
                     .then(() => reloadSelected(`Service ${row.isActive ? "deactivated" : "reactivated"}.`))
-                    .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Service update failed." }))
+                    .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.serviceUpdateFailed") }))
                 }
               >
                 {row.isActive ? "Deactivate" : "Reactivate"}
@@ -382,15 +384,15 @@ export function CustomerCommercialPage() {
   ];
 
   const linkColumns: Column<CustomerServiceLink>[] = [
-    { header: "Service", cell: (row) => services.find((service) => service.id === row.serviceId)?.name ?? row.serviceId.slice(0, 8) },
-    { header: "Contract", cell: (row) => detail.contracts.find((contract) => contract.id === row.contractId)?.code ?? "—" },
-    { header: "Project", cell: (row) => detail.projects.find((project) => project.id === row.projectId)?.code ?? "—" },
-    { header: "Site", cell: (row) => detail.sites.find((site) => site.id === row.siteId)?.code ?? "—" },
-    { header: "Status", cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
+    { header: t("cc.main.h.service"), cell: (row) => services.find((service) => service.id === row.serviceId)?.name ?? row.serviceId.slice(0, 8) },
+    { header: t("cc.main.h.contract"), cell: (row) => detail.contracts.find((contract) => contract.id === row.contractId)?.code ?? "—" },
+    { header: t("cc.main.h.project"), cell: (row) => detail.projects.find((project) => project.id === row.projectId)?.code ?? "—" },
+    { header: t("cc.main.h.site"), cell: (row) => detail.sites.find((site) => site.id === row.siteId)?.code ?? "—" },
+    { header: t("cc.main.h.status"), cell: (row) => <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill> },
     ...(canManageService
       ? [
           {
-            header: "Actions",
+            header: t("cc.main.h.actions"),
             cell: (row) => {
               const transition = maintenanceStatus(row.status);
               return (
@@ -401,7 +403,7 @@ export function CustomerCommercialPage() {
                     void api
                       .updateCustomerServiceLink(token, row.id, { status: transition.next })
                       .then(() => reloadSelected(`Service link ${transition.next === "active" ? "reactivated" : "deactivated"}.`))
-                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : "Service link update failed." }))
+                      .catch((err) => setMessage({ type: "error", text: err instanceof ApiError ? err.message : t("cc.main.msg.serviceLinkUpdateFailed") }))
                   }
                 >
                   {transition.label}
@@ -416,9 +418,9 @@ export function CustomerCommercialPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Customer & Commercial"
-        subtitle="Manage customers, contacts, contracts, projects, sites, service catalog, and customer-service links through the existing scope-safe APIs."
-        actions={<Button onClick={load}>Refresh</Button>}
+        title={t("cc.main.title.customerCommercial")}
+        subtitle={t("cc.main.sub.manageCustomersContactsContractsProjects")}
+        actions={<Button onClick={load}>{t("cc.main.t.refresh")}</Button>}
       />
 
       {message ? <Alert tone={message.type}>{message.text}</Alert> : null}
@@ -437,11 +439,11 @@ export function CustomerCommercialPage() {
             <Card className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Customers</h2>
-                  <p className="text-sm text-slate-500">Rows are already limited to the caller's Customer Data Scope.</p>
+                  <h2 className="text-sm font-semibold text-slate-900">{t("cc.main.t.customers")}</h2>
+                  <p className="text-sm text-slate-500">{t("cc.main.n.rowsAreAlreadyLimitedToTheCallerSCustome")}</p>
                 </div>
                 <Select value={selectedCustomerId} onChange={(event) => void handleCustomerChange(event.target.value)} className="sm:max-w-xs">
-                  <option value="">Select customer…</option>
+                  <option value="">{t("cc.main.t.selectCustomer")}</option>
                   {customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.code} — {customer.name}
@@ -454,12 +456,12 @@ export function CustomerCommercialPage() {
                 rows={customers}
                 keyOf={(row) => row.id}
                 onRowClick={(row) => void handleCustomerChange(row.id)}
-                empty={<EmptyState title="No customers yet" description="Create the first customer from the form on this page." />}
+                empty={<EmptyState title={t("cc.main.title.noCustomersYet")} description={t("cc.main.d.createTheFirstCustomerFromTheFormOnThisP")} />}
               />
             </Card>
 
             <Card>
-              <h2 className="mb-3 text-sm font-semibold text-slate-900">Create customer</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">{t("cc.main.t.createCustomer")}</h2>
               {canManageCustomer ? (
                 <form
                   className="space-y-3"
@@ -476,20 +478,20 @@ export function CustomerCommercialPage() {
                     })
                   }
                 >
-                  <Field label="Code" required><Input name="code" required /></Field>
-                  <Field label="Name" required><Input name="name" required /></Field>
-                  <Field label="Status"><Input name="status" placeholder="active" /></Field>
-                  <Field label="Owning organization unit">
+                  <Field label={t("cc.main.f.code")} required><Input name="code" required /></Field>
+                  <Field label={t("cc.main.f.name")} required><Input name="name" required /></Field>
+                  <Field label={t("cc.main.f.status")}><Input name="status" placeholder={t("cc.main.p.active")} /></Field>
+                  <Field label={t("cc.main.f.owningOrganizationUnit")}>
                     <Select name="ownerOrganizationUnitId">
-                      <option value="">(none)</option>
+                      <option value="">{t("cc.main.t.none")}</option>
                       {orgUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
                     </Select>
                   </Field>
-                  <Field label="Notes"><Textarea name="notes" rows={3} /></Field>
-                  <Button type="submit">Create customer</Button>
+                  <Field label={t("cc.main.f.notes")}><Textarea name="notes" rows={3} /></Field>
+                  <Button type="submit">{t("cc.main.t.createCustomer")}</Button>
                 </form>
               ) : (
-                <p className="text-sm text-slate-500">You need customer.manage to create customers.</p>
+                <p className="text-sm text-slate-500">{t("cc.main.n.youNeedCustomerManageToCreateCustomers")}</p>
               )}
             </Card>
           </div>
@@ -497,7 +499,7 @@ export function CustomerCommercialPage() {
           {selectedCustomer ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <RecordSection
-                title="Contacts"
+                title={t("cc.main.title.contacts")}
                 description={`Contacts for ${selectedCustomer.name}.`}
                 loading={detailLoading}
                 table={
@@ -505,7 +507,7 @@ export function CustomerCommercialPage() {
                     columns={contactColumns}
                     rows={detail.contacts}
                     keyOf={(row) => row.id}
-                    empty={<EmptyState title="No contacts yet" description="Add the first contact for this customer." />}
+                    empty={<EmptyState title={t("cc.main.title.noContactsYet")} description={t("cc.main.d.addTheFirstContactForThisCustomer")} />}
                   />
                 }
                 form={
@@ -525,11 +527,11 @@ export function CustomerCommercialPage() {
                         })
                       }
                     >
-                      <Field label="Name" required><Input name="name" required /></Field>
-                      <Field label="Email"><Input name="email" type="email" /></Field>
-                      <Field label="Phone"><Input name="phone" /></Field>
+                      <Field label={t("cc.main.f.name")} required><Input name="name" required /></Field>
+                      <Field label={t("cc.main.f.email")}><Input name="email" type="email" /></Field>
+                      <Field label={t("cc.main.f.phone")}><Input name="phone" /></Field>
                       <label className="flex items-center gap-2 text-sm text-slate-700"><input name="isPrimary" type="checkbox" /> Primary contact</label>
-                      <Button type="submit">Add contact</Button>
+                      <Button type="submit">{t("cc.main.t.addContact")}</Button>
                     </form>
                   ) : null
                 }
@@ -537,15 +539,15 @@ export function CustomerCommercialPage() {
 
               {canReadContract ? (
                 <RecordSection
-                  title="Contracts"
-                  description="Commercial agreements belonging to the selected customer."
+                  title={t("cc.main.title.contracts")}
+                  description={t("cc.main.d.commercialAgreementsBelongingToTheSelect")}
                   loading={detailLoading}
                   table={
                     <DataTable
                       columns={contractColumns}
                       rows={detail.contracts}
                       keyOf={(row) => row.id}
-                      empty={<EmptyState title="No contracts yet" description="Create a contract for this customer." />}
+                      empty={<EmptyState title={t("cc.main.title.noContractsYet")} description={t("cc.main.d.createAContractForThisCustomer")} />}
                     />
                   }
                   form={
@@ -566,14 +568,14 @@ export function CustomerCommercialPage() {
                         })
                       }
                     >
-                      <Field label="Code" required><Input name="code" required /></Field>
-                      <Field label="Name" required><Input name="name" required /></Field>
+                      <Field label={t("cc.main.f.code")} required><Input name="code" required /></Field>
+                      <Field label={t("cc.main.f.name")} required><Input name="name" required /></Field>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <Field label="Start date"><Input name="startDate" type="date" /></Field>
-                        <Field label="End date"><Input name="endDate" type="date" /></Field>
+                        <Field label={t("cc.main.f.startDate")}><Input name="startDate" type="date" /></Field>
+                        <Field label={t("cc.main.f.endDate")}><Input name="endDate" type="date" /></Field>
                       </div>
-                      <Field label="Status"><Input name="status" placeholder="active" /></Field>
-                      <Button type="submit">Create contract</Button>
+                      <Field label={t("cc.main.f.status")}><Input name="status" placeholder={t("cc.main.p.active")} /></Field>
+                      <Button type="submit">{t("cc.main.t.createContract")}</Button>
                     </form>
                     ) : null
                   }
@@ -582,15 +584,15 @@ export function CustomerCommercialPage() {
 
               {canReadProject ? (
                 <RecordSection
-                  title="Projects"
-                description="Project master records for downstream operations and project delivery."
+                  title={t("cc.main.title.projects")}
+                description={t("cc.main.d.projectMasterRecordsForDownstreamOperati")}
                 loading={detailLoading}
                 table={
                   <DataTable
                     columns={projectColumns}
                     rows={detail.projects}
                     keyOf={(row) => row.id}
-                    empty={<EmptyState title="No projects yet" description="Create a project under this customer." />}
+                    empty={<EmptyState title={t("cc.main.title.noProjectsYet")} description={t("cc.main.d.createAProjectUnderThisCustomer")} />}
                   />
                 }
                 form={
@@ -610,16 +612,16 @@ export function CustomerCommercialPage() {
                         })
                       }
                     >
-                      <Field label="Code" required><Input name="code" required /></Field>
-                      <Field label="Name" required><Input name="name" required /></Field>
-                      <Field label="Contract">
+                      <Field label={t("cc.main.f.code")} required><Input name="code" required /></Field>
+                      <Field label={t("cc.main.f.name")} required><Input name="name" required /></Field>
+                      <Field label={t("cc.main.f.contract")}>
                         <Select name="contractId">
-                          <option value="">(none)</option>
+                          <option value="">{t("cc.main.t.none")}</option>
                           {detail.contracts.map((contract) => <option key={contract.id} value={contract.id}>{contract.code} — {contract.name}</option>)}
                         </Select>
                       </Field>
-                      <Field label="Status"><Input name="status" placeholder="active" /></Field>
-                      <Button type="submit">Create project</Button>
+                      <Field label={t("cc.main.f.status")}><Input name="status" placeholder={t("cc.main.p.active")} /></Field>
+                      <Button type="submit">{t("cc.main.t.createProject")}</Button>
                     </form>
                   ) : null
                 }
@@ -628,15 +630,15 @@ export function CustomerCommercialPage() {
 
               {canReadSite ? (
                 <RecordSection
-                  title="Sites / Locations"
-                description="Operational locations under the selected customer and project."
+                  title={t("cc.main.title.sitesLocations")}
+                description={t("cc.main.d.operationalLocationsUnderTheSelectedCust")}
                 loading={detailLoading}
                 table={
                   <DataTable
                     columns={siteColumns}
                     rows={detail.sites}
                     keyOf={(row) => row.id}
-                    empty={<EmptyState title="No sites yet" description="Create a site/location for this customer." />}
+                    empty={<EmptyState title={t("cc.main.title.noSitesYet")} description={t("cc.main.d.createASiteLocationForThisCustomer")} />}
                   />
                 }
                 form={
@@ -657,17 +659,17 @@ export function CustomerCommercialPage() {
                         })
                       }
                     >
-                      <Field label="Code" required><Input name="code" required /></Field>
-                      <Field label="Name" required><Input name="name" required /></Field>
-                      <Field label="Project">
+                      <Field label={t("cc.main.f.code")} required><Input name="code" required /></Field>
+                      <Field label={t("cc.main.f.name")} required><Input name="name" required /></Field>
+                      <Field label={t("cc.main.f.project")}>
                         <Select name="projectId">
-                          <option value="">(none)</option>
+                          <option value="">{t("cc.main.t.none")}</option>
                           {detail.projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}
                         </Select>
                       </Field>
-                      <Field label="Address"><Textarea name="address" rows={2} /></Field>
-                      <Field label="Status"><Input name="status" placeholder="active" /></Field>
-                      <Button type="submit">Create site</Button>
+                      <Field label={t("cc.main.f.address")}><Textarea name="address" rows={2} /></Field>
+                      <Field label={t("cc.main.f.status")}><Input name="status" placeholder={t("cc.main.p.active")} /></Field>
+                      <Button type="submit">{t("cc.main.t.createSite")}</Button>
                     </form>
                   ) : null
                 }
@@ -676,15 +678,15 @@ export function CustomerCommercialPage() {
 
               {canReadService ? (
                 <RecordSection
-                  title="Service Catalog"
-                description="Reusable commercial services that can be linked to customers."
+                  title={t("cc.main.title.serviceCatalog")}
+                description={t("cc.main.d.reusableCommercialServicesThatCanBeLinke")}
                 loading={false}
                 table={
                   <DataTable
                     columns={serviceColumns}
                     rows={services}
                     keyOf={(row) => row.id}
-                    empty={<EmptyState title="No services yet" description="Create the first service catalog entry." />}
+                    empty={<EmptyState title={t("cc.main.title.noServicesYet")} description={t("cc.main.d.createTheFirstServiceCatalogEntry")} />}
                   />
                 }
                 form={
@@ -702,10 +704,10 @@ export function CustomerCommercialPage() {
                         })
                       }
                     >
-                      <Field label="Code" required><Input name="code" required /></Field>
-                      <Field label="Name" required><Input name="name" required /></Field>
-                      <Field label="Description"><Textarea name="description" rows={3} /></Field>
-                      <Button type="submit">Create service</Button>
+                      <Field label={t("cc.main.f.code")} required><Input name="code" required /></Field>
+                      <Field label={t("cc.main.f.name")} required><Input name="name" required /></Field>
+                      <Field label={t("cc.main.f.description")}><Textarea name="description" rows={3} /></Field>
+                      <Button type="submit">{t("cc.main.t.createService")}</Button>
                     </form>
                   ) : null
                 }
@@ -714,15 +716,15 @@ export function CustomerCommercialPage() {
 
               {canReadService ? (
                 <RecordSection
-                  title="Customer-Service Links"
-                description="Connect services to this customer, optionally scoped to contract, project, or site."
+                  title={t("cc.main.title.customerServiceLinks")}
+                description={t("cc.main.d.connectServicesToThisCustomerOptionallyS")}
                 loading={detailLoading}
                 table={
                   <DataTable
                     columns={linkColumns}
                     rows={detail.links}
                     keyOf={(row) => row.id}
-                    empty={<EmptyState title="No service links yet" description="Link a service to this customer." />}
+                    empty={<EmptyState title={t("cc.main.title.noServiceLinksYet")} description={t("cc.main.d.linkAServiceToThisCustomer")} />}
                   />
                 }
                 form={
@@ -743,23 +745,23 @@ export function CustomerCommercialPage() {
                         })
                       }
                     >
-                      <Field label="Service" required>
+                      <Field label={t("cc.main.f.service")} required>
                         <Select name="serviceId" required>
-                          <option value="">Select service…</option>
+                          <option value="">{t("cc.main.t.selectService")}</option>
                           {services.map((service) => <option key={service.id} value={service.id}>{service.code} — {service.name}</option>)}
                         </Select>
                       </Field>
-                      <Field label="Contract">
-                        <Select name="contractId"><option value="">(none)</option>{detail.contracts.map((contract) => <option key={contract.id} value={contract.id}>{contract.code}</option>)}</Select>
+                      <Field label={t("cc.main.f.contract")}>
+                        <Select name="contractId"><option value="">{t("cc.main.t.none")}</option>{detail.contracts.map((contract) => <option key={contract.id} value={contract.id}>{contract.code}</option>)}</Select>
                       </Field>
-                      <Field label="Project">
-                        <Select name="projectId"><option value="">(none)</option>{detail.projects.map((project) => <option key={project.id} value={project.id}>{project.code}</option>)}</Select>
+                      <Field label={t("cc.main.f.project")}>
+                        <Select name="projectId"><option value="">{t("cc.main.t.none")}</option>{detail.projects.map((project) => <option key={project.id} value={project.id}>{project.code}</option>)}</Select>
                       </Field>
-                      <Field label="Site / Location">
-                        <Select name="siteId"><option value="">(none)</option>{detail.sites.map((site) => <option key={site.id} value={site.id}>{site.code}</option>)}</Select>
+                      <Field label={t("cc.main.f.siteLocation")}>
+                        <Select name="siteId"><option value="">{t("cc.main.t.none")}</option>{detail.sites.map((site) => <option key={site.id} value={site.id}>{site.code}</option>)}</Select>
                       </Field>
-                      <Field label="Internal PIC user ID"><Input name="internalPicUserId" placeholder="optional UUID" /></Field>
-                      <Button type="submit">Link service</Button>
+                      <Field label={t("cc.main.f.internalPicUserId")}><Input name="internalPicUserId" placeholder={t("cc.main.p.optionalUuid")} /></Field>
+                      <Button type="submit">{t("cc.main.t.linkService")}</Button>
                     </form>
                   ) : null
                 }

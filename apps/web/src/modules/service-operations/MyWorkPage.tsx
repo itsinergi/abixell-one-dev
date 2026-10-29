@@ -3,6 +3,7 @@
  * assigned to this user (backend-scoped). Mobile-first: the shared DataTable
  * renders stacked cards below the `sm` breakpoint.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -19,6 +20,7 @@ import {
 import { dueIndicator, formatDateShort, statusTone } from "../../shared/format";
 
 export function MyWorkPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -33,11 +35,11 @@ export function MyWorkPage() {
     try {
       setRows(await api.myWorkOrders(token));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load your work.");
+      setError(err instanceof ApiError ? err.message : t("mo.mw.msg.couldNotLoadYourWork"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -45,7 +47,7 @@ export function MyWorkPage() {
 
   const columns: Column<WorkOrderRow>[] = [
     {
-      header: "Work",
+      header: t("mo.mw.h.work"),
       cell: (row) => (
         <span className="font-medium">
           {row.workOrder.workOrderNumber} — {row.workOrder.title}
@@ -53,7 +55,7 @@ export function MyWorkPage() {
       ),
     },
     {
-      header: "Status",
+      header: t("mo.mw.h.status"),
       cell: (row) => (
         <StatusPill tone={statusTone(row.status?.instanceStatus)}>
           {row.status?.stepName ?? row.status?.stepCode ?? "—"}
@@ -61,7 +63,7 @@ export function MyWorkPage() {
       ),
     },
     {
-      header: "Due",
+      header: t("mo.mw.h.due"),
       cell: (row) => {
         const indicator = dueIndicator(row.workOrder.dueAt);
         return (
@@ -73,21 +75,21 @@ export function MyWorkPage() {
       },
     },
     {
-      header: "Progress",
+      header: t("mo.mw.h.progress"),
       cell: (row) =>
         row.workOrder.completedAt ? (
-          <StatusPill tone="success">Completed</StatusPill>
+          <StatusPill tone="success">{t("mo.mw.t.completed")}</StatusPill>
         ) : row.workOrder.startedAt ? (
-          <StatusPill tone="info">In progress</StatusPill>
+          <StatusPill tone="info">{t("mo.mw.t.inProgress")}</StatusPill>
         ) : (
-          <StatusPill tone="neutral">Not started</StatusPill>
+          <StatusPill tone="neutral">{t("mo.mw.t.notStarted")}</StatusPill>
         ),
     },
   ];
 
   return (
     <div>
-      <PageHeader title="My Work" subtitle="The jobs assigned to you. Open one to record what you did." />
+      <PageHeader title={t("mo.mw.title.myWork")} subtitle={t("mo.mw.sub.theJobsAssignedToYouOpenOneToRecordWhatY")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {loading ? (
         <Spinner />
@@ -97,7 +99,7 @@ export function MyWorkPage() {
           rows={rows}
           keyOf={(row) => row.workOrder.id}
           onRowClick={(row) => navigate(`/my-work/${row.workOrder.id}`)}
-          empty={<EmptyState title="Nothing assigned" description="Work assigned to you will appear here." />}
+          empty={<EmptyState title={t("mo.mw.title.nothingAssigned")} description={t("mo.mw.d.workAssignedToYouWillAppearHere")} />}
         />
       )}
     </div>

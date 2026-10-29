@@ -6,6 +6,7 @@
  * /verification endpoint; the outcome uses the workflow `verify` transition
  * (or any configured return/reject). Backend is the authorization truth.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -32,6 +33,7 @@ import {
 import { formatDate, severityTone, slaIndicator, statusTone } from "../complaints/format";
 
 export function VerificationDetailPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { complaintId } = useParams<{ complaintId: string }>();
@@ -59,11 +61,11 @@ export function VerificationDetailPage() {
       setDetail(d);
       setEvidence(docs);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load complaint");
+      setError(err instanceof ApiError ? err.message : t("ver.detail.msg.failedToLoadComplaint"));
     } finally {
       setLoading(false);
     }
-  }, [token, complaintId]);
+  }, [token, complaintId, t]);
 
   useEffect(() => {
     load();
@@ -84,7 +86,7 @@ export function VerificationDetailPage() {
       setNotice({ tone: "success", text: "Verification recorded." });
       await load();
     } catch (err) {
-      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : "Action failed" });
+      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : t("ver.detail.msg.actionFailed") });
     } finally {
       setBusy(null);
     }
@@ -100,7 +102,7 @@ export function VerificationDetailPage() {
       setNotice({ tone: "success", text: "Evidence uploaded." });
       setEvidence(await api.documentsForEntity(token, "complaint", complaintId));
     } catch (err) {
-      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : "Upload failed" });
+      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : t("ver.detail.msg.uploadFailed") });
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -117,11 +119,11 @@ export function VerificationDetailPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : "Download failed" });
+      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : t("ver.detail.msg.downloadFailed") });
     }
   }
 
-  if (loading) return <Spinner label="Loading complaint…" />;
+  if (loading) return <Spinner label={t("ver.detail.f.loadingComplaint")} />;
   if (error)
     return (
       <div className="space-y-3">
@@ -171,7 +173,7 @@ export function VerificationDetailPage() {
           {status?.stepName ?? status?.instanceStatus ?? "Unknown"}
         </StatusPill>
         <StatusPill tone={severityTone(complaint.severity)}>Severity: {complaint.severity}</StatusPill>
-        <Badge>Priority: {complaint.priority}</Badge>
+        <Badge>{t("ver.detail.t.priorityN", { n: complaint.priority })}</Badge>
         {slaState && <StatusPill tone={slaState.tone}>{slaState.label}</StatusPill>}
       </div>
 
@@ -184,7 +186,7 @@ export function VerificationDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>
-            <h2 className="mb-2 text-sm font-semibold text-slate-700">Complaint</h2>
+            <h2 className="mb-2 text-sm font-semibold text-slate-700">{t("ver.detail.t.complaint")}</h2>
             <p className="whitespace-pre-wrap text-sm text-slate-700">{complaint.description}</p>
             <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-sm">
               <Detail term="Customer" value={customerName ?? "—"} />
@@ -195,7 +197,7 @@ export function VerificationDetailPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-2 text-sm font-semibold text-slate-700">Investigation result</h2>
+            <h2 className="mb-2 text-sm font-semibold text-slate-700">{t("ver.detail.t.investigationResult")}</h2>
             {hasInvestigation ? (
               <dl className="space-y-3 text-sm">
                 <Detail term="Root cause" value={complaint.rootCause ?? "—"} />
@@ -206,7 +208,7 @@ export function VerificationDetailPage() {
                 )}
               </dl>
             ) : (
-              <p className="text-sm text-slate-500">No investigation has been recorded yet.</p>
+              <p className="text-sm text-slate-500">{t("ver.detail.n.noInvestigationHasBeenRecordedYet")}</p>
             )}
             {complaint.verificationNote && (
               <div className="mt-3 border-t border-slate-100 pt-3">
@@ -216,20 +218,20 @@ export function VerificationDetailPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-700">Timeline</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-700">{t("ver.detail.t.timeline")}</h2>
             <Timeline items={timelineItems} />
           </Card>
 
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-700">Evidence</h2>
+              <h2 className="text-sm font-semibold text-slate-700">{t("ver.detail.t.evidence")}</h2>
               <label className="cursor-pointer text-sm font-medium text-slate-700 hover:underline">
                 {uploading ? "Uploading…" : "Add file"}
                 <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
               </label>
             </div>
             {evidence.length === 0 ? (
-              <p className="text-sm text-slate-500">No evidence attached.</p>
+              <p className="text-sm text-slate-500">{t("ver.detail.n.noEvidenceAttached")}</p>
             ) : (
               <ul className="divide-y divide-slate-100 text-sm">
                 {evidence.map((doc) => (
@@ -252,10 +254,10 @@ export function VerificationDetailPage() {
 
         <div className="space-y-4">
           <Card>
-            <h2 className="mb-3 text-sm font-semibold text-slate-700">Verification</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-700">{t("ver.detail.t.verification")}</h2>
             {availableActions.length === 0 ? (
               <EmptyState
-                title="No verification action available"
+                title={t("ver.detail.title.noVerificationActionAvailable")}
                 description={
                   canVerifyHere === false && status?.stepCode === "VERIFICATION"
                     ? "This complaint is awaiting a different verifier."
@@ -264,12 +266,12 @@ export function VerificationDetailPage() {
               />
             ) : (
               <div className="space-y-3">
-                <Field label="Verification note" hint="Recorded with your decision">
+                <Field label={t("ver.detail.f.verificationNote")} hint={t("ver.detail.n.recordedWithYourDecision")}>
                   <Textarea
                     rows={4}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="Summarise your independent verification"
+                    placeholder={t("ver.detail.p.summariseYourIndependentVerification")}
                   />
                 </Field>
                 {availableActions.map((a) => (

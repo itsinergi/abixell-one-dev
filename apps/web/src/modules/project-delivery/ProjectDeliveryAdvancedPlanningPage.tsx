@@ -7,6 +7,7 @@
  * Money fields are exact-decimal strings, never JS numbers (ADR-0026).
  */
 
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -61,6 +62,7 @@ const BASELINE_STATUS_LABEL: Record<string, string> = {
 };
 
 export function ProjectDeliveryAdvancedPlanningPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session?.accessToken ?? "";
 
@@ -125,11 +127,11 @@ export function ProjectDeliveryAdvancedPlanningPage() {
       setBaselines(baselinesResp || []);
       setVariance(varianceResp || null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load planning data.");
+      setError(err instanceof ApiError ? err.message : t("pd.plan.msg.failedToLoadPlanningData"));
     } finally {
       setLoading(false);
     }
-  }, [projectId, token, asOfDate]);
+  }, [projectId, token, asOfDate, t]);
 
   const createWbs = async () => {
     setBusy(true);
@@ -141,11 +143,11 @@ export function ProjectDeliveryAdvancedPlanningPage() {
         name: body.name ?? "",
         description: body.description ?? null,
       });
-      setNotice("WBS node created.");
+      setNotice(t("pd.plan.msg.wbsNodeCreated"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create WBS node.");
+      setError(err instanceof ApiError ? err.message : t("pd.plan.msg.failedToCreateWbsNode"));
     } finally {
       setBusy(false);
     }
@@ -160,11 +162,11 @@ export function ProjectDeliveryAdvancedPlanningPage() {
         code: body.code ?? "",
         description: body.description ?? null,
       });
-      setNotice("Baseline created.");
+      setNotice(t("pd.plan.msg.baselineCreated"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create baseline.");
+      setError(err instanceof ApiError ? err.message : t("pd.plan.msg.failedToCreateBaseline"));
     } finally {
       setBusy(false);
     }
@@ -175,10 +177,10 @@ export function ProjectDeliveryAdvancedPlanningPage() {
     setError(null);
     try {
       await api.approveProjectDeliveryBaseline(token, baselineId);
-      setNotice("Baseline approved.");
+      setNotice(t("pd.plan.msg.baselineApproved"));
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to approve baseline.");
+      setError(err instanceof ApiError ? err.message : t("pd.plan.msg.failedToApproveBaseline"));
     } finally {
       setBusy(false);
     }
@@ -186,22 +188,22 @@ export function ProjectDeliveryAdvancedPlanningPage() {
 
   const wbsColumns: Column<ProjectWbsNodeView>[] = [
     {
-      header: "Code",
+      header: t("pd.plan.h.code"),
       cell: (row) => <span className="font-mono text-sm">{row.code}</span>,
     },
     {
-      header: "Name",
+      header: t("pd.plan.h.name"),
       cell: (row) => (
         <span style={{ paddingLeft: `${Math.max(0, row.depth) * 16}px` }}>{row.name}</span>
       ),
     },
     {
-      header: "Rolled-up Cost",
+      header: t("pd.plan.h.rolledUpCost"),
       className: "tabular-nums text-right",
       cell: (row) => <span>{formatMoney(row.rolledUpCost)}</span>,
     },
     {
-      header: "Activities",
+      header: t("pd.plan.h.activities"),
       className: "text-right",
       cell: (row) => <span>{row.activityCount}</span>,
     },
@@ -209,50 +211,50 @@ export function ProjectDeliveryAdvancedPlanningPage() {
 
   const scheduleColumns: Column<ProjectSchedule["activities"][number]>[] = [
     {
-      header: "Activity",
+      header: t("pd.plan.h.activity"),
       cell: (row) => <span className="font-mono text-sm">{row.code}</span>,
     },
     {
-      header: "Planned Start",
+      header: t("pd.plan.h.plannedStart"),
       cell: (row) => <span>{row.plannedStart ? formatDateShort(row.plannedStart) : "—"}</span>,
     },
     {
-      header: "Planned Finish",
+      header: t("pd.plan.h.plannedFinish"),
       cell: (row) => <span>{row.plannedFinish ? formatDateShort(row.plannedFinish) : "—"}</span>,
     },
     {
-      header: "Critical Path",
+      header: t("pd.plan.h.criticalPath"),
       cell: (row) =>
         row.isCritical ? (
-          <StatusPill tone="warning">Critical</StatusPill>
+          <StatusPill tone="warning">{t("pd.plan.t.critical")}</StatusPill>
         ) : (
-          <StatusPill tone="info">Non-critical</StatusPill>
+          <StatusPill tone="info">{t("pd.plan.t.nonCritical")}</StatusPill>
         ),
     },
   ];
 
   const resourceColumns: Column<ProjectResource>[] = [
     {
-      header: "Resource",
+      header: t("pd.plan.h.resource"),
       cell: (row) => <span className="font-mono text-sm">{row.code}</span>,
     },
     {
-      header: "Name",
+      header: t("pd.plan.h.name"),
       cell: (row) => <span>{row.name}</span>,
     },
     {
-      header: "Type",
+      header: t("pd.plan.h.type"),
       cell: (row) => <Badge>{row.type}</Badge>,
     },
   ];
 
   const baselineColumns: Column<ProjectBaseline>[] = [
     {
-      header: "Baseline",
+      header: t("pd.plan.h.baseline"),
       cell: (row) => <span className="font-mono text-sm">{row.code}</span>,
     },
     {
-      header: "Status",
+      header: t("pd.plan.h.status"),
       cell: (row) => (
         <StatusPill tone={BASELINE_STATUS_TONE[row.status] ?? "neutral"}>
           {BASELINE_STATUS_LABEL[row.status] || row.status}
@@ -260,7 +262,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
       ),
     },
     {
-      header: "Approved",
+      header: t("pd.plan.h.approved"),
       cell: (row) =>
         row.approvedAt ? (
           formatDate(row.approvedAt)
@@ -269,7 +271,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
         ),
     },
     {
-      header: "Actions",
+      header: t("pd.plan.h.actions"),
       mobileRole: "status",
       cell: (row) =>
         row.status === "draft" ? (
@@ -285,25 +287,25 @@ export function ProjectDeliveryAdvancedPlanningPage() {
   ];
 
   const varianceColumns: Column<BaselineVarianceResult["activities"][number]>[] = [
-    { header: "Activity", cell: (row) => <span className="font-mono">{row.code}</span> },
-    { header: "Planned", className: "tabular-nums", cell: (row) => <span>{formatMoney(row.plannedCost)}</span> },
-    { header: "Actual", className: "tabular-nums", cell: (row) => <span>{formatMoney(row.actualCost)}</span> },
-    { header: "Variance", className: "tabular-nums", cell: (row) => <span>{formatMoney(row.variance)}</span> },
+    { header: t("pd.plan.h.activity"), cell: (row) => <span className="font-mono">{row.code}</span> },
+    { header: t("pd.plan.h.planned"), className: "tabular-nums", cell: (row) => <span>{formatMoney(row.plannedCost)}</span> },
+    { header: t("pd.plan.h.actual"), className: "tabular-nums", cell: (row) => <span>{formatMoney(row.actualCost)}</span> },
+    { header: t("pd.plan.h.variance"), className: "tabular-nums", cell: (row) => <span>{formatMoney(row.variance)}</span> },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Planning" subtitle="WBS, schedule, resources, baselines, and variance." />
+      <PageHeader title={t("pd.plan.title.planning")} subtitle={t("pd.plan.sub.wbsScheduleResourcesBaselinesAndVariance")} />
 
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="success">{notice}</Alert>}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Select Project</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t("pd.plan.t.selectProject")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Project" required>
+          <Field label={t("pd.plan.f.project")} required>
             <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">Select a project</option>
+              <option value="">{t("pd.plan.t.selectAProject")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -311,7 +313,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
               ))}
             </Select>
           </Field>
-          <Field label="As Of Date" required>
+          <Field label={t("pd.plan.f.asOfDate")} required>
             <Input
               type="date"
               value={asOfDate}
@@ -327,7 +329,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
       </Card>
 
       {!projectId ? (
-        <EmptyState title="No project selected" description="Pick a project to see planning data." />
+        <EmptyState title={t("pd.plan.title.noProjectSelected")} description={t("pd.plan.d.pickAProjectToSeePlanningData")} />
       ) : loading ? (
         <div className="flex items-center justify-center p-8">
           <Spinner />
@@ -337,7 +339,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
           {/* WBS */}
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Work Breakdown Structure</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("pd.plan.t.workBreakdownStructure")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -350,7 +352,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
               columns={wbsColumns}
               rows={wbsNodes}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No WBS nodes" description="Create the first WBS node." />}
+              empty={<EmptyState title={t("pd.plan.title.noWbsNodes")} description={t("pd.plan.d.createTheFirstWbsNode")} />}
             />
           </div>
 
@@ -358,7 +360,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
           {schedule ? (
             <div>
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-ink">Schedule & Critical Path</h2>
+                <h2 className="text-sm font-semibold text-ink">{t("pd.plan.t.scheduleCriticalPath")}</h2>
                 <span className="text-sm text-ink-dim">
                   Project finish: {schedule.projectFinish ? formatDateShort(schedule.projectFinish) : "—"}
                 </span>
@@ -367,7 +369,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
                 columns={scheduleColumns}
                 rows={schedule.activities || []}
                 keyOf={(row) => row.activityId}
-                empty={<EmptyState title="No scheduled activities" description="Create dependencies to generate a schedule." />}
+                empty={<EmptyState title={t("pd.plan.title.noScheduledActivities")} description={t("pd.plan.d.createDependenciesToGenerateASchedule")} />}
               />
             </div>
           ) : null}
@@ -375,13 +377,13 @@ export function ProjectDeliveryAdvancedPlanningPage() {
           {/* Resources */}
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Resources</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("pd.plan.t.resources")}</h2>
             </div>
             <DataTable
               columns={resourceColumns}
               rows={resources}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No resources" description="Define resources for the project." />}
+              empty={<EmptyState title={t("pd.plan.title.noResources")} description={t("pd.plan.d.defineResourcesForTheProject")} />}
             />
             {loadingResult && loadingResult.overallocations.length > 0 ? (
               <Alert tone="warning">
@@ -393,7 +395,7 @@ export function ProjectDeliveryAdvancedPlanningPage() {
           {/* Baselines */}
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Baselines</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("pd.plan.t.baselines")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -406,19 +408,19 @@ export function ProjectDeliveryAdvancedPlanningPage() {
               columns={baselineColumns}
               rows={baselines}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No baselines" description="Create the first baseline." />}
+              empty={<EmptyState title={t("pd.plan.title.noBaselines")} description={t("pd.plan.d.createTheFirstBaseline")} />}
             />
           </div>
 
           {/* Variance */}
           {variance ? (
             <div>
-              <h2 className="mb-3 text-sm font-semibold text-ink">Baseline Variance</h2>
+              <h2 className="mb-3 text-sm font-semibold text-ink">{t("pd.plan.t.baselineVariance")}</h2>
               <DataTable
                 columns={varianceColumns}
                 rows={variance.activities || []}
                 keyOf={(row) => row.activityId}
-                empty={<EmptyState title="No variance data" description="No activities with cost recorded." />}
+                empty={<EmptyState title={t("pd.plan.title.noVarianceData")} description={t("pd.plan.d.noActivitiesWithCostRecorded")} />}
               />
             </div>
           ) : null}
@@ -428,24 +430,24 @@ export function ProjectDeliveryAdvancedPlanningPage() {
       {/* Modals */}
       {modal.kind === "create-wbs" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Create WBS Node</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("pd.plan.t.createWbsNode")}</h2>
           <div className="space-y-3">
-            <Field label="Code" required>
+            <Field label={t("pd.plan.f.code")} required>
               <Input
                 placeholder="WBS-001"
                 onChange={(e) => setModal({ ...modal, data: { ...modal.data, code: e.target.value } })}
               />
             </Field>
-            <Field label="Name" required>
+            <Field label={t("pd.plan.f.name")} required>
               <Input
-                placeholder="Node name"
+                placeholder={t("pd.plan.p.nodeName")}
                 onChange={(e) => setModal({ ...modal, data: { ...modal.data, name: e.target.value } })}
               />
             </Field>
-            <Field label="Description">
+            <Field label={t("pd.plan.f.description")}>
               <Textarea
                 rows={2}
-                placeholder="Optional description"
+                placeholder={t("pd.plan.p.optionalDescription")}
                 onChange={(e) => setModal({ ...modal, data: { ...modal.data, description: e.target.value || null } })}
               />
             </Field>
@@ -463,18 +465,18 @@ export function ProjectDeliveryAdvancedPlanningPage() {
 
       {modal.kind === "create-baseline" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Create Baseline</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("pd.plan.t.createBaseline")}</h2>
           <div className="space-y-3">
-            <Field label="Code" required>
+            <Field label={t("pd.plan.f.code")} required>
               <Input
                 placeholder="BL-001"
                 onChange={(e) => setModal({ ...modal, data: { ...modal.data, code: e.target.value } })}
               />
             </Field>
-            <Field label="Description">
+            <Field label={t("pd.plan.f.description")}>
               <Textarea
                 rows={2}
-                placeholder="Optional description"
+                placeholder={t("pd.plan.p.optionalDescription")}
                 onChange={(e) => setModal({ ...modal, data: { ...modal.data, description: e.target.value || null } })}
               />
             </Field>

@@ -5,6 +5,7 @@
  * human-action apply / dismiss workflow. Generated runs are always advisory
  * until explicitly applied.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -50,6 +51,7 @@ function optimizationStatusTone(
 }
 
 export function ServiceOptimizationPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { permissions } = useShell();
@@ -83,11 +85,11 @@ export function ServiceOptimizationPage() {
       setRuns(list);
       setOrgUnits(unitList);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load optimization runs.");
+      setError(err instanceof ApiError ? err.message : t("so.opt.msg.couldNotLoadOptimizationRuns"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -114,7 +116,7 @@ export function ServiceOptimizationPage() {
       await load();
       navigate(`/service-optimization/${generated.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not generate optimization run.");
+      setError(err instanceof ApiError ? err.message : t("so.opt.msg.couldNotGenerateOptimizationRun"));
     } finally {
       setBusy(false);
     }
@@ -132,7 +134,7 @@ export function ServiceOptimizationPage() {
       );
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not apply optimization proposals.");
+      setError(err instanceof ApiError ? err.message : t("so.opt.msg.couldNotApplyOptimizationProposals"));
     } finally {
       setBusy(false);
     }
@@ -148,7 +150,7 @@ export function ServiceOptimizationPage() {
       setNotice(`Optimization run ${dismissed.runNumber} dismissed.`);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not dismiss optimization run.");
+      setError(err instanceof ApiError ? err.message : t("so.opt.msg.couldNotDismissOptimizationRun"));
     } finally {
       setBusy(false);
     }
@@ -156,7 +158,7 @@ export function ServiceOptimizationPage() {
 
   const columns: Column<OptimizationRun>[] = [
     {
-      header: "Run Number",
+      header: t("so.opt.h.runNumber"),
       cell: (row) => (
         <Link
           to={`/service-optimization/${row.id}`}
@@ -168,15 +170,15 @@ export function ServiceOptimizationPage() {
       mobileRole: "title",
     },
     {
-      header: "Target Date",
+      header: t("so.opt.h.targetDate"),
       cell: (row) => row.targetDate,
     },
     {
-      header: "Proposals",
+      header: t("so.opt.h.proposals"),
       cell: (row) => <Badge>{row.proposals.length} orders</Badge>,
     },
     {
-      header: "Status",
+      header: t("so.opt.h.status"),
       cell: (row) => (
         <StatusPill tone={optimizationStatusTone(row.status)}>
           {row.status.toUpperCase()}
@@ -185,11 +187,11 @@ export function ServiceOptimizationPage() {
       mobileRole: "status",
     },
     {
-      header: "Created",
+      header: t("so.opt.h.created"),
       cell: (row) => formatDate(row.createdAt),
     },
     {
-      header: "Actions",
+      header: t("so.opt.h.actions"),
       cell: (row) => (
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <Button
@@ -224,31 +226,29 @@ export function ServiceOptimizationPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Service Operations Optimization"
-        subtitle="Advisory dispatch and workload optimization runs (SO-ADV-002…005). Inspect proposed rationales and apply with explicit human confirmation."
+        title={t("so.opt.title.serviceOperationsOptimization")}
+        subtitle={t("so.opt.sub.advisoryDispatchAndWorkloadOptimizationR")}
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">
-          Generate Advisory Optimization Run
-        </h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("so.opt.t.generateAdvisoryOptimizationRun")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Target Schedule Date" required>
+          <Field label={t("so.opt.f.targetScheduleDate")} required>
             <Input
               type="date"
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
             />
           </Field>
-          <Field label="Organization Unit">
+          <Field label={t("so.opt.f.organizationUnit")}>
             <Select
               value={selectedOrgUnit}
               onChange={(e) => setSelectedOrgUnit(e.target.value)}
             >
-              <option value="">Tenant-wide (All units)</option>
+              <option value="">{t("so.opt.t.tenantWideAllUnits")}</option>
               {orgUnits.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -256,7 +256,7 @@ export function ServiceOptimizationPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Max Orders per Worker">
+          <Field label={t("so.opt.f.maxOrdersPerWorker")}>
             <Input
               type="number"
               min="1"
@@ -265,7 +265,7 @@ export function ServiceOptimizationPage() {
               onChange={(e) => setMaxOrders(e.target.value)}
             />
           </Field>
-          <Field label="Max Minutes per Worker">
+          <Field label={t("so.opt.f.maxMinutesPerWorker")}>
             <Input
               type="number"
               min="30"
@@ -305,9 +305,9 @@ export function ServiceOptimizationPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-800">Recent Optimization Runs</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("so.opt.t.recentOptimizationRuns")}</h2>
         {loading ? (
-          <Spinner label="Loading optimization history…" />
+          <Spinner label={t("so.opt.f.loadingOptimizationHistory")} />
         ) : (
           <DataTable
             columns={columns}
@@ -316,8 +316,8 @@ export function ServiceOptimizationPage() {
             onRowClick={(row) => navigate(`/service-optimization/${row.id}`)}
             empty={
               <EmptyState
-                title="No optimization runs recorded"
-                description="Generate an optimization run above to analyze pending work orders and produce explainable assignment proposals."
+                title={t("so.opt.title.noOptimizationRunsRecorded")}
+                description={t("so.opt.d.generateAnOptimizationRunAboveToAnalyzeP")}
               />
             }
           />

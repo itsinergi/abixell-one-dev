@@ -1,4 +1,5 @@
 /** Wave A3 — Optimization proposal detail and explicit human decision. */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -26,6 +27,7 @@ function runTone(status: string): "neutral" | "info" | "success" | "warning" | "
 }
 
 export function ServiceOptimizationDetailPage() {
+  const t = useT();
   const { runId } = useParams<{ runId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
@@ -46,11 +48,11 @@ export function ServiceOptimizationDetailPage() {
     try {
       setRun(await api.optimizationRun(token, runId));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load optimization run.");
+      setError(err instanceof ApiError ? err.message : t("so.optd.msg.couldNotLoadOptimizationRun"));
     } finally {
       setLoading(false);
     }
-  }, [runId, token]);
+  }, [runId, token, t]);
 
   useEffect(() => {
     void load();
@@ -69,7 +71,7 @@ export function ServiceOptimizationDetailPage() {
       setConfirmAction(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not apply this run.");
+      setError(err instanceof ApiError ? err.message : t("so.optd.msg.couldNotApplyThisRun"));
     } finally {
       setBusy(false);
     }
@@ -82,22 +84,22 @@ export function ServiceOptimizationDetailPage() {
     setNotice(null);
     try {
       await api.dismissOptimizationRun(token, run.id);
-      setNotice("Optimization run dismissed. No work-order assignments were changed.");
+      setNotice(t("so.optd.msg.optimizationRunDismissedNoWorkOrderAssig"));
       setConfirmAction(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not dismiss this run.");
+      setError(err instanceof ApiError ? err.message : t("so.optd.msg.couldNotDismissThisRun"));
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <Spinner label="Loading optimization run…" />;
+  if (loading) return <Spinner label={t("so.optd.f.loadingOptimizationRun")} />;
   if (!run) return <Alert tone="error">{error ?? "Optimization run not found."}</Alert>;
 
   const columns: Column<OptimizationRun["proposals"][number]>[] = [
     {
-      header: "Work Order",
+      header: t("so.optd.h.workOrder"),
       cell: (row) => (
         <div>
           <Link
@@ -112,12 +114,12 @@ export function ServiceOptimizationDetailPage() {
       mobileRole: "title",
     },
     {
-      header: "Priority",
+      header: t("so.optd.h.priority"),
       cell: (row) => <Badge>{row.priority ?? "medium"}</Badge>,
       mobileRole: "status",
     },
     {
-      header: "Recommended Assignee",
+      header: t("so.optd.h.recommendedAssignee"),
       cell: (row) => (
         <div>
           <span className="font-medium text-slate-800">{row.recommendedUserName}</span>
@@ -126,11 +128,11 @@ export function ServiceOptimizationDetailPage() {
       ),
     },
     {
-      header: "Est. Duration",
+      header: t("so.optd.h.estDuration"),
       cell: (row) => `${row.estimatedMinutes} min`,
     },
     {
-      header: "Recommendation Rationale",
+      header: t("so.optd.h.recommendationRationale"),
       cell: (row) => (
         <p className="max-w-xl whitespace-normal text-xs leading-5 text-slate-600">
           {row.rationale}
@@ -155,25 +157,25 @@ export function ServiceOptimizationDetailPage() {
       <Card>
         <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Target date</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{t("so.optd.t.targetDate")}</div>
             <div className="mt-1 font-semibold text-slate-900">{run.targetDate}</div>
           </div>
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Proposals</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{t("so.optd.t.proposals")}</div>
             <div className="mt-1 font-semibold text-slate-900">{run.proposals.length}</div>
           </div>
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Max per worker</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{t("so.optd.t.maxPerWorker")}</div>
             <div className="mt-1 font-semibold text-slate-900">
               {run.parameters.maxWorkOrdersPerWorker ?? "Default"}
             </div>
           </div>
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Generated</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{t("so.optd.t.generated")}</div>
             <div className="mt-1 text-slate-900">{formatDate(run.createdAt)}</div>
           </div>
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Organization unit</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{t("so.optd.t.organizationUnit")}</div>
             <div className="mt-1 break-all font-mono text-xs text-slate-700">
               {run.organizationUnitId ?? "Tenant-wide"}
             </div>
@@ -184,7 +186,7 @@ export function ServiceOptimizationDetailPage() {
       <Card>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-800">Explainable Assignment Proposals</h2>
+            <h2 className="text-sm font-semibold text-slate-800">{t("so.optd.t.explainableAssignmentProposals")}</h2>
             <p className="text-xs text-slate-500">
               Each recommendation identifies its selected worker and capacity-leveling rationale.
             </p>
@@ -198,8 +200,8 @@ export function ServiceOptimizationDetailPage() {
           mobileBreakpoint="md"
           empty={
             <EmptyState
-              title="No assignment proposals"
-              description="No eligible unassigned work orders matched this run's date and scope."
+              title={t("so.optd.title.noAssignmentProposals")}
+              description={t("so.optd.d.noEligibleUnassignedWorkOrdersMatchedThi")}
             />
           }
         />
@@ -207,17 +209,14 @@ export function ServiceOptimizationDetailPage() {
 
       {run.status === "proposed" ? (
         <Card className="border-slate-300">
-          <h2 className="text-sm font-semibold text-slate-900">Human Decision Required</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t("so.optd.t.humanDecisionRequired")}</h2>
           <p className="mt-1 text-sm text-slate-600">
             Applying assigns eligible, still-unassigned work orders. If any order was assigned since this run
             was generated, the backend skips it safely. Dismissing changes no work orders.
           </p>
 
           {!canApply ? (
-            <Alert tone="info">
-              You can inspect these proposals, but applying or dismissing requires permission{" "}
-              <code className="font-mono text-xs">service_operations.optimization.apply</code>.
-            </Alert>
+            <Alert tone="info">{t("so.optd.msg.youCanInspectTheseProposalsButApplyingOr", { perm: <code className="font-mono text-xs">service_operations.optimization.apply</code> })}</Alert>
           ) : confirmAction === null ? (
             <div className="mt-4 flex flex-wrap gap-2">
               <Button disabled={busy} onClick={() => setConfirmAction("apply")}>

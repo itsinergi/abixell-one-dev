@@ -2,6 +2,7 @@
  * Checkpoint 1C.2 — Customer complaint list. Shows only complaints within
  * the actor's Customer Data Scope (backend-enforced). Real data end to end.
  */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type ComplaintSummaryItem } from "../../lib/api";
@@ -20,6 +21,7 @@ import { useCustomerScope } from "./useCustomerScope";
 import { formatDateShort, severityTone, slaIndicator, statusTone } from "./format";
 
 export function ComplaintsListPage() {
+  const t = useT();
   const {
     token,
     customers,
@@ -40,12 +42,12 @@ export function ComplaintsListPage() {
       try {
         setItems(await api.complaintsByCustomerSummary(token, customerId));
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Failed to load complaints");
+        setError(err instanceof ApiError ? err.message : t("cmp.list.msg.failedToLoadComplaints"));
       } finally {
         setLoading(false);
       }
     },
-    [token],
+    [token, t],
   );
 
   useEffect(() => {
@@ -56,12 +58,12 @@ export function ComplaintsListPage() {
   return (
     <div>
       <PageHeader
-        title="Complaints"
-        subtitle="Raise a new complaint and track the ones you have submitted."
+        title={t("cmp.list.title.complaints")}
+        subtitle={t("cmp.list.sub.raiseANewComplaintAndTrackTheOnesYouHave")}
         actions={
           selectedId ? (
             <Link to={`/complaints/new?customerId=${selectedId}`}>
-              <Button>New complaint</Button>
+              <Button>{t("cmp.list.t.newComplaint")}</Button>
             </Link>
           ) : undefined
         }
@@ -70,19 +72,19 @@ export function ComplaintsListPage() {
       {customersError && <Alert tone="error">{customersError}</Alert>}
 
       {customersLoading ? (
-        <Spinner label="Loading your customers…" />
+        <Spinner label={t("cmp.list.f.loadingYourCustomers")} />
       ) : customers.length === 0 ? (
         <EmptyState
-          title="No customer available"
-          description="Your account is not linked to a customer yet. Please contact your administrator."
+          title={t("cmp.list.title.noCustomerAvailable")}
+          description={t("cmp.list.d.yourAccountIsNotLinkedToACustomerYetPlea")}
         />
       ) : (
         <div className="space-y-4">
           {customers.length > 1 && (
             <div className="max-w-sm">
-              <Field label="Customer">
+              <Field label={t("cmp.list.f.customer")}>
                 <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
-                  <option value="">Select a customer…</option>
+                  <option value="">{t("cmp.list.t.selectACustomer")}</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -94,18 +96,18 @@ export function ComplaintsListPage() {
           )}
 
           {!selectedId ? (
-            <EmptyState title="Select a customer" description="Choose a customer to see its complaints." />
+            <EmptyState title={t("cmp.list.title.selectACustomer")} description={t("cmp.list.d.chooseACustomerToSeeItsComplaints")} />
           ) : loading ? (
-            <Spinner label="Loading complaints…" />
+            <Spinner label={t("cmp.list.f.loadingComplaints")} />
           ) : error ? (
             <Alert tone="error">{error}</Alert>
           ) : items.length === 0 ? (
             <EmptyState
-              title="No complaints yet"
-              description="When you submit a complaint it will appear here with its status and progress."
+              title={t("cmp.list.title.noComplaintsYet")}
+              description={t("cmp.list.d.whenYouSubmitAComplaintItWillAppearHereW")}
               action={
                 <Link to={`/complaints/new?customerId=${selectedId}`}>
-                  <Button>Create your first complaint</Button>
+                  <Button>{t("cmp.list.t.createYourFirstComplaint")}</Button>
                 </Link>
               }
             />

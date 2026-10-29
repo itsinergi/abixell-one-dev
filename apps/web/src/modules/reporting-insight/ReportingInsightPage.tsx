@@ -1,4 +1,5 @@
 /** Phase 9 & Wave A2 — Reporting, Governed BI & Operational Predictive Analytics. */
+import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -56,6 +57,7 @@ const FORECAST_MODELS: Array<{ code: ForecastModelCode; label: string; descripti
 ];
 
 export function ReportingInsightPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
 
@@ -112,11 +114,11 @@ export function ReportingInsightPage() {
       setDashboard(dashboardResult.modules);
       setSelectedCode((current) => current || reportList[0]?.code || "");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load reporting insight.");
+      setError(err instanceof ApiError ? err.message : t("ri.main.msg.couldNotLoadReportingInsight"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   const loadReport = useCallback(async () => {
     if (!selectedCode) {
@@ -128,11 +130,11 @@ export function ReportingInsightPage() {
     try {
       setResult(await api.reportingReport(token, selectedCode));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the selected report.");
+      setError(err instanceof ApiError ? err.message : t("ri.main.msg.couldNotLoadTheSelectedReport"));
     } finally {
       setReportLoading(false);
     }
-  }, [token, selectedCode]);
+  }, [token, selectedCode, t]);
 
   useEffect(() => {
     void loadFoundation();
@@ -153,11 +155,11 @@ export function ReportingInsightPage() {
         setSelectedDatasetCode(list[0].code);
       }
     } catch (err) {
-      setBiError(err instanceof ApiError ? err.message : "Could not load BI datasets.");
+      setBiError(err instanceof ApiError ? err.message : t("ri.main.msg.couldNotLoadBiDatasets"));
     } finally {
       setBiLoading(false);
     }
-  }, [token, selectedDatasetCode]);
+  }, [token, selectedDatasetCode, t]);
 
   // Load selected dataset detail and saved reports
   const loadDatasetDetail = useCallback(async (code: string) => {
@@ -179,11 +181,11 @@ export function ReportingInsightPage() {
       setFilters([]);
       setBiResult(null);
     } catch (err) {
-      setBiError(err instanceof ApiError ? err.message : "Could not load dataset details.");
+      setBiError(err instanceof ApiError ? err.message : t("ri.main.msg.couldNotLoadDatasetDetails"));
     } finally {
       setBiLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     if (activeTab === "bi") {
@@ -226,11 +228,11 @@ export function ReportingInsightPage() {
       }
       setForecastHistory(history);
     } catch (err) {
-      setPredictiveError(err instanceof ApiError ? err.message : "Could not load predictive snapshots.");
+      setPredictiveError(err instanceof ApiError ? err.message : t("ri.main.msg.couldNotLoadPredictiveSnapshots"));
     } finally {
       setPredictiveLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     if (activeTab === "predictive") {
@@ -255,7 +257,7 @@ export function ReportingInsightPage() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not export the selected report.");
+      setError(err instanceof ApiError ? err.message : t("ri.main.msg.couldNotExportTheSelectedReport"));
     } finally {
       setExporting(false);
     }
@@ -279,7 +281,7 @@ export function ReportingInsightPage() {
       const queryRes = await api.biQuery(token, config);
       setBiResult(queryRes);
     } catch (err) {
-      setBiError(err instanceof ApiError ? err.message : "Governed BI execution failed.");
+      setBiError(err instanceof ApiError ? err.message : t("ri.main.msg.governedBiExecutionFailed"));
     } finally {
       setBiExecuting(false);
     }
@@ -308,7 +310,7 @@ export function ReportingInsightPage() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setBiError(err instanceof ApiError ? err.message : "Governed BI export failed.");
+      setBiError(err instanceof ApiError ? err.message : t("ri.main.msg.governedBiExportFailed"));
     } finally {
       setBiExporting(false);
     }
@@ -335,7 +337,7 @@ export function ReportingInsightPage() {
       setNewReportTitle("");
       setNewReportCode("");
     } catch (err) {
-      setBiError(err instanceof ApiError ? err.message : "Could not save custom BI report.");
+      setBiError(err instanceof ApiError ? err.message : t("ri.main.msg.couldNotSaveCustomBiReport"));
     } finally {
       setSavingReport(false);
     }
@@ -364,7 +366,7 @@ export function ReportingInsightPage() {
       setForecastResponse(response);
       setForecastHistory((prev) => [response.snapshot, ...prev.filter((s) => s.id !== response.snapshot.id)]);
     } catch (err) {
-      setPredictiveError(err instanceof ApiError ? err.message : "Forecast computation failed.");
+      setPredictiveError(err instanceof ApiError ? err.message : t("ri.main.msg.forecastComputationFailed"));
     } finally {
       setForecastGenerating(false);
     }
@@ -394,8 +396,8 @@ export function ReportingInsightPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Reporting & Operational Insight"
-        subtitle="Scope-safe operational reports, governed self-service BI warehouse views, and deterministic time-series forecasting."
+        title={t("ri.main.title.reportingOperationalInsight")}
+        subtitle={t("ri.main.sub.scopeSafeOperationalReportsGovernedSelfS")}
         actions={
           <Button
             onClick={() => {
@@ -467,19 +469,19 @@ export function ReportingInsightPage() {
             <Spinner />
           ) : reports.length === 0 ? (
             <EmptyState
-              title="No reports available"
-              description="No activated module currently exposes a standard report for your permissions."
+              title={t("ri.main.title.noReportsAvailable")}
+              description={t("ri.main.d.noActivatedModuleCurrentlyExposesAStanda")}
             />
           ) : (
             <>
               <section>
-                <h2 className="mb-2 text-sm font-semibold text-slate-800">Executive dashboard</h2>
+                <h2 className="mb-2 text-sm font-semibold text-slate-800">{t("ri.main.t.executiveDashboard")}</h2>
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {dashboard.map((module) => (
                     <Card key={module.moduleCode}>
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <h3 className="font-medium text-slate-900">{module.moduleName}</h3>
-                        <StatusPill tone="info">Active</StatusPill>
+                        <StatusPill tone="info">{t("ri.main.t.active")}</StatusPill>
                       </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         {module.cards.map((card) => (
@@ -505,7 +507,7 @@ export function ReportingInsightPage() {
                 <Card>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                     <label className="block text-sm">
-                      <span className="font-medium text-slate-700">Standard report</span>
+                      <span className="font-medium text-slate-700">{t("ri.main.t.standardReport")}</span>
                       <Select
                         value={selectedCode}
                         onChange={(event) => setSelectedCode(event.target.value)}
@@ -552,8 +554,8 @@ export function ReportingInsightPage() {
                       keyOf={(row) => `${result.code}-${row.label}-${JSON.stringify(row)}`}
                       empty={
                         <EmptyState
-                          title="No scoped rows"
-                          description="No records are available within your Data Scope for this report."
+                          title={t("ri.main.title.noScopedRows")}
+                          description={t("ri.main.d.noRecordsAreAvailableWithinYourDataScope")}
                         />
                       }
                     />
@@ -574,7 +576,7 @@ export function ReportingInsightPage() {
 
           <Card>
             <div className="space-y-1">
-              <h3 className="font-semibold text-slate-900">Governed BI Warehouse Projections</h3>
+              <h3 className="font-semibold text-slate-900">{t("ri.main.t.governedBiWarehouseProjections")}</h3>
               <p className="text-sm text-slate-600">
                 Self-service multi-dimensional queries against registered catalog datasets. All queries are strictly compiled
                 from whitelisted metadata, execute in read-only transactions with strict row limits (1,000 max), and apply your
@@ -587,8 +589,8 @@ export function ReportingInsightPage() {
             <Spinner />
           ) : biDatasets.length === 0 ? (
             <EmptyState
-              title="No BI Datasets Available"
-              description="No registered BI datasets are active or match your assigned module permissions."
+              title={t("ri.main.title.noBiDatasetsAvailable")}
+              description={t("ri.main.d.noRegisteredBiDatasetsAreActiveOrMatchYo")}
             />
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -596,7 +598,7 @@ export function ReportingInsightPage() {
               <div className="space-y-4">
                 <Card>
                   <label className="block text-sm">
-                    <span className="font-medium text-slate-700">BI Dataset</span>
+                    <span className="font-medium text-slate-700">{t("ri.main.t.biDataset")}</span>
                     <Select
                       value={selectedDatasetCode}
                       onChange={(e) => setSelectedDatasetCode(e.target.value)}
@@ -618,11 +620,11 @@ export function ReportingInsightPage() {
                 {/* Saved Reports for this dataset */}
                 <Card>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-slate-800">Saved Reports</h4>
+                    <h4 className="text-sm font-semibold text-slate-800">{t("ri.main.t.savedReports")}</h4>
                     <StatusPill tone="neutral">{savedReports.length}</StatusPill>
                   </div>
                   {savedReports.length === 0 ? (
-                    <p className="text-xs text-slate-500">No saved reports for this dataset yet.</p>
+                    <p className="text-xs text-slate-500">{t("ri.main.n.noSavedReportsForThisDatasetYet")}</p>
                   ) : (
                     <div className="space-y-2 max-h-60 overflow-y-auto">
                       {savedReports.map((saved) => (
@@ -650,7 +652,7 @@ export function ReportingInsightPage() {
                                   await api.deleteBiSavedReport(token, saved.id);
                                   setSavedReports((prev) => prev.filter((r) => r.id !== saved.id));
                                 } catch (err) {
-                                  setBiError(err instanceof ApiError ? err.message : "Failed to delete saved report.");
+                                  setBiError(err instanceof ApiError ? err.message : t("ri.main.msg.failedToDeleteSavedReport"));
                                 }
                               }}
                               className="text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50"
@@ -666,21 +668,21 @@ export function ReportingInsightPage() {
 
                 {/* Save Current Query Form */}
                 <Card>
-                  <h4 className="mb-2 text-sm font-semibold text-slate-800">Save Custom Report</h4>
+                  <h4 className="mb-2 text-sm font-semibold text-slate-800">{t("ri.main.t.saveCustomReport")}</h4>
                   <form onSubmit={handleSaveReport} className="space-y-2 text-xs">
                     <div>
-                      <span className="font-medium text-slate-600">Report Code</span>
+                      <span className="font-medium text-slate-600">{t("ri.main.t.reportCode")}</span>
                       <Input
-                        placeholder="my_operational_kpi"
+                        placeholder={t("ri.main.p.myOperationalKpi")}
                         value={newReportCode}
                         onChange={(e) => setNewReportCode(e.target.value)}
                         required
                       />
                     </div>
                     <div>
-                      <span className="font-medium text-slate-600">Report Title</span>
+                      <span className="font-medium text-slate-600">{t("ri.main.t.reportTitle")}</span>
                       <Input
-                        placeholder="Weekly Volume by Unit"
+                        placeholder={t("ri.main.p.weeklyVolumeByUnit")}
                         value={newReportTitle}
                         onChange={(e) => setNewReportTitle(e.target.value)}
                         required
@@ -790,7 +792,7 @@ export function ReportingInsightPage() {
                         </div>
 
                         {filters.length === 0 ? (
-                          <p className="mt-1 text-xs text-slate-400">No active filters. Entire scoped dataset will be aggregated.</p>
+                          <p className="mt-1 text-xs text-slate-400">{t("ri.main.n.noActiveFiltersEntireScopedDatasetWillBe")}</p>
                         ) : (
                           <div className="mt-2 space-y-2">
                             {filters.map((filter, idx) => (
@@ -821,15 +823,15 @@ export function ReportingInsightPage() {
                                   }}
                                   className="w-28"
                                 >
-                                  <option value="eq">Equals (=)</option>
-                                  <option value="neq">Not Equals (!=)</option>
-                                  <option value="gt">Greater Than (&gt;)</option>
-                                  <option value="gte">Greater or Equal (&gt;=)</option>
-                                  <option value="lt">Less Than (&lt;)</option>
-                                  <option value="lte">Less or Equal (&lt;=)</option>
+                                  <option value="eq">{t("ri.main.t.equals")}</option>
+                                  <option value="neq">{t("ri.main.t.notEquals")}</option>
+                                  <option value="gt">{t("ri.main.t.greaterThanGt")}</option>
+                                  <option value="gte">{t("ri.main.t.greaterOrEqualGt")}</option>
+                                  <option value="lt">{t("ri.main.t.lessThanLt")}</option>
+                                  <option value="lte">{t("ri.main.t.lessOrEqualLt")}</option>
                                 </Select>
                                 <Input
-                                  placeholder="Value..."
+                                  placeholder={t("ri.main.p.value")}
                                   value={String(filter.value)}
                                   onChange={(e) => {
                                     const next = [...filters];
@@ -874,15 +876,15 @@ export function ReportingInsightPage() {
 
                 {/* Query Results Table */}
                 {biExecuting ? (
-                  <Spinner label="Executing multi-dimensional query projection…" />
+                  <Spinner label={t("ri.main.f.executingMultiDimensionalQueryProjection")} />
                 ) : biResult ? (
                   <Card>
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-semibold text-slate-900">Query Results</h4>
+                        <h4 className="text-sm font-semibold text-slate-900">{t("ri.main.t.queryResults")}</h4>
                         <StatusPill tone="info">{biResult.rowCount} rows</StatusPill>
                         {biResult.truncated && (
-                          <StatusPill tone="warning">Limited to 1,000 rows</StatusPill>
+                          <StatusPill tone="warning">{t("ri.main.t.limitedTo1000Rows")}</StatusPill>
                         )}
                       </div>
                       <span className="text-xs text-slate-400 font-mono">
@@ -895,8 +897,8 @@ export function ReportingInsightPage() {
                       keyOf={(row) => JSON.stringify(row)}
                       empty={
                         <EmptyState
-                          title="No Data Returned"
-                          description="The query executed successfully but produced no rows within your scope and filters."
+                          title={t("ri.main.title.noDataReturned")}
+                          description={t("ri.main.d.theQueryExecutedSuccessfullyButProducedN")}
                         />
                       }
                     />
@@ -917,7 +919,7 @@ export function ReportingInsightPage() {
 
           <Card>
             <div className="space-y-1">
-              <h3 className="font-semibold text-slate-900">Deterministic Operational Forecasting</h3>
+              <h3 className="font-semibold text-slate-900">{t("ri.main.t.deterministicOperationalForecasting")}</h3>
               <p className="text-sm text-slate-600">
                 Statistically bounded predictive projections calculated via Ordinary Least Squares (OLS) linear regression
                 and moving average trend decomposition across your organization's operational history. All forecasting models
@@ -931,7 +933,7 @@ export function ReportingInsightPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto]">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <label className="block text-sm">
-                  <span className="font-medium text-slate-700">Forecasting Model</span>
+                  <span className="font-medium text-slate-700">{t("ri.main.t.forecastingModel")}</span>
                   <Select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value as ForecastModelCode)}
@@ -945,7 +947,7 @@ export function ReportingInsightPage() {
                 </label>
 
                 <label className="block text-sm">
-                  <span className="font-medium text-slate-700">Historical Lookback (Days)</span>
+                  <span className="font-medium text-slate-700">{t("ri.main.t.historicalLookbackDays")}</span>
                   <Input
                     type="number"
                     min={30}
@@ -956,7 +958,7 @@ export function ReportingInsightPage() {
                 </label>
 
                 <label className="block text-sm">
-                  <span className="font-medium text-slate-700">Forecast Horizon (Days)</span>
+                  <span className="font-medium text-slate-700">{t("ri.main.t.forecastHorizonDays")}</span>
                   <Input
                     type="number"
                     min={7}
@@ -985,7 +987,7 @@ export function ReportingInsightPage() {
           </Card>
 
           {predictiveLoading ? (
-            <Spinner label="Loading historical forecast snapshots…" />
+            <Spinner label={t("ri.main.f.loadingHistoricalForecastSnapshots")} />
           ) : forecastResponse ? (
             <div className="space-y-4">
               {forecastResponse.forecast.status === "insufficient_data" ? (
@@ -993,7 +995,7 @@ export function ReportingInsightPage() {
                   <div className="flex items-start gap-3">
                     <div className="rounded-full bg-amber-100 p-2 text-amber-600">⚠️</div>
                     <div>
-                      <h4 className="font-semibold text-slate-900">Insufficient Operational History</h4>
+                      <h4 className="font-semibold text-slate-900">{t("ri.main.t.insufficientOperationalHistory")}</h4>
                       <p className="mt-1 text-sm text-slate-600">
                         {forecastResponse.forecast.insufficientDataReason ??
                           "The selected lookback window requires at least 30 days of operational records to establish a reliable regression slope and confidence bounds."}
@@ -1060,10 +1062,10 @@ export function ReportingInsightPage() {
                       <table className="w-full text-left text-xs">
                         <thead className="sticky top-0 bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                           <tr>
-                            <th className="p-2">Period (Date)</th>
-                            <th className="p-2 text-right">Projected Value</th>
-                            <th className="p-2 text-right">Lower Bound (95% CI)</th>
-                            <th className="p-2 text-right">Upper Bound (95% CI)</th>
+                            <th className="p-2">{t("ri.main.h.periodDate")}</th>
+                            <th className="p-2 text-right">{t("ri.main.h.projectedValue")}</th>
+                            <th className="p-2 text-right">{t("ri.main.h.lowerBound95Ci")}</th>
+                            <th className="p-2 text-right">{t("ri.main.h.upperBound95Ci")}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -1096,11 +1098,11 @@ export function ReportingInsightPage() {
               {/* Historical Snapshots Audit Log */}
               <Card>
                 <div className="mb-3 flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-800">Forecast Snapshot Audit History</h4>
+                  <h4 className="text-sm font-semibold text-slate-800">{t("ri.main.t.forecastSnapshotAuditHistory")}</h4>
                   <StatusPill tone="neutral">{forecastHistory.length} snapshots</StatusPill>
                 </div>
                 {forecastHistory.length === 0 ? (
-                  <p className="text-xs text-slate-500">No previous snapshot records for this model.</p>
+                  <p className="text-xs text-slate-500">{t("ri.main.n.noPreviousSnapshotRecordsForThisModel")}</p>
                 ) : (
                   <div className="space-y-2">
                     {forecastHistory.slice(0, 5).map((snap) => (
@@ -1127,8 +1129,8 @@ export function ReportingInsightPage() {
             </div>
           ) : (
             <EmptyState
-              title="No Forecast Generated"
-              description="Select your desired model parameters and click 'Generate Forecast' to compute a deterministic projection."
+              title={t("ri.main.title.noForecastGenerated")}
+              description={t("ri.main.d.selectYourDesiredModelParametersAndClick")}
             />
           )}
         </div>
