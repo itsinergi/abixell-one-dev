@@ -180,7 +180,7 @@ export function SupplierContractsPage() {
     { header: t("scm.supplier.h.overallScore"), cell: (e) => <span className="font-mono font-bold">{e.overallScore.toFixed(1)}</span> },
     {
       header: t("scm.supplier.h.ratingGrade"),
-      cell: (e) => <Badge className="bg-blue-50 text-blue-700">Grade {e.ratingGrade}</Badge>,
+      cell: (e) => <Badge className="bg-blue-50 text-blue-700">{t("scm.supplier.t.gradeN", { n: e.ratingGrade })}</Badge>,
       mobileRole: "status",
     },
   ];
@@ -197,7 +197,7 @@ export function SupplierContractsPage() {
       header: t("scm.supplier.h.actions"),
       cell: (c) =>
         c.status === "draft" ? (
-          <Button variant="primary" onClick={() => handleApproveContract(c.id)} disabled={!canApprove || busy}>Approve</Button>
+          <Button variant="primary" onClick={() => handleApproveContract(c.id)} disabled={!canApprove || busy}>{t("scm.supplier.t.approve")}</Button>
         ) : null,
     },
   ];
@@ -213,8 +213,8 @@ export function SupplierContractsPage() {
       {notice && <Alert tone="success">{notice}</Alert>}
 
       <div className="flex gap-2 border-b border-slate-200 pb-2">
-        <Button variant={tab === "evaluations" ? "primary" : "secondary"} onClick={() => setTab("evaluations")}>Supplier Scorecards</Button>
-        <Button variant={tab === "contracts" ? "primary" : "secondary"} onClick={() => setTab("contracts")}>Purchasing Contracts</Button>
+        <Button variant={tab === "evaluations" ? "primary" : "secondary"} onClick={() => setTab("evaluations")}>{t("scm.supplier.t.supplierScorecards")}</Button>
+        <Button variant={tab === "contracts" ? "primary" : "secondary"} onClick={() => setTab("contracts")}>{t("scm.supplier.t.purchasingContracts")}</Button>
       </div>
 
       {loading ? (
@@ -224,7 +224,7 @@ export function SupplierContractsPage() {
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.supplier.t.supplierEvaluationScorecards")}</h3>
-              <DataTable columns={evalColumns} rows={evaluations} keyOf={(e) => e.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No supplier evaluations recorded.</p>} />
+              <DataTable columns={evalColumns} rows={evaluations} keyOf={(e) => e.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.supplier.n.noSupplierEvaluationsRecorded")}</p>} />
             </Card>
           </div>
           <div>
@@ -250,7 +250,7 @@ export function SupplierContractsPage() {
                 <Field label={t("scm.supplier.f.evaluationRemarks")}>
                   <Input value={evalNotes} onChange={(e) => setEvalNotes(e.target.value)} placeholder={t("scm.supplier.p.onTimeDeliveryPerformanceNotes")} disabled={!canManage || busy} />
                 </Field>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Submit Scorecard</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.supplier.t.submitScorecard")}</Button>
               </form>
             </Card>
           </div>
@@ -260,7 +260,7 @@ export function SupplierContractsPage() {
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.supplier.t.masterPurchasingContracts")}</h3>
-              <DataTable columns={contractColumns} rows={contracts} keyOf={(c) => c.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No purchasing contracts registered.</p>} />
+              <DataTable columns={contractColumns} rows={contracts} keyOf={(c) => c.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.supplier.n.noPurchasingContractsRegistered")}</p>} />
             </Card>
           </div>
           <div>
@@ -285,7 +285,7 @@ export function SupplierContractsPage() {
                 <Field label={t("scm.supplier.f.contractTerms")}>
                   <Input value={ctrTerms} onChange={(e) => setCtrTerms(e.target.value)} disabled={!canManage || busy} />
                 </Field>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Register Contract</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.supplier.t.registerContract")}</Button>
               </form>
             </Card>
           </div>

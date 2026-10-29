@@ -184,9 +184,9 @@ export function ValuationPage() {
       header: t("scm.val.h.actions"),
       cell: (r) => (
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => openLandedCostDetail(r.id)}>Detail</Button>
+          <Button variant="secondary" onClick={() => openLandedCostDetail(r.id)}>{t("scm.val.t.detail")}</Button>
           {r.status === "draft" && (
-            <Button variant="primary" onClick={() => handleApplyLandedCost(r.id)} disabled={!canManage || busy}>Apply</Button>
+            <Button variant="primary" onClick={() => handleApplyLandedCost(r.id)} disabled={!canManage || busy}>{t("scm.val.t.apply")}</Button>
           )}
         </div>
       ),
@@ -204,8 +204,8 @@ export function ValuationPage() {
       {notice && <Alert tone="success">{notice}</Alert>}
 
       <div className="flex gap-2 border-b border-slate-200 pb-2">
-        <Button variant={tab === "layers" ? "primary" : "secondary"} onClick={() => { setTab("layers"); setSelectedLandedCost(null); }}>FIFO Valuation Layers</Button>
-        <Button variant={tab === "landed_costs" ? "primary" : "secondary"} onClick={() => setTab("landed_costs")}>Landed Cost Allocations</Button>
+        <Button variant={tab === "layers" ? "primary" : "secondary"} onClick={() => { setTab("layers"); setSelectedLandedCost(null); }}>{t("scm.val.t.fifoValuationLayers")}</Button>
+        <Button variant={tab === "landed_costs" ? "primary" : "secondary"} onClick={() => setTab("landed_costs")}>{t("scm.val.t.landedCostAllocations")}</Button>
       </div>
 
       {loading ? (
@@ -222,7 +222,7 @@ export function ValuationPage() {
           </div>
           <Card>
             <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.val.t.activeFifoInventoryLayers")}</h3>
-            <DataTable columns={layerColumns} rows={layers} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No active inventory valuation layers found.</p>} />
+            <DataTable columns={layerColumns} rows={layers} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.val.n.noActiveInventoryValuationLayersFound")}</p>} />
           </Card>
         </div>
       ) : (
@@ -231,7 +231,7 @@ export function ValuationPage() {
             <div className="lg:col-span-2">
               <Card>
                 <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.val.t.landedCostVouchers")}</h3>
-                <DataTable columns={landedCostColumns} rows={landedCosts} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No landed cost vouchers created.</p>} />
+                <DataTable columns={landedCostColumns} rows={landedCosts} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.val.n.noLandedCostVouchersCreated")}</p>} />
               </Card>
             </div>
             <div>
@@ -260,7 +260,7 @@ export function ValuationPage() {
                   <Field label={t("scm.val.f.voucherNotes")}>
                     <Input value={lcNotes} onChange={(e) => setLcNotes(e.target.value)} placeholder={t("scm.val.p.customsBillBLReference")} disabled={!canManage || busy} />
                   </Field>
-                  <Button type="submit" variant="primary" disabled={!canManage || busy}>Generate Voucher</Button>
+                  <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.val.t.generateVoucher")}</Button>
                 </form>
               </Card>
             </div>
@@ -271,9 +271,9 @@ export function ValuationPage() {
               <h3 className="text-base font-semibold text-slate-900 mb-3">{`Landed Cost Breakdown: ${selectedLandedCost.landedCost.voucherNumber}`}</h3>
               <div className="space-y-4">
                 <div className="flex gap-4 text-sm">
-                  <div><strong>Status:</strong> <StatusPill tone={selectedLandedCost.landedCost.status === "applied" ? "success" : "warning"}>{label(selectedLandedCost.landedCost.status)}</StatusPill></div>
-                  <div><strong>Total Cost:</strong> <span className="font-mono font-bold">{formatMoney(String(selectedLandedCost.landedCost.amount))}</span></div>
-                  <div><strong>Method:</strong> {label(selectedLandedCost.landedCost.allocationMethod)}</div>
+                  <div><strong>{t("scm.val.f.status")}</strong> <StatusPill tone={selectedLandedCost.landedCost.status === "applied" ? "success" : "warning"}>{label(selectedLandedCost.landedCost.status)}</StatusPill></div>
+                  <div><strong>{t("scm.val.f.totalCost")}</strong> <span className="font-mono font-bold">{formatMoney(String(selectedLandedCost.landedCost.amount))}</span></div>
+                  <div><strong>{t("scm.val.f.method")}</strong> {label(selectedLandedCost.landedCost.allocationMethod)}</div>
                 </div>
                 <DataTable
                   columns={[

@@ -137,15 +137,15 @@ export function SpendAnalyticsPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Card>
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Evaluated Spend</div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t("scm.spend.t.totalEvaluatedSpend")}</div>
               <div className="mt-2 text-2xl font-black text-slate-900 font-mono">{formatMoney(String(totalSpend))}</div>
             </Card>
             <Card>
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Purchase Orders Analyzed</div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t("scm.spend.t.purchaseOrdersAnalyzed")}</div>
               <div className="mt-2 text-2xl font-black text-blue-600 font-mono">{totalPOs}</div>
             </Card>
             <Card>
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Items Purchased Volume</div>
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t("scm.spend.t.itemsPurchasedVolume")}</div>
               <div className="mt-2 text-2xl font-black text-emerald-600 font-mono">{totalItems}</div>
             </Card>
           </div>
@@ -156,7 +156,7 @@ export function SpendAnalyticsPage() {
               columns={snapshotColumns}
               rows={snapshots}
               keyOf={(r) => r.id}
-              empty={<p className="text-slate-500 py-4 text-center text-sm">No spend analytics snapshots generated yet. Click recompute above.</p>}
+              empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.spend.n.noSpendAnalyticsSnapshotsGeneratedYetCli")}</p>}
             />
           </Card>
         </div>

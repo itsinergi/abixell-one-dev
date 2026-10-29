@@ -281,10 +281,10 @@ export function AssetPerformancePage() {
         actions={
           <div className="flex items-center gap-2">
             <Link to={`/assets/${asset.id}`}>
-              <Button variant="secondary">Asset Detail</Button>
+              <Button variant="secondary">{t("sca.perf.t.assetDetail")}</Button>
             </Link>
             <Link to="/asset-maintenance">
-              <Button variant="ghost">Maintenance Center</Button>
+              <Button variant="ghost">{t("sca.perf.t.maintenanceCenter")}</Button>
             </Link>
           </div>
         }
@@ -321,7 +321,7 @@ export function AssetPerformancePage() {
           {reliability ? (
             <div className="mt-4 grid grid-cols-2 gap-3 text-center sm:grid-cols-4 lg:grid-cols-6">
               <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Availability</div>
+                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">{t("sca.perf.t.availability")}</div>
                 <div className="mt-1 text-lg font-bold text-slate-900">{reliability.availabilityPct}%</div>
               </div>
               <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
@@ -333,15 +333,15 @@ export function AssetPerformancePage() {
                 <div className="mt-1 text-lg font-bold text-slate-900">{reliability.mttrHours} hrs</div>
               </div>
               <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Failures</div>
+                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">{t("sca.perf.t.failures")}</div>
                 <div className="mt-1 text-lg font-bold text-slate-900">{reliability.correctiveFailureCount}</div>
               </div>
               <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Downtime</div>
+                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">{t("sca.perf.t.downtime")}</div>
                 <div className="mt-1 text-lg font-bold text-slate-900">{reliability.downtimeHours} hrs</div>
               </div>
               <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Operating</div>
+                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">{t("sca.perf.t.operating")}</div>
                 <div className="mt-1 text-lg font-bold text-slate-900">{reliability.operationalHours} hrs</div>
               </div>
             </div>
@@ -351,7 +351,7 @@ export function AssetPerformancePage() {
             <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-blue-950">Latest Predictive Advisory</span>
+                  <span className="text-sm font-semibold text-blue-950">{t("sca.perf.t.latestPredictiveAdvisory")}</span>
                   <StatusPill tone={latestSnapshot.healthScore >= 75 ? "success" : latestSnapshot.healthScore >= 50 ? "warning" : "danger"}>
                     Health Score {latestSnapshot.healthScore}/100
                   </StatusPill>
