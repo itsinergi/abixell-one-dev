@@ -11,6 +11,7 @@ import type { ActorContext } from "../../domain/shared-kernel/audit-context.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../domain/shared-kernel/errors.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { RbacService } from "../rbac/rbac.service.js";
+import type { ModuleConfigLookup } from "../../domain/configuration/module-config-manifest.entity.js";
 import { SchemaRegistryValidator } from "./schema-registry-validator.js";
 import { formatNumber } from "./numbering-formatter.js";
 
@@ -26,6 +27,7 @@ export class ConfigurationService {
     private readonly repo: ConfigurationRepository,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly manifests?: ModuleConfigLookup,
   ) {
     this.validator = new SchemaRegistryValidator(repo);
   }
@@ -378,7 +380,13 @@ export class ConfigurationService {
 
   async listAppParameters(actor: ActorContext): Promise<AppParameter[]> {
     await this.rbac.requirePermission(actor, "config.read");
-    return this.repo.listAppParameters();
+    const rows = await this.repo.listAppParameters();
+    // `inUse` lives in the code-owned manifest, not in a column: whether code
+    // reads a parameter is a fact about the code, so it cannot drift from it.
+    return rows.map((row) => ({
+      ...row,
+      inUse: this.manifests?.findParameter(row.code)?.inUse ?? true,
+    }));
   }
 
   async resolveEffectiveParameter(

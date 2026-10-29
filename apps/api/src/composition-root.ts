@@ -3,6 +3,8 @@ import { PgTenantRepository } from "./infrastructure/persistence/repositories/te
 import { PgLegalEntityRepository } from "./infrastructure/persistence/repositories/legal-entity.repository.pg.js";
 import { PgOrganizationUnitRepository } from "./infrastructure/persistence/repositories/organization-unit.repository.pg.js";
 import { PgOrganizationUnitHierarchyRepository } from "./infrastructure/persistence/repositories/organization-unit-hierarchy.repository.pg.js";
+import { PgParameterReader } from "./infrastructure/configuration/parameter-reader.pg.js";
+import { buildModuleConfigRegistry } from "./application/configuration/build-module-config-registry.js";
 import { PgDepartmentRepository } from "./infrastructure/persistence/repositories/department.repository.pg.js";
 import { PgBusinessPartnerRepository } from "./infrastructure/persistence/repositories/business-partner.repository.pg.js";
 import { PgEmployeePlacementRepository } from "./infrastructure/persistence/repositories/employee-placement.repository.pg.js";
@@ -184,11 +186,6 @@ export function buildContainer() {
   const tenantRepo = new PgTenantRepository(pool);
   const legalEntityRepo = new PgLegalEntityRepository(pool);
   const organizationUnitRepo = new PgOrganizationUnitRepository(pool);
-  // Epic 5 Gelombang 2 — effective-dated hierarchy history, change requests and
-  // the tombstone/reference-check flow. A separate repository because it owns a
-  // different question (what the structure WAS and who may change it) from the
-  // one `organizationUnitRepo` answers (what the unit is now).
-  const organizationUnitHierarchyRepo = new PgOrganizationUnitHierarchyRepository(pool);
   // Epic 5 Gelombang 1 — Department master. Deliberately NOT a scope source:
   // the repository is only ever reached with the actor's tenant id, and no
   // scope column or RbacService scope method is involved (see the module
@@ -230,7 +227,24 @@ export function buildContainer() {
   // the accumulated-approval window; wired here so the document workflows of
   // Epics 7+ resolve an approver through one place.
   const approvalAuthority = new ApprovalAuthorityService(new PgApprovalAuthorityRepository(pool));
-  const configuration = new ConfigurationService(configurationRepo, audit, rbac);
+  const configuration = new ConfigurationService(
+    configurationRepo,
+    audit,
+    rbac,
+    buildModuleConfigRegistry(),
+  );
+  // §4.15 Putaran 7 — trusted-caller numeric reads for every module manifest
+  // consumer below. One instance, built right after `configuration` exists,
+  // so a module never needs its own `config.read` permission just to pick up
+  // its own tunable.
+  const parameterReader = new PgParameterReader(configuration);
+  // Epic 5 Gelombang 2 — effective-dated hierarchy history, change requests and
+  // the tombstone/reference-check flow. A separate repository because it owns a
+  // different question (what the structure WAS and who may change it) from the
+  // one `organizationUnitRepo` answers (what the unit is now). Built after
+  // `parameterReader` because the backdate bound it enforces is now a
+  // parameter (`platform.organization_unit.backdate_limit_days`).
+  const organizationUnitHierarchyRepo = new PgOrganizationUnitHierarchyRepository(pool, parameterReader);
   // Epic 2 Wave 1 — Application Dictionary. configurationRepo is reused as the
   // Schema Registry source so Ajv validation of rule payloads reads the real
   // metadata_registry row (area='app_field_rules', key='rules_definition').
@@ -280,6 +294,7 @@ export function buildContainer() {
     new PgComplaintDashboardRepository(pool),
     customer,
     rbac,
+    parameterReader,
   );
 
   // Checkpoint 1C.6 — Complaint Administration surface (gated on
@@ -532,6 +547,7 @@ export function buildContainer() {
     accountingKernel,
     accountingEventPort,
     accountingKernelRepo,
+    parameterReader,
   );
 
   // WP-FIN-A6-02 — AP/AR open-item settlement (ADR-0017). Remaining balances
@@ -760,6 +776,7 @@ export function buildContainer() {
     rbac,
     eventBus,
     documentEntityResolvers,
+    parameterReader,
   );
 
   // Generic Survey & Assessment Engine (Checkpoint 1D.1). Reuses the shared
@@ -923,6 +940,7 @@ export function buildContainer() {
       organizationUnitHierarchyRepo,
       organizationUnitRepo,
       rbac,
+      parameterReader,
     ),
     departments: new DepartmentService(departmentRepo, rbac),
     businessPartner: new BusinessPartnerService(businessPartnerRepo, rbac),
@@ -931,7 +949,7 @@ export function buildContainer() {
     ruleRegistry: new RuleRegistryService(ruleRegistryRepo, rbac),
     employeePlacement: new EmployeePlacementService(employeePlacementRepo, rbac),
     user: new UserService(userRepo, rbacRepo, audit, rbac, customerRepo),
-    auth: new AuthService(pool, tenantRepo, userRepo, audit),
+    auth: new AuthService(pool, tenantRepo, userRepo, audit, parameterReader),
     configuration,
     appMetadata,
     workflow,

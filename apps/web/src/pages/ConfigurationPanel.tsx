@@ -453,7 +453,16 @@ export function ConfigurationPanel({
   ];
 
   const parameterColumns: Column<AppParameter>[] = [
-    { header: "Parameter", mobileRole: "title", cell: (row) => row.name },
+    {
+      header: "Parameter",
+      mobileRole: "title",
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <span>{row.name}</span>
+          {row.inUse === false && <StatusPill tone="neutral">Belum dipakai</StatusPill>}
+        </div>
+      ),
+    },
     { header: "Kode", cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
     { header: "Tipe", cell: (row) => row.parameterType },
     {
@@ -471,7 +480,8 @@ export function ConfigurationPanel({
     {
       header: "Aksi",
       cell: (row) =>
-        canManage && (
+        canManage &&
+        row.inUse !== false && (
           <Button variant="ghost" onClick={(event) => open({ kind: "parameter", row }, event.currentTarget)}>
             Atur nilai
           </Button>

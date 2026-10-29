@@ -14,7 +14,10 @@ export interface AccessTokenPayload {
 }
 
 const ACCESS_TOKEN_TTL = "15m";
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// §4.15 Putaran 7 — "platform.auth.refresh_token_ttl_days". This is the
+// fallback used when no tenant-configured value is supplied: an unconfigured
+// tenant, and every call site that does not pass `ttlDays` (tests, scripts).
+const DEFAULT_REFRESH_TOKEN_TTL_DAYS = 7;
 
 function accessSecret(): string {
   const secret = process.env.JWT_ACCESS_SECRET;
@@ -30,6 +33,6 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
   return jwt.verify(token, accessSecret()) as AccessTokenPayload;
 }
 
-export function newRefreshTokenExpiry(): Date {
-  return new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+export function newRefreshTokenExpiry(ttlDays: number = DEFAULT_REFRESH_TOKEN_TTL_DAYS): Date {
+  return new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
 }

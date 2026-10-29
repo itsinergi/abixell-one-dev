@@ -4819,7 +4819,7 @@ Dua opsi tersedia:
 
 4. **UI per-modul memakai layar parameter yang sudah ada.** `ConfigurationPanel` (section `system`) saat ini menampilkan seluruh katalog parameter tanpa pengelompokan. Pekerjaan UI: tambah filter `moduleCode` dan satu halaman daftar modul sesuai keputusan #12. Komponen baru tidak diperlukan.
 
-**Status open item #5 (Module Config):** kontrak registrasi diputuskan (Opsi A); implementasi loader dan manifest belum dibangun.
+**Status open item #5 (Module Config):** kontrak registrasi diputuskan (Opsi A) dan sudah dibangun (commit `71e358f`, 2026-10-28). 14 kode modul terdaftar — 4 bermuatan parameter, 10 dideklarasikan kosong. Lima parameter sekarang punya konsumen nyata di kode: `platform.document.max_upload_mb`, `platform.organization_unit.backdate_limit_days`, `platform.auth.refresh_token_ttl_days`, `finance.accounting.max_posting_attempts`, `customer_complaint.dashboard.default_period_days`. Tiga baris `document.*` tetap di katalog dengan `inUse: false` sehingga UI menandainya "Belum dipakai" dan menyembunyikan aksi tulis (langkah 3 di atas: tetap di seed, belum aktif). Sync berjalan di `main.ts` sebelum `buildApp()`; manifest rusak menghentikan boot. Sisa pekerjaan: tidak ada yang mengikat — parameter baru cukup ditambah di manifest modulnya.
 
 ---
 

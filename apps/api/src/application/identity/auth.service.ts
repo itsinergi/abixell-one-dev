@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type { TenantRepository } from "../../domain/tenant/tenant.entity.js";
 import type { UserRepository, UserWithPasswordHash } from "../../domain/identity/user.entity.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { ParameterReader } from "../../domain/configuration/parameter-reader.js";
 import { UnauthorizedError } from "../../domain/shared-kernel/errors.js";
 import { verifyPassword } from "../../infrastructure/security/password.js";
 import { signAccessToken, verifyAccessToken } from "../../infrastructure/security/jwt.js";
@@ -65,7 +66,16 @@ export class AuthService {
     private readonly tenants: TenantRepository,
     private readonly users: UserRepository,
     private readonly audit: AuditService,
+    private readonly parameters?: ParameterReader,
   ) {}
+
+  // §4.15 Putaran 7 — "platform.auth.refresh_token_ttl_days". `tenantId` is
+  // optional: the very first mint of a session (login) always has one; a
+  // token-predates-Epic-1 edge case does not, and falls back silently.
+  private async refreshTokenTtlDays(tenantId?: string): Promise<number | undefined> {
+    if (!this.parameters || !tenantId) return undefined;
+    return this.parameters.getInteger(tenantId, "platform.auth.refresh_token_ttl_days", 7);
+  }
 
   async login(input: LoginInput): Promise<LoginResult> {
     // Explicit targeting: `tenantCode` (legacy / integration tests) or the
@@ -209,7 +219,12 @@ export class AuthService {
       remoteAddr: ip,
     });
     const accessToken = signAccessToken({ sub: user.id, tenantId: tenant.id, sessionId });
-    const refreshToken = await issueRefreshToken(this.pool, user.id, sessionId);
+    const refreshToken = await issueRefreshToken(
+      this.pool,
+      user.id,
+      sessionId,
+      await this.refreshTokenTtlDays(tenant.id),
+    );
 
     await this.audit.record({
       tenantId: tenant.id,
@@ -267,7 +282,12 @@ export class AuthService {
     await touchSession(this.pool, sessionId);
 
     const accessToken = signAccessToken({ sub: user.id, tenantId: user.tenantId, sessionId });
-    const newRefreshToken = await issueRefreshToken(this.pool, user.id, sessionId);
+    const newRefreshToken = await issueRefreshToken(
+      this.pool,
+      user.id,
+      sessionId,
+      await this.refreshTokenTtlDays(user.tenantId),
+    );
     return { accessToken, refreshToken: newRefreshToken };
   }
 

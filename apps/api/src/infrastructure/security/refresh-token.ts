@@ -15,12 +15,13 @@ export async function issueRefreshToken(
   pool: Pool,
   userId: string,
   sessionId?: string,
+  ttlDays?: number,
 ): Promise<string> {
   const token = generateOpaqueToken();
   await pool.query(
     `INSERT INTO refresh_tokens (user_id, session_id, token_hash, expires_at)
      VALUES ($1, $2, $3, $4)`,
-    [userId, sessionId ?? null, hashToken(token), newRefreshTokenExpiry()],
+    [userId, sessionId ?? null, hashToken(token), newRefreshTokenExpiry(ttlDays)],
   );
   return token;
 }
