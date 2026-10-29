@@ -206,7 +206,7 @@ export function ProcurementPage() {
     { header: t("scm.proc.h.status"), cell: (r) => <StatusPill tone={r.status === "awarded" ? "success" : r.status === "in_evaluation" ? "info" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
     {
       header: t("scm.proc.h.action"),
-      cell: (r) => <Button variant="secondary" onClick={() => openRfqDetail(r.id)}>Inspect & Compare</Button>,
+      cell: (r) => <Button variant="secondary" onClick={() => openRfqDetail(r.id)}>{t("scm.proc.t.inspectCompare")}</Button>,
     },
   ];
 
@@ -220,7 +220,7 @@ export function ProcurementPage() {
       header: t("scm.proc.h.awardDecision"),
       cell: (b) =>
         selectedRfqDetail?.rfq.status !== "awarded" && b.status !== "awarded" ? (
-          <Button variant="primary" onClick={() => handleAwardBid(b.id)} disabled={!canAward || busy}>Award to PO</Button>
+          <Button variant="primary" onClick={() => handleAwardBid(b.id)} disabled={!canAward || busy}>{t("scm.proc.t.awardToPo")}</Button>
         ) : b.status === "awarded" ? (
           <span className="text-xs font-semibold text-emerald-600">✓ Awarded</span>
         ) : null,
@@ -246,7 +246,7 @@ export function ProcurementPage() {
         <div className="lg:col-span-2">
           <Card>
             <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.proc.t.activeRfqsTenders")}</h3>
-            <DataTable columns={rfqColumns} rows={rfqs} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No RFQs created.</p>} />
+            <DataTable columns={rfqColumns} rows={rfqs} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.proc.n.noRfqsCreated")}</p>} />
           </Card>
         </div>
         <div>
@@ -270,7 +270,7 @@ export function ProcurementPage() {
               <Field label={t("scm.proc.f.technicalSpecification")}>
                 <Input value={rfqSpec} onChange={(e) => setRfqSpec(e.target.value)} placeholder={t("scm.proc.p.minimum42uDualPdu")} disabled={!canManage || busy} />
               </Field>
-              <Button type="submit" variant="primary" disabled={!canManage || busy}>Publish RFQ</Button>
+              <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.proc.t.publishRfq")}</Button>
             </form>
           </Card>
         </div>
@@ -281,12 +281,12 @@ export function ProcurementPage() {
           <h3 className="text-base font-semibold text-slate-900 mb-3">{`RFQ Comparative Bids: ${selectedRfqDetail.rfq.rfqNumber} — ${selectedRfqDetail.rfq.title}`}</h3>
           <div className="space-y-6">
             <div className="flex flex-wrap gap-6 text-sm">
-              <div><strong>Status:</strong> <StatusPill tone={selectedRfqDetail.rfq.status === "awarded" ? "success" : "info"}>{label(selectedRfqDetail.rfq.status)}</StatusPill></div>
-              <div><strong>Deadline:</strong> {formatDateShort(selectedRfqDetail.rfq.submissionDeadline)}</div>
+              <div><strong>{t("scm.proc.f.status")}</strong> <StatusPill tone={selectedRfqDetail.rfq.status === "awarded" ? "success" : "info"}>{label(selectedRfqDetail.rfq.status)}</StatusPill></div>
+              <div><strong>{t("scm.proc.f.deadline")}</strong> {formatDateShort(selectedRfqDetail.rfq.submissionDeadline)}</div>
             </div>
 
             <div>
-              <h4 className="text-sm font-bold text-slate-800 mb-2">Required Items</h4>
+              <h4 className="text-sm font-bold text-slate-800 mb-2">{t("scm.proc.t.requiredItems")}</h4>
               <DataTable
                 columns={[
                   { header: t("scm.proc.h.item"), cell: (l) => itemMap.get(l.itemId)?.name || l.itemId, mobileRole: "title" },
@@ -300,12 +300,12 @@ export function ProcurementPage() {
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2">
-                <h4 className="text-sm font-bold text-slate-800 mb-2">Supplier Bids Received</h4>
-                <DataTable columns={bidColumns} rows={selectedRfqDetail.bids} keyOf={(b) => b.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No supplier bids submitted for this RFQ yet.</p>} />
+                <h4 className="text-sm font-bold text-slate-800 mb-2">{t("scm.proc.t.supplierBidsReceived")}</h4>
+                <DataTable columns={bidColumns} rows={selectedRfqDetail.bids} keyOf={(b) => b.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.proc.n.noSupplierBidsSubmittedForThisRfqYet")}</p>} />
               </div>
               <div>
                 <Card>
-                  <h4 className="text-sm font-bold text-slate-800 mb-3">Record Supplier Bid</h4>
+                  <h4 className="text-sm font-bold text-slate-800 mb-3">{t("scm.proc.t.recordSupplierBid")}</h4>
                   <form onSubmit={handleSubmitBid} className="space-y-4">
                     <Field label={t("scm.proc.f.supplier")} required>
                       <Select value={bidSupplierId} onChange={(e) => setBidSupplierId(e.target.value)} disabled={!canManage || busy}>
@@ -321,7 +321,7 @@ export function ProcurementPage() {
                     <Field label={t("scm.proc.f.bidNotes")}>
                       <Input value={bidNotes} onChange={(e) => setBidNotes(e.target.value)} placeholder={t("scm.proc.p.includesFobShipping")} disabled={!canManage || busy} />
                     </Field>
-                    <Button type="submit" variant="primary" disabled={!canManage || busy || selectedRfqDetail.rfq.status === "awarded"}>Submit Bid</Button>
+                    <Button type="submit" variant="primary" disabled={!canManage || busy || selectedRfqDetail.rfq.status === "awarded"}>{t("scm.proc.t.submitBid")}</Button>
                   </form>
                 </Card>
               </div>

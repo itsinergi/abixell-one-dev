@@ -391,12 +391,12 @@ export function WarehousesPage() {
       {notice && <Alert tone="success">{notice}</Alert>}
 
       <div className="flex gap-2 border-b border-slate-200 pb-2">
-        <Button variant={tab === "warehouses" ? "primary" : "secondary"} onClick={() => setTab("warehouses")}>Warehouses</Button>
-        <Button variant={tab === "locations" ? "primary" : "secondary"} onClick={() => setTab("locations")}>Locations / Bins</Button>
-        <Button variant={tab === "batches" ? "primary" : "secondary"} onClick={() => setTab("batches")}>Batches & Lots</Button>
-        <Button variant={tab === "serials" ? "primary" : "secondary"} onClick={() => setTab("serials")}>Serials</Button>
-        <Button variant={tab === "balances" ? "primary" : "secondary"} onClick={() => setTab("balances")}>Stock Balances</Button>
-        <Button variant={tab === "movements" ? "primary" : "secondary"} onClick={() => setTab("movements")}>Ledger Movements</Button>
+        <Button variant={tab === "warehouses" ? "primary" : "secondary"} onClick={() => setTab("warehouses")}>{t("scm.wh.t.warehouses")}</Button>
+        <Button variant={tab === "locations" ? "primary" : "secondary"} onClick={() => setTab("locations")}>{t("scm.wh.t.locationsBins")}</Button>
+        <Button variant={tab === "batches" ? "primary" : "secondary"} onClick={() => setTab("batches")}>{t("scm.wh.t.batchesLots")}</Button>
+        <Button variant={tab === "serials" ? "primary" : "secondary"} onClick={() => setTab("serials")}>{t("scm.wh.t.serials")}</Button>
+        <Button variant={tab === "balances" ? "primary" : "secondary"} onClick={() => setTab("balances")}>{t("scm.wh.t.stockBalances")}</Button>
+        <Button variant={tab === "movements" ? "primary" : "secondary"} onClick={() => setTab("movements")}>{t("scm.wh.t.ledgerMovements")}</Button>
       </div>
 
       {loading ? (
@@ -406,7 +406,7 @@ export function WarehousesPage() {
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.warehouseDirectory")}</h3>
-              <DataTable columns={warehouseColumns} rows={warehouses} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No warehouses defined yet.</p>} />
+              <DataTable columns={warehouseColumns} rows={warehouses} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.wh.n.noWarehousesDefinedYet")}</p>} />
             </Card>
           </div>
           <div>
@@ -422,7 +422,7 @@ export function WarehousesPage() {
                 <Field label={t("scm.wh.f.address")}>
                   <Input value={whAddress} onChange={(e) => setWhAddress(e.target.value)} placeholder={t("scm.wh.p.eGBuilding4LogisticsPark")} disabled={!canManage || busy} />
                 </Field>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Create Warehouse</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.wh.t.createWarehouse")}</Button>
               </form>
             </Card>
           </div>
@@ -432,7 +432,7 @@ export function WarehousesPage() {
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.storageBinsLocations")}</h3>
-              <DataTable columns={locationColumns} rows={locations} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No locations defined yet.</p>} />
+              <DataTable columns={locationColumns} rows={locations} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.wh.n.noLocationsDefinedYet")}</p>} />
             </Card>
           </div>
           <div>
@@ -456,7 +456,7 @@ export function WarehousesPage() {
                   <Field label={t("scm.wh.f.shelf")}><Input value={locShelf} onChange={(e) => setLocShelf(e.target.value)} placeholder="S2" disabled={!canManage || busy} /></Field>
                   <Field label={t("scm.wh.f.bin")}><Input value={locBin} onChange={(e) => setLocBin(e.target.value)} placeholder="B1" disabled={!canManage || busy} /></Field>
                 </div>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Add Location</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.wh.t.addLocation")}</Button>
               </form>
             </Card>
           </div>
@@ -466,7 +466,7 @@ export function WarehousesPage() {
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.batchLotRegistry")}</h3>
-              <DataTable columns={batchColumns} rows={batches} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No batches registered yet.</p>} />
+              <DataTable columns={batchColumns} rows={batches} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.wh.n.noBatchesRegisteredYet")}</p>} />
             </Card>
           </div>
           <div>
@@ -490,7 +490,7 @@ export function WarehousesPage() {
                 <Field label={t("scm.wh.f.notes")}>
                   <Input value={batchNotes} onChange={(e) => setBatchNotes(e.target.value)} placeholder={t("scm.wh.p.supplierCertificatesStorageNotes")} disabled={!canManage || busy} />
                 </Field>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Register Batch</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.wh.t.registerBatch")}</Button>
               </form>
             </Card>
           </div>
@@ -500,7 +500,7 @@ export function WarehousesPage() {
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.serialNumberTracking")}</h3>
-              <DataTable columns={serialColumns} rows={serials} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No serial items registered yet.</p>} />
+              <DataTable columns={serialColumns} rows={serials} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.wh.n.noSerialItemsRegisteredYet")}</p>} />
             </Card>
           </div>
           <div>
@@ -524,7 +524,7 @@ export function WarehousesPage() {
                 <Field label={t("scm.wh.f.warrantyExpiryDate")}>
                   <Input type="date" value={serialWarranty} onChange={(e) => setSerialWarranty(e.target.value)} disabled={!canManage || busy} />
                 </Field>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Register Serial</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.wh.t.registerSerial")}</Button>
               </form>
             </Card>
           </div>
@@ -532,14 +532,14 @@ export function WarehousesPage() {
       ) : tab === "balances" ? (
         <Card>
           <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.authoritativeMultiWarehouseBalances")}</h3>
-          <DataTable columns={balanceColumns} rows={balances} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No stock balances found.</p>} />
+          <DataTable columns={balanceColumns} rows={balances} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.wh.n.noStockBalancesFound")}</p>} />
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.wh.t.immutableStockMovementLedger")}</h3>
-              <DataTable columns={movementColumns} rows={movements} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No ledger movements recorded yet.</p>} />
+              <DataTable columns={movementColumns} rows={movements} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.wh.n.noLedgerMovementsRecordedYet")}</p>} />
             </Card>
           </div>
           <div>
@@ -572,7 +572,7 @@ export function WarehousesPage() {
                 <Field label={t("scm.wh.f.notesReference")}>
                   <Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder={t("scm.wh.p.reasonOrPoJobReference")} disabled={!canManage || busy} />
                 </Field>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Post Ledger Movement</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.wh.t.postLedgerMovement")}</Button>
               </form>
             </Card>
           </div>

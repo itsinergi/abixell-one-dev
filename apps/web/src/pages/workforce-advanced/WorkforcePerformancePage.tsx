@@ -409,13 +409,13 @@ export function WorkforcePerformancePage() {
       <PageHeader title={t("wf.perf.title.talentPerformance")} subtitle={t("wf.perf.sub.maintainCompetenciesTrainingCatalogsStru")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      {!canManage ? <Alert tone="info">Performance evaluations and catalog maintenance require <code className="font-mono text-xs">workforce.performance.manage</code>.</Alert> : null}
+      {!canManage ? <Alert tone="info">{t("wf.perf.msg.performanceEvaluationsAndCatalogMaintena", { perm: <code className="font-mono text-xs">workforce.performance.manage</code> })}</Alert> : null}
 
       <div className="flex overflow-x-auto border-b border-slate-200">
-        {tabButton("reviews", `Appraisals (${reviews.length})`)}
-        {tabButton("competencies", `Competencies (${competencies.length})`)}
-        {tabButton("training", `Training & courses (${courses.length})`)}
-        {tabButton("career", `Career pathways (${careerPaths.length})`)}
+        {tabButton("reviews", t("wf.perf.t.appraisalsCount", { count: reviews.length }))}
+        {tabButton("competencies", t("wf.perf.t.competenciesCount", { count: competencies.length }))}
+        {tabButton("training", t("wf.perf.t.trainingCoursesCount", { count: courses.length }))}
+        {tabButton("career", t("wf.perf.t.careerPathwaysCount", { count: careerPaths.length }))}
       </div>
 
       <Card>
@@ -444,7 +444,7 @@ export function WorkforcePerformancePage() {
             <div className="sm:col-span-2 lg:col-span-4"><Field label={t("wf.perf.f.reviewNotes")}><Textarea rows={2} value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /></Field></div>
             <div className="sm:col-span-2 lg:col-span-4"><Field label={t("wf.perf.f.developmentPlan")}><Textarea rows={2} value={developmentPlan} onChange={(event) => setDevelopmentPlan(event.target.value)} /></Field></div>
           </div>
-          <Button className="mt-3" disabled={busy || !reviewEmployeeId || !reviewStart || !reviewEnd} onClick={() => void createReview()}>Submit performance appraisal</Button>
+          <Button className="mt-3" disabled={busy || !reviewEmployeeId || !reviewStart || !reviewEnd} onClick={() => void createReview()}>{t("wf.perf.t.submitPerformanceAppraisal")}</Button>
         </Card>
       ) : null}
 
@@ -461,7 +461,7 @@ export function WorkforcePerformancePage() {
                 <Field label={t("wf.perf.f.max")}><Input type="number" min="1" value={scaleMax} onChange={(event) => setScaleMax(event.target.value)} /></Field>
               </div>
             </div>
-            <Button className="mt-3" disabled={busy || !compCode.trim() || !compName.trim()} onClick={() => void createCompetency()}>Save competency</Button>
+            <Button className="mt-3" disabled={busy || !compCode.trim() || !compName.trim()} onClick={() => void createCompetency()}>{t("wf.perf.t.saveCompetency")}</Button>
           </Card>
 
           <Card>
@@ -472,7 +472,7 @@ export function WorkforcePerformancePage() {
               <Field label={t("wf.perf.f.proficiencyLevel")} required><Input type="number" min="1" max="10" value={assessLevel} onChange={(event) => setAssessLevel(event.target.value)} /></Field>
               <Field label={t("wf.perf.f.assessmentNotes")}><Input value={assessNotes} onChange={(event) => setAssessNotes(event.target.value)} /></Field>
             </div>
-            <Button className="mt-3" disabled={busy || !assessEmployeeId || !assessCompetencyId} onClick={() => void assessCompetency()}>Save assessment</Button>
+            <Button className="mt-3" disabled={busy || !assessEmployeeId || !assessCompetencyId} onClick={() => void assessCompetency()}>{t("wf.perf.t.saveAssessment")}</Button>
           </Card>
         </div>
       ) : null}
@@ -495,7 +495,7 @@ export function WorkforcePerformancePage() {
                 </Field>
               </div>
             </div>
-            <Button className="mt-3" disabled={busy || !courseCode.trim() || !courseTitle.trim()} onClick={() => void createCourse()}>Save course</Button>
+            <Button className="mt-3" disabled={busy || !courseCode.trim() || !courseTitle.trim()} onClick={() => void createCourse()}>{t("wf.perf.t.saveCourse")}</Button>
           </Card>
 
           <Card>
@@ -504,7 +504,7 @@ export function WorkforcePerformancePage() {
               <Field label={t("wf.perf.f.employee")} required><Select value={enrollEmployeeId} onChange={(event) => setEnrollEmployeeId(event.target.value)}><option value="">{t("wf.perf.t.selectEmployee")}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</Select></Field>
               <Field label={t("wf.perf.f.course")} required><Select value={enrollCourseId} onChange={(event) => setEnrollCourseId(event.target.value)}><option value="">{t("wf.perf.t.selectCourse")}</option>{courses.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</Select></Field>
             </div>
-            <Button className="mt-3" disabled={busy || !enrollEmployeeId || !enrollCourseId} onClick={() => void enrollEmployee()}>Enroll in training</Button>
+            <Button className="mt-3" disabled={busy || !enrollEmployeeId || !enrollCourseId} onClick={() => void enrollEmployee()}>{t("wf.perf.t.enrollInTraining")}</Button>
           </Card>
         </div>
       ) : null}
@@ -518,7 +518,7 @@ export function WorkforcePerformancePage() {
             <Field label={t("wf.perf.f.requiredTenureMonths")}><Input type="number" min="0" value={tenureMonths} onChange={(event) => setTenureMonths(event.target.value)} /></Field>
             <div className="sm:col-span-3"><Field label={t("wf.perf.f.careerMobilityGuidelines")}><Textarea rows={2} value={careerGuidelines} onChange={(event) => setCareerGuidelines(event.target.value)} /></Field></div>
           </div>
-          <Button className="mt-3" disabled={busy || !fromPositionId || !toPositionId} onClick={() => void createCareerPath()}>Save career path</Button>
+          <Button className="mt-3" disabled={busy || !fromPositionId || !toPositionId} onClick={() => void createCareerPath()}>{t("wf.perf.t.saveCareerPath")}</Button>
         </Card>
       ) : null}
 

@@ -389,14 +389,14 @@ export function WorkforceLeaveOvertimePage() {
       <PageHeader title={t("wf.leave.title.leaveOvertime")} subtitle={t("wf.leave.sub.keepEntitlementsAccurateAndRouteLeaveAnd")} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      {!canManage ? <Alert tone="info">Leave setup and request submission require <code className="font-mono text-xs">workforce.leave.manage</code>.</Alert> : null}
-      {!canApprove ? <Alert tone="info">Workflow decisions require <code className="font-mono text-xs">workforce.leave.approve</code>.</Alert> : null}
+      {!canManage ? <Alert tone="info">{t("wf.leave.msg.leaveSetupAndRequestSubmissionRequirePer", { perm: <code className="font-mono text-xs">workforce.leave.manage</code> })}</Alert> : null}
+      {!canApprove ? <Alert tone="info">{t("wf.leave.msg.workflowDecisionsRequirePerm", { perm: <code className="font-mono text-xs">workforce.leave.approve</code> })}</Alert> : null}
 
       <div className="flex overflow-x-auto border-b border-slate-200">
-        {tabButton("leave", `Leave requests (${leaveRequests.length})`)}
-        {tabButton("overtime", `Overtime (${overtimeRequests.length})`)}
-        {tabButton("balances", `Balances (${balances.length})`)}
-        {tabButton("types", `Leave types (${leaveTypes.length})`)}
+        {tabButton("leave", t("wf.leave.t.leaveRequestsCount", { count: leaveRequests.length }))}
+        {tabButton("overtime", t("wf.leave.t.overtimeCount", { count: overtimeRequests.length }))}
+        {tabButton("balances", t("wf.leave.t.balancesCount", { count: balances.length }))}
+        {tabButton("types", t("wf.leave.t.leaveTypesCount", { count: leaveTypes.length }))}
       </div>
 
       <Card>
@@ -412,7 +412,7 @@ export function WorkforceLeaveOvertimePage() {
           <Field label={t("wf.leave.f.to")}><Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></Field>
           <Field label={t("wf.leave.f.balanceYear")}><Input type="number" min="2000" max="2100" value={balanceYear} onChange={(event) => setBalanceYear(event.target.value)} /></Field>
         </div>
-        {tab === "balances" && !employeeFilter ? <p className="mt-2 text-xs text-slate-500">Select an employee to load scoped leave balances.</p> : null}
+        {tab === "balances" && !employeeFilter ? <p className="mt-2 text-xs text-slate-500">{t("wf.leave.n.selectAnEmployeeToLoadScopedLeaveBalance")}</p> : null}
       </Card>
 
       {canManage && tab === "leave" ? (
@@ -427,7 +427,7 @@ export function WorkforceLeaveOvertimePage() {
             <Field label={t("wf.leave.f.attachmentDocumentId")} hint={t("wf.leave.n.requiredWhenTheSelectedPolicyRequiresEvi")}><Input value={leaveAttachmentId} onChange={(event) => setLeaveAttachmentId(event.target.value)} /></Field>
             <div className="sm:col-span-2"><Field label={t("wf.leave.f.reason")}><Textarea rows={2} value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} /></Field></div>
           </div>
-          <Button className="mt-3" disabled={busy || !leaveEmployee || !leaveTypeId || !leaveStart || !leaveEnd || Number(leaveDays) <= 0} onClick={() => void submitLeave()}>Submit leave request</Button>
+          <Button className="mt-3" disabled={busy || !leaveEmployee || !leaveTypeId || !leaveStart || !leaveEnd || Number(leaveDays) <= 0} onClick={() => void submitLeave()}>{t("wf.leave.t.submitLeaveRequest")}</Button>
         </Card>
       ) : null}
 
@@ -442,7 +442,7 @@ export function WorkforceLeaveOvertimePage() {
             <Field label={t("wf.leave.f.estimatedHours")} required><Input type="number" min="0.25" step="0.25" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} /></Field>
             <div className="sm:col-span-2 lg:col-span-3"><Field label={t("wf.leave.f.reason")}><Textarea rows={2} value={overtimeReason} onChange={(event) => setOvertimeReason(event.target.value)} /></Field></div>
           </div>
-          <Button className="mt-3" disabled={busy || !overtimeEmployee || !overtimeDate || !overtimeStart || !overtimeEnd || Number(estimatedHours) <= 0} onClick={() => void submitOvertime()}>Submit overtime request</Button>
+          <Button className="mt-3" disabled={busy || !overtimeEmployee || !overtimeDate || !overtimeStart || !overtimeEnd || Number(estimatedHours) <= 0} onClick={() => void submitOvertime()}>{t("wf.leave.t.submitOvertimeRequest")}</Button>
         </Card>
       ) : null}
 
@@ -455,7 +455,7 @@ export function WorkforceLeaveOvertimePage() {
             <Field label={t("wf.leave.f.year")} required><Input type="number" min="2000" max="2100" value={balanceYear} onChange={(event) => setBalanceYear(event.target.value)} /></Field>
             <Field label={t("wf.leave.f.allocatedDays")} required><Input type="number" min="0" step="0.5" value={allocatedDays} onChange={(event) => setAllocatedDays(event.target.value)} /></Field>
           </div>
-          <Button className="mt-3" disabled={busy || !allocationEmployee || !allocationType || Number(allocatedDays) < 0} onClick={() => void allocateBalance()}>Save allocation</Button>
+          <Button className="mt-3" disabled={busy || !allocationEmployee || !allocationType || Number(allocatedDays) < 0} onClick={() => void allocateBalance()}>{t("wf.leave.t.saveAllocation")}</Button>
         </Card>
       ) : null}
 
@@ -468,10 +468,10 @@ export function WorkforceLeaveOvertimePage() {
             <Field label={t("wf.leave.f.annualAllowance")}><Input type="number" min="0" step="0.5" value={allowance} onChange={(event) => setAllowance(event.target.value)} /></Field>
           </div>
           <div className="mt-3 flex flex-wrap gap-5 text-sm text-slate-700">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={typePaid} onChange={(event) => setTypePaid(event.target.checked)} />Paid leave</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={requiresAttachment} onChange={(event) => setRequiresAttachment(event.target.checked)} />Requires attachment</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={typePaid} onChange={(event) => setTypePaid(event.target.checked)} />{t("wf.leave.f.paidLeave")}</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={requiresAttachment} onChange={(event) => setRequiresAttachment(event.target.checked)} />{t("wf.leave.f.requiresAttachment")}</label>
           </div>
-          <Button className="mt-3" disabled={busy || !typeCode.trim() || !typeName.trim()} onClick={() => void createLeaveType()}>Create leave type</Button>
+          <Button className="mt-3" disabled={busy || !typeCode.trim() || !typeName.trim()} onClick={() => void createLeaveType()}>{t("wf.leave.t.createLeaveType")}</Button>
         </Card>
       ) : null}
 

@@ -319,8 +319,8 @@ export function StockOperationsPage() {
       cell: (r) =>
         r.status === "active" ? (
           <div className="flex gap-2">
-            <Button variant="primary" onClick={() => handleFulfillReservation(r.id)} disabled={!canManage || busy}>Fulfill</Button>
-            <Button variant="secondary" onClick={() => handleCancelReservation(r.id)} disabled={!canManage || busy}>Cancel</Button>
+            <Button variant="primary" onClick={() => handleFulfillReservation(r.id)} disabled={!canManage || busy}>{t("scm.stock.t.fulfill")}</Button>
+            <Button variant="secondary" onClick={() => handleCancelReservation(r.id)} disabled={!canManage || busy}>{t("scm.stock.t.cancel")}</Button>
           </div>
         ) : null,
     },
@@ -334,7 +334,7 @@ export function StockOperationsPage() {
     { header: t("scm.stock.h.requestedDate"), cell: (r) => formatDateShort(r.createdAt) },
     {
       header: t("scm.stock.h.inspect"),
-      cell: (r) => <Button variant="secondary" onClick={() => openTransferDetail(r.id)}>Detail</Button>,
+      cell: (r) => <Button variant="secondary" onClick={() => openTransferDetail(r.id)}>{t("scm.stock.t.detail")}</Button>,
     },
   ];
 
@@ -345,7 +345,7 @@ export function StockOperationsPage() {
     { header: t("scm.stock.h.status"), cell: (r) => <StatusPill tone={r.status === "adjusted" || r.status === "approved" ? "success" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
     {
       header: t("scm.stock.h.inspect"),
-      cell: (r) => <Button variant="secondary" onClick={() => openOpnameDetail(r.id)}>Detail</Button>,
+      cell: (r) => <Button variant="secondary" onClick={() => openOpnameDetail(r.id)}>{t("scm.stock.t.detail")}</Button>,
     },
   ];
 
@@ -361,11 +361,11 @@ export function StockOperationsPage() {
 
       <div className="flex flex-wrap gap-2 border-b border-line pb-2">
         <Button variant={tab === "alerts" ? "primary" : "secondary"} onClick={() => { setTab("alerts"); setSelectedTransfer(null); setSelectedOpname(null); }}>Reorder Alerts ({alerts.length})</Button>
-        <Button variant={tab === "policies" ? "primary" : "secondary"} onClick={() => { setTab("policies"); setSelectedTransfer(null); setSelectedOpname(null); }}>Reorder Policies</Button>
-        <Button variant={tab === "reservations" ? "primary" : "secondary"} onClick={() => { setTab("reservations"); setSelectedTransfer(null); setSelectedOpname(null); }}>Stock Reservations</Button>
-        <Button variant={tab === "transfers" ? "primary" : "secondary"} onClick={() => { setTab("transfers"); setSelectedOpname(null); }}>Stock Transfers</Button>
-        <Button variant={tab === "opnames" ? "primary" : "secondary"} onClick={() => { setTab("opnames"); setSelectedTransfer(null); }}>Stock Opname</Button>
-        <Button variant={tab === "receiving" ? "primary" : "secondary"} onClick={() => { setTab("receiving"); setSelectedTransfer(null); setSelectedOpname(null); }}>Receiving & Quality</Button>
+        <Button variant={tab === "policies" ? "primary" : "secondary"} onClick={() => { setTab("policies"); setSelectedTransfer(null); setSelectedOpname(null); }}>{t("scm.stock.t.reorderPolicies")}</Button>
+        <Button variant={tab === "reservations" ? "primary" : "secondary"} onClick={() => { setTab("reservations"); setSelectedTransfer(null); setSelectedOpname(null); }}>{t("scm.stock.t.stockReservations")}</Button>
+        <Button variant={tab === "transfers" ? "primary" : "secondary"} onClick={() => { setTab("transfers"); setSelectedOpname(null); }}>{t("scm.stock.t.stockTransfers")}</Button>
+        <Button variant={tab === "opnames" ? "primary" : "secondary"} onClick={() => { setTab("opnames"); setSelectedTransfer(null); }}>{t("scm.stock.t.stockOpname")}</Button>
+        <Button variant={tab === "receiving" ? "primary" : "secondary"} onClick={() => { setTab("receiving"); setSelectedTransfer(null); setSelectedOpname(null); }}>{t("scm.stock.t.receivingQuality")}</Button>
       </div>
 
       {loading ? (
@@ -373,14 +373,14 @@ export function StockOperationsPage() {
       ) : tab === "alerts" ? (
         <Card>
           <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.criticalReorderAlerts")}</h3>
-          <DataTable columns={alertColumns} rows={alerts} keyOf={(r) => r.itemId} empty={<p className="text-slate-500 py-4 text-center text-sm">All inventory levels are above reorder thresholds.</p>} />
+          <DataTable columns={alertColumns} rows={alerts} keyOf={(r) => r.itemId} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.stock.n.allInventoryLevelsAreAboveReorderThresho")}</p>} />
         </Card>
       ) : tab === "policies" ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.configuredReorderPolicies")}</h3>
-              <DataTable columns={policyColumns} rows={policies} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No reorder policies configured yet.</p>} />
+              <DataTable columns={policyColumns} rows={policies} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.stock.n.noReorderPoliciesConfiguredYet")}</p>} />
             </Card>
           </div>
           <div>
@@ -407,7 +407,7 @@ export function StockOperationsPage() {
                   <Field label={t("scm.stock.f.safetyStock")}><Input type="number" value={polSafetyStock} onChange={(e) => setPolSafetyStock(e.target.value)} disabled={!canManage || busy} /></Field>
                   <Field label={t("scm.stock.f.leadDays")}><Input type="number" value={polLeadDays} onChange={(e) => setPolLeadDays(e.target.value)} disabled={!canManage || busy} /></Field>
                 </div>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Save Policy</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.stock.t.savePolicy")}</Button>
               </form>
             </Card>
           </div>
@@ -417,7 +417,7 @@ export function StockOperationsPage() {
           <div className="lg:col-span-2">
             <Card>
               <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.stockReservations")}</h3>
-              <DataTable columns={reservationColumns} rows={reservations} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No active reservations.</p>} />
+              <DataTable columns={reservationColumns} rows={reservations} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.stock.n.noActiveReservations")}</p>} />
             </Card>
           </div>
           <div>
@@ -453,7 +453,7 @@ export function StockOperationsPage() {
                 <Field label={t("scm.stock.f.notes")}>
                   <Input value={resNotes} onChange={(e) => setResNotes(e.target.value)} placeholder={t("scm.stock.p.reservationReason")} disabled={!canManage || busy} />
                 </Field>
-                <Button type="submit" variant="primary" disabled={!canManage || busy}>Place Reservation</Button>
+                <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.stock.t.placeReservation")}</Button>
               </form>
             </Card>
           </div>
@@ -464,7 +464,7 @@ export function StockOperationsPage() {
             <div className="lg:col-span-2">
               <Card>
                 <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.warehouseStockTransfers")}</h3>
-                <DataTable columns={transferColumns} rows={transfers} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No transfers registered.</p>} />
+                <DataTable columns={transferColumns} rows={transfers} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.stock.n.noTransfersRegistered")}</p>} />
               </Card>
             </div>
             <div>
@@ -492,7 +492,7 @@ export function StockOperationsPage() {
                   <Field label={t("scm.stock.f.notes")}>
                     <Input value={trNotes} onChange={(e) => setTrNotes(e.target.value)} placeholder={t("scm.stock.p.logisticsNotesTransferRationale")} disabled={!canManage || busy} />
                   </Field>
-                  <Button type="submit" variant="primary" disabled={!canManage || busy}>Request Transfer</Button>
+                  <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.stock.t.requestTransfer")}</Button>
                 </form>
               </Card>
             </div>
@@ -502,9 +502,9 @@ export function StockOperationsPage() {
               <h3 className="text-base font-semibold text-slate-900 mb-3">{`Transfer ${selectedTransfer.transfer.transferNumber}`}</h3>
               <div className="space-y-4">
                 <div className="flex gap-4 text-sm">
-                  <div><strong>Status:</strong> <StatusPill tone="info">{label(selectedTransfer.transfer.status)}</StatusPill></div>
-                  <div><strong>From:</strong> {whMap.get(selectedTransfer.transfer.fromWarehouseId)?.name}</div>
-                  <div><strong>To:</strong> {whMap.get(selectedTransfer.transfer.toWarehouseId)?.name}</div>
+                  <div><strong>{t("scm.stock.f.status")}</strong> <StatusPill tone="info">{label(selectedTransfer.transfer.status)}</StatusPill></div>
+                  <div><strong>{t("scm.stock.f.from")}</strong> {whMap.get(selectedTransfer.transfer.fromWarehouseId)?.name}</div>
+                  <div><strong>{t("scm.stock.f.to")}</strong> {whMap.get(selectedTransfer.transfer.toWarehouseId)?.name}</div>
                 </div>
                 <DataTable
                   columns={[
@@ -528,7 +528,7 @@ export function StockOperationsPage() {
             <div className="lg:col-span-2">
               <Card>
                 <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.stockOpnameAudits")}</h3>
-                <DataTable columns={opnameColumns} rows={opnames} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No opname audits found.</p>} />
+                <DataTable columns={opnameColumns} rows={opnames} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">{t("scm.stock.n.noOpnameAuditsFound")}</p>} />
               </Card>
             </div>
             <div>
@@ -546,7 +546,7 @@ export function StockOperationsPage() {
                   <Field label={t("scm.stock.f.auditNotes")}>
                     <Input value={opNotes} onChange={(e) => setOpNotes(e.target.value)} placeholder={t("scm.stock.p.quarterlyFullCountCycle")} disabled={!canManage || busy} />
                   </Field>
-                  <Button type="submit" variant="primary" disabled={!canManage || busy}>Start Opname</Button>
+                  <Button type="submit" variant="primary" disabled={!canManage || busy}>{t("scm.stock.t.startOpname")}</Button>
                 </form>
               </Card>
             </div>
@@ -556,9 +556,9 @@ export function StockOperationsPage() {
               <h3 className="text-base font-semibold text-slate-900 mb-3">{`Opname ${selectedOpname.opname.opnameNumber}`}</h3>
               <div className="space-y-4">
                 <div className="flex gap-4 text-sm">
-                  <div><strong>Status:</strong> <StatusPill tone="info">{label(selectedOpname.opname.status)}</StatusPill></div>
-                  <div><strong>Warehouse:</strong> {whMap.get(selectedOpname.opname.warehouseId)?.name}</div>
-                  <div><strong>Date:</strong> {formatDateShort(selectedOpname.opname.opnameDate)}</div>
+                  <div><strong>{t("scm.stock.f.status")}</strong> <StatusPill tone="info">{label(selectedOpname.opname.status)}</StatusPill></div>
+                  <div><strong>{t("scm.stock.f.warehouse")}:</strong> {whMap.get(selectedOpname.opname.warehouseId)?.name}</div>
+                  <div><strong>{t("scm.stock.f.date")}</strong> {formatDateShort(selectedOpname.opname.opnameDate)}</div>
                 </div>
                 <DataTable
                   columns={[

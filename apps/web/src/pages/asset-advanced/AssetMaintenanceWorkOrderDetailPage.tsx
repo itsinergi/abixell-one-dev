@@ -148,10 +148,7 @@ export function AssetMaintenanceWorkOrderDetailPage() {
       {error ? <Alert tone="error">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {!canManage ? (
-        <Alert tone="info">
-          You can inspect this work order. Maintenance actions require permission{" "}
-          <code className="font-mono text-xs">asset.maintenance.manage</code>.
-        </Alert>
+        <Alert tone="info">{t("sca.maint.msg.youCanInspectThisWorkOrderMaintenanceAct", { perm: <code className="font-mono text-xs">asset.maintenance.manage</code> })}</Alert>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -159,21 +156,21 @@ export function AssetMaintenanceWorkOrderDetailPage() {
           <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.workOrderDetails")}</h2>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <dt className="text-slate-500">Asset</dt>
+              <dt className="text-slate-500">{t("sca.maint.f.asset")}</dt>
               <dd className="text-slate-900">
                 <Link to={`/asset-maintenance/assets/${workOrder.assetId}`} className="underline hover:text-slate-700">
                   {workOrder.assetId}
                 </Link>
               </dd>
             </div>
-            <div><dt className="text-slate-500">Maintenance Type</dt><dd className="text-slate-900">{label(workOrder.maintenanceType)}</dd></div>
-            <div><dt className="text-slate-500">Priority</dt><dd className="text-slate-900">{label(workOrder.priority)}</dd></div>
-            <div><dt className="text-slate-500">Assigned To</dt><dd className="text-slate-900">{assignee?.fullName ?? workOrder.assignedToUserId ?? "Unassigned"}</dd></div>
-            <div><dt className="text-slate-500">Cost Estimate</dt><dd className="text-slate-900">{workOrder.costEstimate ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Actual Cost</dt><dd className="text-slate-900">{workOrder.actualCost ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Downtime Hours</dt><dd className="text-slate-900">{workOrder.downtimeHours}</dd></div>
-            <div><dt className="text-slate-500">Completed</dt><dd className="text-slate-900">{formatDate(workOrder.completedAt)}</dd></div>
-            <div><dt className="text-slate-500">Verified</dt><dd className="text-slate-900">{formatDate(workOrder.verifiedAt)}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.maintenanceType")}</dt><dd className="text-slate-900">{label(workOrder.maintenanceType)}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.priority")}</dt><dd className="text-slate-900">{label(workOrder.priority)}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.assignedTo")}</dt><dd className="text-slate-900">{assignee?.fullName ?? workOrder.assignedToUserId ?? "Unassigned"}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.costEstimate")}</dt><dd className="text-slate-900">{workOrder.costEstimate ?? "—"}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.actualCost")}</dt><dd className="text-slate-900">{workOrder.actualCost ?? "—"}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.downtimeHours")}</dt><dd className="text-slate-900">{workOrder.downtimeHours}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.completed")}</dt><dd className="text-slate-900">{formatDate(workOrder.completedAt)}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.verified")}</dt><dd className="text-slate-900">{formatDate(workOrder.verifiedAt)}</dd></div>
           </dl>
           {workOrder.description ? (
             <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-600">{workOrder.description}</p>
@@ -190,10 +187,10 @@ export function AssetMaintenanceWorkOrderDetailPage() {
         <Card>
           <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("sca.maint.t.linkedPreventiveSchedule")}</h2>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-4">
-            <div><dt className="text-slate-500">Schedule Code</dt><dd className="font-mono text-xs text-slate-900">{schedule.scheduleCode}</dd></div>
-            <div><dt className="text-slate-500">Title</dt><dd className="text-slate-900">{schedule.title}</dd></div>
-            <div><dt className="text-slate-500">Frequency</dt><dd className="text-slate-900">{label(schedule.frequencyType)}</dd></div>
-            <div><dt className="text-slate-500">Next Due</dt><dd className="text-slate-900">{schedule.nextDueDate ? formatDateShort(schedule.nextDueDate) : `${schedule.nextDueMeter ?? "—"} ${schedule.meterType ?? ""}`}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.scheduleCode")}</dt><dd className="font-mono text-xs text-slate-900">{schedule.scheduleCode}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.title")}</dt><dd className="text-slate-900">{schedule.title}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.frequency")}</dt><dd className="text-slate-900">{label(schedule.frequencyType)}</dd></div>
+            <div><dt className="text-slate-500">{t("sca.maint.f.nextDue")}</dt><dd className="text-slate-900">{schedule.nextDueDate ? formatDateShort(schedule.nextDueDate) : `${schedule.nextDueMeter ?? "—"} ${schedule.meterType ?? ""}`}</dd></div>
           </dl>
         </Card>
       ) : null}
@@ -308,7 +305,7 @@ export function AssetMaintenanceWorkOrderDetailPage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold text-slate-800">{t("sca.maint.t.sparePartsUsage")}</h2>
-            <p className="text-xs text-slate-500">Parts are recorded against this maintenance work order.</p>
+            <p className="text-xs text-slate-500">{t("sca.maint.n.partsAreRecordedAgainstThisMaintenanceWo")}</p>
           </div>
           <Badge>{parts.length} parts</Badge>
         </div>
