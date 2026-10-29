@@ -18,6 +18,7 @@ import {
   type MeterReadingType,
   type ReliabilityMetrics,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -54,6 +55,7 @@ export function AssetPerformancePage() {
   const { assetId } = useParams<{ assetId: string }>();
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManageMeters = permissions.includes(PERMISSIONS.assetMeterManage);
@@ -122,11 +124,11 @@ export function AssetPerformancePage() {
         }
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load asset performance data.");
+      setError(err instanceof ApiError ? err.message : t("sca.perf.msg.couldNotLoadAssetPerformanceData"));
     } finally {
       setLoading(false);
     }
-  }, [token, assetId, canReadAnalytics, periodStart, periodEnd]);
+  }, [token, assetId, canReadAnalytics, periodStart, periodEnd, t]);
 
   useEffect(() => {
     void load();
@@ -144,12 +146,12 @@ export function AssetPerformancePage() {
         readingDate: readingDate ? new Date(readingDate).toISOString() : undefined,
         notes: meterNotes || null,
       });
-      setNotice("Meter reading recorded.");
+      setNotice(t("sca.perf.msg.meterReadingRecorded"));
       setReadingValue("");
       setMeterNotes("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record meter reading.");
+      setError(err instanceof ApiError ? err.message : t("sca.perf.msg.couldNotRecordMeterReading"));
     } finally {
       setBusy(false);
     }
@@ -167,12 +169,12 @@ export function AssetPerformancePage() {
         reasonCategory: downtimeReason,
         notes: downtimeNotes || null,
       });
-      setNotice("Downtime record created.");
+      setNotice(t("sca.perf.msg.downtimeRecordCreated"));
       setDowntimeNotes("");
       setDowntimeEnd("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not record downtime.");
+      setError(err instanceof ApiError ? err.message : t("sca.perf.msg.couldNotRecordDowntime"));
     } finally {
       setBusy(false);
     }
@@ -190,10 +192,10 @@ export function AssetPerformancePage() {
         id,
         chosen ? new Date(chosen).toISOString() : new Date().toISOString(),
       );
-      setNotice("Downtime record closed.");
+      setNotice(t("sca.perf.msg.downtimeRecordClosed"));
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not close downtime.");
+      setError(err instanceof ApiError ? err.message : t("sca.perf.msg.couldNotCloseDowntime"));
     } finally {
       setBusy(false);
     }
@@ -209,32 +211,32 @@ export function AssetPerformancePage() {
       setNotice(`Predictive snapshot generated with Health Score ${snap.healthScore}/100.`);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not generate snapshot.");
+      setError(err instanceof ApiError ? err.message : t("sca.perf.msg.couldNotGenerateSnapshot"));
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <Spinner label="Loading asset performance…" />;
+  if (loading) return <Spinner label={t("sca.perf.f.loadingAssetPerformance")} />;
   if (!assetDetail) return <Alert tone="error">{error ?? "Asset not found."}</Alert>;
 
   const { asset } = assetDetail;
 
   const meterColumns: Column<AssetMeterReading>[] = [
-    { header: "Type", cell: (row) => <Badge>{label(row.readingType)}</Badge>, mobileRole: "title" },
-    { header: "Value", cell: (row) => <span className="font-semibold text-slate-900">{row.readingValue.toLocaleString()} {row.readingType}</span>, mobileRole: "status" },
-    { header: "Date", cell: (row) => formatDate(row.readingDate) },
-    { header: "Notes", cell: (row) => row.notes ?? "—" },
+    { header: t("sca.perf.h.type"), cell: (row) => <Badge>{label(row.readingType)}</Badge>, mobileRole: "title" },
+    { header: t("sca.perf.h.value"), cell: (row) => <span className="font-semibold text-slate-900">{row.readingValue.toLocaleString()} {row.readingType}</span>, mobileRole: "status" },
+    { header: t("sca.perf.h.date"), cell: (row) => formatDate(row.readingDate) },
+    { header: t("sca.perf.h.notes"), cell: (row) => row.notes ?? "—" },
   ];
 
   const downtimeColumns: Column<AssetDowntimeRecord>[] = [
-    { header: "Reason", cell: (row) => <span className="font-semibold text-slate-900">{label(row.reasonCategory)}</span>, mobileRole: "title" },
-    { header: "Start", cell: (row) => formatDate(row.startTime) },
-    { header: "End", cell: (row) => row.endTime ? formatDate(row.endTime) : <Badge className="bg-amber-100 text-amber-800">Ongoing</Badge>, mobileRole: "status" },
-    { header: "Duration", cell: (row) => row.durationMinutes != null ? `${row.durationMinutes} min` : "—" },
-    { header: "Notes", cell: (row) => row.notes ?? "—" },
+    { header: t("sca.perf.h.reason"), cell: (row) => <span className="font-semibold text-slate-900">{label(row.reasonCategory)}</span>, mobileRole: "title" },
+    { header: t("sca.perf.h.start"), cell: (row) => formatDate(row.startTime) },
+    { header: t("sca.perf.h.end"), cell: (row) => row.endTime ? formatDate(row.endTime) : <Badge className="bg-amber-100 text-amber-800">Ongoing</Badge>, mobileRole: "status" },
+    { header: t("sca.perf.h.duration"), cell: (row) => row.durationMinutes != null ? `${row.durationMinutes} min` : "—" },
+    { header: t("sca.perf.h.notes"), cell: (row) => row.notes ?? "—" },
     {
-      header: "Action",
+      header: t("sca.perf.h.action"),
       cell: (row) =>
         !row.endTime && canManageDowntime ? (
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -253,9 +255,9 @@ export function AssetPerformancePage() {
   ];
 
   const snapshotColumns: Column<AssetPredictiveSnapshot>[] = [
-    { header: "Analysis Date", cell: (row) => formatDateShort(row.analysisDate), mobileRole: "title" },
+    { header: t("sca.perf.h.analysisDate"), cell: (row) => formatDateShort(row.analysisDate), mobileRole: "title" },
     {
-      header: "Health Score",
+      header: t("sca.perf.h.healthScore"),
       cell: (row) => (
         <StatusPill tone={row.healthScore >= 75 ? "success" : row.healthScore >= 50 ? "warning" : "danger"}>
           {row.healthScore}/100
@@ -265,17 +267,17 @@ export function AssetPerformancePage() {
     },
     { header: "MTBF", cell: (row) => row.mtbfHours != null ? `${row.mtbfHours}h` : "—" },
     { header: "MTTR", cell: (row) => row.mttrHours != null ? `${row.mttrHours}h` : "—" },
-    { header: "Availability", cell: (row) => row.availabilityPct != null ? `${row.availabilityPct}%` : "—" },
-    { header: "Predicted Failure", cell: (row) => row.predictedFailureDate ? formatDateShort(row.predictedFailureDate) : "None" },
-    { header: "Confidence", cell: (row) => row.confidencePct != null ? `${row.confidencePct}%` : "—" },
-    { header: "Recommendation", cell: (row) => <p className="max-w-xs text-xs text-slate-600">{row.recommendation ?? "—"}</p> },
+    { header: t("sca.perf.h.availability"), cell: (row) => row.availabilityPct != null ? `${row.availabilityPct}%` : "—" },
+    { header: t("sca.perf.h.predictedFailure"), cell: (row) => row.predictedFailureDate ? formatDateShort(row.predictedFailureDate) : "None" },
+    { header: t("sca.perf.h.confidence"), cell: (row) => row.confidencePct != null ? `${row.confidencePct}%` : "—" },
+    { header: t("sca.perf.h.recommendation"), cell: (row) => <p className="max-w-xs text-xs text-slate-600">{row.recommendation ?? "—"}</p> },
   ];
 
   return (
     <div className="space-y-4">
       <PageHeader
         title={`${asset.assetNumber} — ${asset.name}`}
-        subtitle="Meters, downtime tracking, reliability analytics, and predictive snapshots."
+        subtitle={t("sca.perf.sub.metersDowntimeTrackingReliabilityAnalyti")}
         actions={
           <div className="flex items-center gap-2">
             <Link to={`/assets/${asset.id}`}>
@@ -296,16 +298,16 @@ export function AssetPerformancePage() {
         <Card className="border-slate-300">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Reliability &amp; Predictive Analytics</h2>
+              <h2 className="text-base font-semibold text-slate-900">{t("sca.perf.t.reliabilityAmpPredictiveAnalytics")}</h2>
               <p className="text-xs text-slate-500">
                 Deterministic MTBF/MTTR metrics and advisory health scoring based on downtime &amp; failure history.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Field label="From">
+              <Field label={t("sca.perf.f.from")}>
                 <Input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
               </Field>
-              <Field label="To">
+              <Field label={t("sca.perf.f.to")}>
                 <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
               </Field>
               <div className="flex items-end">
@@ -364,12 +366,12 @@ export function AssetPerformancePage() {
           ) : null}
 
           <div className="mt-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Historical Snapshots</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{t("sca.perf.t.historicalSnapshots")}</h3>
             <DataTable
               columns={snapshotColumns}
               rows={snapshots}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No predictive snapshots" description="Generate a snapshot above to evaluate this asset's health." />}
+              empty={<EmptyState title={t("sca.perf.title.noPredictiveSnapshots")} description={t("sca.perf.d.generateASnapshotAboveToEvaluateThisAsse")} />}
             />
           </div>
         </Card>
@@ -380,25 +382,25 @@ export function AssetPerformancePage() {
         {/* Meter Readings */}
         <Card>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800">Meter Readings</h2>
+            <h2 className="text-sm font-semibold text-slate-800">{t("sca.perf.t.meterReadings")}</h2>
             <Badge>{meterReadings.length} readings</Badge>
           </div>
 
           {canManageMeters ? (
             <div className="mb-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
-              <Field label="Meter Type">
+              <Field label={t("sca.perf.f.meterType")}>
                 <Select value={readingType} onChange={(e) => setReadingType(e.target.value as MeterReadingType)}>
                   {METER_TYPES.map((type) => <option key={type} value={type}>{label(type)}</option>)}
                 </Select>
               </Field>
-              <Field label="Value" required>
+              <Field label={t("sca.perf.f.value")} required>
                 <Input type="number" min="0" step="0.01" value={readingValue} onChange={(e) => setReadingValue(e.target.value)} />
               </Field>
-              <Field label="Reading Date">
+              <Field label={t("sca.perf.f.readingDate")}>
                 <Input type="datetime-local" value={readingDate} onChange={(e) => setReadingDate(e.target.value)} />
               </Field>
               <div className="sm:col-span-3">
-                <Field label="Notes">
+                <Field label={t("sca.perf.f.notes")}>
                   <Input value={meterNotes} onChange={(e) => setMeterNotes(e.target.value)} />
                 </Field>
               </div>
@@ -414,31 +416,31 @@ export function AssetPerformancePage() {
             columns={meterColumns}
             rows={meterReadings}
             keyOf={(row) => row.id}
-            empty={<EmptyState title="No meter readings" description="Record usage hours, kilometers, or cycles to trigger maintenance schedules." />}
+            empty={<EmptyState title={t("sca.perf.title.noMeterReadings")} description={t("sca.perf.d.recordUsageHoursKilometersOrCyclesToTrig")} />}
           />
         </Card>
 
         {/* Downtime Records */}
         <Card>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800">Downtime Records</h2>
+            <h2 className="text-sm font-semibold text-slate-800">{t("sca.perf.t.downtimeRecords")}</h2>
             <Badge>{downtimeRecords.length} records</Badge>
           </div>
 
           {canManageDowntime ? (
             <div className="mb-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-              <Field label="Reason Category">
+              <Field label={t("sca.perf.f.reasonCategory")}>
                 <Select value={downtimeReason} onChange={(e) => setDowntimeReason(e.target.value as DowntimeReasonCategory)}>
                   {DOWNTIME_REASONS.map((r) => <option key={r} value={r}>{label(r)}</option>)}
                 </Select>
               </Field>
-              <Field label="Start Time" required>
+              <Field label={t("sca.perf.f.startTime")} required>
                 <Input type="datetime-local" value={downtimeStart} onChange={(e) => setDowntimeStart(e.target.value)} />
               </Field>
-              <Field label="End Time (Optional)">
+              <Field label={t("sca.perf.f.endTimeOptional")}>
                 <Input type="datetime-local" value={downtimeEnd} onChange={(e) => setDowntimeEnd(e.target.value)} />
               </Field>
-              <Field label="Notes">
+              <Field label={t("sca.perf.f.notes")}>
                 <Input value={downtimeNotes} onChange={(e) => setDowntimeNotes(e.target.value)} />
               </Field>
               <div className="sm:col-span-2">
@@ -453,7 +455,7 @@ export function AssetPerformancePage() {
             columns={downtimeColumns}
             rows={downtimeRecords}
             keyOf={(row) => row.id}
-            empty={<EmptyState title="No downtime recorded" description="Record breakdown or maintenance downtime for MTBF/MTTR analytics." />}
+            empty={<EmptyState title={t("sca.perf.title.noDowntimeRecorded")} description={t("sca.perf.d.recordBreakdownOrMaintenanceDowntimeForM")} />}
           />
         </Card>
       </div>

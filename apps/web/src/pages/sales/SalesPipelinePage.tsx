@@ -13,6 +13,7 @@ import {
   type PriceBookRecord,
   type PriceBookEntryRecord,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import {
   Alert,
   Button,
@@ -69,6 +70,7 @@ function quotationStatusTone(status: string): "neutral" | "info" | "success" | "
 export function SalesPipelinePage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
 
   const [activeTab, setActiveTab] = useState<"pipeline" | "quotations" | "price-books">("pipeline");
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -121,12 +123,12 @@ export function SalesPipelinePage() {
         setSelectedPriceBookId(pbooksRes[0].id);
       }
     } catch (err) {
-      const text = err instanceof ApiError ? err.message : "Failed to load sales data.";
+      const text = err instanceof ApiError ? err.message : t("sc.sales.msg.failedToLoadSalesData");
       setMessage({ type: "error", text });
     } finally {
       setLoading(false);
     }
-  }, [token, filterOutcome, filterStage, selectedPriceBookId]);
+  }, [token, filterOutcome, filterStage, selectedPriceBookId, t]);
 
   useEffect(() => {
     loadData();
@@ -143,10 +145,10 @@ export function SalesPipelinePage() {
       .catch((err) => {
         setMessage({
           type: "error",
-          text: err instanceof ApiError ? err.message : "Failed to load opportunity detail.",
+          text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToLoadOpportunityDetail"),
         });
       });
-  }, [token, selectedOppId]);
+  }, [token, selectedOppId, t]);
 
   // Load quotation detail
   useEffect(() => {
@@ -159,10 +161,10 @@ export function SalesPipelinePage() {
       .catch((err) => {
         setMessage({
           type: "error",
-          text: err instanceof ApiError ? err.message : "Failed to load quotation detail.",
+          text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToLoadQuotationDetail"),
         });
       });
-  }, [token, selectedQuotationId]);
+  }, [token, selectedQuotationId, t]);
 
   // Load price book entries
   useEffect(() => {
@@ -175,10 +177,10 @@ export function SalesPipelinePage() {
       .catch((err) => {
         setMessage({
           type: "error",
-          text: err instanceof ApiError ? err.message : "Failed to load price book entries.",
+          text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToLoadPriceBookEntries"),
         });
       });
-  }, [token, selectedPriceBookId]);
+  }, [token, selectedPriceBookId, t]);
 
   // Handle Create Opportunity
   async function handleCreateOpportunity(e: FormEvent<HTMLFormElement>) {
@@ -202,7 +204,7 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to create opportunity.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToCreateOpportunity"),
       });
     }
   }
@@ -231,7 +233,7 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to update opportunity stage.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToUpdateOpportunityStage"),
       });
     }
   }
@@ -265,7 +267,7 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to create quotation.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToCreateQuotation"),
       });
     }
   }
@@ -283,10 +285,10 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to submit quotation.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToSubmitQuotation"),
       });
     }
-  }, [loadData, selectedQuotationId, token]);
+  }, [loadData, selectedQuotationId, token, t]);
 
   // Handle Approve Quotation
   const handleApproveQuotation = useCallback(async (id: string, decision: "issued" | "withdrawn") => {
@@ -301,10 +303,10 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to update quotation approval.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToUpdateQuotationApproval"),
       });
     }
-  }, [loadData, selectedQuotationId, token]);
+  }, [loadData, selectedQuotationId, token, t]);
 
   // Handle Customer Decision
   const handleCustomerDecision = useCallback(async (id: string, decision: "accepted" | "declined") => {
@@ -319,10 +321,10 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to record customer decision.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToRecordCustomerDecision"),
       });
     }
-  }, [loadData, selectedQuotationId, token]);
+  }, [loadData, selectedQuotationId, token, t]);
 
   // Handle Create Price Book
   async function handleCreatePriceBook(e: FormEvent<HTMLFormElement>) {
@@ -342,7 +344,7 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to create price book.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToCreatePriceBook"),
       });
     }
   }
@@ -367,7 +369,7 @@ export function SalesPipelinePage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof ApiError ? err.message : "Failed to add price book entry.",
+        text: err instanceof ApiError ? err.message : t("sc.sales.msg.failedToAddPriceBookEntry"),
       });
     }
   }
@@ -375,7 +377,7 @@ export function SalesPipelinePage() {
   const oppColumns: Column<OpportunityRecord>[] = useMemo(
     () => [
       {
-        header: "Code / Title",
+        header: t("sc.sales.h.codeTitle"),
         cell: (r: OpportunityRecord) => (
           <div>
             <div className="font-medium text-slate-900">{r.title}</div>
@@ -384,7 +386,7 @@ export function SalesPipelinePage() {
         ),
       },
       {
-        header: "Stage",
+        header: t("sc.sales.h.stage"),
         cell: (r: OpportunityRecord) => (
           <div className="flex items-center gap-1.5">
             <StatusPill tone={stageTone(r.stageCode)}>{r.stageCode}</StatusPill>
@@ -393,18 +395,18 @@ export function SalesPipelinePage() {
         ),
       },
       {
-        header: "Est. Value",
+        header: t("sc.sales.h.estValue"),
         cell: (r: OpportunityRecord) =>
           r.estimatedValue !== null
             ? `${r.currency} ${Number(r.estimatedValue).toLocaleString()}`
             : "—",
       },
       {
-        header: "Confidence",
+        header: t("sc.sales.h.confidence"),
         cell: (r: OpportunityRecord) => (r.confidencePercent !== null ? `${r.confidencePercent}%` : "—"),
       },
       {
-        header: "Target Close",
+        header: t("sc.sales.h.targetClose"),
         cell: (r: OpportunityRecord) => r.targetCloseDate || "—",
       },
       {
@@ -420,13 +422,13 @@ export function SalesPipelinePage() {
         ),
       },
     ],
-    [],
+    [t],
   );
 
   const quoteColumns: Column<QuotationRecord>[] = useMemo(
     () => [
       {
-        header: "Quotation Code",
+        header: t("sc.sales.h.quotationCode"),
         cell: (r: QuotationRecord) => (
           <div>
             <div className="font-medium text-slate-900">{r.code}</div>
@@ -435,21 +437,21 @@ export function SalesPipelinePage() {
         ),
       },
       {
-        header: "Status",
+        header: t("sc.sales.h.status"),
         cell: (r: QuotationRecord) => (
           <StatusPill tone={quotationStatusTone(r.status)}>{r.status}</StatusPill>
         ),
       },
       {
-        header: "Total Amount",
+        header: t("sc.sales.h.totalAmount"),
         cell: (r: QuotationRecord) => `${r.currency} ${Number(r.totalAmount).toLocaleString()}`,
       },
       {
-        header: "Valid Until",
+        header: t("sc.sales.h.validUntil"),
         cell: (r: QuotationRecord) => r.validUntil || "—",
       },
       {
-        header: "Actions",
+        header: t("sc.sales.h.actions"),
         cell: (r: QuotationRecord) => (
           <div className="flex gap-1">
             <Button
@@ -496,14 +498,15 @@ export function SalesPipelinePage() {
       handleApproveQuotation,
       handleCustomerDecision,
       handleSubmitQuotation,
+      t,
     ],
   );
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Sales & Pipeline"
-        subtitle="Manage commercial opportunities, stage pipelines, versioned quotations, and price books."
+        title={t("sc.sales.title.salesPipeline")}
+        subtitle={t("sc.sales.sub.manageCommercialOpportunitiesStagePipeli")}
       />
 
       {message && (
@@ -578,29 +581,29 @@ export function SalesPipelinePage() {
                 {/* Opportunities Table */}
                 <div className="lg:col-span-2 space-y-4">
                   <div className="flex justify-between items-center gap-4">
-                    <h3 className="text-base font-semibold text-slate-900">Opportunities</h3>
+                    <h3 className="text-base font-semibold text-slate-900">{t("sc.sales.t.opportunities")}</h3>
                     <div className="flex gap-2">
                       <Select
                         className="text-xs py-1"
                         value={filterStage}
                         onChange={(e) => setFilterStage(e.target.value)}
                       >
-                        <option value="">All Stages</option>
-                        <option value="lead">Lead</option>
-                        <option value="qualification">Qualification</option>
-                        <option value="proposal">Proposal</option>
-                        <option value="negotiation">Negotiation</option>
-                        <option value="closed">Closed</option>
+                        <option value="">{t("sc.sales.t.allStages")}</option>
+                        <option value="lead">{t("sc.sales.t.lead")}</option>
+                        <option value="qualification">{t("sc.sales.t.qualification")}</option>
+                        <option value="proposal">{t("sc.sales.t.proposal")}</option>
+                        <option value="negotiation">{t("sc.sales.t.negotiation")}</option>
+                        <option value="closed">{t("sc.sales.t.closed")}</option>
                       </Select>
                       <Select
                         className="text-xs py-1"
                         value={filterOutcome}
                         onChange={(e) => setFilterOutcome(e.target.value)}
                       >
-                        <option value="">All Outcomes</option>
-                        <option value="won">Won</option>
-                        <option value="lost">Lost</option>
-                        <option value="abandoned">Abandoned</option>
+                        <option value="">{t("sc.sales.t.allOutcomes")}</option>
+                        <option value="won">{t("sc.sales.t.won")}</option>
+                        <option value="lost">{t("sc.sales.t.lost")}</option>
+                        <option value="abandoned">{t("sc.sales.t.abandoned")}</option>
                       </Select>
                     </div>
                   </div>
@@ -674,29 +677,29 @@ export function SalesPipelinePage() {
                           <div className="text-xs font-semibold uppercase text-slate-600">
                             Advance Stage
                           </div>
-                          <Field label="Target Stage">
+                          <Field label={t("sc.sales.f.targetStage")}>
                             <Select name="stageCode" defaultValue={opportunityDetail.opportunity.stageCode}>
-                              <option value="lead">Lead</option>
-                              <option value="qualification">Qualification</option>
-                              <option value="proposal">Proposal</option>
-                              <option value="negotiation">Negotiation</option>
-                              <option value="closed">Closed</option>
+                              <option value="lead">{t("sc.sales.t.lead")}</option>
+                              <option value="qualification">{t("sc.sales.t.qualification")}</option>
+                              <option value="proposal">{t("sc.sales.t.proposal")}</option>
+                              <option value="negotiation">{t("sc.sales.t.negotiation")}</option>
+                              <option value="closed">{t("sc.sales.t.closed")}</option>
                             </Select>
                           </Field>
-                          <Field label="Outcome (if closing)">
+                          <Field label={t("sc.sales.f.outcomeIfClosing")}>
                             <Select name="outcome">
-                              <option value="">In Progress</option>
-                              <option value="won">Won</option>
-                              <option value="lost">Lost</option>
-                              <option value="abandoned">Abandoned</option>
+                              <option value="">{t("sc.sales.t.inProgress")}</option>
+                              <option value="won">{t("sc.sales.t.won")}</option>
+                              <option value="lost">{t("sc.sales.t.lost")}</option>
+                              <option value="abandoned">{t("sc.sales.t.abandoned")}</option>
                             </Select>
                           </Field>
-                          <Field label="Note / Outcome Reason">
-                            <Input name="note" placeholder="Stage transition rationale" />
+                          <Field label={t("sc.sales.f.noteOutcomeReason")}>
+                            <Input name="note" placeholder={t("sc.sales.p.stageTransitionRationale")} />
                           </Field>
                           <Button type="submit" variant="primary" className="w-full">
-                            Update Stage
-                          </Button>
+              {t("sc.sales.t.updateStage")}
+              </Button>
                         </form>
                       )}
 
@@ -722,15 +725,15 @@ export function SalesPipelinePage() {
                     <Card className="space-y-4">
                       <h4 className="font-semibold text-slate-900">New Opportunity</h4>
                       <form onSubmit={handleCreateOpportunity} className="space-y-3">
-                        <Field label="Code" required>
+                        <Field label={t("sc.sales.f.code")} required>
                           <Input name="code" placeholder="OPP-2026-001" required />
                         </Field>
-                        <Field label="Title" required>
-                          <Input name="title" placeholder="Annual Fiber Renewal" required />
+                        <Field label={t("sc.sales.f.title")} required>
+                          <Input name="title" placeholder={t("sc.sales.p.annualFiberRenewal")} required />
                         </Field>
-                        <Field label="Customer" required>
+                        <Field label={t("sc.sales.f.customer")} required>
                           <Select name="customerId" required>
-                            <option value="">Select customer...</option>
+                            <option value="">{t("sc.sales.t.selectCustomer")}</option>
                             {customers.map((c) => (
                               <option key={c.id} value={c.id}>
                                 {c.name} ({c.code})
@@ -738,18 +741,18 @@ export function SalesPipelinePage() {
                             ))}
                           </Select>
                         </Field>
-                        <Field label="Estimated Value">
+                        <Field label={t("sc.sales.f.estimatedValue")}>
                           <Input type="number" name="estimatedValue" placeholder="150000000" />
                         </Field>
-                        <Field label="Confidence (%)">
+                        <Field label={t("sc.sales.f.confidence")}>
                           <Input type="number" name="confidencePercent" placeholder="75" min="0" max="100" />
                         </Field>
-                        <Field label="Target Close Date">
+                        <Field label={t("sc.sales.f.targetCloseDate")}>
                           <Input type="date" name="targetCloseDate" />
                         </Field>
                         <Button type="submit" variant="primary" className="w-full">
-                          Create Opportunity
-                        </Button>
+              {t("sc.sales.t.createOpportunity")}
+              </Button>
                       </form>
                     </Card>
                   ) : null}
@@ -762,7 +765,7 @@ export function SalesPipelinePage() {
           {activeTab === "quotations" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-4">
-                <h3 className="text-base font-semibold text-slate-900">Quotations</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("sc.sales.t.quotations")}</h3>
                 <DataTable
                   columns={quoteColumns}
                   rows={quotations}
@@ -845,12 +848,12 @@ export function SalesPipelinePage() {
                   <Card className="space-y-4">
                     <h4 className="font-semibold text-slate-900">Draft Quotation</h4>
                     <form onSubmit={handleCreateQuotation} className="space-y-3">
-                      <Field label="Quotation Code" required>
+                      <Field label={t("sc.sales.f.quotationCode")} required>
                         <Input name="code" placeholder="QUO-2026-001" required />
                       </Field>
-                      <Field label="Customer" required>
+                      <Field label={t("sc.sales.f.customer")} required>
                         <Select name="customerId" required>
-                          <option value="">Select customer...</option>
+                          <option value="">{t("sc.sales.t.selectCustomer")}</option>
                           {customers.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name}
@@ -858,9 +861,9 @@ export function SalesPipelinePage() {
                           ))}
                         </Select>
                       </Field>
-                      <Field label="Opportunity (Optional)">
+                      <Field label={t("sc.sales.f.opportunityOptional")}>
                         <Select name="opportunityId">
-                          <option value="">None</option>
+                          <option value="">{t("sc.sales.t.none")}</option>
                           {opportunities.map((o) => (
                             <option key={o.id} value={o.id}>
                               {o.code} - {o.title}
@@ -868,9 +871,9 @@ export function SalesPipelinePage() {
                           ))}
                         </Select>
                       </Field>
-                      <Field label="Price Book (Optional)">
+                      <Field label={t("sc.sales.f.priceBookOptional")}>
                         <Select name="priceBookId">
-                          <option value="">Standard Catalog</option>
+                          <option value="">{t("sc.sales.t.standardCatalog")}</option>
                           {priceBooks.map((pb) => (
                             <option key={pb.id} value={pb.id}>
                               {pb.name} ({pb.currency})
@@ -878,26 +881,26 @@ export function SalesPipelinePage() {
                           ))}
                         </Select>
                       </Field>
-                      <Field label="Item Description" required>
-                        <Input name="itemDescription" placeholder="Dedicated 1Gbps Bandwidth" required />
+                      <Field label={t("sc.sales.f.itemDescription")} required>
+                        <Input name="itemDescription" placeholder={t("sc.sales.p.dedicated1gbpsBandwidth")} required />
                       </Field>
                       <div className="grid grid-cols-2 gap-2">
-                        <Field label="Unit Price" required>
+                        <Field label={t("sc.sales.f.unitPrice")} required>
                           <Input type="number" name="unitPrice" placeholder="25000000" required />
                         </Field>
-                        <Field label="Quantity" required>
+                        <Field label={t("sc.sales.f.quantity")} required>
                           <Input type="number" name="quantity" defaultValue="1" min="1" required />
                         </Field>
                       </div>
-                      <Field label="Discount (%)">
+                      <Field label={t("sc.sales.f.discount")}>
                         <Input type="number" name="discountPercent" defaultValue="0" min="0" max="100" />
                       </Field>
-                      <Field label="Valid Until">
+                      <Field label={t("sc.sales.f.validUntil")}>
                         <Input type="date" name="validUntil" />
                       </Field>
                       <Button type="submit" variant="primary" className="w-full">
-                        Create Quotation
-                      </Button>
+              {t("sc.sales.t.createQuotation")}
+              </Button>
                     </form>
                   </Card>
                 ) : null}
@@ -910,7 +913,7 @@ export function SalesPipelinePage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left Column: Price Books List */}
               <div className="space-y-4">
-                <h3 className="text-base font-semibold text-slate-900">Price Books</h3>
+                <h3 className="text-base font-semibold text-slate-900">{t("sc.sales.t.priceBooks")}</h3>
                 <div className="space-y-2">
                   {priceBooks.map((pb) => (
                     <div
@@ -939,12 +942,12 @@ export function SalesPipelinePage() {
                   <Card className="space-y-3 mt-4">
                     <div className="font-semibold text-slate-900 text-sm">Add Price Book</div>
                     <form onSubmit={handleCreatePriceBook} className="space-y-2">
-                      <Input name="code" placeholder="Code (e.g. PB-ENT-2026)" required />
-                      <Input name="name" placeholder="Name (e.g. Enterprise Tier)" required />
-                      <Input name="currency" placeholder="Currency (e.g. IDR)" defaultValue="IDR" required />
+                      <Input name="code" placeholder={t("sc.sales.p.codeEGPbEnt2026")} required />
+                      <Input name="name" placeholder={t("sc.sales.p.nameEGEnterpriseTier")} required />
+                      <Input name="currency" placeholder={t("sc.sales.p.currencyEGIdr")} defaultValue="IDR" required />
                       <Button type="submit" variant="secondary" className="w-full text-xs">
-                        Create Price Book
-                      </Button>
+              {t("sc.sales.t.createPriceBook")}
+              </Button>
                     </form>
                   </Card>
                 )}
@@ -953,9 +956,7 @@ export function SalesPipelinePage() {
               {/* Right Columns: Entries for selected price book */}
               <div className="lg:col-span-2 space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-base font-semibold text-slate-900">
-                    Volume Price Matrix
-                  </h3>
+                  <h3 className="text-base font-semibold text-slate-900">{t("sc.sales.t.volumePriceMatrix")}</h3>
                 </div>
 
                 {selectedPriceBookId ? (
@@ -1001,22 +1002,22 @@ export function SalesPipelinePage() {
                           Add Volume Entry to Selected Book
                         </div>
                         <form onSubmit={handleAddPriceBookEntry} className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                          <Input name="itemSku" placeholder="SKU (e.g. BW-100M)" required />
-                          <Input type="number" name="unitPrice" placeholder="Unit Price" required />
-                          <Input type="number" name="minQuantity" placeholder="Min Qty" defaultValue="1" required />
-                          <Input type="number" name="maxQuantity" placeholder="Max Qty (opt)" />
-                          <Input name="unitOfMeasure" placeholder="UOM (e.g. Mbps)" defaultValue="unit" required />
+                          <Input name="itemSku" placeholder={t("sc.sales.p.skuEGBw100m")} required />
+                          <Input type="number" name="unitPrice" placeholder={t("sc.sales.p.unitPrice")} required />
+                          <Input type="number" name="minQuantity" placeholder={t("sc.sales.p.minQty")} defaultValue="1" required />
+                          <Input type="number" name="maxQuantity" placeholder={t("sc.sales.p.maxQtyOpt")} />
+                          <Input name="unitOfMeasure" placeholder={t("sc.sales.p.uomEGMbps")} defaultValue="unit" required />
                           <div className="col-span-2 md:col-span-5">
                             <Button type="submit" variant="primary" className="w-full text-xs">
-                              Add Volume Pricing Tier
-                            </Button>
+              {t("sc.sales.t.addVolumePricingTier")}
+              </Button>
                           </div>
                         </form>
                       </Card>
                     )}
                   </div>
                 ) : (
-                  <EmptyState title="Select a price book" description="Choose a price book on the left to inspect its volume pricing tiers." />
+                  <EmptyState title={t("sc.sales.title.selectAPriceBook")} description={t("sc.sales.d.chooseAPriceBookOnTheLeftToInspectItsVol")} />
                 )}
               </div>
             </div>

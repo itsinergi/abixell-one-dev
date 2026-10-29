@@ -16,6 +16,7 @@ import {
   type ScmStockTransferDetail,
   type ScmWarehouse,
 } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { PERMISSIONS } from "../../lib/capabilities";
 import { useShell } from "../../shell/layout/AppShell";
 import {
@@ -41,6 +42,7 @@ function label(v: string) {
 export function StockOperationsPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
+  const t = useT();
   const { permissions } = useShell();
 
   const canManage = permissions.includes(PERMISSIONS.supplyChainInventoryManage);
@@ -121,11 +123,11 @@ export function StockOperationsPage() {
       if (whList.length > 1 && !trToWhId) setTrToWhId(whList[1].id);
       if (whList.length > 0 && !opWhId) setOpWhId(whList[0].id);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load stock operations");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToLoadStockOperations"));
     } finally {
       setLoading(false);
     }
-  }, [token, polItemId, resItemId, trItemId, resWhId, trFromWhId, trToWhId, opWhId]);
+  }, [token, polItemId, resItemId, trItemId, resWhId, trFromWhId, trToWhId, opWhId, t]);
 
   useEffect(() => {
     void loadData();
@@ -150,10 +152,10 @@ export function StockOperationsPage() {
         safetyStock: Number(polSafetyStock),
         leadTimeDays: Number(polLeadDays),
       });
-      setNotice("Reorder policy saved.");
+      setNotice(t("scm.stock.msg.reorderPolicySaved"));
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to save reorder policy");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToSaveReorderPolicy"));
     } finally {
       setBusy(false);
     }
@@ -181,7 +183,7 @@ export function StockOperationsPage() {
       setResNotes("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to create reservation");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToCreateReservation"));
     } finally {
       setBusy(false);
     }
@@ -200,11 +202,11 @@ export function StockOperationsPage() {
         notes: trNotes.trim() || null,
         lines: [{ itemId: trItemId, quantityRequested: Number(trQty) }],
       });
-      setNotice("Transfer request initiated.");
+      setNotice(t("scm.stock.msg.transferRequestInitiated"));
       setTrNotes("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to initiate transfer");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToInitiateTransfer"));
     } finally {
       setBusy(false);
     }
@@ -223,11 +225,11 @@ export function StockOperationsPage() {
         notes: opNotes.trim() || null,
         lines: items.slice(0, 10).map((i) => ({ itemId: i.id, systemQuantity: 10 })),
       });
-      setNotice("Stock Opname cycle started.");
+      setNotice(t("scm.stock.msg.stockOpnameCycleStarted"));
       setOpNotes("");
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to start stock opname");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToStartStockOpname"));
     } finally {
       setBusy(false);
     }
@@ -238,10 +240,10 @@ export function StockOperationsPage() {
     setError(null);
     try {
       await api.fulfillScmStockReservation(token, id);
-      setNotice("Reservation fulfilled.");
+      setNotice(t("scm.stock.msg.reservationFulfilled"));
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to fulfill reservation");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToFulfillReservation"));
     } finally {
       setBusy(false);
     }
@@ -252,10 +254,10 @@ export function StockOperationsPage() {
     setError(null);
     try {
       await api.cancelScmStockReservation(token, id);
-      setNotice("Reservation cancelled.");
+      setNotice(t("scm.stock.msg.reservationCancelled"));
       await loadData();
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to cancel reservation");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToCancelReservation"));
     } finally {
       setBusy(false);
     }
@@ -268,7 +270,7 @@ export function StockOperationsPage() {
       const dt = await api.scmStockTransfer(token, id);
       setSelectedTransfer(dt);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load transfer detail");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToLoadTransferDetail"));
     } finally {
       setBusy(false);
     }
@@ -281,39 +283,39 @@ export function StockOperationsPage() {
       const dt = await api.scmStockOpname(token, id);
       setSelectedOpname(dt);
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : "Failed to load opname detail");
+      setError(err instanceof ApiError ? err.message : t("scm.stock.msg.failedToLoadOpnameDetail"));
     } finally {
       setBusy(false);
     }
   }
 
   const alertColumns: Column<ScmReorderAlert>[] = [
-    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
-    { header: "Warehouse", cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "All Warehouses" },
-    { header: "Current Balance", cell: (r) => <span className="font-mono font-bold text-red-600">{r.currentBalance}</span>, mobileRole: "status" },
-    { header: "Reorder Point", cell: (r) => <span className="font-mono">{r.reorderPoint}</span> },
-    { header: "Suggested Reorder Qty", cell: (r) => <span className="font-mono font-bold text-emerald-600">{r.suggestedReorderQuantity}</span> },
+    { header: t("scm.stock.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
+    { header: t("scm.stock.h.warehouse"), cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "All Warehouses" },
+    { header: t("scm.stock.h.currentBalance"), cell: (r) => <span className="font-mono font-bold text-red-600">{r.currentBalance}</span>, mobileRole: "status" },
+    { header: t("scm.stock.h.reorderPoint"), cell: (r) => <span className="font-mono">{r.reorderPoint}</span> },
+    { header: t("scm.stock.h.suggestedReorderQty"), cell: (r) => <span className="font-mono font-bold text-emerald-600">{r.suggestedReorderQuantity}</span> },
   ];
 
   const policyColumns: Column<ScmReorderPolicy>[] = [
-    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
-    { header: "Warehouse", cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "Global / All" },
-    { header: "Min Qty", cell: (r) => r.minQuantity },
+    { header: t("scm.stock.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
+    { header: t("scm.stock.h.warehouse"), cell: (r) => r.warehouseId ? (whMap.get(r.warehouseId)?.name || r.warehouseId) : "Global / All" },
+    { header: t("scm.stock.h.minQty"), cell: (r) => r.minQuantity },
     { header: "ROP", cell: (r) => r.reorderPoint },
     { header: "ROQ", cell: (r) => r.reorderQuantity },
-    { header: "Safety Stock", cell: (r) => r.safetyStock },
-    { header: "Lead Time (Days)", cell: (r) => `${r.leadTimeDays}d`, mobileRole: "status" },
+    { header: t("scm.stock.h.safetyStock"), cell: (r) => r.safetyStock },
+    { header: t("scm.stock.h.leadTimeDays"), cell: (r) => `${r.leadTimeDays}d`, mobileRole: "status" },
   ];
 
   const reservationColumns: Column<ScmStockReservation>[] = [
-    { header: "Reservation #", cell: (r) => <span className="font-mono font-semibold">{r.reservationNumber}</span>, mobileRole: "title" },
-    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId },
-    { header: "Warehouse", cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
-    { header: "Qty", cell: (r) => <span className="font-mono font-bold">{r.quantity}</span> },
-    { header: "Reserved For", cell: (r) => `${label(r.reservedForType)} ${r.reservedForNumber || ""}` },
-    { header: "Status", cell: (r) => <StatusPill tone={r.status === "active" ? "warning" : r.status === "fulfilled" ? "success" : "neutral"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
+    { header: t("scm.stock.h.reservation"), cell: (r) => <span className="font-mono font-semibold">{r.reservationNumber}</span>, mobileRole: "title" },
+    { header: t("scm.stock.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId },
+    { header: t("scm.stock.h.warehouse"), cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
+    { header: t("scm.stock.h.qty"), cell: (r) => <span className="font-mono font-bold">{r.quantity}</span> },
+    { header: t("scm.stock.h.reservedFor"), cell: (r) => `${label(r.reservedForType)} ${r.reservedForNumber || ""}` },
+    { header: t("scm.stock.h.status"), cell: (r) => <StatusPill tone={r.status === "active" ? "warning" : r.status === "fulfilled" ? "success" : "neutral"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
     {
-      header: "Actions",
+      header: t("scm.stock.h.actions"),
       cell: (r) =>
         r.status === "active" ? (
           <div className="flex gap-2">
@@ -325,24 +327,24 @@ export function StockOperationsPage() {
   ];
 
   const transferColumns: Column<ScmStockTransfer>[] = [
-    { header: "Transfer #", cell: (r) => <span className="font-mono font-semibold">{r.transferNumber}</span>, mobileRole: "title" },
-    { header: "Origin", cell: (r) => whMap.get(r.fromWarehouseId)?.name || r.fromWarehouseId },
-    { header: "Destination", cell: (r) => whMap.get(r.toWarehouseId)?.name || r.toWarehouseId },
-    { header: "Status", cell: (r) => <StatusPill tone={r.status === "received" ? "success" : r.status === "in_transit" ? "warning" : "info"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
-    { header: "Requested Date", cell: (r) => formatDateShort(r.createdAt) },
+    { header: t("scm.stock.h.transfer"), cell: (r) => <span className="font-mono font-semibold">{r.transferNumber}</span>, mobileRole: "title" },
+    { header: t("scm.stock.h.origin"), cell: (r) => whMap.get(r.fromWarehouseId)?.name || r.fromWarehouseId },
+    { header: t("scm.stock.h.destination"), cell: (r) => whMap.get(r.toWarehouseId)?.name || r.toWarehouseId },
+    { header: t("scm.stock.h.status"), cell: (r) => <StatusPill tone={r.status === "received" ? "success" : r.status === "in_transit" ? "warning" : "info"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
+    { header: t("scm.stock.h.requestedDate"), cell: (r) => formatDateShort(r.createdAt) },
     {
-      header: "Inspect",
+      header: t("scm.stock.h.inspect"),
       cell: (r) => <Button variant="secondary" onClick={() => openTransferDetail(r.id)}>Detail</Button>,
     },
   ];
 
   const opnameColumns: Column<ScmStockOpname>[] = [
-    { header: "Opname #", cell: (r) => <span className="font-mono font-semibold">{r.opnameNumber}</span>, mobileRole: "title" },
-    { header: "Warehouse", cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
-    { header: "Audit Date", cell: (r) => formatDateShort(r.opnameDate) },
-    { header: "Status", cell: (r) => <StatusPill tone={r.status === "adjusted" || r.status === "approved" ? "success" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
+    { header: t("scm.stock.h.opname"), cell: (r) => <span className="font-mono font-semibold">{r.opnameNumber}</span>, mobileRole: "title" },
+    { header: t("scm.stock.h.warehouse"), cell: (r) => whMap.get(r.warehouseId)?.name || r.warehouseId },
+    { header: t("scm.stock.h.auditDate"), cell: (r) => formatDateShort(r.opnameDate) },
+    { header: t("scm.stock.h.status"), cell: (r) => <StatusPill tone={r.status === "adjusted" || r.status === "approved" ? "success" : "warning"}>{label(r.status)}</StatusPill>, mobileRole: "status" },
     {
-      header: "Inspect",
+      header: t("scm.stock.h.inspect"),
       cell: (r) => <Button variant="secondary" onClick={() => openOpnameDetail(r.id)}>Detail</Button>,
     },
   ];
@@ -350,8 +352,8 @@ export function StockOperationsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Stock Operations"
-        subtitle="Dynamic reorder alerts, stock reservations, warehouse transfer logistics, and stock opname reconciliation."
+        title={t("scm.stock.title.stockOperations")}
+        subtitle={t("scm.stock.sub.dynamicReorderAlertsStockReservationsWar")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -370,40 +372,40 @@ export function StockOperationsPage() {
         <div className="flex justify-center p-8"><Spinner /></div>
       ) : tab === "alerts" ? (
         <Card>
-          <h3 className="text-base font-semibold text-slate-900 mb-3">Critical Reorder Alerts</h3>
+          <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.criticalReorderAlerts")}</h3>
           <DataTable columns={alertColumns} rows={alerts} keyOf={(r) => r.itemId} empty={<p className="text-slate-500 py-4 text-center text-sm">All inventory levels are above reorder thresholds.</p>} />
         </Card>
       ) : tab === "policies" ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Configured Reorder Policies</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.configuredReorderPolicies")}</h3>
               <DataTable columns={policyColumns} rows={policies} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No reorder policies configured yet.</p>} />
             </Card>
           </div>
           <div>
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Set Reorder Policy</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.setReorderPolicy")}</h3>
               <form onSubmit={handleUpsertPolicy} className="space-y-4">
-                <Field label="Item" required>
+                <Field label={t("scm.stock.f.item")} required>
                   <Select value={polItemId} onChange={(e) => setPolItemId(e.target.value)} disabled={!canManage || busy}>
                     {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
                   </Select>
                 </Field>
-                <Field label="Warehouse Scope">
+                <Field label={t("scm.stock.f.warehouseScope")}>
                   <Select value={polWhId} onChange={(e) => setPolWhId(e.target.value)} disabled={!canManage || busy}>
-                    <option value="">Global / All Warehouses</option>
+                    <option value="">{t("scm.stock.t.globalAllWarehouses")}</option>
                     {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </Select>
                 </Field>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Min Qty" required><Input type="number" value={polMinQty} onChange={(e) => setPolMinQty(e.target.value)} disabled={!canManage || busy} /></Field>
-                  <Field label="Reorder Point" required><Input type="number" value={polReorderPoint} onChange={(e) => setPolReorderPoint(e.target.value)} disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.stock.f.minQty")} required><Input type="number" value={polMinQty} onChange={(e) => setPolMinQty(e.target.value)} disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.stock.f.reorderPoint")} required><Input type="number" value={polReorderPoint} onChange={(e) => setPolReorderPoint(e.target.value)} disabled={!canManage || busy} /></Field>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <Field label="Reorder Qty" required><Input type="number" value={polReorderQty} onChange={(e) => setPolReorderQty(e.target.value)} disabled={!canManage || busy} /></Field>
-                  <Field label="Safety Stock"><Input type="number" value={polSafetyStock} onChange={(e) => setPolSafetyStock(e.target.value)} disabled={!canManage || busy} /></Field>
-                  <Field label="Lead Days"><Input type="number" value={polLeadDays} onChange={(e) => setPolLeadDays(e.target.value)} disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.stock.f.reorderQty")} required><Input type="number" value={polReorderQty} onChange={(e) => setPolReorderQty(e.target.value)} disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.stock.f.safetyStock")}><Input type="number" value={polSafetyStock} onChange={(e) => setPolSafetyStock(e.target.value)} disabled={!canManage || busy} /></Field>
+                  <Field label={t("scm.stock.f.leadDays")}><Input type="number" value={polLeadDays} onChange={(e) => setPolLeadDays(e.target.value)} disabled={!canManage || busy} /></Field>
                 </div>
                 <Button type="submit" variant="primary" disabled={!canManage || busy}>Save Policy</Button>
               </form>
@@ -414,42 +416,42 @@ export function StockOperationsPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Stock Reservations</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.stockReservations")}</h3>
               <DataTable columns={reservationColumns} rows={reservations} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No active reservations.</p>} />
             </Card>
           </div>
           <div>
             <Card>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Create Stock Reservation</h3>
+              <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.createStockReservation")}</h3>
               <form onSubmit={handleCreateReservation} className="space-y-4">
-                <Field label="Reservation #" required>
-                  <Input value={resNumber} onChange={(e) => setResNumber(e.target.value)} placeholder="e.g. RES-2026-001" disabled={!canManage || busy} />
+                <Field label={t("scm.stock.f.reservation")} required>
+                  <Input value={resNumber} onChange={(e) => setResNumber(e.target.value)} placeholder={t("scm.stock.p.eGRes2026001")} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Item" required>
+                <Field label={t("scm.stock.f.item")} required>
                   <Select value={resItemId} onChange={(e) => setResItemId(e.target.value)} disabled={!canManage || busy}>
                     {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
                   </Select>
                 </Field>
-                <Field label="Warehouse" required>
+                <Field label={t("scm.stock.f.warehouse")} required>
                   <Select value={resWhId} onChange={(e) => setResWhId(e.target.value)} disabled={!canManage || busy}>
                     {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </Select>
                 </Field>
-                <Field label="Quantity" required>
+                <Field label={t("scm.stock.f.quantity")} required>
                   <Input type="number" min="0.01" step="any" value={resQty} onChange={(e) => setResQty(e.target.value)} disabled={!canManage || busy} />
                 </Field>
-                <Field label="Reserved For Type" required>
+                <Field label={t("scm.stock.f.reservedForType")} required>
                   <Select value={resForType} onChange={(e) => setResForType(e.target.value)} disabled={!canManage || busy}>
-                    <option value="work_order">Work Order</option>
-                    <option value="project">Project</option>
-                    <option value="sales_order">Sales Order</option>
+                    <option value="work_order">{t("scm.stock.t.workOrder")}</option>
+                    <option value="project">{t("scm.stock.t.project")}</option>
+                    <option value="sales_order">{t("scm.stock.t.salesOrder")}</option>
                   </Select>
                 </Field>
-                <Field label="Reference Number">
+                <Field label={t("scm.stock.f.referenceNumber")}>
                   <Input value={resForNumber} onChange={(e) => setResForNumber(e.target.value)} placeholder="WO-2026-012" disabled={!canManage || busy} />
                 </Field>
-                <Field label="Notes">
-                  <Input value={resNotes} onChange={(e) => setResNotes(e.target.value)} placeholder="Reservation reason..." disabled={!canManage || busy} />
+                <Field label={t("scm.stock.f.notes")}>
+                  <Input value={resNotes} onChange={(e) => setResNotes(e.target.value)} placeholder={t("scm.stock.p.reservationReason")} disabled={!canManage || busy} />
                 </Field>
                 <Button type="submit" variant="primary" disabled={!canManage || busy}>Place Reservation</Button>
               </form>
@@ -461,34 +463,34 @@ export function StockOperationsPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <Card>
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Warehouse Stock Transfers</h3>
+                <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.warehouseStockTransfers")}</h3>
                 <DataTable columns={transferColumns} rows={transfers} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No transfers registered.</p>} />
               </Card>
             </div>
             <div>
               <Card>
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Initiate Stock Transfer</h3>
+                <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.initiateStockTransfer")}</h3>
                 <form onSubmit={handleCreateTransfer} className="space-y-4">
-                  <Field label="Origin Warehouse" required>
+                  <Field label={t("scm.stock.f.originWarehouse")} required>
                     <Select value={trFromWhId} onChange={(e) => setTrFromWhId(e.target.value)} disabled={!canManage || busy}>
                       {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </Select>
                   </Field>
-                  <Field label="Destination Warehouse" required>
+                  <Field label={t("scm.stock.f.destinationWarehouse")} required>
                     <Select value={trToWhId} onChange={(e) => setTrToWhId(e.target.value)} disabled={!canManage || busy}>
                       {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </Select>
                   </Field>
-                  <Field label="Item to Transfer" required>
+                  <Field label={t("scm.stock.f.itemToTransfer")} required>
                     <Select value={trItemId} onChange={(e) => setTrItemId(e.target.value)} disabled={!canManage || busy}>
                       {items.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
                     </Select>
                   </Field>
-                  <Field label="Quantity" required>
+                  <Field label={t("scm.stock.f.quantity")} required>
                     <Input type="number" min="0.01" step="any" value={trQty} onChange={(e) => setTrQty(e.target.value)} disabled={!canManage || busy} />
                   </Field>
-                  <Field label="Notes">
-                    <Input value={trNotes} onChange={(e) => setTrNotes(e.target.value)} placeholder="Logistics notes / transfer rationale" disabled={!canManage || busy} />
+                  <Field label={t("scm.stock.f.notes")}>
+                    <Input value={trNotes} onChange={(e) => setTrNotes(e.target.value)} placeholder={t("scm.stock.p.logisticsNotesTransferRationale")} disabled={!canManage || busy} />
                   </Field>
                   <Button type="submit" variant="primary" disabled={!canManage || busy}>Request Transfer</Button>
                 </form>
@@ -506,10 +508,10 @@ export function StockOperationsPage() {
                 </div>
                 <DataTable
                   columns={[
-                    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
-                    { header: "Requested Qty", cell: (r) => r.quantityRequested },
-                    { header: "Shipped Qty", cell: (r) => r.quantityShipped },
-                    { header: "Received Qty", cell: (r) => r.quantityReceived, mobileRole: "status" },
+                    { header: t("scm.stock.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
+                    { header: t("scm.stock.h.requestedQty"), cell: (r) => r.quantityRequested },
+                    { header: t("scm.stock.h.shippedQty"), cell: (r) => r.quantityShipped },
+                    { header: t("scm.stock.h.receivedQty"), cell: (r) => r.quantityReceived, mobileRole: "status" },
                   ]}
                   rows={selectedTransfer.lines}
                   keyOf={(r) => r.id}
@@ -525,24 +527,24 @@ export function StockOperationsPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <Card>
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Stock Opname Audits</h3>
+                <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.stockOpnameAudits")}</h3>
                 <DataTable columns={opnameColumns} rows={opnames} keyOf={(r) => r.id} empty={<p className="text-slate-500 py-4 text-center text-sm">No opname audits found.</p>} />
               </Card>
             </div>
             <div>
               <Card>
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Initiate Opname Audit</h3>
+                <h3 className="text-base font-semibold text-slate-900 mb-3">{t("scm.stock.t.initiateOpnameAudit")}</h3>
                 <form onSubmit={handleCreateOpname} className="space-y-4">
-                  <Field label="Warehouse to Audit" required>
+                  <Field label={t("scm.stock.f.warehouseToAudit")} required>
                     <Select value={opWhId} onChange={(e) => setOpWhId(e.target.value)} disabled={!canManage || busy}>
                       {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </Select>
                   </Field>
-                  <Field label="Audit Date" required>
+                  <Field label={t("scm.stock.f.auditDate")} required>
                     <Input type="date" value={opDate} onChange={(e) => setOpDate(e.target.value)} disabled={!canManage || busy} />
                   </Field>
-                  <Field label="Audit Notes">
-                    <Input value={opNotes} onChange={(e) => setOpNotes(e.target.value)} placeholder="Quarterly full count cycle..." disabled={!canManage || busy} />
+                  <Field label={t("scm.stock.f.auditNotes")}>
+                    <Input value={opNotes} onChange={(e) => setOpNotes(e.target.value)} placeholder={t("scm.stock.p.quarterlyFullCountCycle")} disabled={!canManage || busy} />
                   </Field>
                   <Button type="submit" variant="primary" disabled={!canManage || busy}>Start Opname</Button>
                 </form>
@@ -560,10 +562,10 @@ export function StockOperationsPage() {
                 </div>
                 <DataTable
                   columns={[
-                    { header: "Item", cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
-                    { header: "System Qty", cell: (r) => r.systemQuantity },
-                    { header: "Physical Count", cell: (r) => r.physicalQuantity ?? "—" },
-                    { header: "Variance", cell: (r) => r.varianceQuantity ?? "—", mobileRole: "status" },
+                    { header: t("scm.stock.h.item"), cell: (r) => itemMap.get(r.itemId)?.name || r.itemId, mobileRole: "title" },
+                    { header: t("scm.stock.h.systemQty"), cell: (r) => r.systemQuantity },
+                    { header: t("scm.stock.h.physicalCount"), cell: (r) => r.physicalQuantity ?? "—" },
+                    { header: t("scm.stock.h.variance"), cell: (r) => r.varianceQuantity ?? "—", mobileRole: "status" },
                   ]}
                   rows={selectedOpname.lines}
                   keyOf={(r) => r.id}
