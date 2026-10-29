@@ -29,11 +29,13 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort } from "../../shared/format";
+import { useT } from "../../i18n/LocaleProvider";
 
 export function HseRegisterPage() {
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
+  const t = useT();
 
   const [records, setRecords] = useState<HseRecord[]>([]);
   const [categories, setCategories] = useState<{ code: string; label: string }[]>([]);
@@ -63,11 +65,11 @@ export function HseRegisterPage() {
         }),
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load HSE records.");
+      setError(err instanceof ApiError ? err.message : t("hse.register.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, filterType, filterCategory, filterSeverity, filterFrom, filterTo, search]);
+  }, [token, filterType, filterCategory, filterSeverity, filterFrom, filterTo, search, t]);
 
   useEffect(() => {
     void load();
@@ -85,60 +87,69 @@ export function HseRegisterPage() {
   }, [token]);
 
   const categoryLabel = (code: string | null) => {
-    if (!code) return "—";
+    if (!code) return t("hse.common.notAvailable");
     return categories.find((c) => c.code === code)?.label ?? code;
   };
 
   const severityLabel = (code: string | null) => {
-    if (!code) return "—";
+    if (!code) return t("hse.common.notAvailable");
     return severities.find((s) => s.code === code)?.label ?? code;
   };
 
   const columns: Column<HseRecord>[] = [
-    { header: "Number", cell: (row) => <span className="font-medium">{row.recordNumber}</span> },
-    { header: "Type", cell: (row) => <Badge>{row.recordType === "incident" ? "Incident" : "Observation"}</Badge> },
-    { header: "Date", cell: (row) => formatDateShort(row.occurredAt) },
-    { header: "Title", cell: (row) => row.title },
-    { header: "Category", cell: (row) => categoryLabel(row.categoryCode) },
-    { header: "Severity", cell: (row) => severityLabel(row.severityCode) },
+    { header: t("hse.register.colNumber"), cell: (row) => <span className="font-medium">{row.recordNumber}</span> },
     {
-      header: "Status",
+      header: t("fin.common.type"),
+      cell: (row) => (
+        <Badge>{row.recordType === "incident" ? t("hse.common.incident") : t("hse.common.observation")}</Badge>
+      ),
+    },
+    { header: t("fin.common.date"), cell: (row) => formatDateShort(row.occurredAt) },
+    { header: t("hse.common.title"), cell: (row) => row.title },
+    { header: t("fin.common.category"), cell: (row) => categoryLabel(row.categoryCode) },
+    { header: t("hse.common.severity"), cell: (row) => severityLabel(row.severityCode) },
+    {
+      header: t("fin.common.status"),
       cell: (row) =>
         row.workflowInstanceId ? (
-          <StatusPill tone="info">In Progress</StatusPill>
+          <StatusPill tone="info">{t("hse.common.inProgress")}</StatusPill>
         ) : (
-          <StatusPill tone="warning">Not Started</StatusPill>
+          <StatusPill tone="warning">{t("hse.common.notStarted")}</StatusPill>
         ),
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="HSE Register" subtitle="Health, safety, and environment incidents and observations." />
+      <PageHeader title={t("hse.register.title")} subtitle={t("hse.register.subtitle")} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
       <div className="flex gap-2">
         <Button onClick={() => navigate("/hse/report")} variant="primary">
-          Report New
+          {t("hse.register.reportNew")}
         </Button>
       </div>
 
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Search">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Number, title, description" />
+          <Field label={t("fin.common.search")}>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("hse.register.searchPlaceholder")}
+            />
           </Field>
-          <Field label="Type">
+          <Field label={t("fin.common.type")}>
             <Select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-              <option value="">Any</option>
-              <option value="incident">Incident</option>
-              <option value="observation">Observation</option>
+              <option value="">{t("fin.common.any")}</option>
+              <option value="incident">{t("hse.common.incident")}</option>
+              <option value="observation">{t("hse.common.observation")}</option>
             </Select>
           </Field>
-          <Field label="Category">
+          <Field label={t("fin.common.category")}>
             <Select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-              <option value="">All categories</option>
+              <option value="">{t("fin.common.allCategories")}</option>
               {categories.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.label}
@@ -146,9 +157,9 @@ export function HseRegisterPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Severity">
+          <Field label={t("hse.common.severity")}>
             <Select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
-              <option value="">All severities</option>
+              <option value="">{t("hse.common.allSeverities")}</option>
               {severities.map((s) => (
                 <option key={s.code} value={s.code}>
                   {s.label}
@@ -156,10 +167,10 @@ export function HseRegisterPage() {
               ))}
             </Select>
           </Field>
-          <Field label="From">
+          <Field label={t("fin.common.from")}>
             <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
           </Field>
-          <Field label="To">
+          <Field label={t("fin.common.to")}>
             <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
           </Field>
         </div>
@@ -175,8 +186,8 @@ export function HseRegisterPage() {
           onRowClick={(row) => navigate(`/hse/records/${row.id}`)}
           empty={
             <EmptyState
-              title="No HSE records yet"
-              description="Report the first incident or observation to get started."
+              title={t("hse.register.emptyTitle")}
+              description={t("hse.register.emptyDescription")}
             />
           }
         />

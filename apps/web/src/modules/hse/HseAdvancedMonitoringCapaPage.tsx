@@ -29,6 +29,8 @@ import {
 } from "../../shell/components/ui";
 import { formatDate, formatDateShort } from "../../shared/format";
 import { useAuth } from "../../auth/AuthContext";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import {
   ApiError,
   api,
@@ -51,12 +53,12 @@ const CAPA_STATUS_TONE: Record<CapaStatus, "neutral" | "info" | "warning" | "suc
   cancelled: "neutral",
 };
 
-const CAPA_STATUS_LABEL: Record<CapaStatus, string> = {
-  open: "Open",
-  in_progress: "In progress",
-  verification: "Verification",
-  closed: "Closed",
-  cancelled: "Cancelled",
+const CAPA_STATUS_LABEL_KEYS: Record<CapaStatus, MessageKey> = {
+  open: "hse.capa.statusOpen",
+  in_progress: "hse.capa.statusInProgress",
+  verification: "hse.capa.statusVerification",
+  closed: "hse.capa.statusClosed",
+  cancelled: "hse.capa.statusCancelled",
 };
 
 const CAPA_STATUSES: CapaStatus[] = ["open", "in_progress", "verification", "closed", "cancelled"];
@@ -90,6 +92,7 @@ const nowLocal = () => new Date().toISOString().slice(0, 16);
 export function HseAdvancedMonitoringCapaPage() {
   const { session } = useAuth();
   const token = session?.accessToken ?? "";
+  const t = useT();
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -119,11 +122,11 @@ export function HseAdvancedMonitoringCapaPage() {
       setCapas(c || []);
       setIndicators(i || []);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load monitoring and CAPA data.");
+      setError(err instanceof ApiError ? err.message : t("hse.capa.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -135,21 +138,21 @@ export function HseAdvancedMonitoringCapaPage() {
   const createPoint = async () => {
     if (modal.kind !== "create-point") return;
     if (!modal.code.trim() || !modal.name.trim() || !modal.parameterCode.trim() || !modal.unit.trim()) {
-      setError("Code, name, parameter and unit are required.");
+      setError(t("hse.capa.pointRequired"));
       return;
     }
     const min = modal.thresholdMin.trim();
     const max = modal.thresholdMax.trim();
     if (!min && !max) {
-      setError("A monitoring point needs at least one threshold.");
+      setError(t("hse.capa.needThreshold"));
       return;
     }
     if ((min && !DECIMAL.test(min)) || (max && !DECIMAL.test(max))) {
-      setError("Thresholds must be decimal numbers with at most four decimal places.");
+      setError(t("hse.capa.thresholdFormat"));
       return;
     }
     if (min && max && Number(max) < Number(min)) {
-      setError("Threshold max must not be below threshold min.");
+      setError(t("hse.capa.thresholdOrder"));
       return;
     }
     setBusy(true);
@@ -163,11 +166,11 @@ export function HseAdvancedMonitoringCapaPage() {
         thresholdMin: min || null,
         thresholdMax: max || null,
       });
-      setNotice("Monitoring point created.");
+      setNotice(t("hse.capa.pointCreated"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to create the monitoring point.");
+      fail(err, t("hse.capa.pointFailed"));
     } finally {
       setBusy(false);
     }
@@ -181,7 +184,7 @@ export function HseAdvancedMonitoringCapaPage() {
       setReadingForm({ measuredAt: nowLocal(), value: "", note: "" });
       setModal({ kind: "point-detail", pointId });
     } catch (err) {
-      fail(err, "Failed to load readings.");
+      fail(err, t("hse.capa.readingsFailed"));
     } finally {
       setBusy(false);
     }
@@ -189,7 +192,7 @@ export function HseAdvancedMonitoringCapaPage() {
 
   const recordReading = async (pointId: string) => {
     if (!DECIMAL.test(readingForm.value.trim())) {
-      setError("Reading must be a decimal number with at most four decimal places.");
+      setError(t("hse.capa.readingFormat"));
       return;
     }
     setBusy(true);
@@ -200,11 +203,11 @@ export function HseAdvancedMonitoringCapaPage() {
         value: readingForm.value.trim(),
         note: readingForm.note.trim() || null,
       });
-      setNotice("Reading recorded.");
+      setNotice(t("hse.capa.readingRecorded"));
       setReadingForm({ measuredAt: nowLocal(), value: "", note: "" });
       setReadings((await api.hseAdvReadings(token, pointId)) || []);
     } catch (err) {
-      fail(err, "Failed to record the reading.");
+      fail(err, t("hse.capa.readingFailed"));
     } finally {
       setBusy(false);
     }
@@ -213,11 +216,11 @@ export function HseAdvancedMonitoringCapaPage() {
   const createCapa = async () => {
     if (modal.kind !== "create-capa") return;
     if (!modal.title.trim()) {
-      setError("Title is required.");
+      setError(t("hse.inv.titleRequired"));
       return;
     }
     if (!modal.anchorValue.trim()) {
-      setError("A CAPA must anchor to a record, investigation, finding, reading, or follow-up.");
+      setError(t("hse.capa.anchorRequired"));
       return;
     }
     setBusy(true);
@@ -232,11 +235,11 @@ export function HseAdvancedMonitoringCapaPage() {
         [modal.anchorKind]: modal.anchorValue.trim(),
       };
       await api.createHseAdvCapa(token, body);
-      setNotice("CAPA raised.");
+      setNotice(t("hse.capa.raised"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to raise the CAPA.");
+      fail(err, t("hse.capa.raiseFailed"));
     } finally {
       setBusy(false);
     }
@@ -250,7 +253,7 @@ export function HseAdvancedMonitoringCapaPage() {
       setActionForm({ description: "", dueDate: "" });
       setModal({ kind: "capa-detail", capaId });
     } catch (err) {
-      fail(err, "Failed to load the CAPA.");
+      fail(err, t("hse.capa.loadCapaFailed"));
     } finally {
       setBusy(false);
     }
@@ -262,10 +265,10 @@ export function HseAdvancedMonitoringCapaPage() {
     try {
       await api.changeHseAdvCapaStatus(token, capaId, { status });
       setCapaDetail(await api.hseAdvCapa(token, capaId));
-      setNotice("CAPA status changed.");
+      setNotice(t("hse.capa.statusChanged"));
       await load();
     } catch (err) {
-      fail(err, "Failed to change the CAPA status.");
+      fail(err, t("hse.capa.statusFailed"));
     } finally {
       setBusy(false);
     }
@@ -273,7 +276,7 @@ export function HseAdvancedMonitoringCapaPage() {
 
   const addAction = async (capaId: string) => {
     if (!actionForm.description.trim()) {
-      setError("An action needs a description.");
+      setError(t("hse.capa.actionDescriptionRequired"));
       return;
     }
     setBusy(true);
@@ -285,9 +288,9 @@ export function HseAdvancedMonitoringCapaPage() {
       });
       setCapaDetail(await api.hseAdvCapa(token, capaId));
       setActionForm({ description: "", dueDate: "" });
-      setNotice("Action added.");
+      setNotice(t("hse.capa.actionAdded"));
     } catch (err) {
-      fail(err, "Failed to add the action.");
+      fail(err, t("hse.capa.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -299,20 +302,20 @@ export function HseAdvancedMonitoringCapaPage() {
     try {
       await api.completeHseAdvCapaAction(token, capaId, actionId, {});
       setCapaDetail(await api.hseAdvCapa(token, capaId));
-      setNotice("Action completed.");
+      setNotice(t("hse.capa.actionCompleted"));
     } catch (err) {
-      fail(err, "Failed to complete the action.");
+      fail(err, t("hse.capa.actionCompleteFailed"));
     } finally {
       setBusy(false);
     }
   };
 
   const pointColumns: Column<HseMonitoringPoint>[] = [
-    { header: "Code", cell: (row) => <span className="font-mono text-sm">{row.code}</span> },
-    { header: "Name", mobileRole: "title", cell: (row) => <span>{row.name}</span> },
-    { header: "Parameter", cell: (row) => <span className="text-sm text-ink-dim">{row.parameterCode}</span> },
+    { header: t("fin.common.code"), cell: (row) => <span className="font-mono text-sm">{row.code}</span> },
+    { header: t("fin.common.name"), mobileRole: "title", cell: (row) => <span>{row.name}</span> },
+    { header: t("hse.capa.colParameter"), cell: (row) => <span className="text-sm text-ink-dim">{row.parameterCode}</span> },
     {
-      header: "Threshold",
+      header: t("hse.capa.colThreshold"),
       className: "text-right",
       cell: (row) => (
         <span className="font-mono text-sm">
@@ -324,39 +327,50 @@ export function HseAdvancedMonitoringCapaPage() {
       header: "Status",
       mobileRole: "status",
       cell: (row) => (
-        <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>
+        <StatusPill tone={row.isActive ? "success" : "neutral"}>
+          {row.isActive ? t("hse.inv.active") : t("hse.inv.inactive")}
+        </StatusPill>
       ),
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       mobileRole: "detail",
       cell: (row) => (
         <Button variant="secondary" disabled={busy} onClick={() => void openPoint(row.id)}>
-          Readings
+          {t("hse.capa.readings")}
         </Button>
       ),
     },
   ];
 
   const capaColumns: Column<HseCapa>[] = [
-    { header: "Number", cell: (row) => <span className="font-mono text-sm">{row.capaNumber}</span> },
-    { header: "Title", mobileRole: "title", cell: (row) => <span>{row.title}</span> },
-    { header: "Type", cell: (row) => <Badge>{row.actionType === "preventive" ? "Preventive" : "Corrective"}</Badge> },
+    { header: t("hse.register.colNumber"), cell: (row) => <span className="font-mono text-sm">{row.capaNumber}</span> },
+    { header: t("hse.common.title"), mobileRole: "title", cell: (row) => <span>{row.title}</span> },
+    { header: t("fin.common.type"),
+      cell: (row) => (
+        <Badge>{row.actionType === "preventive" ? t("hse.capa.preventive") : t("hse.capa.corrective")}</Badge>
+      ) },
     {
-      header: "Due",
-      cell: (row) => <span className="text-sm text-ink-dim">{row.dueDate ? formatDateShort(row.dueDate) : "—"}</span>,
+      header: t("hse.common.due"),
+      cell: (row) => (
+        <span className="text-sm text-ink-dim">
+          {row.dueDate ? formatDateShort(row.dueDate) : t("hse.common.notAvailable")}
+        </span>
+      ),
     },
     {
       header: "Status",
       mobileRole: "status",
-      cell: (row) => <StatusPill tone={CAPA_STATUS_TONE[row.status]}>{CAPA_STATUS_LABEL[row.status]}</StatusPill>,
+      cell: (row) => (
+        <StatusPill tone={CAPA_STATUS_TONE[row.status]}>{t(CAPA_STATUS_LABEL_KEYS[row.status])}</StatusPill>
+      ),
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       mobileRole: "detail",
       cell: (row) => (
         <Button variant="secondary" disabled={busy} onClick={() => void openCapa(row.id)}>
-          Open
+          {t("hse.capa.open")}
         </Button>
       ),
     },
@@ -364,7 +378,7 @@ export function HseAdvancedMonitoringCapaPage() {
 
   const indicatorColumns: Column<HseIndicatorSnapshot>[] = [
     {
-      header: "Window",
+      header: t("hse.capa.colWindow"),
       cell: (row) => (
         <span className="text-sm">
           {formatDateShort(row.windowStart)} → {formatDateShort(row.windowEnd)}
@@ -372,29 +386,37 @@ export function HseAdvancedMonitoringCapaPage() {
       ),
     },
     {
-      header: "Exposure hours",
+      header: t("hse.capa.colExposure"),
       className: "text-right",
-      cell: (row) => <span className="font-mono text-sm">{row.exposureHours ?? "—"}</span>,
+      cell: (row) => (
+        <span className="font-mono text-sm">{row.exposureHours ?? t("hse.common.notAvailable")}</span>
+      ),
     },
     {
-      header: "Incidents / LTI",
+      header: t("hse.capa.colIncidents"),
       className: "text-right",
       cell: (row) => <span className="font-mono text-sm">{row.incidentCount} / {row.lostTimeIncidentCount}</span>,
     },
     {
-      header: "IFR",
+      header: t("hse.capa.colIfr"),
       className: "text-right",
-      cell: (row) => <span className="font-mono text-sm">{row.incidentFrequencyRate ?? "—"}</span>,
+      cell: (row) => (
+        <span className="font-mono text-sm">{row.incidentFrequencyRate ?? t("hse.common.notAvailable")}</span>
+      ),
     },
     {
-      header: "Severity rate",
+      header: t("hse.capa.colSeverityRate"),
       className: "text-right",
-      cell: (row) => <span className="font-mono text-sm">{row.severityRate ?? "—"}</span>,
+      cell: (row) => (
+        <span className="font-mono text-sm">{row.severityRate ?? t("hse.common.notAvailable")}</span>
+      ),
     },
     {
-      header: "CAPA closure",
+      header: t("hse.capa.colClosure"),
       className: "text-right",
-      cell: (row) => <span className="font-mono text-sm">{row.capaClosureRate ?? "—"}</span>,
+      cell: (row) => (
+        <span className="font-mono text-sm">{row.capaClosureRate ?? t("hse.common.notAvailable")}</span>
+      ),
     },
   ];
 
@@ -403,8 +425,8 @@ export function HseAdvancedMonitoringCapaPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="HSE Monitoring & CAPA"
-        subtitle="Threshold monitoring with breach flags, corrective and preventive actions, and the frozen indicator snapshots derived from them."
+        title={t("hse.capa.title")}
+        subtitle={t("hse.capa.subtitle")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -416,7 +438,7 @@ export function HseAdvancedMonitoringCapaPage() {
         <div className="space-y-6">
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Monitoring Points</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.capa.points")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -432,20 +454,20 @@ export function HseAdvancedMonitoringCapaPage() {
                   })
                 }
               >
-                + Point
+                + {t("hse.capa.addPoint")}
               </Button>
             </div>
             <DataTable
               columns={pointColumns}
               rows={points}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No monitoring points" description="Define the first parameter to watch." />}
+              empty={<EmptyState title={t("hse.capa.noPointsTitle")} description={t("hse.capa.noPointsDescription")} />}
             />
           </div>
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">CAPA</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.capa.capa")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -462,27 +484,27 @@ export function HseAdvancedMonitoringCapaPage() {
                   })
                 }
               >
-                + CAPA
+                + {t("hse.capa.addCapa")}
               </Button>
             </div>
             <DataTable
               columns={capaColumns}
               rows={capas}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No CAPA" description="Raise the first corrective action." />}
+              empty={<EmptyState title={t("hse.capa.noCapaTitle")} description={t("hse.capa.noCapaDescription")} />}
             />
           </div>
 
           <div>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Indicator Snapshots</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.capa.indicators")}</h2>
             <DataTable
               columns={indicatorColumns}
               rows={indicators}
               keyOf={(row) => row.id}
               empty={
                 <EmptyState
-                  title="No snapshots"
-                  description="Indicators are frozen per window; nothing has been computed yet."
+                  title={t("hse.capa.noSnapshotsTitle")}
+                  description={t("hse.capa.noSnapshotsDescription")}
                 />
               }
             />
@@ -492,36 +514,36 @@ export function HseAdvancedMonitoringCapaPage() {
 
       {modal.kind === "create-point" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Create Monitoring Point</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.capa.createPoint")}</h2>
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Code" required>
+              <Field label={t("fin.common.code")} required>
                 <Input value={modal.code} onChange={(e) => setModal({ ...modal, code: e.target.value })} />
               </Field>
-              <Field label="Name" required>
+              <Field label={t("fin.common.name")} required>
                 <Input value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} />
               </Field>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Parameter code" required hint="e.g. noise_dba, dust_mg_m3">
+              <Field label={t("hse.capa.parameterCode")} required hint={t("hse.capa.parameterHint")}>
                 <Input
                   value={modal.parameterCode}
                   onChange={(e) => setModal({ ...modal, parameterCode: e.target.value })}
                 />
               </Field>
-              <Field label="Unit" required>
+              <Field label={t("hse.capa.unit")} required>
                 <Input value={modal.unit} onChange={(e) => setModal({ ...modal, unit: e.target.value })} />
               </Field>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Threshold min" hint="Leave empty for no lower bound.">
+              <Field label={t("hse.capa.thresholdMin")} hint={t("hse.capa.thresholdMinHint")}>
                 <Input
                   inputMode="decimal"
                   value={modal.thresholdMin}
                   onChange={(e) => setModal({ ...modal, thresholdMin: e.target.value })}
                 />
               </Field>
-              <Field label="Threshold max" hint="Leave empty for no upper bound.">
+              <Field label={t("hse.capa.thresholdMax")} hint={t("hse.capa.thresholdMaxHint")}>
                 <Input
                   inputMode="decimal"
                   value={modal.thresholdMax}
@@ -532,10 +554,10 @@ export function HseAdvancedMonitoringCapaPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => createPoint()}>
-              Create
+              {t("fin.common.create")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
@@ -545,29 +567,32 @@ export function HseAdvancedMonitoringCapaPage() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">
-              Readings — {currentPoint()?.name ?? ""} ({currentPoint()?.unit ?? ""})
+              {t("hse.capa.readingsFor", {
+                name: currentPoint()?.name ?? "",
+                unit: currentPoint()?.unit ?? "",
+              })}
             </h2>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Close
+              {t("common.close")}
             </Button>
           </div>
 
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <Field label="Measured at" required>
+            <Field label={t("hse.capa.measuredAt")} required>
               <Input
                 type="datetime-local"
                 value={readingForm.measuredAt}
                 onChange={(e) => setReadingForm({ ...readingForm, measuredAt: e.target.value })}
               />
             </Field>
-            <Field label="Value" required>
+            <Field label={t("hse.capa.value")} required>
               <Input
                 inputMode="decimal"
                 value={readingForm.value}
                 onChange={(e) => setReadingForm({ ...readingForm, value: e.target.value })}
               />
             </Field>
-            <Field label="Note">
+            <Field label={t("hse.capa.note")}>
               <Input
                 value={readingForm.note}
                 onChange={(e) => setReadingForm({ ...readingForm, note: e.target.value })}
@@ -575,13 +600,13 @@ export function HseAdvancedMonitoringCapaPage() {
             </Field>
             <div className="flex items-end">
               <Button disabled={busy} onClick={() => recordReading(modal.pointId)}>
-                Record reading
+                {t("hse.capa.recordReading")}
               </Button>
             </div>
           </div>
 
           {readings.length === 0 ? (
-            <EmptyState title="No readings" description="Record the first measurement." />
+            <EmptyState title={t("hse.capa.noReadingsTitle")} description={t("hse.capa.noReadingsDescription")} />
           ) : (
             <ul className="divide-y divide-line">
               {readings.map((reading) => (
@@ -591,9 +616,9 @@ export function HseAdvancedMonitoringCapaPage() {
                     {reading.value} {currentPoint()?.unit ?? ""}
                   </span>
                   {reading.isBreach ? (
-                    <StatusPill tone="danger">Breach</StatusPill>
+                    <StatusPill tone="danger">{t("hse.capa.breach")}</StatusPill>
                   ) : (
-                    <StatusPill tone="success">Within</StatusPill>
+                    <StatusPill tone="success">{t("hse.capa.within")}</StatusPill>
                   )}
                 </li>
               ))}
@@ -604,12 +629,12 @@ export function HseAdvancedMonitoringCapaPage() {
 
       {modal.kind === "create-capa" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Raise CAPA</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.capa.raiseCapa")}</h2>
           <div className="space-y-3">
-            <Field label="Title" required>
+            <Field label={t("hse.common.title")} required>
               <Input value={modal.title} onChange={(e) => setModal({ ...modal, title: e.target.value })} />
             </Field>
-            <Field label="Description">
+            <Field label={t("fin.common.description")}>
               <Textarea
                 rows={2}
                 value={modal.description}
@@ -617,21 +642,21 @@ export function HseAdvancedMonitoringCapaPage() {
               />
             </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Action type" required>
+              <Field label={t("hse.capa.actionType")} required>
                 <Select
                   value={modal.actionType}
                   onChange={(e) => setModal({ ...modal, actionType: e.target.value as CapaActionType })}
                 >
-                  <option value="corrective">Corrective</option>
-                  <option value="preventive">Preventive</option>
+                  <option value="corrective">{t("hse.capa.corrective")}</option>
+                  <option value="preventive">{t("hse.capa.preventive")}</option>
                 </Select>
               </Field>
-              <Field label="Due date">
+              <Field label={t("hse.capa.dueDate")}>
                 <Input type="date" value={modal.dueDate} onChange={(e) => setModal({ ...modal, dueDate: e.target.value })} />
               </Field>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Anchored to" required hint="At least one anchor is required.">
+              <Field label={t("hse.capa.anchoredTo")} required hint={t("hse.capa.anchorHint")}>
                 <Select
                   value={modal.anchorKind}
                   onChange={(e) =>
@@ -642,22 +667,22 @@ export function HseAdvancedMonitoringCapaPage() {
                     })
                   }
                 >
-                  <option value="hseRecordId">HSE record</option>
-                  <option value="investigationId">Investigation</option>
-                  <option value="auditFindingId">Audit finding</option>
-                  <option value="monitoringReadingId">Monitoring reading</option>
-                  <option value="coreFollowUpId">Core follow-up</option>
+                  <option value="hseRecordId">{t("hse.capa.anchorHseRecord")}</option>
+                  <option value="investigationId">{t("hse.capa.anchorInvestigation")}</option>
+                  <option value="auditFindingId">{t("hse.capa.anchorAuditFinding")}</option>
+                  <option value="monitoringReadingId">{t("hse.capa.anchorReading")}</option>
+                  <option value="coreFollowUpId">{t("hse.capa.anchorFollowUp")}</option>
                 </Select>
               </Field>
-              <Field label="Anchor ID" required>
+              <Field label={t("hse.capa.anchorId")} required>
                 <Input
                   value={modal.anchorValue}
                   onChange={(e) => setModal({ ...modal, anchorValue: e.target.value })}
-                  placeholder="Paste the referenced ID"
+                  placeholder={t("hse.capa.anchorIdPlaceholder")}
                 />
               </Field>
             </div>
-            <Field label="Root cause">
+            <Field label={t("hse.capa.rootCause")}>
               <Textarea
                 rows={2}
                 value={modal.rootCause}
@@ -667,10 +692,10 @@ export function HseAdvancedMonitoringCapaPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => createCapa()}>
-              Raise
+              {t("hse.capa.raise")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
@@ -681,19 +706,19 @@ export function HseAdvancedMonitoringCapaPage() {
           <div className="mb-3 flex items-start justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-ink">
-                {capaDetail.capa.capaNumber} — {capaDetail.capa.title}
+                {capaDetail.capa.capaNumber} · {capaDetail.capa.title}
               </h2>
               <p className="mt-0.5 text-sm text-ink-dim">
-                {capaDetail.capa.rootCause ?? "No root cause recorded"}
+                {capaDetail.capa.rootCause ?? t("hse.capa.noRootCause")}
               </p>
             </div>
             <StatusPill tone={CAPA_STATUS_TONE[capaDetail.capa.status]}>
-              {CAPA_STATUS_LABEL[capaDetail.capa.status]}
+              {t(CAPA_STATUS_LABEL_KEYS[capaDetail.capa.status])}
             </StatusPill>
           </div>
 
           <div className="mb-4 flex flex-wrap items-end gap-2">
-            <Field label="Change status">
+            <Field label={t("hse.capa.changeStatus")}>
               <Select
                 value={capaDetail.capa.status}
                 disabled={busy}
@@ -701,7 +726,7 @@ export function HseAdvancedMonitoringCapaPage() {
               >
                 {CAPA_STATUSES.map((status) => (
                   <option key={status} value={status}>
-                    {CAPA_STATUS_LABEL[status]}
+                    {t(CAPA_STATUS_LABEL_KEYS[status])}
                   </option>
                 ))}
               </Select>
@@ -709,9 +734,9 @@ export function HseAdvancedMonitoringCapaPage() {
           </div>
 
           <div className="space-y-3 border-t border-line pt-3">
-            <h3 className="text-sm font-semibold text-ink">Actions</h3>
+            <h3 className="text-sm font-semibold text-ink">{t("hse.capa.actions")}</h3>
             {capaDetail.actions.length === 0 ? (
-              <p className="text-sm text-ink-dim">No actions yet.</p>
+              <p className="text-sm text-ink-dim">{t("hse.capa.noActions")}</p>
             ) : (
               <ul className="divide-y divide-line">
                 {capaDetail.actions.map((action) => (
@@ -719,18 +744,20 @@ export function HseAdvancedMonitoringCapaPage() {
                     <div>
                       <div className="text-sm text-ink">{action.description}</div>
                       <div className="text-xs text-ink-dim">
-                        {action.dueDate ? `Due ${formatDateShort(action.dueDate)}` : "No due date"}
+                        {action.dueDate
+                          ? `${t("hse.common.due")} ${formatDateShort(action.dueDate)}`
+                          : t("hse.capa.noDueDate")}
                       </div>
                     </div>
                     {action.completedAt ? (
-                      <StatusPill tone="success">Done</StatusPill>
+                      <StatusPill tone="success">{t("hse.capa.done")}</StatusPill>
                     ) : (
                       <Button
                         variant="secondary"
                         disabled={busy}
                         onClick={() => completeAction(capaDetail.capa.id, action.id)}
                       >
-                        Complete
+                        {t("hse.capa.complete")}
                       </Button>
                     )}
                   </li>
@@ -738,13 +765,13 @@ export function HseAdvancedMonitoringCapaPage() {
               </ul>
             )}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <Field label="New action">
+              <Field label={t("hse.capa.newAction")}>
                 <Input
                   value={actionForm.description}
                   onChange={(e) => setActionForm({ ...actionForm, description: e.target.value })}
                 />
               </Field>
-              <Field label="Due date">
+              <Field label={t("hse.capa.dueDate")}>
                 <Input
                   type="date"
                   value={actionForm.dueDate}
@@ -757,7 +784,7 @@ export function HseAdvancedMonitoringCapaPage() {
                   disabled={busy || capaDetail.capa.status === "closed" || capaDetail.capa.status === "cancelled"}
                   onClick={() => addAction(capaDetail.capa.id)}
                 >
-                  + Action
+                  + {t("hse.capa.addAction")}
                 </Button>
               </div>
             </div>
@@ -765,7 +792,7 @@ export function HseAdvancedMonitoringCapaPage() {
 
           <div className="mt-3">
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Close
+              {t("common.close")}
             </Button>
           </div>
         </Card>

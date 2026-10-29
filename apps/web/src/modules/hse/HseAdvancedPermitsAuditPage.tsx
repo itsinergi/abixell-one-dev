@@ -28,6 +28,8 @@ import {
 } from "../../shell/components/ui";
 import { formatDate, formatDateShort, statusTone } from "../../shared/format";
 import { useAuth } from "../../auth/AuthContext";
+import { useT } from "../../i18n/LocaleProvider";
+import type { MessageKey } from "../../i18n/t";
 import {
   ApiError,
   api,
@@ -41,19 +43,19 @@ import {
   type HsePermitDetail,
 } from "../../lib/api";
 
-const PERMIT_TYPES = [
-  { code: "hot_work", label: "Hot work" },
-  { code: "confined_space", label: "Confined space" },
-  { code: "work_at_height", label: "Work at height" },
-  { code: "electrical_isolation", label: "Electrical isolation" },
-  { code: "excavation", label: "Excavation" },
-  { code: "general", label: "General" },
+const PERMIT_TYPES: { code: string; labelKey: MessageKey }[] = [
+  { code: "hot_work", labelKey: "hse.permit.typeHotWork" },
+  { code: "confined_space", labelKey: "hse.permit.typeConfinedSpace" },
+  { code: "work_at_height", labelKey: "hse.permit.typeWorkAtHeight" },
+  { code: "electrical_isolation", labelKey: "hse.permit.typeElectricalIsolation" },
+  { code: "excavation", labelKey: "hse.permit.typeExcavation" },
+  { code: "general", labelKey: "hse.permit.typeGeneral" },
 ];
 
-const FINDING_TYPE_LABEL: Record<AuditFindingType, string> = {
-  observation: "Observation",
-  nonconformity: "Nonconformity",
-  major_nonconformity: "Major nonconformity",
+const FINDING_TYPE_LABEL_KEYS: Record<AuditFindingType, MessageKey> = {
+  observation: "hse.permit.findingObservation",
+  nonconformity: "hse.permit.findingNonconformity",
+  major_nonconformity: "hse.permit.findingMajor",
 };
 
 const FINDING_TYPE_TONE: Record<AuditFindingType, "neutral" | "warning" | "danger"> = {
@@ -91,6 +93,7 @@ const nowLocal = () => new Date().toISOString().slice(0, 16);
 export function HseAdvancedPermitsAuditPage() {
   const { session } = useAuth();
   const token = session?.accessToken ?? "";
+  const t = useT();
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -120,11 +123,11 @@ export function HseAdvancedPermitsAuditPage() {
       setPermits(p || []);
       setProgrammes(g || []);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load permits and audit programmes.");
+      setError(err instanceof ApiError ? err.message : t("hse.permit.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -140,7 +143,7 @@ export function HseAdvancedPermitsAuditPage() {
       setPermitDetail(await api.hseAdvPermit(token, permitId));
       setModal({ kind: "permit-detail", permitId });
     } catch (err) {
-      fail(err, "Failed to load permit.");
+      fail(err, t("hse.permit.permitFailed"));
     } finally {
       setBusy(false);
     }
@@ -149,15 +152,15 @@ export function HseAdvancedPermitsAuditPage() {
   const createPermit = async () => {
     if (modal.kind !== "create-permit") return;
     if (!modal.permitTypeCode || !modal.title.trim()) {
-      setError("Permit type and title are required.");
+      setError(t("hse.permit.permitRequired"));
       return;
     }
     if (!modal.validFrom || !modal.validTo) {
-      setError("Validity window is required.");
+      setError(t("hse.permit.validityRequired"));
       return;
     }
     if (modal.validTo <= modal.validFrom) {
-      setError("Valid to must be after valid from.");
+      setError(t("hse.permit.validityOrder"));
       return;
     }
     setBusy(true);
@@ -171,11 +174,11 @@ export function HseAdvancedPermitsAuditPage() {
         validFrom: modal.validFrom,
         validTo: modal.validTo,
       });
-      setNotice(`Permit ${permit.permitNumber} raised.`);
+      setNotice(t("hse.permit.raised", { number: permit.permitNumber }));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to raise permit.");
+      fail(err, t("hse.permit.raiseFailed"));
     } finally {
       setBusy(false);
     }
@@ -186,11 +189,11 @@ export function HseAdvancedPermitsAuditPage() {
     setError(null);
     try {
       await api.startHseAdvPermitLifecycle(token, permitId);
-      setNotice("Permit lifecycle started.");
+      setNotice(t("hse.permit.lifecycleStarted"));
       await openPermit(permitId);
       await load();
     } catch (err) {
-      fail(err, "Failed to start the permit lifecycle.");
+      fail(err, t("hse.permit.lifecycleFailed"));
     } finally {
       setBusy(false);
     }
@@ -201,10 +204,10 @@ export function HseAdvancedPermitsAuditPage() {
     setError(null);
     try {
       setPermitDetail(await api.actOnHseAdvPermit(token, permitId, actionCode));
-      setNotice("Permit action applied.");
+      setNotice(t("hse.permit.actionApplied"));
       await load();
     } catch (err) {
-      fail(err, "Failed to apply the permit action.");
+      fail(err, t("hse.permit.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -214,16 +217,16 @@ export function HseAdvancedPermitsAuditPage() {
     if (modal.kind !== "create-programme") return;
     const frequencyDays = Number(modal.frequencyDays);
     if (!modal.code.trim() || !modal.name.trim()) {
-      setError("Code and name are required.");
+      setError(t("hse.inv.codeNameRequired"));
       return;
     }
     if (!Number.isInteger(frequencyDays) || frequencyDays <= 0) {
-      setError("Frequency must be a positive whole number of days.");
+      setError(t("hse.permit.frequencyPositive"));
       return;
     }
     const codes = modal.checklist.map((item) => item.code.trim());
     if (new Set(codes).size !== codes.length) {
-      setError("Checklist item codes must be unique.");
+      setError(t("hse.permit.checklistUnique"));
       return;
     }
     setBusy(true);
@@ -238,11 +241,11 @@ export function HseAdvancedPermitsAuditPage() {
           .filter((item) => item.code.trim() && item.question.trim())
           .map((item) => ({ code: item.code.trim(), question: item.question.trim(), isMandatory: item.isMandatory })),
       });
-      setNotice("Audit programme created.");
+      setNotice(t("hse.permit.programmeCreated"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to create the audit programme.");
+      fail(err, t("hse.permit.programmeFailed"));
     } finally {
       setBusy(false);
     }
@@ -255,23 +258,23 @@ export function HseAdvancedPermitsAuditPage() {
       setOccurrences((await api.hseAdvOccurrences(token, programmeId)) || []);
       setModal({ kind: "programme-detail", programmeId });
     } catch (err) {
-      fail(err, "Failed to load occurrences.");
+      fail(err, t("hse.permit.occurrencesFailed"));
     } finally {
       setBusy(false);
     }
   };
 
   const scheduleOccurrence = async (programmeId: string) => {
-    const scheduledFor = window.prompt("Scheduled date (YYYY-MM-DD)", today());
+    const scheduledFor = window.prompt(t("hse.permit.schedulePrompt"), today());
     if (!scheduledFor) return;
     setBusy(true);
     setError(null);
     try {
       await api.scheduleHseAdvOccurrence(token, programmeId, scheduledFor);
-      setNotice("Occurrence scheduled.");
+      setNotice(t("hse.permit.scheduled"));
       await openProgramme(programmeId);
     } catch (err) {
-      fail(err, "Failed to schedule the occurrence.");
+      fail(err, t("hse.permit.scheduleFailed"));
     } finally {
       setBusy(false);
     }
@@ -287,7 +290,7 @@ export function HseAdvancedPermitsAuditPage() {
       setNewFinding({ findingType: "observation", checklistItemCode: "", description: "" });
       setModal({ kind: "occurrence-detail", occurrenceId, programmeId });
     } catch (err) {
-      fail(err, "Failed to load the occurrence.");
+      fail(err, t("hse.permit.occurrenceLoadFailed"));
     } finally {
       setBusy(false);
     }
@@ -303,17 +306,17 @@ export function HseAdvancedPermitsAuditPage() {
       (item) => item.isMandatory && !occurrenceResults[item.code],
     );
     if (unanswered.length > 0) {
-      setError(`Mandatory items have no result: ${unanswered.map((i) => i.code).join(", ")}`);
+      setError(t("hse.permit.mandatoryMissing", { codes: unanswered.map((i) => i.code).join(", ") }));
       return;
     }
     setBusy(true);
     setError(null);
     try {
       await api.completeHseAdvOccurrence(token, occurrenceId, { results, notes: occurrenceNotes.trim() || null });
-      setNotice("Occurrence completed.");
+      setNotice(t("hse.permit.occurrenceCompleted"));
       await openProgramme(programmeId);
     } catch (err) {
-      fail(err, "Failed to complete the occurrence.");
+      fail(err, t("hse.permit.occurrenceCompleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -321,7 +324,7 @@ export function HseAdvancedPermitsAuditPage() {
 
   const addFinding = async (occurrenceId: string) => {
     if (!newFinding.description.trim()) {
-      setError("A finding needs a description.");
+      setError(t("hse.permit.findingDescriptionRequired"));
       return;
     }
     setBusy(true);
@@ -332,25 +335,28 @@ export function HseAdvancedPermitsAuditPage() {
         checklistItemCode: newFinding.checklistItemCode || null,
         description: newFinding.description.trim(),
       });
-      setNotice("Finding recorded.");
+      setNotice(t("hse.permit.findingRecorded"));
       setFindings((await api.hseAdvFindings(token, occurrenceId)) || []);
       setNewFinding({ findingType: "observation", checklistItemCode: "", description: "" });
     } catch (err) {
-      fail(err, "Failed to record the finding.");
+      fail(err, t("hse.permit.findingFailed"));
     } finally {
       setBusy(false);
     }
   };
 
   const permitColumns: Column<HsePermit>[] = [
-    { header: "Number", cell: (row) => <span className="font-mono text-sm">{row.permitNumber}</span> },
-    { header: "Title", mobileRole: "title", cell: (row) => <span>{row.title}</span> },
+    { header: t("hse.register.colNumber"), cell: (row) => <span className="font-mono text-sm">{row.permitNumber}</span> },
+    { header: t("hse.common.title"), mobileRole: "title", cell: (row) => <span>{row.title}</span> },
     {
-      header: "Type",
-      cell: (row) => <Badge>{PERMIT_TYPES.find((t) => t.code === row.permitTypeCode)?.label ?? row.permitTypeCode}</Badge>,
+      header: t("fin.common.type"),
+      cell: (row) => {
+        const pt = PERMIT_TYPES.find((p) => p.code === row.permitTypeCode);
+        return <Badge>{pt ? t(pt.labelKey) : row.permitTypeCode}</Badge>;
+      },
     },
     {
-      header: "Valid",
+      header: t("hse.permit.colValid"),
       cell: (row) => (
         <span className="text-sm text-ink-dim">
           {formatDateShort(row.validFrom)} → {formatDateShort(row.validTo)}
@@ -358,55 +364,63 @@ export function HseAdvancedPermitsAuditPage() {
       ),
     },
     {
-      header: "Lifecycle",
+      header: t("hse.permit.colLifecycle"),
       mobileRole: "status",
       cell: (row) =>
         row.workflowInstanceId ? (
-          <StatusPill tone="info">In workflow</StatusPill>
+          <StatusPill tone="info">{t("hse.permit.inWorkflow")}</StatusPill>
         ) : (
-          <StatusPill tone="neutral">Not started</StatusPill>
+          <StatusPill tone="neutral">{t("hse.permit.notStarted")}</StatusPill>
         ),
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       mobileRole: "detail",
       cell: (row) => (
         <Button variant="secondary" disabled={busy} onClick={() => void openPermit(row.id)}>
-          Open
+          {t("hse.capa.open")}
         </Button>
       ),
     },
   ];
 
   const programmeColumns: Column<HseAuditProgramme>[] = [
-    { header: "Code", cell: (row) => <span className="font-mono text-sm">{row.code}</span> },
-    { header: "Name", mobileRole: "title", cell: (row) => <span>{row.name}</span> },
+    { header: t("fin.common.code"), cell: (row) => <span className="font-mono text-sm">{row.code}</span> },
+    { header: t("fin.common.name"), mobileRole: "title", cell: (row) => <span>{row.name}</span> },
     {
-      header: "Type",
-      cell: (row) => <Badge>{row.programmeType === "audit" ? "Audit" : "Inspection"}</Badge>,
-    },
-    {
-      header: "Frequency",
-      className: "text-right",
-      cell: (row) => <span className="text-sm">{row.frequencyDays} days</span>,
-    },
-    {
-      header: "Last scheduled",
-      cell: (row) => <span className="text-sm text-ink-dim">{row.lastScheduledFor ? formatDateShort(row.lastScheduledFor) : "—"}</span>,
-    },
-    {
-      header: "Status",
-      mobileRole: "status",
+      header: t("fin.common.type"),
       cell: (row) => (
-        <StatusPill tone={row.isActive ? "success" : "neutral"}>{row.isActive ? "Active" : "Inactive"}</StatusPill>
+        <Badge>{row.programmeType === "audit" ? t("hse.permit.audit") : t("hse.permit.inspection")}</Badge>
       ),
     },
     {
-      header: "Actions",
+      header: t("hse.permit.colFrequency"),
+      className: "text-right",
+      cell: (row) => <span className="text-sm">{t("hse.permit.days", { count: row.frequencyDays })}</span>,
+    },
+    {
+      header: t("hse.permit.colLastScheduled"),
+      cell: (row) => (
+        <span className="text-sm text-ink-dim">
+          {row.lastScheduledFor ? formatDateShort(row.lastScheduledFor) : t("hse.common.notAvailable")}
+        </span>
+      ),
+    },
+    {
+      header: t("fin.common.status"),
+      mobileRole: "status",
+      cell: (row) => (
+        <StatusPill tone={row.isActive ? "success" : "neutral"}>
+          {row.isActive ? t("hse.inv.active") : t("hse.inv.inactive")}
+        </StatusPill>
+      ),
+    },
+    {
+      header: t("fin.common.actions"),
       mobileRole: "detail",
       cell: (row) => (
         <Button variant="secondary" disabled={busy} onClick={() => void openProgramme(row.id)}>
-          Occurrences
+          {t("hse.permit.colOccurrences")}
         </Button>
       ),
     },
@@ -419,8 +433,8 @@ export function HseAdvancedPermitsAuditPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="HSE Permits & Audit"
-        subtitle="Work permits driven by the Workflow Engine, plus scheduled audit programmes, their occurrences and findings."
+        title={t("hse.permit.title")}
+        subtitle={t("hse.permit.subtitle")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -432,7 +446,7 @@ export function HseAdvancedPermitsAuditPage() {
         <div className="space-y-6">
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Work Permits</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.permit.permits")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -448,20 +462,20 @@ export function HseAdvancedPermitsAuditPage() {
                   })
                 }
               >
-                + Permit
+                + {t("hse.permit.addPermit")}
               </Button>
             </div>
             <DataTable
               columns={permitColumns}
               rows={permits}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No permits" description="Raise the first work permit." />}
+              empty={<EmptyState title={t("hse.permit.noPermitsTitle")} description={t("hse.permit.noPermitsDescription")} />}
             />
           </div>
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Audit Programmes</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.permit.programmes")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -476,14 +490,14 @@ export function HseAdvancedPermitsAuditPage() {
                   })
                 }
               >
-                + Programme
+                + {t("hse.permit.addProgramme")}
               </Button>
             </div>
             <DataTable
               columns={programmeColumns}
               rows={programmes}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No programmes" description="Create an inspection or audit programme." />}
+              empty={<EmptyState title={t("hse.permit.noProgrammesTitle")} description={t("hse.permit.noProgrammesDescription")} />}
             />
           </div>
         </div>
@@ -491,45 +505,45 @@ export function HseAdvancedPermitsAuditPage() {
 
       {modal.kind === "create-permit" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Raise Permit</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.permit.raisePermit")}</h2>
           <div className="space-y-3">
-            <Field label="Permit type" required>
+            <Field label={t("hse.permit.permitType")} required>
               <Select
                 value={modal.permitTypeCode}
                 onChange={(e) => setModal({ ...modal, permitTypeCode: e.target.value })}
               >
-                {PERMIT_TYPES.map((t) => (
-                  <option key={t.code} value={t.code}>
-                    {t.label}
+                {PERMIT_TYPES.map((pt) => (
+                  <option key={pt.code} value={pt.code}>
+                    {t(pt.labelKey)}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="Title" required>
+            <Field label={t("hse.common.title")} required>
               <Input value={modal.title} onChange={(e) => setModal({ ...modal, title: e.target.value })} />
             </Field>
-            <Field label="Description">
+            <Field label={t("fin.common.description")}>
               <Textarea
                 rows={2}
                 value={modal.description}
                 onChange={(e) => setModal({ ...modal, description: e.target.value })}
               />
             </Field>
-            <Field label="Location detail">
+            <Field label={t("hse.permit.locationDetail")}>
               <Input
                 value={modal.locationDetail}
                 onChange={(e) => setModal({ ...modal, locationDetail: e.target.value })}
               />
             </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Valid from" required>
+              <Field label={t("hse.permit.validFrom")} required>
                 <Input
                   type="datetime-local"
                   value={modal.validFrom}
                   onChange={(e) => setModal({ ...modal, validFrom: e.target.value })}
                 />
               </Field>
-              <Field label="Valid to" required>
+              <Field label={t("hse.permit.validTo")} required>
                 <Input
                   type="datetime-local"
                   value={modal.validTo}
@@ -540,10 +554,10 @@ export function HseAdvancedPermitsAuditPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => createPermit()}>
-              Raise
+              {t("hse.capa.raise")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
@@ -554,10 +568,13 @@ export function HseAdvancedPermitsAuditPage() {
           <div className="mb-3 flex items-start justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-ink">
-                {permitDetail.permit.permitNumber} — {permitDetail.permit.title}
+                {permitDetail.permit.permitNumber} · {permitDetail.permit.title}
               </h2>
               <p className="mt-0.5 text-sm text-ink-dim">
-                Valid {formatDate(permitDetail.permit.validFrom)} → {formatDate(permitDetail.permit.validTo)}
+                {t("hse.permit.validWindow", {
+                  from: formatDate(permitDetail.permit.validFrom),
+                  to: formatDate(permitDetail.permit.validTo),
+                })}
               </p>
             </div>
             {permitDetail.status ? (
@@ -565,7 +582,7 @@ export function HseAdvancedPermitsAuditPage() {
                 {permitDetail.status.stepName ?? permitDetail.status.instanceStatus}
               </StatusPill>
             ) : (
-              <StatusPill tone="neutral">Not started</StatusPill>
+              <StatusPill tone="neutral">{t("hse.permit.notStarted")}</StatusPill>
             )}
           </div>
 
@@ -573,8 +590,10 @@ export function HseAdvancedPermitsAuditPage() {
             <ul className="mb-3 space-y-1 text-sm text-ink-dim">
               {permitDetail.permit.isolationConditions.map((c, i) => (
                 <li key={i}>
-                  <span className="font-medium text-ink">{c.conditionType}</span> — {c.description}
-                  {c.verifiedAt ? ` (verified ${formatDate(c.verifiedAt)})` : " (not verified)"}
+                  <span className="font-medium text-ink">{c.conditionType}</span> · {c.description}
+                  {c.verifiedAt
+                    ? ` (${t("hse.permit.isolationVerified", { date: formatDate(c.verifiedAt) })})`
+                    : ` (${t("hse.permit.isolationUnverified")})`}
                 </li>
               ))}
             </ul>
@@ -583,7 +602,7 @@ export function HseAdvancedPermitsAuditPage() {
           <div className="flex flex-wrap gap-2">
             {!permitDetail.permit.workflowInstanceId ? (
               <Button disabled={busy} onClick={() => startLifecycle(permitDetail.permit.id)}>
-                Start lifecycle
+                {t("hse.permit.startLifecycle")}
               </Button>
             ) : (
               permitDetail.availableActions.map((action) => (
@@ -597,7 +616,7 @@ export function HseAdvancedPermitsAuditPage() {
               ))
             )}
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Close
+              {t("common.close")}
             </Button>
           </div>
         </Card>
@@ -605,27 +624,27 @@ export function HseAdvancedPermitsAuditPage() {
 
       {modal.kind === "create-programme" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Create Audit Programme</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.permit.createProgramme")}</h2>
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Code" required>
+              <Field label={t("fin.common.code")} required>
                 <Input value={modal.code} onChange={(e) => setModal({ ...modal, code: e.target.value })} />
               </Field>
-              <Field label="Name" required>
+              <Field label={t("fin.common.name")} required>
                 <Input value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} />
               </Field>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Type" required>
+              <Field label={t("fin.common.type")} required>
                 <Select
                   value={modal.programmeType}
                   onChange={(e) => setModal({ ...modal, programmeType: e.target.value as AuditProgrammeType })}
                 >
-                  <option value="inspection">Inspection</option>
-                  <option value="audit">Audit</option>
+                  <option value="inspection">{t("hse.permit.inspection")}</option>
+                  <option value="audit">{t("hse.permit.audit")}</option>
                 </Select>
               </Field>
-              <Field label="Frequency (days)" required>
+              <Field label={t("hse.permit.frequencyDays")} required>
                 <Input
                   type="number"
                   min={1}
@@ -636,7 +655,7 @@ export function HseAdvancedPermitsAuditPage() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-ink-dim">Checklist</span>
+                <span className="text-sm font-medium text-ink-dim">{t("hse.permit.checklist")}</span>
                 <Button
                   variant="secondary"
                   onClick={() =>
@@ -646,13 +665,13 @@ export function HseAdvancedPermitsAuditPage() {
                     })
                   }
                 >
-                  + Item
+                  + {t("hse.permit.addItem")}
                 </Button>
               </div>
               {modal.checklist.map((item, index) => (
                 <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <Input
-                    placeholder="Code"
+                    placeholder={t("fin.common.code")}
                     value={item.code}
                     onChange={(e) =>
                       setModal({
@@ -664,7 +683,7 @@ export function HseAdvancedPermitsAuditPage() {
                     }
                   />
                   <Input
-                    placeholder="Question"
+                    placeholder={t("hse.permit.question")}
                     value={item.question}
                     onChange={(e) =>
                       setModal({
@@ -688,7 +707,7 @@ export function HseAdvancedPermitsAuditPage() {
                         })
                       }
                     />
-                    Mandatory
+                    {t("hse.permit.mandatory")}
                   </label>
                 </div>
               ))}
@@ -696,10 +715,10 @@ export function HseAdvancedPermitsAuditPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => createProgramme()}>
-              Create
+              {t("fin.common.create")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
@@ -709,19 +728,19 @@ export function HseAdvancedPermitsAuditPage() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">
-              Occurrences — {currentProgramme(modal.programmeId)?.name ?? ""}
+              {t("hse.permit.occurrencesFor", { name: currentProgramme(modal.programmeId)?.name ?? "" })}
             </h2>
             <div className="flex gap-2">
               <Button variant="secondary" disabled={busy} onClick={() => scheduleOccurrence(modal.programmeId)}>
-                + Schedule
+                + {t("hse.permit.schedule")}
               </Button>
               <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-                Close
+                {t("common.close")}
               </Button>
             </div>
           </div>
           {occurrences.length === 0 ? (
-            <EmptyState title="No occurrences" description="Schedule the first inspection." />
+            <EmptyState title={t("hse.permit.noOccurrencesTitle")} description={t("hse.permit.noOccurrencesDescription")} />
           ) : (
             <ul className="divide-y divide-line">
               {occurrences.map((occurrence) => (
@@ -729,21 +748,23 @@ export function HseAdvancedPermitsAuditPage() {
                   <div>
                     <div className="text-sm text-ink">{formatDateShort(occurrence.scheduledFor)}</div>
                     <div className="text-xs text-ink-dim">
-                      {occurrence.performedAt ? `Performed ${formatDate(occurrence.performedAt)}` : "Not performed"}
+                      {occurrence.performedAt
+                        ? t("hse.permit.performed", { date: formatDate(occurrence.performedAt) })
+                        : t("hse.permit.notPerformed")}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {occurrence.performedAt ? (
-                      <StatusPill tone="success">Complete</StatusPill>
+                      <StatusPill tone="success">{t("hse.permit.complete")}</StatusPill>
                     ) : (
-                      <StatusPill tone="warning">Pending</StatusPill>
+                      <StatusPill tone="warning">{t("hse.permit.pending")}</StatusPill>
                     )}
                     <Button
                       variant="secondary"
                       disabled={busy}
                       onClick={() => void openOccurrence(occurrence.id, modal.programmeId)}
                     >
-                      Open
+                      {t("hse.capa.open")}
                     </Button>
                   </div>
                 </li>
@@ -756,11 +777,13 @@ export function HseAdvancedPermitsAuditPage() {
       {modal.kind === "occurrence-detail" ? (
         <Card>
           <h2 className="mb-3 text-sm font-semibold text-ink">
-            Occurrence {currentOccurrence() ? formatDateShort(currentOccurrence()!.scheduledFor) : ""}
+            {t("hse.permit.occurrenceOn", {
+              date: currentOccurrence() ? formatDateShort(currentOccurrence()!.scheduledFor) : "",
+            })}
           </h2>
 
           {currentOccurrence()?.performedAt ? (
-            <Alert tone="info">This occurrence is complete; results are frozen.</Alert>
+            <Alert tone="info">{t("hse.permit.frozenNotice")}</Alert>
           ) : (
             <div className="space-y-3">
               {(currentProgramme(modal.programmeId)?.checklist ?? []).map((item) => (
@@ -769,32 +792,32 @@ export function HseAdvancedPermitsAuditPage() {
                     value={occurrenceResults[item.code] ?? ""}
                     onChange={(e) => setOccurrenceResults({ ...occurrenceResults, [item.code]: e.target.value })}
                   >
-                    <option value="">Not answered</option>
-                    <option value="pass">Pass</option>
-                    <option value="fail">Fail</option>
-                    <option value="not_applicable">Not applicable</option>
+                    <option value="">{t("hse.permit.notAnswered")}</option>
+                    <option value="pass">{t("hse.permit.pass")}</option>
+                    <option value="fail">{t("hse.permit.fail")}</option>
+                    <option value="not_applicable">{t("hse.permit.notApplicable")}</option>
                   </Select>
                 </Field>
               ))}
-              <Field label="Notes">
+              <Field label={t("hse.permit.notes")}>
                 <Textarea rows={2} value={occurrenceNotes} onChange={(e) => setOccurrenceNotes(e.target.value)} />
               </Field>
               <Button disabled={busy} onClick={() => completeOccurrence(modal.occurrenceId, modal.programmeId)}>
-                Complete occurrence
+                {t("hse.permit.completeOccurrence")}
               </Button>
             </div>
           )}
 
           <div className="mt-4 space-y-3 border-t border-line pt-3">
-            <h3 className="text-sm font-semibold text-ink">Findings</h3>
+            <h3 className="text-sm font-semibold text-ink">{t("hse.permit.findings")}</h3>
             {findings.length === 0 ? (
-              <p className="text-sm text-ink-dim">No findings recorded.</p>
+              <p className="text-sm text-ink-dim">{t("hse.permit.noFindings")}</p>
             ) : (
               <ul className="space-y-2">
                 {findings.map((finding) => (
                   <li key={finding.id} className="text-sm">
                     <StatusPill tone={FINDING_TYPE_TONE[finding.findingType]}>
-                      {FINDING_TYPE_LABEL[finding.findingType]}
+                      {t(FINDING_TYPE_LABEL_KEYS[finding.findingType])}
                     </StatusPill>{" "}
                     <span className="text-ink">{finding.description}</span>
                     {finding.checklistItemCode ? (
@@ -811,15 +834,15 @@ export function HseAdvancedPermitsAuditPage() {
                   setNewFinding({ ...newFinding, findingType: e.target.value as AuditFindingType })
                 }
               >
-                <option value="observation">Observation</option>
-                <option value="nonconformity">Nonconformity</option>
-                <option value="major_nonconformity">Major nonconformity</option>
+                <option value="observation">{t("hse.permit.findingObservation")}</option>
+                <option value="nonconformity">{t("hse.permit.findingNonconformity")}</option>
+                <option value="major_nonconformity">{t("hse.permit.findingMajor")}</option>
               </Select>
               <Select
                 value={newFinding.checklistItemCode}
                 onChange={(e) => setNewFinding({ ...newFinding, checklistItemCode: e.target.value })}
               >
-                <option value="">No checklist item</option>
+                <option value="">{t("hse.permit.noChecklistItem")}</option>
                 {(currentProgramme(modal.programmeId)?.checklist ?? []).map((item) => (
                   <option key={item.code} value={item.code}>
                     {item.code}
@@ -827,10 +850,10 @@ export function HseAdvancedPermitsAuditPage() {
                 ))}
               </Select>
               <Button variant="secondary" disabled={busy} onClick={() => addFinding(modal.occurrenceId)}>
-                + Finding
+                + {t("hse.permit.addFinding")}
               </Button>
             </div>
-            <Field label="Finding description">
+            <Field label={t("hse.permit.findingDescription")}>
               <Textarea
                 rows={2}
                 value={newFinding.description}
@@ -841,7 +864,7 @@ export function HseAdvancedPermitsAuditPage() {
 
           <div className="mt-3">
             <Button variant="ghost" disabled={busy} onClick={() => void openProgramme(modal.programmeId)}>
-              Back to occurrences
+              {t("hse.permit.backToOccurrences")}
             </Button>
           </div>
         </Card>

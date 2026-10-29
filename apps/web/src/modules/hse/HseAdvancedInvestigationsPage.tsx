@@ -28,6 +28,7 @@ import {
 } from "../../shell/components/ui";
 import { formatDate, formatDateShort } from "../../shared/format";
 import { useAuth } from "../../auth/AuthContext";
+import { useT } from "../../i18n/LocaleProvider";
 import {
   ApiError,
   api,
@@ -67,6 +68,7 @@ const ASSESSMENT_TYPE_LABEL: Record<RiskAssessmentType, string> = {
 export function HseAdvancedInvestigationsPage() {
   const { session } = useAuth();
   const token = session?.accessToken ?? "";
+  const t = useT();
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -98,11 +100,11 @@ export function HseAdvancedInvestigationsPage() {
       setMatrix(m || null);
       setAssessments(a || []);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load HSE investigations and risk data.");
+      setError(err instanceof ApiError ? err.message : t("hse.inv.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void load();
@@ -114,7 +116,7 @@ export function HseAdvancedInvestigationsPage() {
   const createFramework = async () => {
     if (modal.kind !== "create-framework") return;
     if (!modal.code.trim() || !modal.name.trim()) {
-      setError("Code and name are required.");
+      setError(t("hse.inv.codeNameRequired"));
       return;
     }
     setBusy(true);
@@ -129,11 +131,11 @@ export function HseAdvancedInvestigationsPage() {
           .map((c) => c.trim())
           .filter(Boolean),
       });
-      setNotice("Investigation framework created.");
+      setNotice(t("hse.inv.frameworkCreated"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to create framework.");
+      fail(err, t("hse.inv.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -142,18 +144,18 @@ export function HseAdvancedInvestigationsPage() {
   const startInvestigation = async () => {
     if (modal.kind !== "start-investigation") return;
     if (!modal.recordId || !modal.frameworkId) {
-      setError("Pick a record and a framework.");
+      setError(t("hse.inv.pickRecordFramework"));
       return;
     }
     setBusy(true);
     setError(null);
     try {
       await api.createHseAdvInvestigation(token, modal.recordId, { frameworkId: modal.frameworkId });
-      setNotice("Investigation started.");
+      setNotice(t("hse.inv.started"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to start investigation.");
+      fail(err, t("hse.inv.startFailed"));
     } finally {
       setBusy(false);
     }
@@ -162,7 +164,7 @@ export function HseAdvancedInvestigationsPage() {
   const saveInvestigation = async (conclude: boolean) => {
     if (modal.kind !== "conclude-investigation") return;
     if (conclude && !modal.rootCause.trim()) {
-      setError("An investigation cannot conclude without a root cause.");
+      setError(t("hse.inv.rootCauseRequired"));
       return;
     }
     setBusy(true);
@@ -174,11 +176,11 @@ export function HseAdvancedInvestigationsPage() {
         contributingFactors: modal.factors,
         concluded: conclude,
       });
-      setNotice(conclude ? "Investigation concluded." : "Investigation updated.");
+      setNotice(conclude ? t("hse.inv.concludedNotice") : t("hse.inv.updatedNotice"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to update investigation.");
+      fail(err, t("hse.inv.updateFailed"));
     } finally {
       setBusy(false);
     }
@@ -189,11 +191,11 @@ export function HseAdvancedInvestigationsPage() {
     const likelihood = Number(modal.likelihood);
     const severity = Number(modal.severity);
     if (!modal.title.trim()) {
-      setError("Title is required.");
+      setError(t("hse.inv.titleRequired"));
       return;
     }
     if (!Number.isInteger(likelihood) || !Number.isInteger(severity)) {
-      setError("Likelihood and severity must be whole numbers from the matrix scale.");
+      setError(t("hse.inv.wholeNumbers"));
       return;
     }
     setBusy(true);
@@ -206,11 +208,11 @@ export function HseAdvancedInvestigationsPage() {
         likelihood,
         severity,
       });
-      setNotice("Risk assessment recorded.");
+      setNotice(t("hse.inv.assessmentRecorded"));
       setModal({ kind: "none" });
       await load();
     } catch (err) {
-      fail(err, "Failed to record risk assessment.");
+      fail(err, t("hse.inv.assessmentFailed"));
     } finally {
       setBusy(false);
     }
@@ -225,21 +227,23 @@ export function HseAdvancedInvestigationsPage() {
   };
 
   const frameworkColumns: Column<HseInvestigationFramework>[] = [
-    { header: "Code", cell: (row) => <span className="font-mono text-sm">{row.code}</span> },
-    { header: "Name", cell: (row) => <span>{row.name}</span> },
-    { header: "Version", className: "text-right", cell: (row) => <span>v{row.version}</span> },
+    { header: t("fin.common.code"), cell: (row) => <span className="font-mono text-sm">{row.code}</span> },
+    { header: t("fin.common.name"), cell: (row) => <span>{row.name}</span> },
+    { header: t("hse.inv.colVersion"), className: "text-right", cell: (row) => <span>v{row.version}</span> },
     {
-      header: "Cause Categories",
+      header: t("hse.inv.colCauseCategories"),
       cell: (row) => (
-        <span className="text-sm text-ink-dim">{row.causeCategories.join(", ") || "—"}</span>
+        <span className="text-sm text-ink-dim">
+          {row.causeCategories.join(", ") || t("hse.common.notAvailable")}
+        </span>
       ),
     },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
       cell: (row) => (
         <StatusPill tone={row.isActive ? "success" : "neutral"}>
-          {row.isActive ? "Active" : "Inactive"}
+          {row.isActive ? t("hse.inv.active") : t("hse.inv.inactive")}
         </StatusPill>
       ),
     },
@@ -247,32 +251,32 @@ export function HseAdvancedInvestigationsPage() {
 
   const investigationColumns: Column<HseInvestigation>[] = [
     {
-      header: "Framework",
+      header: t("hse.inv.colFramework"),
       cell: (row) => (
         <span className="text-sm">
           <span className="font-mono">{row.frameworkCode}</span> v{row.frameworkVersion}
         </span>
       ),
     },
-    { header: "Started", cell: (row) => <span>{formatDateShort(row.startedAt)}</span> },
+    { header: t("hse.inv.colStarted"), cell: (row) => <span>{formatDateShort(row.startedAt)}</span> },
     {
-      header: "Root Cause",
+      header: t("hse.inv.colRootCause"),
       cell: (row) => (
-        <span className="text-sm text-ink-dim">{row.rootCause || "—"}</span>
+        <span className="text-sm text-ink-dim">{row.rootCause || t("hse.common.notAvailable")}</span>
       ),
     },
     {
-      header: "Status",
+      header: t("fin.common.status"),
       mobileRole: "status",
       cell: (row) =>
         row.concludedAt ? (
-          <StatusPill tone="success">Concluded</StatusPill>
+          <StatusPill tone="success">{t("hse.inv.concluded")}</StatusPill>
         ) : (
-          <StatusPill tone="info">Open</StatusPill>
+          <StatusPill tone="info">{t("hse.inv.open")}</StatusPill>
         ),
     },
     {
-      header: "Actions",
+      header: t("fin.common.actions"),
       mobileRole: "detail",
       cell: (row) => (
         <Button
@@ -288,7 +292,7 @@ export function HseAdvancedInvestigationsPage() {
             })
           }
         >
-          Record findings
+          {t("hse.inv.recordFindings")}
         </Button>
       ),
     },
@@ -296,12 +300,12 @@ export function HseAdvancedInvestigationsPage() {
 
   const assessmentColumns: Column<HseRiskAssessment>[] = [
     {
-      header: "Type",
+      header: t("fin.common.type"),
       cell: (row) => <Badge>{ASSESSMENT_TYPE_LABEL[row.assessmentType]}</Badge>,
     },
-    { header: "Title", cell: (row) => <span>{row.title}</span> },
+    { header: t("hse.common.title"), cell: (row) => <span>{row.title}</span> },
     {
-      header: "Rating",
+      header: t("hse.inv.colRating"),
       className: "text-right",
       cell: (row) => (
         <span className="font-mono text-sm">
@@ -310,7 +314,7 @@ export function HseAdvancedInvestigationsPage() {
       ),
     },
     {
-      header: "Residual",
+      header: t("hse.inv.colResidual"),
       className: "text-right",
       cell: (row) =>
         row.residualScore ? (
@@ -318,22 +322,22 @@ export function HseAdvancedInvestigationsPage() {
             {row.residualScore} ({row.residualBandCode})
           </span>
         ) : (
-          <span className="text-sm text-ink-dim">—</span>
+          <span className="text-sm text-ink-dim">{t("hse.common.notAvailable")}</span>
         ),
     },
-    { header: "Assessed", cell: (row) => <span>{formatDate(row.assessedAt)}</span> },
+    { header: t("hse.inv.colAssessed"), cell: (row) => <span>{formatDate(row.assessedAt)}</span> },
   ];
 
   const recordLabel = (recordId: string) => {
     const r = records.find((x) => x.id === recordId);
-    return r ? `${r.recordNumber} — ${r.title}` : recordId;
+    return r ? `${r.recordNumber} · ${r.title}` : recordId;
   };
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="HSE Investigations & Risk"
-        subtitle="Versioned investigation frameworks, findings and root cause, plus the tenant risk matrix and JSA/HIRA assessments."
+        title={t("hse.inv.title")}
+        subtitle={t("hse.inv.subtitle")}
       />
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -347,7 +351,7 @@ export function HseAdvancedInvestigationsPage() {
         <div className="space-y-6">
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Investigation Frameworks</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.inv.frameworks")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy}
@@ -355,26 +359,26 @@ export function HseAdvancedInvestigationsPage() {
                   setModal({ kind: "create-framework", code: "", name: "", description: "", causeCategories: "" })
                 }
               >
-                + Framework
+                + {t("hse.inv.addFramework")}
               </Button>
             </div>
             <DataTable
               columns={frameworkColumns}
               rows={frameworks}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No frameworks" description="Create the first investigation framework." />}
+              empty={<EmptyState title={t("hse.inv.noFrameworksTitle")} description={t("hse.inv.noFrameworksDescription")} />}
             />
           </div>
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Investigations</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.inv.investigations")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy || records.length === 0}
                 onClick={() => setModal({ kind: "start-investigation", recordId: "", frameworkId: "" })}
               >
-                + Investigation
+                + {t("hse.inv.addInvestigation")}
               </Button>
             </div>
             <DataTable
@@ -383,8 +387,8 @@ export function HseAdvancedInvestigationsPage() {
               keyOf={(row) => row.id}
               empty={
                 <EmptyState
-                  title="No investigations"
-                  description="Start one against a Core HSE record."
+                  title={t("hse.inv.noInvestigationsTitle")}
+                  description={t("hse.inv.noInvestigationsDescription")}
                 />
               }
             />
@@ -392,7 +396,7 @@ export function HseAdvancedInvestigationsPage() {
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Risk Matrix</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.inv.riskMatrix")}</h2>
             </div>
             {matrix ? (
               <Card>
@@ -400,21 +404,23 @@ export function HseAdvancedInvestigationsPage() {
                   <span className="font-mono">{matrix.code}</span> {matrix.name}
                 </div>
                 <div className="mt-1 text-sm text-ink-dim">
-                  Likelihood {matrix.likelihoodScale.map((p) => p.value).join(" · ")} — severity{" "}
-                  {matrix.severityScale.map((p) => p.value).join(" · ")}
+                  {t("hse.inv.matrixScale", {
+                    likelihood: matrix.likelihoodScale.map((p) => p.value).join(" · "),
+                    severity: matrix.severityScale.map((p) => p.value).join(" · "),
+                  })}
                 </div>
               </Card>
             ) : (
               <EmptyState
-                title="No active risk matrix"
-                description="An assessment cannot be rated until the tenant publishes a matrix."
+                title={t("hse.inv.noMatrixTitle")}
+                description={t("hse.inv.noMatrixDescription")}
               />
             )}
           </div>
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">JSA / HIRA Assessments</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("hse.inv.assessments")}</h2>
               <Button
                 variant="secondary"
                 disabled={busy || !matrix}
@@ -429,14 +435,14 @@ export function HseAdvancedInvestigationsPage() {
                   })
                 }
               >
-                + Assessment
+                + {t("hse.inv.addAssessment")}
               </Button>
             </div>
             <DataTable
               columns={assessmentColumns}
               rows={assessments}
               keyOf={(row) => row.id}
-              empty={<EmptyState title="No assessments" description="Record the first JSA or HIRA." />}
+              empty={<EmptyState title={t("hse.inv.noAssessmentsTitle")} description={t("hse.inv.noAssessmentsDescription")} />}
             />
           </div>
         </div>
@@ -444,30 +450,30 @@ export function HseAdvancedInvestigationsPage() {
 
       {modal.kind === "create-framework" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Create Framework</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.inv.createFramework")}</h2>
           <div className="space-y-3">
-            <Field label="Code" required>
+            <Field label={t("fin.common.code")} required>
               <Input
                 placeholder="ICAM"
                 value={modal.code}
                 onChange={(e) => setModal({ ...modal, code: e.target.value })}
               />
             </Field>
-            <Field label="Name" required>
+            <Field label={t("fin.common.name")} required>
               <Input
                 placeholder="Incident Cause Analysis Method"
                 value={modal.name}
                 onChange={(e) => setModal({ ...modal, name: e.target.value })}
               />
             </Field>
-            <Field label="Description">
+            <Field label={t("fin.common.description")}>
               <Textarea
                 rows={2}
                 value={modal.description}
                 onChange={(e) => setModal({ ...modal, description: e.target.value })}
               />
             </Field>
-            <Field label="Cause Categories" hint="Comma separated.">
+            <Field label={t("hse.inv.causeCategories")} hint={t("hse.inv.causeCategoriesHint")}>
               <Input
                 placeholder="human, equipment, environment, organisation"
                 value={modal.causeCategories}
@@ -477,10 +483,10 @@ export function HseAdvancedInvestigationsPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => createFramework()}>
-              Create
+              {t("fin.common.create")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
@@ -488,14 +494,14 @@ export function HseAdvancedInvestigationsPage() {
 
       {modal.kind === "start-investigation" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Start Investigation</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.inv.startInvestigation")}</h2>
           <div className="space-y-3">
-            <Field label="Core HSE Record" required>
+            <Field label={t("hse.inv.coreRecord")} required>
               <Select
                 value={modal.recordId}
                 onChange={(e) => setModal({ ...modal, recordId: e.target.value })}
               >
-                <option value="">Select a record</option>
+                <option value="">{t("hse.inv.selectRecord")}</option>
                 {records.map((r) => (
                   <option key={r.id} value={r.id}>
                     {recordLabel(r.id)}
@@ -503,17 +509,17 @@ export function HseAdvancedInvestigationsPage() {
                 ))}
               </Select>
             </Field>
-            <Field label="Framework" required>
+            <Field label={t("hse.inv.framework")} required>
               <Select
                 value={modal.frameworkId}
                 onChange={(e) => setModal({ ...modal, frameworkId: e.target.value })}
               >
-                <option value="">Select a framework</option>
+                <option value="">{t("hse.inv.selectFramework")}</option>
                 {frameworks
                   .filter((f) => f.isActive)
                   .map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.code} v{f.version} — {f.name}
+                      {f.code} v{f.version} · {f.name}
                     </option>
                   ))}
               </Select>
@@ -521,10 +527,10 @@ export function HseAdvancedInvestigationsPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => startInvestigation()}>
-              Start
+              {t("hse.inv.start")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
@@ -532,16 +538,16 @@ export function HseAdvancedInvestigationsPage() {
 
       {modal.kind === "conclude-investigation" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Record Findings</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.inv.recordFindingsTitle")}</h2>
           <div className="space-y-3">
-            <Field label="Findings">
+            <Field label={t("hse.inv.findings")}>
               <Textarea
                 rows={3}
                 value={modal.findings}
                 onChange={(e) => setModal({ ...modal, findings: e.target.value })}
               />
             </Field>
-            <Field label="Root Cause" hint="Required before the investigation can conclude.">
+            <Field label={t("hse.inv.rootCause")} hint={t("hse.inv.rootCauseHint")}>
               <Textarea
                 rows={2}
                 value={modal.rootCause}
@@ -550,7 +556,7 @@ export function HseAdvancedInvestigationsPage() {
             </Field>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-ink-dim">Contributing Factors</span>
+                <span className="text-sm font-medium text-ink-dim">{t("hse.inv.contributingFactors")}</span>
                 <Button
                   variant="secondary"
                   onClick={() =>
@@ -560,18 +566,18 @@ export function HseAdvancedInvestigationsPage() {
                     })
                   }
                 >
-                  + Factor
+                  + {t("hse.inv.addFactor")}
                 </Button>
               </div>
               {modal.factors.map((factor, index) => (
                 <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <Input
-                    placeholder="Category"
+                    placeholder={t("fin.common.category")}
                     value={factor.category}
                     onChange={(e) => patchFactor(index, { category: e.target.value })}
                   />
                   <Input
-                    placeholder="Description"
+                    placeholder={t("fin.common.description")}
                     value={factor.description}
                     onChange={(e) => patchFactor(index, { description: e.target.value })}
                   />
@@ -581,7 +587,7 @@ export function HseAdvancedInvestigationsPage() {
                       checked={factor.isRootCause}
                       onChange={(e) => patchFactor(index, { isRootCause: e.target.checked })}
                     />
-                    Root cause
+                    {t("hse.inv.rootCauseCheck")}
                   </label>
                 </div>
               ))}
@@ -589,13 +595,13 @@ export function HseAdvancedInvestigationsPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => saveInvestigation(true)}>
-              Save & conclude
+              {t("hse.inv.saveAndConclude")}
             </Button>
             <Button variant="secondary" disabled={busy} onClick={() => saveInvestigation(false)}>
-              Save draft
+              {t("hse.inv.saveDraft")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
@@ -603,23 +609,23 @@ export function HseAdvancedInvestigationsPage() {
 
       {modal.kind === "create-assessment" ? (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Record Risk Assessment</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t("hse.inv.recordAssessment")}</h2>
           <div className="space-y-3">
-            <Field label="Type" required>
+            <Field label={t("fin.common.type")} required>
               <Select
                 value={modal.assessmentType}
                 onChange={(e) =>
                   setModal({ ...modal, assessmentType: e.target.value as RiskAssessmentType })
                 }
               >
-                <option value="jsa">JSA — Job Safety Analysis</option>
-                <option value="hira">HIRA — Hazard Identification & Risk Assessment</option>
+                <option value="jsa">{t("hse.inv.optJsa")}</option>
+                <option value="hira">{t("hse.inv.optHira")}</option>
               </Select>
             </Field>
-            <Field label="Title" required>
+            <Field label={t("hse.common.title")} required>
               <Input value={modal.title} onChange={(e) => setModal({ ...modal, title: e.target.value })} />
             </Field>
-            <Field label="Task Description">
+            <Field label={t("hse.inv.taskDescription")}>
               <Textarea
                 rows={2}
                 value={modal.taskDescription}
@@ -627,28 +633,28 @@ export function HseAdvancedInvestigationsPage() {
               />
             </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Likelihood" required>
+              <Field label={t("hse.inv.likelihood")} required>
                 <Select
                   value={modal.likelihood}
                   onChange={(e) => setModal({ ...modal, likelihood: e.target.value })}
                 >
-                  <option value="">Select</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {(matrix?.likelihoodScale ?? []).map((p) => (
                     <option key={p.value} value={p.value}>
-                      {p.value} — {p.label}
+                      {p.value} · {p.label}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Severity" required>
+              <Field label={t("hse.common.severity")} required>
                 <Select
                   value={modal.severity}
                   onChange={(e) => setModal({ ...modal, severity: e.target.value })}
                 >
-                  <option value="">Select</option>
+                  <option value="">{t("fin.common.select")}</option>
                   {(matrix?.severityScale ?? []).map((p) => (
                     <option key={p.value} value={p.value}>
-                      {p.value} — {p.label}
+                      {p.value} · {p.label}
                     </option>
                   ))}
                 </Select>
@@ -657,10 +663,10 @@ export function HseAdvancedInvestigationsPage() {
           </div>
           <div className="mt-3 flex gap-2">
             <Button disabled={busy} onClick={() => createAssessment()}>
-              Record
+              {t("hse.inv.record")}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setModal({ kind: "none" })}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </Card>
