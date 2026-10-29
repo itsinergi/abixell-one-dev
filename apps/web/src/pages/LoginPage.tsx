@@ -2,10 +2,12 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { api, ApiError, type TenantSelectionRequired } from "../lib/api";
+import { useT } from "../i18n/LocaleProvider";
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function LoginPage() {
       // assignment — the user's chosen work context is what shapes the shell.
       navigate("/select-workspace", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Login failed");
+      setError(err instanceof ApiError ? err.message : t("login.failed"));
     } finally {
       setLoading(false);
     }
@@ -53,41 +55,39 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50">
+    <div className="flex min-h-screen items-center justify-center bg-ground">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded border border-slate-200 bg-white p-6 shadow-xs"
+        className="w-full max-w-sm space-y-4 rounded border border-line bg-panel p-6 shadow-xs"
       >
-        <div>
-          <h1 className="text-lg font-semibold">Enterprise Management System</h1>
-          <p className="text-sm text-slate-500">Sign in to continue</p>
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-ink">{t("login.title")}</h1>
+          <p className="text-sm text-ink-faint">{t("login.subtitle")}</p>
         </div>
 
         {tenantChoice ? (
           <fieldset disabled={loading} className="space-y-3">
-            <legend className="text-sm text-slate-600">
-              This email is registered in more than one organization. Choose one to continue.
-            </legend>
+            <legend className="text-sm text-ink-dim">{t("login.tenantLegend")}</legend>
             {tenantChoice.map((tenant) => (
               <button
                 key={tenant.tenantId}
                 type="button"
                 onClick={() => void submit(tenant.tenantId)}
-                className="flex w-full items-center justify-between rounded border border-slate-300 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-50"
+                className="flex w-full items-center justify-between rounded border border-line px-3 py-2 text-left text-sm hover:bg-panel-2 disabled:opacity-50"
               >
-                <span className="font-medium text-slate-900">{tenant.tenantName}</span>
-                <span className="text-xs text-slate-500">{tenant.tenantCode}</span>
+                <span className="font-medium text-ink">{tenant.tenantName}</span>
+                <span className="text-xs text-ink-faint">{tenant.tenantCode}</span>
               </button>
             ))}
           </fieldset>
         ) : (
           <>
             <label className="block text-sm">
-              Email
+              {t("login.email")}
               <input
                 type="email"
                 autoComplete="username"
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+                className="mt-1 w-full rounded border border-line px-2 py-1.5"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -95,11 +95,11 @@ export function LoginPage() {
             </label>
 
             <label className="block text-sm">
-              Password
+              {t("login.password")}
               <input
                 type="password"
                 autoComplete="current-password"
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+                className="mt-1 w-full rounded border border-line px-2 py-1.5"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -108,7 +108,7 @@ export function LoginPage() {
           </>
         )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-status-danger">{error}</p>}
 
         {tenantChoice ? (
           <button
@@ -118,17 +118,17 @@ export function LoginPage() {
               setError(null);
             }}
             disabled={loading}
-            className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            className="w-full rounded border border-line px-3 py-2 text-sm font-medium text-ink-dim disabled:opacity-50"
           >
-            Use a different email
+            {t("login.otherEmail")}
           </button>
         ) : (
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="w-full rounded bg-accent px-3 py-2 text-sm font-medium text-accent-on disabled:opacity-50"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? t("login.submitting") : t("login.submit")}
           </button>
         )}
       </form>

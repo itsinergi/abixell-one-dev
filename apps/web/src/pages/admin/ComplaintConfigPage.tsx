@@ -31,20 +31,22 @@ import {
   StatusPill,
 } from "../../shell/components/ui";
 import { OverlayDialog } from "../../shell/components/OverlayDialog";
+import { useT, type Translate } from "../../i18n/LocaleProvider";
 
-function configErrorMessage(err: unknown, fallback: string): string {
-  if (err instanceof ApiError && err.status === 401) return "Your session has expired. Sign in again to continue.";
-  if (err instanceof ApiError && err.status === 403) return "Access denied. This operation requires complaint.configure permission.";
+function configErrorMessage(t: Translate, err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.status === 401) return t("complaintConfig.sessionExpired");
+  if (err instanceof ApiError && err.status === 403) return t("complaintConfig.accessDenied");
   return err instanceof ApiError ? err.message : fallback;
 }
 
-const REF_TYPES: { typeCode: string; title: string; singular: string; key: "categories" | "severities" | "priorities" }[] = [
-  { typeCode: "complaint_category", title: "Categories", singular: "category", key: "categories" },
-  { typeCode: "complaint_severity", title: "Severity", singular: "severity", key: "severities" },
-  { typeCode: "priority_level", title: "Priority", singular: "priority", key: "priorities" },
+const REF_TYPE_KEYS: { typeCode: string; titleKey: "complaintConfig.categories" | "complaintConfig.severity" | "complaintConfig.priority"; singularKey: "complaintConfig.categorySingular" | "complaintConfig.severitySingular" | "complaintConfig.prioritySingular"; key: "categories" | "severities" | "priorities" }[] = [
+  { typeCode: "complaint_category", titleKey: "complaintConfig.categories", singularKey: "complaintConfig.categorySingular", key: "categories" },
+  { typeCode: "complaint_severity", titleKey: "complaintConfig.severity", singularKey: "complaintConfig.severitySingular", key: "severities" },
+  { typeCode: "priority_level", titleKey: "complaintConfig.priority", singularKey: "complaintConfig.prioritySingular", key: "priorities" },
 ];
 
 export function ComplaintConfigPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -75,11 +77,11 @@ export function ComplaintConfigPage() {
       if (loadRequestRef.current === requestId) setConfig(nextConfig);
     } catch (err) {
       if (loadRequestRef.current !== requestId) return;
-      setError(configErrorMessage(err, "Failed to load configuration."));
+      setError(configErrorMessage(t, err, t("complaintConfig.loadFailed")));
     } finally {
       if (loadRequestRef.current === requestId) setLoading(false);
     }
-  }, [token]);
+  }, [t, token]);
 
   useEffect(() => {
     setConfig(null);
@@ -133,7 +135,7 @@ export function ComplaintConfigPage() {
     const code = String(data.get("code") ?? "").trim();
     const label = String(data.get("label") ?? "").trim();
     if (dialog.kind === "create" && (!code || !label)) {
-      setDialogError("Code and label are required.");
+      setDialogError(t("complaintConfig.codeAndLabelRequired"));
       return;
     }
     const requestId = ++dialogRequestRef.current;
@@ -146,7 +148,9 @@ export function ComplaintConfigPage() {
         ? await api.createComplaintRefItem(token, dialog.typeCode, { code, label })
         : await api.setComplaintRefItemActive(token, dialog.typeCode, dialog.item.id, !dialog.item.isActive);
       if (dialogRequestRef.current !== requestId) return;
-      setNotice(dialog.kind === "create" ? "Item created." : `Item ${item.isActive ? "activated" : "deactivated"}.`);
+      setNotice(dialog.kind === "create"
+        ? t("complaintConfig.itemCreated")
+        : (item.isActive ? t("complaintConfig.itemActivated") : t("complaintConfig.itemDeactivated")));
       // Refresh errors belong to the page, not the successful mutation dialog.
       // Keep the trigger mounted while refreshing so OverlayDialog restores focus.
       await load();
@@ -154,7 +158,7 @@ export function ComplaintConfigPage() {
       setDialog(null);
     } catch (err) {
       if (dialogRequestRef.current === requestId) {
-        setDialogError(configErrorMessage(err, "Failed to save the item."));
+        setDialogError(configErrorMessage(t, err, t("complaintConfig.failedSave")));
       }
     } finally {
       if (dialogRequestRef.current === requestId) {
@@ -164,32 +168,34 @@ export function ComplaintConfigPage() {
     }
   }
 
-  if (loading && !config) return <Spinner label="Loading configuration…" />;
+  if (loading && !config) return <Spinner label={t("complaintConfig.loading")} />;
   if (!config) {
     return (
       <div className="space-y-3">
-        <Alert tone="error">{error ?? "Configuration is unavailable."}</Alert>
+        <Alert tone="error">{error ?? t("complaintConfig.failedLoad")}</Alert>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => void load()}>Retry</Button>
+          <Button variant="secondary" onClick={() => void load()}>{t("complaintConfig.retry")}</Button>
           <Button variant="secondary" onClick={() => navigate("/administration")}>
-            Back to Administration
+            {t("complaintConfig.backToAdmin")}
           </Button>
         </div>
       </div>
     );
   }
   const actionsDisabled = pending || loading || error !== null;
-  const selectedType = REF_TYPES.find((rt) => rt.typeCode === dialog?.typeCode);
-  const actionLabel = dialog?.kind === "toggle" ? (dialog.item.isActive ? "Deactivate" : "Activate") : "Create";
+  const selectedType = REF_TYPE_KEYS.find((rt) => rt.typeCode === dialog?.typeCode);
+  const actionLabel = dialog?.kind === "toggle"
+    ? (dialog.item.isActive ? t("complaintConfig.deactivate") : t("complaintConfig.activate"))
+    : t("complaintConfig.create");
 
   return (
     <div>
       <PageHeader
-        title="Complaint Configuration"
-        subtitle="Manage the catalogs and settings that drive the complaint experience."
+        title={t("complaintConfig.title")}
+        subtitle={t("complaintConfig.subtitle")}
         actions={
           <Button variant="secondary" onClick={() => navigate("/administration")}>
-            Back to Administration
+            {t("complaintConfig.backToAdmin")}
           </Button>
         }
       />
@@ -207,9 +213,9 @@ export function ComplaintConfigPage() {
 
       {/* Reference Data */}
       <section className="mb-6">
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">Reference Data</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-700">{t("complaintConfig.referenceData")}</h2>
         <div className="space-y-6">
-          {REF_TYPES.map((rt) => {
+          {REF_TYPE_KEYS.map((rt) => {
             const items = config.referenceData[rt.key];
             const query = queries[rt.typeCode] ?? "";
             const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -218,26 +224,26 @@ export function ComplaintConfigPage() {
               : items;
             const columns: Column<ReferenceItemView>[] = [
               {
-                header: "Code",
+                header: t("complaintConfig.code"),
                 cell: (item) => <code className="font-mono text-xs text-slate-600">{item.code}</code>,
                 mobileRole: "title",
               },
               {
-                header: "Label",
+                header: t("complaintConfig.label"),
                 cell: (item) => item.label,
               },
               {
-                header: "Status",
+                header: t("complaintConfig.status"),
                 cell: (item) =>
                   item.isActive ? (
-                    <StatusPill tone="success">Active</StatusPill>
+                    <StatusPill tone="success">{t("complaintConfig.active")}</StatusPill>
                   ) : (
-                    <StatusPill tone="neutral">Inactive</StatusPill>
+                    <StatusPill tone="neutral">{t("complaintConfig.inactive")}</StatusPill>
                   ),
                 mobileRole: "status",
               },
               {
-                header: "Action",
+                header: t("complaintConfig.action"),
                 cell: (item) =>
                   config.capabilities.referenceDataToggleActive ? (
                     <Button
@@ -248,27 +254,35 @@ export function ComplaintConfigPage() {
                         openToggleDialog(rt.typeCode, item, event.currentTarget);
                       }}
                     >
-                      {item.isActive ? "Deactivate" : "Activate"}
+                      {item.isActive ? t("complaintConfig.deactivate") : t("complaintConfig.activate")}
                     </Button>
                   ) : null,
                 className: "text-right",
               },
             ];
 
+            const typeTitle = t(rt.titleKey);
+            const singular = t(rt.singularKey);
+            const itemsLabel = items.length !== 1 ? t("complaintConfig.itemsLabelPlural") : t("complaintConfig.itemsLabelSingular");
+
             return (
               <Card key={rt.typeCode}>
                 <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900">{rt.title}</h3>
+                    <h3 className="text-sm font-semibold text-slate-900">{typeTitle}</h3>
                     <p className="mt-0.5 text-xs text-slate-500">
-                      Showing {visibleItems.length} of {items.length} loaded item{items.length !== 1 ? "s" : ""}. Search is limited to this loaded configuration.
+                      {t("complaintConfig.showing", {
+                        visibleItems: String(visibleItems.length),
+                        totalItems: String(items.length),
+                        itemsLabel,
+                      })}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <Field label={`Search ${rt.title.toLowerCase()}`}>
+                    <Field label={t("complaintConfig.searchField", { typeTitle })}>
                       <Input
                         type="search"
-                        placeholder="Search code or label"
+                        placeholder={t("complaintConfig.searchPlaceholder")}
                         value={query}
                         onChange={(event) => setQueries((prev) => ({ ...prev, [rt.typeCode]: event.target.value }))}
                         disabled={loading}
@@ -283,7 +297,7 @@ export function ComplaintConfigPage() {
                           openCreateDialog(rt.typeCode, event.currentTarget);
                         }}
                       >
-                        Create {rt.singular}
+                        {t("complaintConfig.createItem", { singular })}
                       </Button>
                     )}
                   </div>
@@ -295,11 +309,11 @@ export function ComplaintConfigPage() {
                   mobileBreakpoint="md"
                   empty={
                     <EmptyState
-                      title={items.length === 0 ? `No ${rt.title.toLowerCase()} configured` : "No matching items"}
+                      title={items.length === 0 ? t("complaintConfig.noItemsConfigured", { typeTitle }) : t("complaintConfig.noMatchingItems")}
                       description={
                         items.length === 0
-                          ? `Create the first ${rt.singular} to get started.`
-                          : "Try a different search term or clear the filter."
+                          ? t("complaintConfig.createFirstItem", { singular })
+                          : t("complaintConfig.tryDifferentSearch")
                       }
                       action={
                         items.length === 0 && config.capabilities.referenceDataCreate ? (
@@ -310,7 +324,7 @@ export function ComplaintConfigPage() {
                               openCreateDialog(rt.typeCode, event.currentTarget);
                             }}
                           >
-                            Create {rt.singular}
+                            {t("complaintConfig.createItem", { singular })}
                           </Button>
                         ) : undefined
                       }
@@ -326,73 +340,73 @@ export function ComplaintConfigPage() {
       {/* Numbering + Notifications */}
       <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-2 text-sm font-semibold text-slate-700">Numbering</h2>
+          <h2 className="mb-2 text-sm font-semibold text-slate-700">{t("complaintConfig.numbering")}</h2>
           {config.numbering ? (
             <dl className="space-y-2 text-sm">
               <div>
-                <dt className="text-xs text-slate-400">Pattern</dt>
+                <dt className="text-xs text-slate-400">{t("complaintConfig.pattern")}</dt>
                 <dd className="font-mono text-slate-700">{config.numbering.pattern}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-400">Current sequence</dt>
+                <dt className="text-xs text-slate-400">{t("complaintConfig.currentSequence")}</dt>
                 <dd className="text-slate-700">{config.numbering.currentSequence}</dd>
               </div>
             </dl>
           ) : (
-            <p className="text-sm text-slate-400">No numbering sequence configured.</p>
+            <p className="text-sm text-slate-400">{t("complaintConfig.noNumbering")}</p>
           )}
           {!config.capabilities.numberingEditable && (
-            <p className="mt-2 text-xs text-slate-400">Read-only in this release.</p>
+            <p className="mt-2 text-xs text-slate-400">{t("complaintConfig.readOnlyRelease")}</p>
           )}
         </Card>
 
         <Card>
-          <h2 className="mb-2 text-sm font-semibold text-slate-700">Notification templates</h2>
+          <h2 className="mb-2 text-sm font-semibold text-slate-700">{t("complaintConfig.notifications")}</h2>
           {config.notificationTemplates.length === 0 ? (
-            <p className="text-sm text-slate-400">No complaint notification templates configured.</p>
+            <p className="text-sm text-slate-400">{t("complaintConfig.noNotifications")}</p>
           ) : (
             <ul className="divide-y divide-slate-100 text-sm">
-              {config.notificationTemplates.map((t) => (
-                <li key={t.id} className="py-2">
+              {config.notificationTemplates.map((tpl) => (
+                <li key={tpl.id} className="py-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-slate-600">{t.eventType}</span>
-                    <Badge>{t.channel}</Badge>
+                    <span className="font-mono text-xs text-slate-600">{tpl.eventType}</span>
+                    <Badge>{tpl.channel}</Badge>
                   </div>
-                  {t.subjectTemplate && <div className="mt-0.5 text-slate-600">{t.subjectTemplate}</div>}
+                  {tpl.subjectTemplate && <div className="mt-0.5 text-slate-600">{tpl.subjectTemplate}</div>}
                 </li>
               ))}
             </ul>
           )}
           {!config.capabilities.notificationTemplateEditable && (
-            <p className="mt-2 text-xs text-slate-400">Read-only in this release.</p>
+            <p className="mt-2 text-xs text-slate-400">{t("complaintConfig.readOnlyRelease")}</p>
           )}
         </Card>
       </section>
 
       {/* Workflow (read-only) */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">Workflow lifecycle</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-700">{t("complaintConfig.workflow")}</h2>
         <Card>
           {config.workflow ? (
             <>
               <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium text-slate-700">{config.workflow.definition.name}</span>
                 <Badge>
-                  v{config.workflow.versionNumber ?? "—"} · {config.workflow.versionStatus ?? "no published version"}
+                  v{config.workflow.versionNumber ?? "—"} · {config.workflow.versionStatus ?? t("complaintConfig.noPublishedVersion")}
                 </Badge>
                 {!config.capabilities.workflowEditable && (
-                  <span className="text-xs text-slate-400">Read-only — authored via the workflow engine.</span>
+                  <span className="text-xs text-slate-400">{t("complaintConfig.readOnlyWorkflow")}</span>
                 )}
               </div>
-              <p className="mb-1 text-xs text-slate-400 lg:hidden">Scroll to see all workflow columns →</p>
+              <p className="mb-1 text-xs text-slate-400 lg:hidden">{t("complaintConfig.workflowScroll")}</p>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Step</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">SLA (h)</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Actions</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Assigned to</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">{t("complaintConfig.step")}</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">{t("complaintConfig.slaHours")}</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">{t("complaintConfig.actions")}</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">{t("complaintConfig.assignedTo")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -402,18 +416,18 @@ export function ComplaintConfigPage() {
                           <div className="font-medium text-slate-700">{s.name}</div>
                           <div className="font-mono text-xs text-slate-400">
                             {s.code}
-                            {s.isInitial ? " · initial" : ""}
-                            {s.isTerminal ? ` · terminal (${s.terminalStatus})` : ""}
+                            {s.isInitial ? ` · ${t("complaintConfig.initial")}` : ""}
+                            {s.isTerminal ? ` · ${t("complaintConfig.terminal")} (${s.terminalStatus})` : ""}
                           </div>
                         </td>
                         <td className="px-3 py-2 align-top text-slate-600">{s.slaHours ?? "—"}</td>
                         <td className="px-3 py-2 align-top text-slate-600">
                           {s.transitions.length === 0
                             ? "—"
-                            : s.transitions.map((t) => (
-                                <div key={t.actionCode}>
-                                  {t.name} → {t.toStepCode ?? "?"}
-                                  {t.condition ? ` [${t.condition.field} ${t.condition.operator} ${String(t.condition.value)}]` : ""}
+                            : s.transitions.map((tr) => (
+                                <div key={tr.actionCode}>
+                                  {tr.name} → {tr.toStepCode ?? "?"}
+                                  {tr.condition ? ` [${tr.condition.field} ${tr.condition.operator} ${String(tr.condition.value)}]` : ""}
                                 </div>
                               ))}
                         </td>
@@ -435,19 +449,21 @@ export function ComplaintConfigPage() {
               </div>
             </>
           ) : (
-            <p className="text-sm text-slate-400">No workflow definition configured.</p>
+            <p className="text-sm text-slate-400">{t("complaintConfig.noWorkflow")}</p>
           )}
         </Card>
       </section>
 
-      {loading && <Spinner label="Refreshing configuration…" />}
+      {loading && <Spinner label={t("complaintConfig.loadingRefresh")} />}
       <OverlayDialog
         open={dialog !== null}
-        title={dialog?.kind === "toggle" ? `${actionLabel} item` : `Create ${selectedType?.singular ?? "item"}`}
+        title={dialog?.kind === "toggle"
+          ? t("complaintConfig.toggleDialogTitle", { action: actionLabel })
+          : t("complaintConfig.createDialogTitle", { singularTitle: selectedType ? t(selectedType.singularKey) : t("complaintConfig.noneAssigned") })}
         description={
           dialog?.kind === "toggle"
-            ? `Are you sure you want to ${actionLabel.toLowerCase()} “${dialog.item.label}”?`
-            : "Add a new reference item to the catalog."
+            ? t("complaintConfig.togglePrompt", { action: actionLabel.toLowerCase(), itemLabel: dialog.item.label })
+            : t("complaintConfig.createPrompt")
         }
         pending={pending}
         onClose={closeDialog}
@@ -455,10 +471,10 @@ export function ComplaintConfigPage() {
         footer={
           <>
             <Button variant="secondary" onClick={closeDialog} disabled={pending}>
-              Cancel
+              {t("complaintConfig.cancel")}
             </Button>
             <Button type="submit" form="complaint-config-item-form" disabled={actionsDisabled}>
-              {pending ? "Saving…" : actionLabel}
+              {pending ? t("complaintConfig.saving") : actionLabel}
             </Button>
           </>
         }
@@ -471,16 +487,16 @@ export function ComplaintConfigPage() {
         <form id="complaint-config-item-form" className="space-y-4" onSubmit={submitDialog}>
           {dialog?.kind === "create" ? (
             <>
-              <Field label="Code" required hint="Internal identifier (e.g., billing, urgent)">
-                <Input name="code" placeholder="Code" required disabled={pending} autoComplete="off" />
+              <Field label={t("complaintConfig.codeFieldLabel")} required hint={t("complaintConfig.codeFieldHint")}>
+                <Input name="code" placeholder={t("complaintConfig.codeFieldLabel")} required disabled={pending} autoComplete="off" />
               </Field>
-              <Field label="Label" required hint="Human-readable display name">
-                <Input name="label" placeholder="Label" required disabled={pending} autoComplete="off" />
+              <Field label={t("complaintConfig.labelFieldLabel")} required hint={t("complaintConfig.labelFieldHint")}>
+                <Input name="label" placeholder={t("complaintConfig.labelFieldLabel")} required disabled={pending} autoComplete="off" />
               </Field>
             </>
           ) : (
             <p className="text-sm text-slate-600">
-              This changes the server-reported status for <strong>{dialog?.item.label}</strong>. The result will be refreshed from the server.
+              {t("complaintConfig.togglePromptDetail", { itemLabel: <strong key="label">{dialog?.item.label}</strong> })}
             </p>
           )}
         </form>

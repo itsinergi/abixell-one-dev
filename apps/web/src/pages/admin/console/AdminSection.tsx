@@ -8,6 +8,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../auth/AuthContext";
+import { useT } from "../../../i18n/LocaleProvider";
 import {
   Alert,
   Button,
@@ -19,7 +20,7 @@ import {
 
 export function AdminSectionState({
   loading,
-  loadingLabel = "Loading administration data…",
+  loadingLabel,
   denied,
   sessionExpired = false,
   error,
@@ -38,8 +39,9 @@ export function AdminSectionState({
   children: ReactNode;
 }) {
   const { logout } = useAuth();
+  const t = useT();
 
-  if (loading) return <Spinner label={loadingLabel} />;
+  if (loading) return <Spinner label={loadingLabel ?? t("adminSection.loading")} />;
 
   if (denied) {
     return (
@@ -50,7 +52,7 @@ export function AdminSectionState({
             to="/admin"
             className="inline-flex min-h-[44px] items-center justify-center rounded border border-line-strong bg-panel px-3 py-1.5 text-sm font-medium text-ink-dim hover:bg-panel-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent sm:min-h-[36px]"
           >
-            Back to overview
+            {t("adminSection.backToOverview")}
           </Link>
         }
       />
@@ -60,13 +62,9 @@ export function AdminSectionState({
   if (sessionExpired) {
     return (
       <EmptyState
-        title="Your session has expired"
-        description="Sign in again to continue. No permission decision was made for this section."
-        action={
-          <Button onClick={logout}>
-            Sign in again
-          </Button>
-        }
+        title={t("adminSection.sessionExpired")}
+        description={t("adminSection.sessionExpiredDesc")}
+        action={<Button onClick={logout}>{t("adminSection.signInAgain")}</Button>}
       />
     );
   }
@@ -78,7 +76,7 @@ export function AdminSectionState({
           <span>{error}</span>
           {onRetry && (
             <Button variant="secondary" onClick={onRetry}>
-              Retry
+              {t("common.retry")}
             </Button>
           )}
         </div>

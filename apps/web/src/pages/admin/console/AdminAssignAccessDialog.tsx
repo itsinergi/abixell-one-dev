@@ -14,6 +14,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { useAuth } from "../../../auth/AuthContext";
+import { useT } from "../../../i18n/LocaleProvider";
 import {
   api,
   ApiError,
@@ -39,12 +40,22 @@ type Step =
   | "verification-failed"
   | "success";
 
-const SCOPE_LABELS: Record<string, string> = {
-  tenant: "Tenant-wide",
-  legal_entity: "Legal entity",
-  organization_unit: "Organization unit",
-  customer: "Customer",
-};
+type Translate = ReturnType<typeof useT>;
+
+function scopeLabel(t: Translate, scopeType: string): string {
+  switch (scopeType) {
+    case "tenant":
+      return t("assignAccess.scopeTenant");
+    case "legal_entity":
+      return t("assignAccess.scopeLegalEntity");
+    case "organization_unit":
+      return t("assignAccess.scopeOrgUnit");
+    case "customer":
+      return t("assignAccess.scopeCustomer");
+    default:
+      return scopeType;
+  }
+}
 
 export function AssignAccessDialog({
   targetUserId,
@@ -62,6 +73,7 @@ export function AssignAccessDialog({
   restoreFocusRef?: React.RefObject<HTMLElement | null>;
 }) {
   const { session, logout } = useAuth();
+  const t = useT();
   const token = session!.accessToken;
   const optionsState = useAssignmentOptions(true);
   const [pairs, setPairs] = useState<AdminRoleAssignmentInput[]>([]);
@@ -91,7 +103,7 @@ export function AssignAccessDialog({
       setPreview(result);
       setStep("review");
     } catch (err) {
-      setError(errorMessage(err, "The batch could not be reviewed."));
+      setError(errorMessage(t, err, t("assignAccess.reviewFailed")));
       setStep("edit");
     }
   }
@@ -103,26 +115,29 @@ export function AssignAccessDialog({
     );
     const missing = createdIds.filter((id) => !present.has(id));
     if (missing.length > 0) {
-      throw new Error(
-        "The authoritative reload did not contain every accepted assignment.",
-      );
+      throw new Error(t("assignAccess.missingAssignments"));
     }
     setStep("success");
     onApplied(
-      `${createdIds.length} assignment${createdIds.length === 1 ? "" : "s"} added for ${targetName}.`,
+      createdIds.length === 1
+        ? t("assignAccess.addedOne", { name: targetName })
+        : t("assignAccess.addedMany", {
+            count: createdIds.length,
+            name: targetName,
+          }),
     );
   }
 
   function verificationMessage(err: unknown): string {
     if (err instanceof ApiError && err.status === 401) {
-      return "The batch was accepted, but your session expired before the updated access could be read back.";
+      return t("assignAccess.verifySessionExpired");
     }
     if (err instanceof ApiError && err.status === 403) {
-      return "The batch was accepted, but your current access cannot reload the user to verify it.";
+      return t("assignAccess.verifyForbidden");
     }
     const detail =
-      err instanceof Error ? err.message : "The updated access could not be reloaded.";
-    return `The batch was accepted, but verification could not be completed: ${detail}`;
+      err instanceof Error ? err.message : t("assignAccess.verifyFailedFallback");
+    return t("assignAccess.verifyFailed", { detail });
   }
 
   async function confirmBatch() {
@@ -141,14 +156,12 @@ export function AssignAccessDialog({
     } catch (err) {
       if (err instanceof ApiError) {
         // The server answered: the batch was refused, nothing was written.
-        setError(errorMessage(err, "The batch could not be applied."));
+        setError(errorMessage(t, err, t("assignAccess.applyFailed")));
         setStep("failed");
       } else {
         // No answer arrived. The POST may have been applied, so this flow must
         // not return to an editable confirm that could apply it a second time.
-        setError(
-          "The server did not answer. The batch may or may not have been applied; it will not be retried here. Verify the user's current access instead.",
-        );
+        setError(t("assignAccess.unknownOutcome"));
         setStep("unknown-outcome");
       }
       return;
@@ -192,7 +205,7 @@ export function AssignAccessDialog({
   return (
     <OverlayDialog
       open
-      title={`Assign access · ${targetName}`}
+      title={t("assignAccess.title", { name: targetName })}
       description={<span className="break-all">{targetEmail}</span>}
       pending={pending}
       onClose={closeDialog}
@@ -207,14 +220,14 @@ export function AssignAccessDialog({
               onClick={closeDialog}
               disabled={pending}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               className="min-h-[44px]"
               disabled={pending || reviewDisabled}
               onClick={() => void requestPreview()}
             >
-              {step === "previewing" ? "Reviewing…" : "Review batch"}
+              {step === "previewing" ? t("assignAccess.reviewing") : t("assignAccess.review")}
             </Button>
           </>
         ) : step === "review" ? (
@@ -227,11 +240,12 @@ export function AssignAccessDialog({
                 setStep("edit");
               }}
             >
-              Back
+              {t("assignAccess.back")}
             </Button>
             <Button className="min-h-[44px]" onClick={() => void confirmBatch()}>
-              Confirm {preview?.pairs.length ?? 0}{" "}
-              {(preview?.pairs.length ?? 0) === 1 ? "assignment" : "assignments"}
+              {(preview?.pairs.length ?? 0) === 1
+                ? t("assignAccess.confirmOne")
+                : t("assignAccess.confirmMany", { count: preview?.pairs.length ?? 0 })}
             </Button>
           </>
         ) : step === "failed" ? (
@@ -244,12 +258,12 @@ export function AssignAccessDialog({
                 setStep("edit");
               }}
             >
-              Back
+              {t("assignAccess.back")}
             </Button>
           </>
         ) : step === "unknown-outcome" ? (
           <Button variant="secondary" className="min-h-[44px]" onClick={closeDialog}>
-            Close
+            {t("assignAccess.close")}
           </Button>
         ) : step === "verification-failed" ? (
           <>
@@ -258,39 +272,34 @@ export function AssignAccessDialog({
               className="min-h-[44px]"
               onClick={closeDialog}
             >
-              Close
+              {t("assignAccess.close")}
             </Button>
             <Button
               className="min-h-[44px]"
               disabled={!acceptedIds}
               onClick={() => void retryVerification()}
             >
-              Retry verification
+              {t("assignAccess.retryVerification")}
             </Button>
           </>
         ) : step === "pending" ? (
           <Button className="min-h-[44px]" disabled>
-            {acceptedIds ? "Verifying applied batch…" : "Applying batch…"}
+            {acceptedIds ? t("assignAccess.verifying") : t("assignAccess.applying")}
           </Button>
         ) : null
       }
     >
       {step === "success" && (
-        <Alert tone="success">
-          The server confirmed the batch and the user's access was reloaded.
-        </Alert>
+        <Alert tone="success">{t("assignAccess.successBody")}</Alert>
       )}
 
       {step === "verification-failed" && (
         <div className="space-y-4">
           <Alert tone="warning">
             <div className="space-y-1">
-              <p className="font-medium">Batch applied; verification reload failed.</p>
+              <p className="font-medium">{t("assignAccess.verifyFailedTitle")}</p>
               <p>{error}</p>
-              <p>
-                Retry verification reloads the user's access with GET only. It will
-                not repeat the assignment change.
-              </p>
+              <p>{t("assignAccess.verifyFailedBody")}</p>
             </div>
           </Alert>
           {preview && <PreviewSummary preview={preview} applied />}
@@ -301,12 +310,9 @@ export function AssignAccessDialog({
         <div className="space-y-4">
           <Alert tone="warning">
             <div className="space-y-1">
-              <p className="font-medium">Batch outcome unknown.</p>
+              <p className="font-medium">{t("assignAccess.unknownTitle")}</p>
               <p>{error}</p>
-              <p>
-                Reopen this user's access view to see the authoritative current
-                state; this dialog will not repeat the change.
-              </p>
+              <p>{t("assignAccess.unknownBody")}</p>
             </div>
           </Alert>
           {preview && <PreviewSummary preview={preview} applied />}
@@ -320,8 +326,8 @@ export function AssignAccessDialog({
           {step === "pending" && (
             <Alert tone="info">
               {acceptedIds
-                ? "The batch was already accepted. Access is being reloaded with GET only so the result can be verified. This dialog cannot be closed yet."
-                : "The server is applying every pair in one transaction. This dialog cannot be closed yet."}
+                ? t("assignAccess.pendingVerify")
+                : t("assignAccess.pendingApply")}
             </Alert>
           )}
         </div>
@@ -331,13 +337,13 @@ export function AssignAccessDialog({
         <div className="space-y-4">
           {error && <Alert tone="error">{error}</Alert>}
           {optionsState.status === "loading" || optionsState.status === "idle" ? (
-            <Spinner label="Loading governed choices…" />
+            <Spinner label={t("assignAccess.loadingChoices")} />
           ) : optionsState.status === "session-expired" ? (
             <Alert tone="warning">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>Your session expired before the picker could be loaded.</span>
+                <span>{t("assignAccess.sessionExpired")}</span>
                 <Button variant="secondary" onClick={logout}>
-                  Sign in again
+                  {t("assignAccess.signInAgain")}
                 </Button>
               </div>
             </Alert>
@@ -345,11 +351,10 @@ export function AssignAccessDialog({
             <Alert tone="error">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>
-                  {optionsState.error ??
-                    "Assignment options are unavailable to your current access."}
+                  {optionsState.error ?? t("assignAccess.optionsUnavailable")}
                 </span>
                 <Button variant="secondary" onClick={optionsState.reload}>
-                  Retry
+                  {t("assignAccess.retry")}
                 </Button>
               </div>
             </Alert>
@@ -359,11 +364,9 @@ export function AssignAccessDialog({
                 options={optionsState.options}
                 pairs={pairs}
                 onChange={setPairs}
+                addLabel={t("pairEditor.add")}
               />
-              <p className="text-sm text-ink-dim">
-                The batch is applied in one transaction: if any pair is refused,
-                none of them is written.
-              </p>
+              <p className="text-sm text-ink-dim">{t("assignAccess.batchAtomic")}</p>
             </>
           ) : null}
         </div>
@@ -379,13 +382,16 @@ function PreviewSummary({
   preview: AdminAssignmentBatchPreview;
   applied?: boolean;
 }) {
+  const t = useT();
   return (
     <section
       aria-labelledby="batch-preview-title"
       className="rounded border border-line-strong bg-panel-2 p-4"
     >
       <h3 id="batch-preview-title" className="text-sm font-semibold text-ink">
-        {applied ? "Batch accepted by the server" : "What will be granted"}
+        {applied
+          ? t("assignAccess.previewAcceptedTitle")
+          : t("assignAccess.previewTitle")}
       </h3>
       <ul className="mt-3 divide-y divide-line">
         {preview.pairs.map((pair) => (
@@ -400,15 +406,15 @@ function PreviewSummary({
               </code>
             </div>
             <div className="text-sm text-ink-dim sm:text-right">
-              {SCOPE_LABELS[pair.scopeType] ?? pair.scopeType}
+              {scopeLabel(t, pair.scopeType)}
               {" · "}
               {pair.scopeType === "tenant"
-                ? "Tenant-wide"
+                ? t("assignAccess.scopeTenant")
                 : pair.scopeType === "legal_entity"
-                  ? pair.scopeLegalEntityName ?? "Unknown Legal Entity"
+                  ? pair.scopeLegalEntityName ?? t("assignAccess.unknownLegalEntity")
                   : pair.scopeType === "organization_unit"
-                    ? pair.scopeOrganizationUnitName ?? "Unknown organization unit"
-                    : pair.scopeCustomerName ?? "Unknown customer"}
+                    ? pair.scopeOrganizationUnitName ?? t("assignAccess.unknownOrgUnit")
+                    : pair.scopeCustomerName ?? t("assignAccess.unknownCustomer")}
             </div>
           </li>
         ))}
@@ -416,9 +422,7 @@ function PreviewSummary({
       <p className="mt-3 break-all font-mono text-[11.5px] text-ink-faint">
         {preview.previewHash}
       </p>
-      <p className="mt-1 text-xs text-ink-faint">
-        This hash binds the confirmation to the pairs above for this user.
-      </p>
+      <p className="mt-1 text-xs text-ink-faint">{t("assignAccess.hashNote")}</p>
     </section>
   );
 }

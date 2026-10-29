@@ -9,22 +9,23 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, type MyRoleAssignment } from "../../lib/api";
+import { useT } from "../../i18n/LocaleProvider";
 import { Alert, Button, Field, Select, Spinner } from "./ui";
 import { OverlayDialog } from "./OverlayDialog";
 
 /** Human label for one assignment's Data Scope — the same wording as the
  * post-login picker (RoleSiteSelectionPage), one source of truth per
  * concept, not a restyled variant. */
-function scopeLabel(assignment: MyRoleAssignment): string {
+function scopeLabel(assignment: MyRoleAssignment, t: ReturnType<typeof useT>): string {
   switch (assignment.scopeType) {
     case "tenant":
-      return "All sites (tenant-wide)";
+      return t("switchRole.scopeTenant");
     case "legal_entity":
-      return assignment.scopeLegalEntityName ?? "Legal entity";
+      return assignment.scopeLegalEntityName ?? t("switchRole.scopeLegalEntity");
     case "customer":
-      return assignment.scopeCustomerName ?? "Customer";
+      return assignment.scopeCustomerName ?? t("switchRole.scopeCustomer");
     default:
-      return assignment.scopeOrganizationUnitName ?? "Organization unit";
+      return assignment.scopeOrganizationUnitName ?? t("switchRole.scopeOrgUnit");
   }
 }
 
@@ -43,6 +44,7 @@ export function SwitchRoleDialog({
    * switch; the caller records it and re-fetches /me. */
   onSwitched: (patch: { assignmentId: string; activeRoleName: string; activeScopeName: string }) => void;
 }) {
+  const t = useT();
   const [assignments, setAssignments] = useState<MyRoleAssignment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [roleCode, setRoleCode] = useState("");
@@ -68,14 +70,15 @@ export function SwitchRoleDialog({
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Could not load your access");
+        if (!cancelled)
+          setError(err instanceof ApiError ? err.message : t("switchRole.loadFailed"));
       });
     return () => {
       cancelled = true;
     };
     // The list is refetched on every open: an admin may have granted or
     // revoked an assignment since the dialog was last shown.
-  }, [open, token, currentAssignmentId]);
+  }, [open, token, currentAssignmentId, t]);
 
   // One entry per Role; a Role may carry several scopes, which the second
   // control narrows — same structure as the post-login picker.
@@ -117,7 +120,7 @@ export function SwitchRoleDialog({
       });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not switch role");
+      setError(err instanceof ApiError ? err.message : t("switchRole.failed"));
     } finally {
       setPending(false);
     }
@@ -126,8 +129,8 @@ export function SwitchRoleDialog({
   return (
     <OverlayDialog
       open={open}
-      title="Switch role"
-      description="Your permissions, navigation, and pending tasks follow the role you pick. You only see options your account already has."
+      title={t("switchRole.title")}
+      description={t("switchRole.description")}
       pending={pending}
       onClose={onClose}
       initialFocusRef={submitButtonRef}
@@ -135,17 +138,15 @@ export function SwitchRoleDialog({
       <div className="space-y-4">
         {error && <Alert tone="error">{error}</Alert>}
 
-        {!assignments && !error && <Spinner label="Loading your access…" />}
+        {!assignments && !error && <Spinner label={t("switchRole.loading")} />}
 
         {assignments && assignments.length === 0 && (
-          <Alert tone="warning">
-            Your account has no role assigned yet. Ask an administrator to grant you access.
-          </Alert>
+          <Alert tone="warning">{t("switchRole.noRoles")}</Alert>
         )}
 
         {assignments && assignments.length > 0 && (
           <>
-            <Field label="Role" required>
+            <Field label={t("switchRole.role")} required>
               <Select value={roleCode} onChange={(e) => chooseRole(e.target.value)} disabled={pending}>
                 {roles.map((role) => (
                   <option key={role.code} value={role.code}>
@@ -155,7 +156,7 @@ export function SwitchRoleDialog({
               </Select>
             </Field>
 
-            <Field label="Site" required>
+            <Field label={t("switchRole.site")} required>
               <Select
                 value={assignmentId}
                 onChange={(e) => setAssignmentId(e.target.value)}
@@ -163,7 +164,7 @@ export function SwitchRoleDialog({
               >
                 {scopes.map((scope) => (
                   <option key={scope.id} value={scope.id}>
-                    {scopeLabel(scope)}
+                    {scopeLabel(scope, t)}
                   </option>
                 ))}
               </Select>
@@ -171,7 +172,7 @@ export function SwitchRoleDialog({
 
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={onClose} disabled={pending}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 ref={submitButtonRef}
@@ -179,7 +180,7 @@ export function SwitchRoleDialog({
                 onClick={() => void handleSwitch()}
                 disabled={!assignmentId || pending}
               >
-                {pending ? "Switching…" : "Switch"}
+                {pending ? t("switchRole.pending") : t("switchRole.submit")}
               </Button>
             </div>
           </>

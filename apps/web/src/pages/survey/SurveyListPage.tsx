@@ -21,8 +21,10 @@ import {
   type Column,
 } from "../../shell/components/ui";
 import { formatDateShort } from "../complaints/format";
+import { useT } from "../../i18n/LocaleProvider";
 
 export function SurveyListPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const navigate = useNavigate();
@@ -40,11 +42,11 @@ export function SurveyListPage() {
     try {
       setRows(await api.surveys(token));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load surveys");
+      setError(err instanceof ApiError ? err.message : t("surveyList.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     load();
@@ -63,45 +65,45 @@ export function SurveyListPage() {
       });
       navigate(`/surveys/${created.definition.code}`);
     } catch (err) {
-      setCreateError(err instanceof ApiError ? err.message : "Failed to create survey");
+      setCreateError(err instanceof ApiError ? err.message : t("surveyList.createFailed"));
     } finally {
       setCreating(false);
     }
   }
 
   const columns: Column<SurveyDefinition>[] = [
-    { header: "Code", cell: (d) => <span className="font-mono text-slate-800">{d.code}</span> },
-    { header: "Name", cell: (d) => d.name },
+    { header: t("surveyList.colCode"), cell: (d) => <span className="font-mono text-ink">{d.code}</span> },
+    { header: t("surveyList.colName"), cell: (d) => d.name },
     {
-      header: "Status",
-      cell: (d) => <Badge>{d.isActive ? "Active" : "Inactive"}</Badge>,
+      header: t("surveyList.colStatus"),
+      cell: (d) => <Badge>{d.isActive ? t("surveyList.active") : t("surveyList.inactive")}</Badge>,
     },
-    { header: "Created", cell: (d) => formatDateShort(d.createdAt) },
+    { header: t("surveyList.colCreated"), cell: (d) => formatDateShort(d.createdAt) },
   ];
 
   return (
     <div>
       <PageHeader
-        title="Surveys"
-        subtitle="Author survey definitions, publish versions, and assign them."
-        actions={<Button onClick={() => setShowCreate((v) => !v)}>{showCreate ? "Close" : "New survey"}</Button>}
+        title={t("surveyList.title")}
+        subtitle={t("surveyList.subtitle")}
+        actions={<Button onClick={() => setShowCreate((v) => !v)}>{showCreate ? t("surveyList.close") : t("surveyList.newSurvey")}</Button>}
       />
 
       {showCreate && (
         <Card className="mb-4 max-w-xl">
           <form onSubmit={handleCreate} className="space-y-3">
-            <Field label="Code" required hint="Unique per tenant, e.g. csat">
+            <Field label={t("surveyList.colCode")} required hint={t("surveyList.codeHint")}>
               <Input name="code" required placeholder="csat" />
             </Field>
-            <Field label="Name" required>
-              <Input name="name" required placeholder="Customer Satisfaction" />
+            <Field label={t("surveyList.colName")} required>
+              <Input name="name" required placeholder={t("surveyList.namePlaceholder")} />
             </Field>
-            <Field label="Description" hint="Optional">
+            <Field label={t("surveyList.fieldDescription")} hint={t("surveyList.optional")}>
               <Textarea name="description" rows={2} />
             </Field>
             {createError && <Alert tone="error">{createError}</Alert>}
             <Button type="submit" disabled={creating}>
-              {creating ? "Creating…" : "Create survey"}
+              {creating ? t("surveyList.creating") : t("surveyList.create")}
             </Button>
           </form>
         </Card>
@@ -110,7 +112,7 @@ export function SurveyListPage() {
       {error ? (
         <Alert tone="error">{error}</Alert>
       ) : loading ? (
-        <Spinner label="Loading surveys…" />
+        <Spinner label={t("surveyList.loading")} />
       ) : (
         <DataTable
           columns={columns}
@@ -119,9 +121,9 @@ export function SurveyListPage() {
           onRowClick={(d) => navigate(`/surveys/${d.code}`)}
           empty={
             <EmptyState
-              title="No surveys yet"
-              description="Create your first survey definition to get started."
-              action={<Button onClick={() => setShowCreate(true)}>New survey</Button>}
+              title={t("surveyList.emptyTitle")}
+              description={t("surveyList.emptyDesc")}
+              action={<Button onClick={() => setShowCreate(true)}>{t("surveyList.newSurvey")}</Button>}
             />
           }
         />

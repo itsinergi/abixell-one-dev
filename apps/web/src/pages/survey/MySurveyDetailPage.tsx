@@ -31,6 +31,7 @@ import {
   sortSurveyQuestions,
   type ResponseAnswerState,
 } from "./survey-response";
+import { useT } from "../../i18n/LocaleProvider";
 
 type LocalAnswer = ResponseAnswerState;
 
@@ -41,6 +42,7 @@ type LocalMatrixAnswer = {
 };
 
 export function MySurveyDetailPage() {
+  const t = useT();
   const { session } = useAuth();
   const token = session!.accessToken;
   const { assignmentId } = useParams<{ assignmentId: string }>();
@@ -82,11 +84,11 @@ export function MySurveyDetailPage() {
       }
       setMatrixAnswers(initialMatrix);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load survey");
+      setError(err instanceof ApiError ? err.message : t("surveyRespond.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token, assignmentId]);
+  }, [token, assignmentId, t]);
 
   useEffect(() => {
     load();
@@ -216,10 +218,10 @@ export function MySurveyDetailPage() {
     setNotice(null);
     try {
       await api.saveSurveyAnswers(token, assignmentId, payload, matrixPayload);
-      setNotice({ tone: "success", text: "Draft saved." });
+      setNotice({ tone: "success", text: t("surveyRespond.draftSaved") });
       await load();
     } catch (err) {
-      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : "Save failed" });
+      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : t("surveyRespond.saveFailed") });
     } finally {
       setBusy(false);
     }
@@ -251,7 +253,9 @@ export function MySurveyDetailPage() {
     if (missing.length > 0) {
       setNotice({
         tone: "error",
-        text: `Please answer required question(s): ${missing.map((question) => question.text).join(", ")}`,
+        text: t("surveyRespond.requiredMissing", {
+          questions: missing.map((question) => question.text).join(", "),
+        }),
       });
       return;
     }
@@ -261,22 +265,22 @@ export function MySurveyDetailPage() {
     try {
       await api.saveSurveyAnswers(token, assignmentId, payload, matrixPayload);
       await api.submitSurvey(token, assignmentId);
-      setNotice({ tone: "success", text: "Survey submitted. Thank you!" });
+      setNotice({ tone: "success", text: t("surveyRespond.submitted") });
       await load();
     } catch (err) {
-      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : "Submit failed" });
+      setNotice({ tone: "error", text: err instanceof ApiError ? err.message : t("surveyRespond.submitFailed") });
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <Spinner label="Loading survey…" />;
+  if (loading) return <Spinner label={t("surveyRespond.loading")} />;
   if (error) {
     return (
       <div className="space-y-3">
         <Alert tone="error">{error}</Alert>
         <Button variant="secondary" onClick={() => navigate("/my-surveys")}>
-          Back to my surveys
+          {t("surveyRespond.backToList")}
         </Button>
       </div>
     );
@@ -286,11 +290,11 @@ export function MySurveyDetailPage() {
   return (
     <div>
       <PageHeader
-        title="Survey"
-        subtitle={submitted ? "Submitted — thank you for your response." : "Please answer the questions below."}
+        title={t("surveyRespond.title")}
+        subtitle={submitted ? t("surveyRespond.subtitleSubmitted") : t("surveyRespond.subtitleOpen")}
         actions={
           <Button variant="secondary" onClick={() => navigate("/my-surveys")}>
-            Back to my surveys
+            {t("surveyRespond.backToList")}
           </Button>
         }
       />
@@ -298,10 +302,10 @@ export function MySurveyDetailPage() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <StatusPill tone={submitted ? "success" : "warning"}>{view.assignment.status}</StatusPill>
         {submitted && view.assignment.totalScore != null && (
-          <Badge>Total score: {view.assignment.totalScore}</Badge>
+          <Badge>{t("surveyRespond.totalScore", { score: view.assignment.totalScore })}</Badge>
         )}
         {!submitted && skippedQuestionIds.size > 0 && (
-          <Badge>{skippedQuestionIds.size} question(s) skipped by branching</Badge>
+          <Badge>{t("surveyRespond.skippedCount", { count: skippedQuestionIds.size })}</Badge>
         )}
       </div>
 
@@ -320,9 +324,9 @@ export function MySurveyDetailPage() {
 
           return (
             <section key={section.id} className="space-y-3">
-              <div className="border-l-4 border-slate-900 pl-3">
-                <h2 className="text-base font-semibold text-slate-900">{section.title}</h2>
-                {section.description && <p className="text-xs text-slate-500">{section.description}</p>}
+              <div className="border-l-4 border-accent pl-3">
+                <h2 className="text-base font-semibold text-ink">{section.title}</h2>
+                {section.description && <p className="text-xs text-ink-faint">{section.description}</p>}
               </div>
 
               {visibleQuestions.map((question, index) => (
@@ -383,12 +387,12 @@ export function MySurveyDetailPage() {
           ))}
 
         {!submitted && (
-          <div className="flex items-center gap-2 border-t border-slate-200 pt-4">
+          <div className="flex items-center gap-2 border-t border-line pt-4">
             <Button variant="secondary" disabled={busy} onClick={saveDraft}>
-              Save draft
+              {t("surveyRespond.saveDraft")}
             </Button>
             <Button disabled={busy} onClick={submit}>
-              {busy ? "Working…" : "Submit"}
+              {busy ? t("surveyRespond.working") : t("surveyRespond.submit")}
             </Button>
           </div>
         )}
@@ -417,11 +421,12 @@ function RespondentQuestion({
   onAnswerChange: (update: Partial<LocalAnswer>) => void;
   onMatrixAnswerChange: (rowId: string, update: Partial<LocalMatrixAnswer>) => void;
 }) {
+  const t = useT();
   return (
     <Card>
-      <div className="mb-2 text-sm font-medium text-slate-800">
+      <div className="mb-2 text-sm font-medium text-ink">
         {index}. {question.text}
-        {question.isRequired && <span className="ml-1 text-red-500">*</span>}
+        {question.isRequired && <span className="ml-1 text-status-danger">*</span>}
       </div>
 
       {question.questionType === "rating" && (
@@ -437,7 +442,7 @@ function RespondentQuestion({
       {question.questionType === "single_choice" && (
         <div className="space-y-1">
           {(question.options ?? []).map((option) => (
-            <label key={option.id} className="flex items-center gap-2 text-sm text-slate-700">
+            <label key={option.id} className="flex items-center gap-2 text-sm text-ink-dim">
               <input
                 type="radio"
                 name={`q-${question.id}`}
@@ -456,7 +461,7 @@ function RespondentQuestion({
           {(question.options ?? []).map((option) => {
             const selected = (answer.optionIds ?? []).includes(option.id);
             return (
-              <label key={option.id} className="flex items-center gap-2 text-sm text-slate-700">
+              <label key={option.id} className="flex items-center gap-2 text-sm text-ink-dim">
                 <input
                   type="checkbox"
                   disabled={disabled}
@@ -480,8 +485,8 @@ function RespondentQuestion({
       {question.questionType === "yes_no" && (
         <div className="flex gap-2">
           {[
-            { value: "yes", label: "Yes" },
-            { value: "no", label: "No" },
+            { value: "yes", label: t("surveyRespond.yes") },
+            { value: "no", label: t("surveyRespond.no") },
           ].map((choice) => (
             <button
               key={choice.value}
@@ -491,8 +496,8 @@ function RespondentQuestion({
               onClick={() => onAnswerChange({ valueText: choice.value })}
               className={`rounded border px-4 py-2 text-sm font-medium transition-colors ${
                 answer.valueText === choice.value
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  ? "border-accent bg-accent text-accent-on"
+                  : "border-line bg-panel text-ink-dim hover:bg-panel-2"
               } disabled:opacity-50`}
             >
               {choice.label}
@@ -551,22 +556,24 @@ function RespondentQuestion({
       {question.questionType === "matrix_single_choice" && (
         <div className="overflow-x-auto pt-1">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-panel-2">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Statement</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-ink-dim">
+                  {t("surveyRespond.statementColumn")}
+                </th>
                 {(question.options ?? []).map((option) => (
-                  <th key={option.id} className="px-3 py-2 text-center text-xs font-semibold text-slate-600">
+                  <th key={option.id} className="px-3 py-2 text-center text-xs font-semibold text-ink-dim">
                     {option.label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-panel">
               {(question.matrixRows ?? []).map((row) => {
                 const matrixAnswer = matrixAnswers[`${question.id}:${row.id}`];
                 return (
                   <tr key={row.id}>
-                    <td className="px-3 py-2 text-slate-800">{row.label}</td>
+                    <td className="px-3 py-2 text-ink">{row.label}</td>
                     {(question.options ?? []).map((option) => (
                       <td key={option.id} className="px-3 py-2 text-center">
                         <input
@@ -589,20 +596,25 @@ function RespondentQuestion({
       {question.questionType === "matrix_rating" && (
         <div className="overflow-x-auto pt-1">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-panel-2">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Statement</th>
-                <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">
-                  Rating {String(question.config.min ?? 1)}–{String(question.config.max ?? 5)}
+                <th className="px-3 py-2 text-left text-xs font-semibold text-ink-dim">
+                  {t("surveyRespond.statementColumn")}
+                </th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-ink-dim">
+                  {t("surveyRespond.ratingRange", {
+                    min: String(question.config.min ?? 1),
+                    max: String(question.config.max ?? 5),
+                  })}
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-panel">
               {(question.matrixRows ?? []).map((row) => {
                 const matrixAnswer = matrixAnswers[`${question.id}:${row.id}`];
                 return (
                   <tr key={row.id}>
-                    <td className="px-3 py-2 text-slate-800">{row.label}</td>
+                    <td className="px-3 py-2 text-ink">{row.label}</td>
                     <td className="px-3 py-2 text-center">
                       <RatingInput
                         min={Number(question.config.min ?? 1)}
@@ -650,10 +662,10 @@ function RatingInput({
           disabled={disabled}
           aria-pressed={value === number}
           onClick={() => onChange(number)}
-          className={`${compact ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm"} rounded border font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400 ${
+          className={`${compact ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm"} rounded border font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent ${
             value === number
-              ? "border-slate-900 bg-slate-900 text-white"
-              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              ? "border-accent bg-accent text-accent-on"
+              : "border-line bg-panel text-ink-dim hover:bg-panel-2"
           } disabled:opacity-50`}
         >
           {number}

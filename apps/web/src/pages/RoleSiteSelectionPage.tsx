@@ -3,21 +3,24 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { api, ApiError, type MyRoleAssignment } from "../lib/api";
 import { Alert, Button, Field, Select, Spinner } from "../shell/components/ui";
+import { useT } from "../i18n/LocaleProvider";
+import { LanguageSwitcher } from "../shell/components/LanguageSwitcher";
+import type { MessageKey } from "../i18n/dictionaries/en";
 
 /** Human label for one assignment's Data Scope. `organization_unit` names the
  * site; a tenant-wide grant has no single site, and a customer grant is scoped
  * to the customer rather than to any internal site — each is stated plainly
  * instead of leaving the control empty. */
-function scopeLabel(assignment: MyRoleAssignment): string {
+function scopeLabel(assignment: MyRoleAssignment, t: (key: MessageKey) => string): string {
   switch (assignment.scopeType) {
     case "tenant":
-      return "All sites (tenant-wide)";
+      return t("selectRole.scopeTenant");
     case "legal_entity":
-      return assignment.scopeLegalEntityName ?? "Legal entity";
+      return assignment.scopeLegalEntityName ?? t("selectRole.scopeLegalEntity");
     case "customer":
-      return assignment.scopeCustomerName ?? "Customer";
+      return assignment.scopeCustomerName ?? t("selectRole.scopeCustomer");
     default:
-      return assignment.scopeOrganizationUnitName ?? "Organization unit";
+      return assignment.scopeOrganizationUnitName ?? t("selectRole.scopeOrgUnit");
   }
 }
 
@@ -35,6 +38,7 @@ function scopeLabel(assignment: MyRoleAssignment): string {
 export function RoleSiteSelectionPage() {
   const { session, updateSession } = useAuth();
   const navigate = useNavigate();
+  const t = useT();
   const token = session?.accessToken;
   const currentAssignmentId = session?.assignmentId;
 
@@ -61,12 +65,15 @@ export function RoleSiteSelectionPage() {
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Could not load your access");
+        if (!cancelled) setError(err instanceof ApiError ? err.message : t("selectRole.loadFailed"));
       });
     return () => {
       cancelled = true;
     };
     // Runs once per session token — the assignment list is stable for a login.
+    // `t` is intentionally omitted: the message is captured at failure time and
+    // a language switch must not refetch the access list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currentAssignmentId]);
 
   // One entry per Role; a Role may carry several scopes, which the second
@@ -98,7 +105,7 @@ export function RoleSiteSelectionPage() {
       try {
         await api.switchRole(token, assignmentId);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not set your work context");
+        setError(err instanceof ApiError ? err.message : t("selectRole.switchFailed"));
         setPending(false);
         return;
       }
@@ -111,29 +118,30 @@ export function RoleSiteSelectionPage() {
   if (!session) return null;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md space-y-4 rounded border border-slate-200 bg-white p-6 shadow-xs">
+    <div className="flex min-h-screen items-center justify-center bg-ground px-4">
+      <div className="w-full max-w-md space-y-4 rounded border border-line bg-panel p-6 shadow-xs">
         <div>
-          <h1 className="text-lg font-semibold">Choose how you want to work</h1>
-          <p className="text-sm text-slate-500">
-            Pick a role and the site it applies to. You only see the options your account already
-            has.
-          </p>
+          <h1 className="text-lg font-semibold text-ink">{t("selectRole.title")}</h1>
+          <p className="text-sm text-ink-faint">{t("selectRole.subtitle")}</p>
         </div>
 
         {error && <Alert tone="error">{error}</Alert>}
 
-        {!assignments && !error && <Spinner label="Loading your access…" />}
+        {!assignments && !error && <Spinner label={t("selectRole.loading")} />}
 
         {assignments && assignments.length === 0 && (
-          <Alert tone="warning">
-            Your account has no role assigned yet. Ask an administrator to grant you access.
-          </Alert>
+          <Alert tone="warning">{t("selectRole.noRoles")}</Alert>
         )}
 
         {assignments && assignments.length > 0 && (
           <>
-            <Field label="Role" required>
+            {/* Placed above the role control, as asked: the language is a
+                choice about the whole screen, so it comes before the choice
+                that screen is asking for. */}
+            <div className="flex justify-end">
+              <LanguageSwitcher />
+            </div>
+            <Field label={t("selectRole.role")} required>
               <Select value={roleCode} onChange={(e) => chooseRole(e.target.value)}>
                 {roles.map((role) => (
                   <option key={role.code} value={role.code}>
@@ -143,11 +151,11 @@ export function RoleSiteSelectionPage() {
               </Select>
             </Field>
 
-            <Field label="Site" required>
+            <Field label={t("selectRole.site")} required>
               <Select value={assignmentId} onChange={(e) => setAssignmentId(e.target.value)}>
                 {scopes.map((scope) => (
                   <option key={scope.id} value={scope.id}>
-                    {scopeLabel(scope)}
+                    {scopeLabel(scope, t)}
                   </option>
                 ))}
               </Select>
@@ -158,7 +166,7 @@ export function RoleSiteSelectionPage() {
               disabled={!assignmentId || pending}
               onClick={() => void handleContinue()}
             >
-              {pending ? "Setting up…" : "Continue"}
+              {pending ? t("selectRole.pending") : t("selectRole.continue")}
             </Button>
           </>
         )}

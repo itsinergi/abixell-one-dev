@@ -41,9 +41,11 @@ import {
 import { GUARD_ENFORCE, evaluateRouteAccess, isEntryFlowRoute } from "../../lib/routeRegistry";
 import { Alert, Button, Spinner } from "../components/ui";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { UserMenu } from "../components/UserMenu";
 import { SwitchRoleDialog } from "../components/SwitchRoleDialog";
 import { useOnlineStatus } from "../useOnlineStatus";
+import { useLocale, useT } from "../../i18n/LocaleProvider";
 
 interface ShellContextValue {
   /** Raw permission codes from `GET /me`. */
@@ -132,14 +134,14 @@ function NavRow({
   );
 }
 
-function scopeSummary(scopeTypes: string[]): string {
+function scopeSummary(scopeTypes: string[], t: ReturnType<typeof useT>): string {
   const labels = [
-    scopeTypes.includes("tenant") ? "All Project" : null,
-    scopeTypes.includes("organization_unit") ? "Organization unit scope" : null,
-    scopeTypes.includes("customer") ? "Customer scope" : null,
+    scopeTypes.includes("tenant") ? t("shell.scopeTenant") : null,
+    scopeTypes.includes("organization_unit") ? t("shell.scopeOrgUnit") : null,
+    scopeTypes.includes("customer") ? t("shell.scopeCustomer") : null,
   ].filter((label): label is string => label !== null);
 
-  return labels.length > 0 ? labels.join(" · ") : "No data scope reported";
+  return labels.length > 0 ? labels.join(" · ") : t("shell.scopeNone");
 }
 
 function NavigationContent({
@@ -159,6 +161,7 @@ function NavigationContent({
   onNavigate?: () => void;
   filterId: string;
 }) {
+  const t = useT();
   const filterInputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredGroups = useMemo(
@@ -170,7 +173,7 @@ function NavigationContent({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-3 pb-3">
         <label htmlFor={filterId} className="sr-only">
-          Filter navigation
+          {t("shell.filterNavigation")}
         </label>
         <div className="relative">
           <input
@@ -179,7 +182,7 @@ function NavigationContent({
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Filter navigation"
+            placeholder={t("shell.filterNavigation")}
             autoComplete="off"
             className="min-h-[44px] w-full rounded border border-line-strong bg-panel px-3 pr-9 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-2 focus:ring-accent-soft lg:min-h-[36px]"
           />
@@ -190,7 +193,7 @@ function NavigationContent({
                 onQueryChange("");
                 filterInputRef.current?.focus();
               }}
-              aria-label="Clear navigation filter"
+              aria-label={t("shell.clearFilter")}
               className="absolute inset-y-0 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r text-lg leading-none text-ink-faint hover:text-ink-dim focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent lg:min-h-[36px] lg:min-w-[36px]"
             >
               ×
@@ -199,7 +202,7 @@ function NavigationContent({
         </div>
       </div>
 
-      <nav aria-label="Primary navigation" className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+      <nav aria-label={t("shell.primaryNavigation")} className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {filteredGroups.length > 0 ? (
           <div className="space-y-5">
             {filteredGroups.map((group) => (
@@ -393,7 +396,7 @@ export function AppShell() {
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [tenantName, setTenantName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | boolean | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navigationQuery, setNavigationQuery] = useState("");
   const [switchRoleOpen, setSwitchRoleOpen] = useState(false);
@@ -401,6 +404,8 @@ export function AppShell() {
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const loadGeneration = useRef(0);
   const online = useOnlineStatus();
+  const t = useT();
+  const { locale } = useLocale();
 
   // Route guard (Epic 3 Wave 1 §4.3 step 1; Wave 2 step 8 adds the third
   // cause). It resolves the current path against the route registry;
@@ -493,7 +498,7 @@ export function AppShell() {
       }
     } catch (err) {
       if (loadGeneration.current !== generation) return;
-      setError(err instanceof ApiError ? err.message : "Failed to load your workspace");
+      setError(err instanceof ApiError ? err : true);
     } finally {
       if (loadGeneration.current === generation) setLoading(false);
     }
@@ -530,7 +535,7 @@ export function AppShell() {
   // here, and `locked` arrives already decided. Labels and descriptions come
   // from the served `MenuNode`, so a tenant label override served by the
   // dictionary shows up without the shell knowing about it.
-  const groups = useMemo(() => servedNavGroups(menu), [menu]);
+  const groups = useMemo(() => servedNavGroups(menu, locale), [menu, locale]);
 
   useEffect(() => {
     const activeCodes = activeServedModuleCodes(groups, location.pathname);
@@ -549,8 +554,8 @@ export function AppShell() {
   }, [groups, location.pathname]);
 
   // Client-neutral fallback while the Tenant name loads (ADR-0003).
-  const workspaceTitle = tenantName || "Enterprise Management System";
-  const currentScopeSummary = scopeSummary(scopeTypes);
+  const workspaceTitle = tenantName || t("shell.workspaceFallback");
+  const currentScopeSummary = scopeSummary(scopeTypes, t);
 
   return (
     <div className="min-h-screen bg-ground text-ink lg:flex">
@@ -558,7 +563,7 @@ export function AppShell() {
         href="#main-content"
         className="fixed left-3 top-3 z-60 -translate-y-20 rounded bg-accent px-4 py-2 text-sm font-medium text-accent-on shadow-lg transition-transform focus:translate-y-0 focus:outline-hidden focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-ground"
       >
-        Skip to main content
+        {t("shell.skipToContent")}
       </a>
 
       {/* Persistent desktop navigation. */}
@@ -596,7 +601,7 @@ export function AppShell() {
             type="button"
             className="absolute inset-0 h-full w-full cursor-default bg-black/50"
             onClick={closeMobileNavigation}
-            aria-label="Close navigation"
+            aria-label={t("shell.closeNavigation")}
             tabIndex={-1}
           />
           <aside
@@ -618,7 +623,7 @@ export function AppShell() {
               <button
                 type="button"
                 onClick={closeMobileNavigation}
-                aria-label="Close navigation"
+                aria-label={t("shell.closeNavigation")}
                 className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-xl text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
               >
                 ×
@@ -635,15 +640,21 @@ export function AppShell() {
                 filterId="drawer-navigation-filter"
               />
             </div>
-            <div className="border-t border-line p-3">
+            <div className="space-y-3 border-t border-line p-3">
+              {/* The topbar controls are desktop-only, so the drawer carries
+                  its own pair; otherwise a phone user can reach neither. */}
+              <div className="flex items-center gap-2">
+                <LanguageSwitcher />
+                <ThemeToggle />
+              </div>
               <UserMenu
-            fullName={session?.fullName}
-            email={session?.email}
-            activeRoleName={session?.activeRoleName}
-            activeScopeName={session?.activeScopeName}
-            onSwitchRole={() => setSwitchRoleOpen(true)}
-            onSignOut={logout}
-          />
+                fullName={session?.fullName}
+                email={session?.email}
+                activeRoleName={session?.activeRoleName}
+                activeScopeName={session?.activeScopeName}
+                onSwitchRole={() => setSwitchRoleOpen(true)}
+                onSignOut={logout}
+              />
             </div>
           </aside>
         </div>
@@ -658,11 +669,11 @@ export function AppShell() {
                 type="button"
                 aria-expanded={mobileNavOpen}
                 aria-controls="mobile-navigation"
-                aria-label="Open navigation"
+                aria-label={t("shell.openNavigation")}
                 onClick={() => setMobileNavOpen(true)}
                 className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded border border-line-strong bg-panel text-sm font-medium text-ink-dim hover:bg-panel-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
               >
-                Menu
+                {t("shell.menu")}
               </button>
               <div className="min-w-0 lg:hidden">
                 <div className="truncate text-sm font-semibold text-ink">{workspaceTitle}</div>
@@ -676,15 +687,16 @@ export function AppShell() {
               </div>
             </div>
             <div className="hidden min-w-0 items-center gap-3 lg:flex">
+              <LanguageSwitcher />
               <ThemeToggle />
               <UserMenu
-            fullName={session?.fullName}
-            email={session?.email}
-            activeRoleName={session?.activeRoleName}
-            activeScopeName={session?.activeScopeName}
-            onSwitchRole={() => setSwitchRoleOpen(true)}
-            onSignOut={logout}
-          />
+                fullName={session?.fullName}
+                email={session?.email}
+                activeRoleName={session?.activeRoleName}
+                activeScopeName={session?.activeScopeName}
+                onSwitchRole={() => setSwitchRoleOpen(true)}
+                onSignOut={logout}
+              />
             </div>
           </header>
           {!online && (
@@ -693,7 +705,7 @@ export function AppShell() {
               role="status"
               aria-live="polite"
             >
-              You are offline — some actions may be unavailable until the connection returns.
+              {t("shell.offline")}
             </div>
           )}
           {/* Report mode only. Gated on the loaded state — while /me is in
@@ -716,12 +728,14 @@ export function AppShell() {
         <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 p-4 focus:outline-hidden sm:p-6">
           <div className="mx-auto w-full max-w-[1600px]">
             {loading ? (
-              <Spinner label="Loading your workspace…" />
+              <Spinner label={t("shell.loadingWorkspace")} />
             ) : error ? (
               <div className="space-y-3">
-                <Alert tone="error">{error}</Alert>
+                <Alert tone="error">
+                  {error instanceof ApiError ? error.message : t("shell.loadFailed")}
+                </Alert>
                 <Button variant="secondary" onClick={load}>
-                  Retry
+                  {t("common.retry")}
                 </Button>
               </div>
             ) : guardBlocks ? (
@@ -738,20 +752,26 @@ export function AppShell() {
               <div className="mx-auto max-w-xl space-y-3 py-8 text-center">
                 <h1 className="text-lg font-semibold text-ink">
                   {moduleInactive
-                    ? "This module is not active for your tenant."
+                    ? t("shell.guardInactiveTitle")
                     : routeGuardReport.registered
-                      ? "You do not have access to this page."
-                      : "Page not found."}
+                      ? t("shell.guardDeniedTitle")
+                      : t("shell.guardNotFoundTitle")}
                 </h1>
                 <p className="text-sm text-ink-dim">
                   {moduleInactive
-                    ? `${routeGuardReport.pathname} belongs to the ${routeGuardReport.entry?.moduleCode} module, which is turned off for your tenant. Ask your tenant administrator to activate it.`
+                    ? t("shell.guardInactiveBody", {
+                        path: routeGuardReport.pathname,
+                        module: routeGuardReport.entry?.moduleCode ?? "",
+                      })
                     : routeGuardReport.registered
-                      ? `${routeGuardReport.pathname} requires one of: ${routeGuardReport.missingPermissions.join(", ")}. Ask your tenant administrator for access.`
-                      : `The address ${routeGuardReport.pathname} is not part of this application.`}
+                      ? t("shell.guardDeniedBody", {
+                          path: routeGuardReport.pathname,
+                          permissions: routeGuardReport.missingPermissions.join(", "),
+                        })
+                      : t("shell.guardNotFoundBody", { path: routeGuardReport.pathname })}
                 </p>
                 <Button variant="secondary" onClick={() => navigate("/")}>
-                  Back to Overview
+                  {t("shell.backToOverview")}
                 </Button>
               </div>
             ) : (

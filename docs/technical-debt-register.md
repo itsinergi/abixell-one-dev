@@ -750,3 +750,44 @@ interfaces. Excluded from the product denominator.
 
 ### PLATFORM HARDENING (delivered)
 PH-1, PH-2, PH-5, PH-6, and PH-7 delivered in Phase H (Pilot Hardening). The Pilot gate is satisfied; Phase H2 (PH-3, PH-4, PH-8) remains planned for Production gate.
+
+---
+
+## I18N — Dua Bahasa EN/ID (2026-10-28)
+
+Rencana dan gelombang: `docs/plans/I18N-ROADMAP.md`. Semua item di bawah adalah
+**TECHNICAL DEBT** (aman ditunda) kecuali dinyatakan lain.
+
+1. **Pilihan bahasa hanya tersimpan per-browser** (`localStorage`, kunci
+   `abixell.locale.v1`). Tidak ikut ke perangkat lain dan tidak bisa
+   diatur admin. Jalur perbaikan: kolom `users.preferred_locale` +
+   `PATCH /me`. Schema `PATCH /me` adalah `.strict()` di
+   `apps/api/src/interfaces/http/routes/auth.ts:108-123`, sehingga
+   menambah field berarti perubahan backend + migrasi; ditunda karena
+   pekerjaan i18n ini tidak menyentuh backend. *(Asal: i18n W1.)*
+2. **Pesan galat dari API tetap Inggris.** `ApiError.message` dikirim
+   server. Jalur perbaikan: peta `error code` → kamus klien (butuh kode
+   galat stabil di respons API). *(Asal: i18n W2.)*
+3. **`DESIGN.md` §6 ("Bahasa Indonesia untuk seluruh copy produk") belum
+   terpenuhi** karena default dikunci ke Inggris dan modul W3–W7 belum
+   diterjemahkan. Ditutup saat W7 selesai. Kontradiksi disengaja dan
+   tercatat, bukan terlewat. *(Asal: i18n W0.)*
+4. **Data bisnis tidak diterjemahkan** (nama tenant, role, unit
+   organisasi, master data). Menerjemahkan berarti mengubah data, bukan
+   UI. Tidak direncanakan. *(Asal: i18n W2.)*
+5. **Label navigasi `nav-*` diterjemahkan di klien**, di-key oleh `code`.
+   Seed server tetap Inggris. Bila katalog menu bertambah, `navLabels`
+   harus ikut diperbarui; kode baru tanpa entri jatuh ke `MenuNode.name`.
+   *(Asal: i18n W1.)*
+6. **Tanpa plural/ICU dan tanpa library i18n.** Cukup untuk EN/ID
+   (Indonesia tidak berinfleksi jumlah). Tinjau ulang bila bahasa ketiga
+   atau format tanggal/terbilang kompleks dibutuhkan. *(Asal: i18n W1.)*
+7. **Pil status gagal AA tipis di tema terang.** `text-status-ok`
+   (`#0F7A4A`) di atas `bg-status-ok-soft` (alpha 10% di panel
+   `#F7F8FA`) terukur 4.41:1, di bawah ambang 4.5:1 untuk teks normal.
+   `warn` 4.85, `danger` 5.15, `idle` 5.26 lolos. Ini nilai palet
+   `DESIGN.md` dan dipakai `StatusPill` di seluruh aplikasi sejak sebelum
+   W4, bukan regresi gelombang survei. Jalur perbaikan: gelapkan `ok`
+   terang ke `#0E7043` (5.04:1) di `apps/web/src/index.css` **dan** baris
+   tabel `DESIGN.md`, satu perubahan dua tempat. Ditunda karena mengubah
+   token global menyentuh seluruh layar. *(Asal: i18n W4.)*

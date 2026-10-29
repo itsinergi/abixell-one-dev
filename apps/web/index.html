@@ -17,18 +17,24 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="EMS" />
-    <!-- Design tokens (Epic 4 Wave 1). Applied before first paint so a stored
-         theme never flashes the other one while the bundle loads. Kept in
-         sync with src/theme/ThemeProvider.tsx: same key, same two values. -->
+    <!-- Design tokens (Epic 4 Wave 1) and the UI language. Applied before
+         first paint so a stored theme or language never flashes the other one
+         while the bundle loads. Kept in sync with src/theme/ThemeProvider.tsx
+         and src/i18n/LocaleProvider.tsx: same keys, same values. -->
     <script>
       (function () {
         try {
-          var stored = window.localStorage.getItem("abixell.theme.v1");
-          if (stored === "dark" || stored === "light") {
-            document.documentElement.setAttribute("data-theme", stored);
+          var theme = window.localStorage.getItem("abixell.theme.v1");
+          if (theme === "dark" || theme === "light") {
+            document.documentElement.setAttribute("data-theme", theme);
+          }
+          var locale = window.localStorage.getItem("abixell.locale.v1");
+          if (locale === "en" || locale === "id") {
+            document.documentElement.setAttribute("lang", locale);
+            document.documentElement.setAttribute("data-locale", locale);
           }
         } catch (error) {
-          /* Storage unavailable: the default theme applies. */
+          /* Storage unavailable: the default theme and language apply. */
         }
       })();
     </script>

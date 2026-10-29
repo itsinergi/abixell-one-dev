@@ -20,9 +20,11 @@ import { Link } from "react-router-dom";
 import { useShell } from "../shell/layout/AppShell";
 import { servedGroupPages } from "../lib/servedNav";
 import { EmptyState, PageHeader } from "../shell/components/ui";
+import { useT } from "../i18n/LocaleProvider";
 
 export function OverviewPage() {
   const { navGroups, tenantName } = useShell();
+  const t = useT();
 
   // The landing page does not list itself, and a group whose only served page
   // is Overview has nothing to offer — dropping it keeps the page from
@@ -37,24 +39,24 @@ export function OverviewPage() {
   return (
     <div>
       <PageHeader
-        title={`Welcome to ${tenantName || "your workspace"}`}
-        subtitle="Choose an area to continue. You only see the sections your access allows."
+        title={t("overview.welcome", { tenant: tenantName || t("overview.welcomeFallback") })}
+        subtitle={t("overview.subtitle")}
       />
 
       {groups.length === 0 ? (
         <EmptyState
-          title="No work areas available"
-          description="You are signed in, but no destination is currently available to your account. Contact your administrator if you expect additional access."
+          title={t("overview.emptyTitle")}
+          description={t("overview.emptyDescription")}
         />
       ) : (
         <div className="space-y-8">
           {groups.map((group) => (
             <section key={group.key} aria-labelledby={`overview-${group.key}`}>
               <div className="mb-3">
-                <h2 id={`overview-${group.key}`} className="text-sm font-semibold text-slate-900">
+                <h2 id={`overview-${group.key}`} className="text-sm font-semibold text-ink">
                   {group.label}
                 </h2>
-                <p className="mt-0.5 text-sm text-slate-500">{group.description}</p>
+                <p className="mt-0.5 text-sm text-ink-faint">{group.description}</p>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {group.pages.map((page) =>
@@ -63,29 +65,29 @@ export function OverviewPage() {
                       key={page.code}
                       aria-disabled="true"
                       data-overview-locked={page.code}
-                      className="flex min-h-[112px] flex-col rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4"
+                      className="flex min-h-[112px] flex-col rounded-lg border border-dashed border-line bg-panel-2 p-4"
                     >
-                      <h3 className="text-sm font-semibold text-slate-400">{page.label}</h3>
-                      <p className="mt-1 text-sm leading-5 text-slate-400">
-                        {page.lockedReason ?? "You do not have access to this area."}
+                      <h3 className="text-sm font-semibold text-ink-faint">{page.label}</h3>
+                      <p className="mt-1 text-sm leading-5 text-ink-faint">
+                        {page.lockedReason ?? t("overview.lockedFallback")}
                       </p>
                     </div>
                   ) : (
                     <Link
                       key={page.code}
                       to={page.path}
-                      className="group flex min-h-[112px] flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                      className="group flex min-h-[112px] flex-col rounded-lg border border-line bg-panel p-4 transition-colors hover:border-line-strong hover:bg-panel-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <h3 className="text-sm font-semibold text-slate-900">{page.label}</h3>
+                        <h3 className="text-sm font-semibold text-ink">{page.label}</h3>
                         <span
                           aria-hidden="true"
-                          className="text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500"
+                          className="text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-ink-dim"
                         >
                           →
                         </span>
                       </div>
-                      <p className="mt-1 text-sm leading-5 text-slate-500">{page.description}</p>
+                      <p className="mt-1 text-sm leading-5 text-ink-faint">{page.description}</p>
                     </Link>
                   ),
                 )}

@@ -5,66 +5,65 @@
  * Internal steps, transitions, and conditions are authoring territory and
  * are intentionally not projected here.
  */
+import { useT } from "../../../i18n/LocaleProvider";
 import { api, type AdminWorkflowSummary } from "../../../lib/api";
 import { DataTable, StatusPill, type Column } from "../../../shell/components/ui";
 import { AdminEmpty, AdminPanel, AdminSectionState } from "./AdminSection";
 import { useAdminResource } from "./useAdminResource";
 
-const COLUMNS: Column<AdminWorkflowSummary>[] = [
-  {
-    header: "Code",
-    cell: (workflow) => (
-      <code className="break-all font-mono text-xs font-medium text-ink">{workflow.code}</code>
-    ),
-    mobileRole: "title",
-  },
-  { header: "Name", cell: (workflow) => workflow.name },
-  {
-    header: "Applies to",
-    cell: (workflow) => <code className="break-all font-mono text-xs">{workflow.entityType}</code>,
-  },
-  {
-    header: "Status",
-    cell: (workflow) =>
-      workflow.isActive ? (
-        <StatusPill tone="success">Active</StatusPill>
-      ) : (
-        <StatusPill tone="neutral">Inactive</StatusPill>
-      ),
-    mobileRole: "status",
-  },
-];
-
 export function AdminWorkflowsView() {
+  const t = useT();
   const { data, loading, error, denied, sessionExpired, reload } =
     useAdminResource<AdminWorkflowSummary[]>(
       (token) => api.adminWorkflows(token),
-      "Failed to load workflow definitions",
+      t("adminWorkflows.loadFailed"),
     );
+
+  const columns: Column<AdminWorkflowSummary>[] = [
+    {
+      header: t("adminWorkflows.columnCode"),
+      cell: (workflow) => (
+        <code className="break-all font-mono text-xs font-medium text-ink">{workflow.code}</code>
+      ),
+      mobileRole: "title",
+    },
+    { header: t("adminWorkflows.columnName"), cell: (workflow) => workflow.name },
+    {
+      header: t("adminWorkflows.columnAppliesto"),
+      cell: (workflow) => <code className="break-all font-mono text-xs">{workflow.entityType}</code>,
+    },
+    {
+      header: t("adminWorkflows.columnStatus"),
+      cell: (workflow) =>
+        workflow.isActive ? (
+          <StatusPill tone="success">{t("adminWorkflows.statusActive")}</StatusPill>
+        ) : (
+          <StatusPill tone="neutral">{t("adminWorkflows.statusInactive")}</StatusPill>
+        ),
+      mobileRole: "status",
+    },
+  ];
 
   return (
     <AdminSectionState
       loading={loading}
-      loadingLabel="Loading workflow definitions…"
+      loadingLabel={t("adminWorkflows.loading")}
       denied={denied}
       sessionExpired={sessionExpired}
       error={error}
       requiredPermission="workflow.definition.read"
       onRetry={reload}
     >
-      <AdminPanel
-        title="Workflow definitions"
-        description="Configured approval and lifecycle definitions and the entity type each governs. This view does not expose authoring controls or rule internals."
-      >
+      <AdminPanel title={t("adminWorkflows.title")} description={t("adminWorkflows.description")}>
         <DataTable
-          columns={COLUMNS}
+          columns={columns}
           rows={data ?? []}
           keyOf={(workflow) => workflow.code}
           mobileBreakpoint="md"
           empty={
             <AdminEmpty
-              title="No workflow definitions configured"
-              description="No configured workflow definitions were returned for this tenant."
+              title={t("adminWorkflows.emptyTitle")}
+              description={t("adminWorkflows.emptyDescription")}
             />
           }
         />
