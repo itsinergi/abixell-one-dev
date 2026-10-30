@@ -18,6 +18,7 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
+import { useAuth } from "../auth/AuthContext";
 import { translate, type MessageKey } from "./t";
 
 export type Locale = "en" | "id";
@@ -41,21 +42,47 @@ function readStoredLocale(): Locale | null {
 }
 
 export function LocaleProvider({ children }: PropsWithChildren) {
-  const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale() ?? "en");
+  const auth = useAuth();
+  const backendLocale = auth.session?.preferredLocale as Locale | undefined;
+
+  const [locale, setLocaleState] = useState<Locale>(() =>
+    readStoredLocale() ?? backendLocale ?? "id",
+  );
+
+  // Sync with backend on mount (after auth loads)
+  useEffect(() => {
+    if (!auth.initializing && backendLocale && backendLocale !== locale) {
+      setLocaleState(backendLocale);
+    }
+  }, [auth.initializing, backendLocale, locale]);
 
   useEffect(() => {
     document.documentElement.setAttribute("lang", locale);
     document.documentElement.setAttribute("data-locale", locale);
   }, [locale]);
 
-  const setLocale = useCallback((next: Locale) => {
-    setLocaleState(next);
-    try {
-      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
-    } catch {
-      // Preference is best-effort; the in-memory choice still applies.
-    }
-  }, []);
+  const setLocale = useCallback(
+    async (next: Locale) => {
+      setLocaleState(next);
+      try {
+        window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+      } catch {
+        // Preference is best-effort; the in-memory choice still applies.
+      }
+
+      // Persist to backend (best-effort, don't block UI)
+      try {
+        await fetch("/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ preferredLocale: next }),
+        });
+      } catch {
+        // Silent fail — localStorage still works as fallback
+      }
+    },
+    [],
+  );
 
   const value = useMemo(() => ({ locale, setLocale }), [locale, setLocale]);
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
@@ -65,7 +92,7 @@ export function LocaleProvider({ children }: PropsWithChildren) {
  *  rendered in isolation without the provider. */
 export function useLocale() {
   const context = useContext(LocaleContext);
-  return context ?? { locale: "en" as Locale, setLocale: () => {} };
+  return context ?? { locale: "id" as Locale, setLocale: () => {} };
 }
 
 /** `t(key, params)` type: string params return a string (usable in attributes

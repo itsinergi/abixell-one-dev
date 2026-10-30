@@ -1,3 +1,5 @@
+export type Locale = "en" | "id";
+
 export interface User {
   id: string;
   tenantId: string;
@@ -8,6 +10,7 @@ export interface User {
   deactivatedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
+  preferredLocale: Locale;
 }
 
 export interface UserWithPasswordHash extends User {
@@ -25,6 +28,7 @@ export interface UpdateUserProfileInput {
   fullName?: string;
   email?: string;
   passwordHash?: string;
+  preferredLocale?: Locale;
 }
 
 export interface LifecycleActor {

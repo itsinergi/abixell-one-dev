@@ -479,6 +479,7 @@ export function AppShell() {
       updateSession({
         fullName: me.fullName,
         email: me.email,
+        preferredLocale: me.preferredLocale,
         sessionId: me.sessionId,
         assignmentId: me.activeAssignmentId ?? undefined,
         activeRoleName: me.activeAssignmentName ?? undefined,

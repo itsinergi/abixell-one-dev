@@ -10,13 +10,13 @@ import "./index.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <LocaleProvider>
-        <BrowserRouter>
-          <AuthProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <LocaleProvider>
             <App />
-          </AuthProvider>
-        </BrowserRouter>
-      </LocaleProvider>
+          </LocaleProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>,
 );

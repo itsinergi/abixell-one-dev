@@ -227,6 +227,10 @@ export const api = {
       sessionId: string;
       fullName: string;
       email: string;
+      /** User's preferred UI language (en | id), persisted server-side so
+       * it follows the user across devices rather than living only in
+       * this browser's localStorage. */
+      preferredLocale: "en" | "id";
       permissions: string[];
       scopeTypes: string[];
       activeModuleCodes: string[];
