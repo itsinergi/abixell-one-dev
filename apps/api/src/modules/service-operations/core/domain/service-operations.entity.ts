@@ -131,6 +131,9 @@ export interface WorkOrder {
    * costs_finalized_at locks further cost-item adds on this WO. */
   costsFinalizedAt: Date | null;
   costsTotal: string | null;
+  /** Serving phase (SO-CORE-016) — set once a serving log is recorded. */
+  servingRecordedAt: Date | null;
+  servingSupervisorUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -215,6 +218,62 @@ export interface CreateInvoiceInput {
 export interface CreateInvoiceResult {
   invoice: CustomerInvoice;
   outboxEventsEmitted: number;
+}
+
+// ---------------------------------------------------------------------------
+// Work Order serving log (SO-CORE-016) — last-mile meal tracking
+// ---------------------------------------------------------------------------
+
+export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+
+export interface WorkOrderServingLog {
+  id: string;
+  tenantId: string;
+  workOrderId: string;
+  servingNumber: string;
+  servicePointId: string | null;
+  mealDate: string; // YYYY-MM-DD
+  mealType: MealType;
+  openingTime: Date;
+  closingTime: Date | null;
+  receivedQty: string;
+  servedQty: string;
+  returnedQty: string;
+  wastedQty: string;
+  remainingQty: string; // GENERATED: received - served - returned - wasted
+  servingSupervisorUserId: string | null;
+  notes: string | null;
+  recordedBy: string;
+  recordedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateServingLogInput {
+  tenantId: string;
+  workOrderId: string;
+  servingNumber: string;
+  servicePointId?: string | null;
+  mealDate: string;
+  mealType: MealType;
+  openingTime: Date;
+  closingTime?: Date | null;
+  receivedQty: string;
+  servedQty: string;
+  returnedQty: string;
+  wastedQty: string;
+  servingSupervisorUserId?: string | null;
+  notes?: string | null;
+  recordedBy: string;
+}
+
+export interface UpdateServingLogInput {
+  closingTime?: Date | null;
+  servedQty?: string;
+  returnedQty?: string;
+  wastedQty?: string;
+  servingSupervisorUserId?: string | null;
+  notes?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -463,4 +522,49 @@ export interface ServiceOperationsRepository {
     client?: PoolClient,
   ): Promise<CustomerInvoice | null>;
   findInvoiceByWorkOrder(tenantId: string, workOrderId: string): Promise<CustomerInvoice | null>;
+
+  // Work Order serving log (SO-CORE-016)
+  createServingLog(input: CreateServingLogInput): Promise<WorkOrderServingLog>;
+  findServingLogByWorkOrder(workOrderId: string): Promise<WorkOrderServingLog | null>;
+  updateServingLog(id: string, input: UpdateServingLogInput, updatedBy: string): Promise<WorkOrderServingLog | null>;
+  /** Mark WO as serving-recorded: SET serving_recorded_at = now(). Guarded
+   * so multiple serves on the same WO cannot happen. */
+  markWorkOrderServingRecorded(
+    id: string,
+    servingSupervisorUserId: string | null,
+    updatedBy: string,
+  ): Promise<WorkOrder | null>;
+
+  // KPI aggregates (SO-CORE-017) — all 4 queries scoped to [periodStart, periodEnd).
+  // Percentages/ratios calculated by PostgreSQL NUMERIC (no JS float).
+  /** KPI 1: Production Achievement — sum(output_quantity) vs sum(planned_portions)
+   * for confirmed/consumed meal batches with a meal_plan_id in range. */
+  getProductionAchievement(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+  ): Promise<{ actualQty: string; plannedQty: string; achievementPct: string; batchCount: number }>;
+
+  /** KPI 2+3: Meal Fulfillment + Food Waste — sums from serving logs in range. */
+  getServingTotals(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+  ): Promise<{
+    receivedQty: string;
+    servedQty: string;
+    wastedQty: string;
+    returnedQty: string;
+    fulfillmentPct: string;
+    wastePct: string;
+    logCount: number;
+  }>;
+
+  /** KPI 4: Food Cost per Meal — WO costs_total summed against the WO's own
+   * serving log served_qty, for WOs whose serving was recorded in range. */
+  getFoodCostTotals(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+  ): Promise<{ totalCost: string; servedQty: string; costPerMeal: string; workOrderCount: number }>;
 }

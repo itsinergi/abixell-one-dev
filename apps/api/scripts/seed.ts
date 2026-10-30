@@ -1085,7 +1085,8 @@ async function main() {
   // mechanism as `demo_ticket` and `complaint_number` above.
   await pool.query(
     `INSERT INTO numbering_sequences (tenant_id, code, pattern, current_sequence)
-     VALUES ($1, 'work_order', 'WO-{SEQ:5}', 0), ($1, 'customer_invoice', 'INV-{SEQ:5}', 0)`,
+     VALUES ($1, 'work_order', 'WO-{SEQ:5}', 0), ($1, 'customer_invoice', 'INV-{SEQ:5}', 0),
+            ($1, 'work_order_serving', 'SRV-{SEQ:5}', 0)`,
     [tenant.id],
   );
 

@@ -3,6 +3,7 @@ import type {
   AddCostItemInput,
   CustomerInvoice,
   CreateServiceDefinitionInput,
+  CreateServingLogInput,
   CreateWorkOrderInput,
   CreateWorkRequestInput,
   MarkCustomerAcceptedInput,
@@ -11,11 +12,13 @@ import type {
   ServiceDefinition,
   ServiceDefinitionChecklistItem,
   ServiceOperationsRepository,
+  UpdateServingLogInput,
   WorkOrder,
   WorkOrderAcceptanceToken,
   WorkOrderChecklistItem,
   WorkOrderCostItem,
   WorkOrderCostType,
+  WorkOrderServingLog,
   WorkRequest,
 } from "../domain/service-operations.entity.js";
 import { ConflictError } from "../../../../domain/shared-kernel/errors.js";
@@ -633,6 +636,218 @@ export class PgServiceOperationsRepository implements ServiceOperationsRepositor
     );
     return r.rows[0] ? toCustomerInvoice(r.rows[0]) : null;
   }
+
+  // ========================================================================
+  // Work Order Serving Log (SO-CORE-016)
+  // ========================================================================
+
+  async createServingLog(input: CreateServingLogInput): Promise<WorkOrderServingLog> {
+    const r = await this.pool.query(
+      `INSERT INTO work_order_serving_logs (
+        tenant_id, work_order_id, serving_number, service_point_id,
+        meal_date, meal_type, opening_time, closing_time,
+        received_qty, served_qty, returned_qty, wasted_qty,
+        serving_supervisor_user_id, notes, recorded_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.workOrderId,
+        input.servingNumber,
+        input.servicePointId ?? null,
+        input.mealDate,
+        input.mealType,
+        input.openingTime,
+        input.closingTime ?? null,
+        input.receivedQty,
+        input.servedQty,
+        input.returnedQty,
+        input.wastedQty,
+        input.servingSupervisorUserId ?? null,
+        input.notes ?? null,
+        input.recordedBy,
+      ],
+    );
+    return toServingLog(r.rows[0]);
+  }
+
+  async findServingLogByWorkOrder(workOrderId: string): Promise<WorkOrderServingLog | null> {
+    const r = await this.pool.query(
+      `SELECT * FROM work_order_serving_logs WHERE work_order_id = $1`,
+      [workOrderId],
+    );
+    return r.rows[0] ? toServingLog(r.rows[0]) : null;
+  }
+
+  async updateServingLog(
+    id: string,
+    input: UpdateServingLogInput,
+    updatedBy: string,
+  ): Promise<WorkOrderServingLog | null> {
+    const fields: string[] = ["updated_at = now()"];
+    const values: unknown[] = [];
+    let paramIdx = 1;
+
+    if (input.closingTime !== undefined) {
+      fields.push(`closing_time = $${paramIdx++}`);
+      values.push(input.closingTime);
+    }
+    if (input.servedQty !== undefined) {
+      fields.push(`served_qty = $${paramIdx++}`);
+      values.push(input.servedQty);
+    }
+    if (input.returnedQty !== undefined) {
+      fields.push(`returned_qty = $${paramIdx++}`);
+      values.push(input.returnedQty);
+    }
+    if (input.wastedQty !== undefined) {
+      fields.push(`wasted_qty = $${paramIdx++}`);
+      values.push(input.wastedQty);
+    }
+    if (input.servingSupervisorUserId !== undefined) {
+      fields.push(`serving_supervisor_user_id = $${paramIdx++}`);
+      values.push(input.servingSupervisorUserId);
+    }
+    if (input.notes !== undefined) {
+      fields.push(`notes = $${paramIdx++}`);
+      values.push(input.notes);
+    }
+
+    if (fields.length === 1) return null; // no fields to update
+
+    values.push(id);
+    const sql = `UPDATE work_order_serving_logs SET ${fields.join(", ")}
+                 WHERE id = $${paramIdx} RETURNING *`;
+
+    const r = await this.pool.query(sql, values);
+    return r.rows[0] ? toServingLog(r.rows[0]) : null;
+  }
+
+  async markWorkOrderServingRecorded(
+    id: string,
+    servingSupervisorUserId: string | null,
+    updatedBy: string,
+  ): Promise<WorkOrder | null> {
+    const r = await this.pool.query(
+      `UPDATE work_orders
+        SET serving_recorded_at = now(),
+            serving_supervisor_user_id = $2,
+            updated_at = now()
+        WHERE id = $1 AND serving_recorded_at IS NULL
+        RETURNING *`,
+      [id, servingSupervisorUserId],
+    );
+    return r.rows[0] ? toWorkOrder(r.rows[0]) : null;
+  }
+
+  // ========================================================================
+  // KPI Aggregates (SO-CORE-017)
+  // ========================================================================
+
+  async getProductionAchievement(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+  ): Promise<{ actualQty: string; plannedQty: string; achievementPct: string; batchCount: number }> {
+    const r = await this.pool.query(
+      `SELECT
+        COUNT(*) as batch_count,
+        COALESCE(SUM(cmb.output_quantity), 0) as actual_qty,
+        COALESCE(SUM(cmp.planned_portions), 0) as planned_qty,
+        CASE WHEN COALESCE(SUM(cmp.planned_portions), 0) = 0 THEN '0'
+             ELSE ROUND(SUM(cmb.output_quantity) / SUM(cmp.planned_portions) * 100, 2)::text
+        END as achievement_pct
+      FROM catering_meal_batches cmb
+      LEFT JOIN catering_meal_plans cmp ON cmb.tenant_id = cmp.tenant_id
+        AND cmb.meal_plan_id = cmp.id
+      WHERE cmb.tenant_id = $1
+        AND cmb.status IN ('confirmed', 'consumed')
+        AND cmb.produced_at >= $2::timestamptz
+        AND cmb.produced_at < $3::timestamptz`,
+      [tenantId, periodStart, periodEnd],
+    );
+    const row = r.rows[0];
+    return {
+      actualQty: String(row.actual_qty),
+      plannedQty: String(row.planned_qty),
+      achievementPct: row.achievement_pct,
+      batchCount: Number(row.batch_count),
+    };
+  }
+
+  async getServingTotals(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+  ): Promise<{
+    receivedQty: string;
+    servedQty: string;
+    wastedQty: string;
+    returnedQty: string;
+    fulfillmentPct: string;
+    wastePct: string;
+    logCount: number;
+  }> {
+    const r = await this.pool.query(
+      `SELECT
+        COUNT(*) as log_count,
+        COALESCE(SUM(received_qty), 0) as received_qty,
+        COALESCE(SUM(served_qty), 0) as served_qty,
+        COALESCE(SUM(wasted_qty), 0) as wasted_qty,
+        COALESCE(SUM(returned_qty), 0) as returned_qty,
+        CASE WHEN COALESCE(SUM(received_qty), 0) = 0 THEN '0'
+             ELSE ROUND(SUM(served_qty) / SUM(received_qty) * 100, 2)::text
+        END as fulfillment_pct,
+        CASE WHEN COALESCE(SUM(received_qty), 0) = 0 THEN '0'
+             ELSE ROUND(SUM(wasted_qty) / SUM(received_qty) * 100, 2)::text
+        END as waste_pct
+      FROM work_order_serving_logs
+      WHERE tenant_id = $1
+        AND recorded_at >= $2::timestamptz
+        AND recorded_at < $3::timestamptz`,
+      [tenantId, periodStart, periodEnd],
+    );
+    const row = r.rows[0];
+    return {
+      receivedQty: String(row.received_qty),
+      servedQty: String(row.served_qty),
+      wastedQty: String(row.wasted_qty),
+      returnedQty: String(row.returned_qty),
+      fulfillmentPct: row.fulfillment_pct,
+      wastePct: row.waste_pct,
+      logCount: Number(row.log_count),
+    };
+  }
+
+  async getFoodCostTotals(
+    tenantId: string,
+    periodStart: string,
+    periodEnd: string,
+  ): Promise<{ totalCost: string; servedQty: string; costPerMeal: string; workOrderCount: number }> {
+    const r = await this.pool.query(
+      `SELECT
+        COUNT(DISTINCT wo.id) as wo_count,
+        COALESCE(SUM(wo.costs_total), 0) as total_cost,
+        COALESCE(SUM(wosl.served_qty), 0) as served_qty,
+        CASE WHEN COALESCE(SUM(wosl.served_qty), 0) = 0 THEN '0'
+             ELSE ROUND(SUM(wo.costs_total) / SUM(wosl.served_qty), 4)::text
+        END as cost_per_meal
+      FROM work_orders wo
+      LEFT JOIN work_order_serving_logs wosl ON wo.id = wosl.work_order_id
+      WHERE wo.tenant_id = $1
+        AND wo.serving_recorded_at >= $2::timestamptz
+        AND wo.serving_recorded_at < $3::timestamptz
+        AND wo.costs_total IS NOT NULL`,
+      [tenantId, periodStart, periodEnd],
+    );
+    const row = r.rows[0];
+    return {
+      totalCost: String(row.total_cost),
+      servedQty: String(row.served_qty),
+      costPerMeal: row.cost_per_meal,
+      workOrderCount: Number(row.wo_count),
+    };
+  }
 }
 
 // --- Row mappers (snake_case → camelCase) -----------------------------
@@ -721,6 +936,33 @@ function toWorkOrder(r: QueryResultRow): WorkOrder {
     workflowInstanceId: r.workflow_instance_id,
     costsFinalizedAt: r.costs_finalized_at,
     costsTotal: r.costs_total,
+    servingRecordedAt: r.serving_recorded_at,
+    servingSupervisorUserId: r.serving_supervisor_user_id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function toServingLog(r: QueryResultRow): WorkOrderServingLog {
+  return {
+    id: r.id,
+    tenantId: r.tenant_id,
+    workOrderId: r.work_order_id,
+    servingNumber: r.serving_number,
+    servicePointId: r.service_point_id,
+    mealDate: r.meal_date,
+    mealType: r.meal_type,
+    openingTime: r.opening_time,
+    closingTime: r.closing_time,
+    receivedQty: r.received_qty,
+    servedQty: r.served_qty,
+    returnedQty: r.returned_qty,
+    wastedQty: r.wasted_qty,
+    remainingQty: r.remaining_qty,
+    servingSupervisorUserId: r.serving_supervisor_user_id,
+    notes: r.notes,
+    recordedBy: r.recorded_by,
+    recordedAt: r.recorded_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
