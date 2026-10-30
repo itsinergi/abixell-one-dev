@@ -238,6 +238,7 @@ try {
   );
   await page.keyboard.press("Escape");
   await roleDetailDialog.waitFor({ state: "detached" });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
   assert.equal(
     await roleDetailTrigger.evaluate((element) => element === document.activeElement),
     true,
@@ -307,12 +308,12 @@ try {
     "Privacy-minimized user summary missing",
   );
   await assertVisible(page.getByText(/Showing \d+ of \d+/), "User result count missing");
-  const userSearch = page.getByLabel("Search users by name, email, or role");
+  const userSearch = page.getByLabel("Search users by name, email, status, or role");
   await userSearch.fill("reviewer@demo.local");
   await assertVisible(page.getByText("Showing 1 of", { exact: false }), "User search did not narrow the result");
 
   const reviewerRow = page.locator("tr", { has: page.getByText("reviewer@demo.local", { exact: true }) });
-  const manageAccess = reviewerRow.getByRole("button", { name: "Manage access" });
+  const manageAccess = reviewerRow.getByRole("button", { name: "Assign access" });
   await assertMinimumTouchTarget(manageAccess, "Desktop Manage access", 36);
 
   let assignmentPostCount = 0;
@@ -328,7 +329,7 @@ try {
   };
 
   await manageAccess.click();
-  let accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
+  let accessDialog = page.getByRole("dialog", { name: "Assign access · Demo Workflow Reviewer" });
   await assertVisible(accessDialog, "Governed access dialog missing");
   await page.waitForFunction(
     () => document.activeElement?.getAttribute("aria-label") === "Close dialog",
@@ -337,6 +338,7 @@ try {
   await assertMinimumTouchTarget(accessDialog.getByRole("button", { name: "Close dialog" }), "Access dialog close");
   await page.keyboard.press("Escape");
   await accessDialog.waitFor({ state: "detached" });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
   assert.equal(
     await manageAccess.evaluate((element) => element === document.activeElement),
     true,
@@ -344,7 +346,7 @@ try {
   );
 
   await manageAccess.click();
-  accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
+  accessDialog = page.getByRole("dialog", { name: "Assign access · Demo Workflow Reviewer" });
   await assertVisible(accessDialog, "Access dialog did not reopen");
   await closeDialogWithBackdrop(accessDialog);
   assert.equal(
@@ -354,38 +356,32 @@ try {
   );
 
   await manageAccess.click();
-  accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
+  accessDialog = page.getByRole("dialog", { name: "Assign access · Demo Workflow Reviewer" });
   await assertVisible(accessDialog, "Access dialog did not reopen for assignment");
-  const roleSelect = accessDialog.getByLabel("Role");
-  const scopeSelect = accessDialog.getByLabel("Scope");
-  await roleSelect.selectOption("SUPERVISOR");
+  await accessDialog.getByRole("button", { name: "Add assignment" }).click();
+  const roleSelect = accessDialog.getByLabel("Role 1");
+  const scopeSelect = accessDialog.getByLabel("Scope 1");
+  // Roles the user already holds are disabled in the picker (duplicate
+  // prevention), so the first enabled option is already unassigned.
+  const availableRole = await roleSelect
+    .locator("option:not([disabled])")
+    .first()
+    .getAttribute("value");
+  assert.ok(availableRole, "No unassigned selectable role available for smoke mutation");
+  await roleSelect.selectOption(availableRole);
   await scopeSelect.selectOption("tenant");
-  await accessDialog.getByRole("button", { name: "Review assignment" }).click();
-  await assertVisible(accessDialog.getByRole("heading", { name: "What will change" }), "Change review is not mandatory");
-  await assertVisible(accessDialog.getByText("Add role assignment", { exact: true }), "Add operation summary missing");
-  await assertVisible(
-    accessDialog.getByText("Demo Workflow Reviewer · reviewer@demo.local", { exact: true }),
-    "Target user summary missing",
-  );
-  await assertVisible(accessDialog.getByText("Site Supervisor ·", { exact: false }), "Target role summary missing");
-  const addChangeSummary = accessDialog.getByRole("heading", { name: "What will change" }).locator("xpath=..");
-  await assertVisible(
-    addChangeSummary.getByText("SUPERVISOR", { exact: true }),
-    "Target role code missing",
-  );
-  await assertVisible(accessDialog.getByText("tenant", { exact: true }), "Tenant scope type missing");
-  await assertVisible(accessDialog.getByText("Tenant-wide", { exact: true }), "Tenant scope label missing");
-  await assertVisible(
-    accessDialog.getByText("Tenant (no scope ID)", { exact: true }),
-    "Tenant scope ID summary missing",
-  );
-  await assertVisible(
-    accessDialog.getByRole("heading", { name: "Actual role permission summary" }),
-    "Permission review summary missing",
-  );
-  await assertVisible(accessDialog.getByText("user.read", { exact: true }), "Selected role permission summary missing");
+  const selectedRoleCode = availableRole;
+  // Option text renders as "{name} ({code})"; the revoke dialog later shows
+  // only the bare name.
+  const selectedRoleName = (await roleSelect.locator("option:checked").innerText())
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .trim();
+  await accessDialog.getByRole("button", { name: "Review batch" }).click();
+  await assertVisible(accessDialog.getByRole("heading", { name: "What will be granted" }), "Change review is not mandatory");
+  await assertVisible(accessDialog.getByText(selectedRoleCode, { exact: true }), "Target role code missing");
+  await assertVisible(accessDialog.getByText("This hash binds the confirmation", { exact: false }), "Preview integrity note missing");
 
-  const addPath = /\/api\/admin\/users\/([^/]+)\/role-assignments$/;
+  const addPath = /\/api\/admin\/users\/([^/]+)\/assignment-batches$/;
   await page.route(addPath, delayAssignment);
   let assignmentTargetUserId = null;
   const addResponsePromise = page.waitForResponse((response) => {
@@ -395,10 +391,10 @@ try {
     assignmentTargetUserId = decodeURIComponent(match[1]);
     return true;
   });
-  const confirmAdd = accessDialog.getByRole("button", { name: "Confirm add" });
+  const confirmAdd = accessDialog.getByRole("button", { name: "Confirm 1 assignment" });
   await confirmAdd.click();
   await assignmentRequestObserved;
-  await assertVisible(accessDialog.getByText("Saving change…", { exact: true }), "Pending mutation state missing");
+  await assertVisible(accessDialog.getByText("Applying batch…", { exact: true }), "Pending mutation state missing");
   assert.equal(await confirmAdd.count(), 0, "Pending state retained a second enabled confirm control");
   assert.equal(
     await accessDialog.getAttribute("aria-busy"),
@@ -430,46 +426,54 @@ try {
   await accessDialog.waitFor({ state: "detached", timeout: 8000 });
   await page.unroute(addPath, delayAssignment);
   await assertVisible(
-    page.getByText("Added Site Supervisor access for Demo Workflow Reviewer.", { exact: true }),
+    page.getByText("1 assignment added for Demo Workflow Reviewer.", { exact: true }),
     "Authoritative add success feedback missing",
   );
+  // The table's role badge list is capped to the first 3 assignments and
+  // carries no lifecycle state, so it cannot reliably prove the new grant
+  // landed; the detail dialog below lists every assignment unfiltered and is
+  // the authoritative check instead.
   const updatedReviewerRow = page.locator("tr", { has: page.getByText("reviewer@demo.local", { exact: true }) });
-  await assertVisible(updatedReviewerRow.getByText("SUPERVISOR", { exact: true }), "Authoritative reload omitted new assignment");
-
-  const updatedManageAccess = updatedReviewerRow.getByRole("button", { name: "Manage access" });
+  const updatedManageAccess = updatedReviewerRow.getByRole("button", { name: "View access" }).first();
   await updatedManageAccess.click();
-  accessDialog = page.getByRole("dialog", { name: "Manage access · Demo Workflow Reviewer" });
-  const supervisorAssignment = accessDialog
-    .getByText("SUPERVISOR", { exact: true })
-    .locator("xpath=ancestor::li[1]");
-  await supervisorAssignment.getByRole("button", { name: "Review removal" }).click();
-  await assertVisible(accessDialog.getByText("Remove role assignment", { exact: true }), "Remove operation summary missing");
-  const removeChangeSummary = accessDialog.getByRole("heading", { name: "What will change" }).locator("xpath=..");
-  await assertVisible(
-    removeChangeSummary.getByText("SUPERVISOR", { exact: true }),
-    "Remove role code summary missing",
-  );
-  await assertVisible(accessDialog.getByText("tenant", { exact: true }), "Remove scope type summary missing");
-  await assertVisible(accessDialog.getByText("Tenant-wide", { exact: true }), "Remove scope label missing");
-  const assignmentIdValue = accessDialog
-    .locator("dt", { hasText: "Assignment ID" })
-    .locator("xpath=following-sibling::dd[1]");
-  await assertVisible(assignmentIdValue, "Exact assignment ID missing from removal review");
-  assert.match(await assignmentIdValue.innerText(), /^[0-9a-f-]{36}$/i, "Removal review has invalid assignment ID");
-  await assertVisible(accessDialog.getByText("user.read", { exact: true }), "Removal permission summary missing");
-  await accessDialog.getByRole("button", { name: "Confirm remove" }).click();
-  await accessDialog.waitFor({ state: "detached", timeout: 8000 });
+  const detailDialog = page.getByRole("dialog", { name: "Access · Demo Workflow Reviewer" });
+  await assertVisible(detailDialog, "User access detail dialog did not open");
+  // The detail list shows lifecycle state per row (StatusPill "Active" vs
+  // "Revoked"), so scope to the row that is both this role and still active.
+  const newAssignmentRow = detailDialog
+    .locator("li", { hasText: selectedRoleCode })
+    .filter({ hasText: "Active" });
+  await assertVisible(newAssignmentRow, "Newly granted assignment not found in active state");
+  await newAssignmentRow.getByRole("button", { name: "Review revocation" }).click();
+  const revokeDialog = page.getByRole("dialog", { name: "Review revocation" });
+  await assertVisible(revokeDialog, "Revocation review dialog did not open");
+  await assertVisible(revokeDialog.getByText(selectedRoleName, { exact: false }), "Revoke role name summary missing");
+  await revokeDialog.getByLabel("Reason").fill("Smoke test cleanup");
+  await revokeDialog.getByRole("button", { name: "Confirm revoke" }).click();
+  await revokeDialog.waitFor({ state: "detached", timeout: 8000 });
+  await detailDialog.getByRole("button", { name: "Close dialog" }).click();
   temporaryAssignment = null;
   await assertVisible(
-    page.getByText("Removed Site Supervisor access from Demo Workflow Reviewer.", { exact: true }),
+    page.getByText(/^Revoked .+ access from Demo Workflow Reviewer\.$/),
     "Authoritative removal success feedback missing",
   );
+  // Revocation retains the historical row (§4.4 Wave 3), so the table badge
+  // list — which shows every assignment regardless of lifecycle state — is
+  // not a reliable "gone" signal. Re-open the detail dialog instead, where
+  // each row's StatusPill proves the authoritative current state.
   const restoredReviewerRow = page.locator("tr", { has: page.getByText("reviewer@demo.local", { exact: true }) });
+  await restoredReviewerRow.getByRole("button", { name: "View access" }).first().click();
+  const restoredDetailDialog = page.getByRole("dialog", { name: "Access · Demo Workflow Reviewer" });
+  await assertVisible(restoredDetailDialog, "User access detail dialog did not reopen");
+  const restoredAssignmentRow = restoredDetailDialog
+    .locator("li", { hasText: selectedRoleCode })
+    .filter({ hasText: "Active" });
   assert.equal(
-    await restoredReviewerRow.getByText("SUPERVISOR", { exact: true }).count(),
+    await restoredAssignmentRow.count(),
     0,
-    "Reversible smoke left the temporary assignment behind",
+    "Reversible smoke left the temporary assignment active",
   );
+  await restoredDetailDialog.getByRole("button", { name: "Close dialog" }).click();
   await shot("admin-users-governed-access");
 
   console.log("5. Responsive drawer, Users layouts, touch targets, and overflow");
@@ -481,12 +485,12 @@ try {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await assertNoHorizontalOverflow(viewport.name);
     await assertVisible(page.getByRole("heading", { name: "Users and access", exact: true }), `${viewport.name} Users view missing`);
-    const responsiveManage = page.getByRole("button", { name: "Manage access" }).first();
-    await assertVisible(responsiveManage, `${viewport.name} Manage access missing`);
+    const responsiveManage = page.getByRole("button", { name: "View access" }).first();
+    await assertVisible(responsiveManage, `${viewport.name} View access missing`);
     await assertMinimumTouchTarget(
       responsiveManage,
-      `${viewport.name} Manage access`,
-      viewport.width < 1024 ? 44 : 36,
+      `${viewport.name} View access`,
+      viewport.width < 640 ? 44 : 36,
     );
     if (viewport.width < 768) {
       assert.equal(
@@ -567,44 +571,54 @@ try {
   console.log("6. Tenant-safe unavailable assignment projection");
   const unavailableAssignmentId = "00000000-0000-4000-8000-00000000011f";
   const unavailableScopeId = "00000000-0000-4000-8000-000000000120";
+  const unavailableScopeUserId = "00000000-0000-4000-8000-000000000121";
   const forbiddenScopeName = "Foreign Tenant Executive Office";
+  function unavailableScopeAccessBody() {
+    return {
+      id: unavailableScopeUserId,
+      fullName: "Unavailable Scope Reviewer",
+      email: "unavailable.scope@example.invalid",
+      status: "active",
+      roleAssignments: [
+        {
+          id: unavailableAssignmentId,
+          roleState: "available",
+          roleCode: "SUPERVISOR",
+          roleName: "Site Supervisor",
+          scopeType: "organization_unit",
+          scopeState: "unavailable",
+          scopeOrganizationUnitId: unavailableScopeId,
+          scopeOrganizationUnitName: forbiddenScopeName,
+          scopeCustomerId: null,
+          scopeCustomerName: null,
+          assignmentState: "active",
+          revokedAt: null,
+          revokedBy: null,
+          revokeReason: null,
+        },
+      ],
+    };
+  }
   const unavailableUsers = async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "00000000-0000-4000-8000-000000000121",
-          fullName: "Unavailable Scope Reviewer",
-          email: "unavailable.scope@example.invalid",
-          status: "active",
-          roleAssignments: [
-            {
-              id: unavailableAssignmentId,
-              roleState: "available",
-              roleCode: "SUPERVISOR",
-              roleName: "Site Supervisor",
-              scopeType: "organization_unit",
-              scopeState: "unavailable",
-              scopeOrganizationUnitId: unavailableScopeId,
-              scopeOrganizationUnitName: forbiddenScopeName,
-              scopeCustomerId: null,
-              scopeCustomerName: null,
-            },
-          ],
-        },
-      ]),
+      body: JSON.stringify([unavailableScopeAccessBody()]),
+    });
+  };
+  const unavailableScopeAccess = async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(unavailableScopeAccessBody()),
     });
   };
   await page.route("**/api/admin/users", unavailableUsers);
+  await page.route(`**/api/admin/users/${unavailableScopeUserId}/access`, unavailableScopeAccess);
   await page.goto(`${BASE}/admin?section=users`, { waitUntil: "networkidle" });
   const unavailableRow = page.locator("tr", {
     has: page.getByText("unavailable.scope@example.invalid", { exact: true }),
   });
-  await assertVisible(
-    unavailableRow.getByText("Unavailable scope", { exact: true }),
-    "Desktop unavailable scope status missing",
-  );
   await assertVisible(
     unavailableRow.getByText("Unavailable organization unit", { exact: false }),
     "Desktop unavailable Organization Unit label missing",
@@ -614,36 +628,39 @@ try {
     0,
     "Unavailable assignment rendered server-supplied scope metadata",
   );
-  await unavailableRow.getByRole("button", { name: "Manage access" }).click();
+  await unavailableRow.getByRole("button", { name: "View access" }).click();
   let unavailableDialog = page.getByRole("dialog", {
-    name: "Manage access · Unavailable Scope Reviewer",
+    name: "Access · Unavailable Scope Reviewer",
   });
   await assertVisible(
-    unavailableDialog.getByText("Unavailable scope", { exact: true }),
+    unavailableDialog.getByText("Unavailable organization unit", { exact: false }),
     "Unavailable status missing from current-access dialog",
   );
-  await unavailableDialog.getByRole("button", { name: "Review removal" }).click();
+  await unavailableDialog.getByRole("button", { name: "Review revocation" }).click();
+  const unavailableRevokeDialog = page.getByRole("dialog", { name: "Review revocation" });
   await assertVisible(
-    unavailableDialog.getByText("Unavailable — grants no access", { exact: true }),
-    "Removal review omitted the generic unavailable state",
+    unavailableRevokeDialog.getByText("Unavailable organization unit", { exact: false }),
+    "Revocation review omitted the generic unavailable state",
   );
-  const unavailableAssignmentIdValue = unavailableDialog
+  const unavailableAssignmentIdValue = unavailableRevokeDialog
     .locator("dt", { hasText: "Assignment ID" })
     .locator("xpath=following-sibling::dd[1]");
   await assertVisible(
     unavailableAssignmentIdValue,
-    "Unavailable removal review omitted the assignment ID",
+    "Unavailable revocation review omitted the assignment ID",
   );
   assert.equal(
     await unavailableAssignmentIdValue.innerText(),
     unavailableAssignmentId,
-    "Unavailable removal review displayed the wrong assignment ID",
+    "Unavailable revocation review displayed the wrong assignment ID",
   );
   assert.equal(
-    await unavailableDialog.getByText(forbiddenScopeName, { exact: true }).count(),
+    await unavailableRevokeDialog.getByText(forbiddenScopeName, { exact: true }).count(),
     0,
-    "Unavailable removal review leaked server-supplied scope metadata",
+    "Unavailable revocation review leaked server-supplied scope metadata",
   );
+  await page.keyboard.press("Escape");
+  await unavailableRevokeDialog.waitFor({ state: "detached" });
   await page.keyboard.press("Escape");
   await unavailableDialog.waitFor({ state: "detached" });
 
@@ -656,7 +673,7 @@ try {
     "Mobile unavailable assignment card missing",
   );
   await assertVisible(
-    unavailableCard.getByText("Unavailable scope", { exact: true }),
+    unavailableCard.getByText("Unavailable organization unit", { exact: false }),
     "Mobile unavailable scope status missing",
   );
   assert.equal(
@@ -665,45 +682,56 @@ try {
     "Mobile unavailable assignment leaked server-supplied scope metadata",
   );
   await assertNoHorizontalOverflow("mobile unavailable assignment");
+  await page.unroute(`**/api/admin/users/${unavailableScopeUserId}/access`, unavailableScopeAccess);
   await page.unroute("**/api/admin/users", unavailableUsers);
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  console.log("7. Tenant-safe unavailable Role removal");
+  console.log("7. Tenant-safe unavailable Role revocation");
   const unavailableRoleAssignmentId = "00000000-0000-4000-8000-000000000122";
   const unavailableRoleUserId = "00000000-0000-4000-8000-000000000123";
   const forbiddenRoleCode = "FOREIGN_EXECUTIVE_ADMIN";
   const forbiddenRoleName = "Foreign Executive Administrator";
-  let unavailableRoleRemoved = false;
+  let unavailableRoleRevoked = false;
   let unavailableRolePermissionRequests = 0;
-  let unavailableRoleDeleteRequests = 0;
+  let unavailableRoleRevokeRequests = 0;
+  function unavailableRoleAccessBody() {
+    return {
+      id: unavailableRoleUserId,
+      fullName: "Unavailable Role Reviewer",
+      email: "unavailable.role@example.invalid",
+      status: "active",
+      roleAssignments: [
+        {
+          id: unavailableRoleAssignmentId,
+          roleState: "unavailable",
+          roleCode: null,
+          roleName: null,
+          scopeType: "organization_unit",
+          scopeState: "unavailable",
+          scopeOrganizationUnitId: unavailableScopeId,
+          scopeOrganizationUnitName: null,
+          scopeCustomerId: null,
+          scopeCustomerName: null,
+          assignmentState: unavailableRoleRevoked ? "revoked" : "active",
+          revokedAt: unavailableRoleRevoked ? new Date().toISOString() : null,
+          revokedBy: null,
+          revokeReason: unavailableRoleRevoked ? "Smoke test cleanup" : null,
+        },
+      ],
+    };
+  }
   const unavailableRoleUsers = async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: unavailableRoleUserId,
-          fullName: "Unavailable Role Reviewer",
-          email: "unavailable.role@example.invalid",
-          status: "active",
-          roleAssignments: unavailableRoleRemoved
-            ? []
-            : [
-                {
-                  id: unavailableRoleAssignmentId,
-                  roleState: "unavailable",
-                  roleCode: null,
-                  roleName: null,
-                  scopeType: "organization_unit",
-                  scopeState: "unavailable",
-                  scopeOrganizationUnitId: unavailableScopeId,
-                  scopeOrganizationUnitName: null,
-                  scopeCustomerId: null,
-                  scopeCustomerName: null,
-                },
-              ],
-        },
-      ]),
+      body: JSON.stringify([unavailableRoleAccessBody()]),
+    });
+  };
+  const unavailableRoleAccess = async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(unavailableRoleAccessBody()),
     });
   };
   const unavailableRolePermissions = async (route) => {
@@ -719,28 +747,29 @@ try {
       }),
     });
   };
-  const unavailableRoleDeletePath =
-    `/api/admin/users/${unavailableRoleUserId}/role-assignments/${unavailableRoleAssignmentId}`;
-  const unavailableRoleDelete = async (route) => {
-    assert.equal(route.request().method(), "DELETE", "Unavailable Role mutation used the wrong method");
+  const unavailableRoleRevokePath =
+    `/api/admin/users/${unavailableRoleUserId}/role-assignments/${unavailableRoleAssignmentId}/revoke`;
+  const unavailableRoleRevoke = async (route) => {
+    assert.equal(route.request().method(), "POST", "Unavailable Role mutation used the wrong method");
     assert.equal(
       new URL(route.request().url()).pathname,
-      unavailableRoleDeletePath,
+      unavailableRoleRevokePath,
       "Unavailable Role mutation targeted the wrong assignment",
     );
-    unavailableRoleDeleteRequests += 1;
-    unavailableRoleRemoved = true;
+    unavailableRoleRevokeRequests += 1;
+    unavailableRoleRevoked = true;
     await route.fulfill({ status: 204, body: "" });
   };
   await page.route("**/api/admin/users", unavailableRoleUsers);
+  await page.route(`**/api/admin/users/${unavailableRoleUserId}/access`, unavailableRoleAccess);
   await page.route("**/api/admin/roles/*/permissions", unavailableRolePermissions);
-  await page.route(`**${unavailableRoleDeletePath}`, unavailableRoleDelete);
+  await page.route(`**${unavailableRoleRevokePath}`, unavailableRoleRevoke);
   await page.goto(`${BASE}/admin?section=users`, { waitUntil: "networkidle" });
   const unavailableRoleRow = page.locator("tr", {
     has: page.getByText("unavailable.role@example.invalid", { exact: true }),
   });
   await assertVisible(
-    unavailableRoleRow.getByText("Unavailable role", { exact: true }).first(),
+    unavailableRoleRow.getByText("Unavailable role", { exact: false }).first(),
     "Desktop unavailable Role label missing",
   );
   assert.equal(
@@ -753,20 +782,21 @@ try {
     0,
     "Unavailable Role projection leaked a foreign role name",
   );
-  await unavailableRoleRow.getByRole("button", { name: "Manage access" }).click();
+  await unavailableRoleRow.getByRole("button", { name: "View access" }).click();
   const unavailableRoleDialog = page.getByRole("dialog", {
-    name: "Manage access · Unavailable Role Reviewer",
+    name: "Access · Unavailable Role Reviewer",
   });
   const unavailableRoleItem = unavailableRoleDialog
     .getByText("Unavailable role", { exact: true })
     .first()
     .locator("xpath=ancestor::li[1]");
-  await unavailableRoleItem.getByRole("button", { name: "Review removal" }).click();
+  await unavailableRoleItem.getByRole("button", { name: "Review revocation" }).click();
+  const unavailableRoleRevokeDialog = page.getByRole("dialog", { name: "Review revocation" });
   await assertVisible(
-    unavailableRoleDialog.getByText("Role permission review is unavailable.", { exact: true }),
-    "Unavailable Role review did not use the generic removal path",
+    unavailableRoleRevokeDialog.getByText("Unavailable role", { exact: true }),
+    "Unavailable Role review did not use the generic revocation path",
   );
-  const unavailableRoleAssignmentIdValue = unavailableRoleDialog
+  const unavailableRoleAssignmentIdValue = unavailableRoleRevokeDialog
     .locator("dt", { hasText: "Assignment ID" })
     .locator("xpath=following-sibling::dd[1]");
   await assertVisible(
@@ -782,36 +812,32 @@ try {
   assert.equal(
     unavailableRolePermissionRequests,
     0,
-    "Unavailable Role removal requested role permission metadata",
+    "Unavailable Role revocation requested role permission metadata",
   );
   assert.equal(
-    await unavailableRoleDialog.getByText(forbiddenRoleCode, { exact: true }).count(),
+    await unavailableRoleRevokeDialog.getByText(forbiddenRoleCode, { exact: true }).count(),
     0,
-    "Unavailable Role removal leaked a foreign role code",
+    "Unavailable Role revocation leaked a foreign role code",
   );
   assert.equal(
-    await unavailableRoleDialog.getByText(forbiddenRoleName, { exact: true }).count(),
+    await unavailableRoleRevokeDialog.getByText(forbiddenRoleName, { exact: true }).count(),
     0,
-    "Unavailable Role removal leaked a foreign role name",
+    "Unavailable Role revocation leaked a foreign role name",
   );
-  await unavailableRoleDialog.getByRole("button", { name: "Confirm remove" }).click();
-  await unavailableRoleDialog.waitFor({ state: "detached", timeout: 8000 });
+  await unavailableRoleRevokeDialog.getByLabel("Reason").fill("Smoke test cleanup");
+  await unavailableRoleRevokeDialog.getByRole("button", { name: "Confirm revoke" }).click();
+  await unavailableRoleRevokeDialog.waitFor({ state: "detached", timeout: 8000 });
   assert.equal(
-    unavailableRoleDeleteRequests,
+    unavailableRoleRevokeRequests,
     1,
-    "Unavailable Role removal did not issue exactly one exact DELETE",
+    "Unavailable Role revocation did not issue exactly one exact POST",
   );
   await assertVisible(
     page.getByText(
-      "Removed unavailable role assignment from Unavailable Role Reviewer.",
+      "Revoked Unavailable role access from Unavailable Role Reviewer.",
       { exact: true },
     ),
-    "Unavailable Role removal success feedback was not generic",
-  );
-  assert.equal(
-    await page.getByText(unavailableRoleAssignmentId, { exact: true }).count(),
-    0,
-    "Authoritative reload retained the removed unavailable Role assignment",
+    "Unavailable Role revocation success feedback was not generic",
   );
   assert.equal(
     await page.getByText(forbiddenRoleCode, { exact: true }).count(),
@@ -823,8 +849,9 @@ try {
     0,
     "Unavailable Role flow exposed a foreign role name",
   );
-  await page.unroute(`**${unavailableRoleDeletePath}`, unavailableRoleDelete);
+  await page.unroute(`**${unavailableRoleRevokePath}`, unavailableRoleRevoke);
   await page.unroute("**/api/admin/roles/*/permissions", unavailableRolePermissions);
+  await page.unroute(`**/api/admin/users/${unavailableRoleUserId}/access`, unavailableRoleAccess);
   await page.unroute("**/api/admin/users", unavailableRoleUsers);
 
   console.log("8. Intercepted deterministic Admin Console states");

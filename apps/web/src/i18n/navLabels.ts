@@ -18,6 +18,13 @@ export interface NavLabel {
 }
 
 export const NAV_LABELS: Record<string, NavLabel> = {
+  // Overview
+  "nav-overview": {
+    en: "Overview",
+    id: "Ringkasan",
+    descriptionId: "Jangkauan cepat ke modul, daftar tugas, dan status sistem.",
+  },
+
   // Groups
   "nav-operations": {
     en: "Operations",
@@ -47,6 +54,26 @@ export const NAV_LABELS: Record<string, NavLabel> = {
     id: "Konfigurasi Keluhan",
     descriptionId: "Kategori, SLA, dan jalur eskalasi keluhan.",
   },
+  "nav-customer_complaint-queue": {
+    en: "Queue",
+    id: "Antrean",
+    descriptionId: "Keluhan yang menunggu penanganan, diurutkan berdasarkan prioritas dan SLA.",
+  },
+  "nav-customer_complaint-verification": {
+    en: "Verification",
+    id: "Verifikasi",
+    descriptionId: "Tinjau dan verifikasi penyelesaian keluhan sebelum ditutup.",
+  },
+  "nav-customer_complaint-management": {
+    en: "Management",
+    id: "Manajemen",
+    descriptionId: "Ringkasan dan pengawasan atas seluruh keluhan pelanggan.",
+  },
+  "nav-customer_complaint-service-quality": {
+    en: "Service Quality",
+    id: "Kualitas Layanan",
+    descriptionId: "Metrik kualitas layanan yang ditarik dari riwayat keluhan.",
+  },
   "nav-survey_assessment": { en: "Surveys & Assessments", id: "Survei & Penilaian" },
   "nav-survey_assessment-my-surveys": {
     en: "My Surveys",
@@ -59,15 +86,30 @@ export const NAV_LABELS: Record<string, NavLabel> = {
     descriptionId: "Kirim survei, kumpulkan tanggapan, dan tindak lanjuti.",
   },
   "nav-service_operations": { en: "Service Operations", id: "Operasional Layanan" },
-  "nav-service_operations-service-work-orders": {
+  "nav-service_operations-my-work": {
+    en: "My Work",
+    id: "Pekerjaan saya",
+    descriptionId: "Pekerjaan yang ditugaskan kepada Anda, status, dan tindakan yang diperlukan.",
+  },
+  "nav-service_operations-work-orders": {
     en: "Work Orders",
     id: "Perintah Kerja",
-    descriptionId: "Antrean pekerjaan lapangan, penugasan, dan penyelesaian.",
+    descriptionId: "Rencanakan, tugaskan, dan pantau pekerjaan yang diselesaikan tim Anda.",
   },
-  "nav-service_operations-service-dispatch": {
-    en: "Dispatch Board",
-    id: "Papan Penugasan",
-    descriptionId: "Cocokkan pekerjaan dengan teknisi dan jadwal.",
+  "nav-service_operations-service-types": {
+    en: "Service Types",
+    id: "Jenis Layanan",
+    descriptionId: "Tentukan layanan yang dapat digunakan ulang oleh tim Anda.",
+  },
+  "nav-service_operations-service-packs": {
+    en: "Service Packs",
+    id: "Paket Layanan",
+    descriptionId: "Aktifkan preset layanan Katering, Tata Graha, Camp, dan Fasilitas.",
+  },
+  "nav-service_operations-service-optimization": {
+    en: "Service Optimization",
+    id: "Optimasi Layanan",
+    descriptionId: "Buat usulan penugasan, periksa alasannya, lalu terapkan atau tolak secara eksplisit.",
   },
 
   // Enterprise core
@@ -199,11 +241,36 @@ export const NAV_LABELS: Record<string, NavLabel> = {
     id: "K3L",
     descriptionId: "Catat dan tinjau aktivitas kesehatan, keselamatan, dan lingkungan.",
   },
+  "nav-hse-hse-advanced-investigations": {
+    en: "Investigations & Risk",
+    id: "Investigasi & Risiko",
+    descriptionId: "Kerangka investigasi bervisi, akar masalah, dan penilaian risiko JSA/HIRA.",
+  },
+  "nav-hse-hse-advanced-permits-audit": {
+    en: "Permits & Audit",
+    id: "Izin & Audit",
+    descriptionId: "Izin kerja pada Mesin Alur Kerja, ditambah program audit, kejadian, dan temuan.",
+  },
+  "nav-hse-hse-advanced-monitoring-capa": {
+    en: "Monitoring & CAPA",
+    id: "Pemantauan & CAPA",
+    descriptionId: "Pemantauan ambang batas dengan tanda pelanggaran, tindakan korektif dan preventif, serta snapshot indikator.",
+  },
   "nav-project_delivery": { en: "Project Delivery", id: "Pengiriman Proyek" },
   "nav-project_delivery-project-delivery": {
     en: "Project Delivery",
     id: "Pengiriman Proyek",
     descriptionId: "Lacak aktivitas proyek, tonggak, dan kemajuan pengiriman.",
+  },
+  "nav-project_delivery-project-delivery-advanced-planning": {
+    en: "Planning & Scheduling",
+    id: "Perencanaan & Penjadwalan",
+    descriptionId: "Rincian pekerjaan, dependensi, tampilan Gantt, pembebanan sumber daya, dan varians baseline.",
+  },
+  "nav-project_delivery-project-delivery-advanced-cost-ev": {
+    en: "Cost & Earned Value",
+    id: "Biaya & Nilai Hasil",
+    descriptionId: "Entri dan posisi biaya, nilai hasil, dan riwayat snapshot yang menjadi tolok ukurnya.",
   },
 
   // Governance

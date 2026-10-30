@@ -1,6 +1,6 @@
 # I18N-ROADMAP — Dua Bahasa (EN/ID) di Abixell One
 
-Status: W0–W5 selesai (2026-10-29). W6–W7 belum dimulai.
+Status: W0–W7 selesai (2026-10-30). Seluruh cakupan UI dua bahasa selesai; batasan yang tercatat tetap berlaku.
 Tujuan: semua yang muncul di UI transaksi punya terjemahan Bahasa Indonesia, tanpa mengubah kode backend.
 
 ## Keputusan terkunci
@@ -39,8 +39,8 @@ apps/web/src/shell/components/LanguageSwitcher.tsx
 | W4 | `pages/survey/**`, `PublicSurveyPage` (termasuk menyatukan pemilih locale survei dengan locale shell) | 220 | 5 | selesai (5/5, 2026-10-29) |
 | W5a | `modules/finance` (13 file + `money.ts`) | 622 kunci | 14 | selesai (14/14, 2026-10-29) |
 | W5b | `modules/hse` (6 halaman + toggle bahasa di login) | 333 kunci | 7 | selesai (7/7, 2026-10-29) |
-| W6 | `pages/supply-chain-advanced`, `workforce-advanced`, `sales`, `asset-advanced` | 971 | 17 | belum |
-| W7 | Sisa: `pages/complaints`, `operational`, `verification`, `management`, `service-*`, `modules/{project-delivery,customer-commercial,service-operations,asset,reporting-insight,supply-chain,workforce}` | ~900 | 30 | belum |
+| W6 | `pages/supply-chain-advanced`, `workforce-advanced`, `sales`, `asset-advanced` | 971 | 17 | selesai (17/17, 2026-10-30) |
+| W7 | Sisa: `pages/complaints`, `operational`, `verification`, `management`, `service-*`, `modules/{project-delivery,customer-commercial,service-operations,asset,reporting-insight,supply-chain,workforce}` | 890 | 30 | selesai (30/30, 2026-10-30) |
 
 Urutan berdasarkan volume string terukur. Satu gelombang = satu PR yang bisa direview.
 
@@ -109,4 +109,4 @@ R-02 tanpa em dash di copy, R-25 kontras AA, R-32 keyboard, R-34 kedua tema, R-3
 
 ## Ringkasan (Indonesia)
 
-Roadmap dua bahasa: W0–W5 selesai (admin dikembalikan ke Inggris, infrastruktur, permukaan inti, `pages/survey/**`, `modules/finance`, `modules/hse`, toggle bahasa di login). W6–W7 menyusul per modul, urut volume string. Empat batasan dinyatakan jujur: pesan galat API tetap Inggris, data bisnis tidak diterjemahkan, `DESIGN.md` §6 belum terpenuhi sampai W7, persistensi hanya per-browser.
+Roadmap dua bahasa: W0–W7 selesai (admin dikembalikan ke Inggris, infrastruktur, permukaan inti, `pages/survey/**`, `modules/finance`, `modules/hse`, dan seluruh modul transaksi tersisa). Empat batasan tetap dinyatakan jujur: pesan galat API tetap Inggris, data bisnis tidak diterjemahkan, default Inggris adalah keputusan pemilik produk, dan persistensi hanya per-browser.
