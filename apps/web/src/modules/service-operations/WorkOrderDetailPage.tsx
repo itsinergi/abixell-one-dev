@@ -19,6 +19,7 @@ import {
   Field,
   Input,
   PageHeader,
+  Select,
   Spinner,
   StatusPill,
   Textarea,
@@ -38,6 +39,7 @@ export function WorkOrderDetailPage() {
   const [busy, setBusy] = useState(false);
 
   const [assigneeUserId, setAssigneeUserId] = useState("");
+  const [users, setUsers] = useState<Array<{ id: string; fullName: string; email: string }>>([]);
   const [dueAt, setDueAt] = useState("");
   const [verificationNotes, setVerificationNotes] = useState("");
 
@@ -57,6 +59,21 @@ export function WorkOrderDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .users(token)
+      .then((rows) => {
+        if (!cancelled) setUsers(rows);
+      })
+      .catch(() => {
+        /* assign dropdown optional; leave empty */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   async function run(action: () => Promise<unknown>, successMessage: string) {
     setBusy(true);
@@ -156,11 +173,14 @@ export function WorkOrderDetailPage() {
         <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mo.wod.t.assignmentSchedule")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={t("mo.wod.f.assignToUserId")}>
-            <Input
-              value={assigneeUserId}
-              onChange={(e) => setAssigneeUserId(e.target.value)}
-              placeholder={t("mo.wod.p.userId")}
-            />
+            <Select value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)}>
+              <option value="">{t("mo.wod.p.userId")}</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.fullName} ({u.email})
+                </option>
+              ))}
+            </Select>
           </Field>
           <div className="flex items-end">
             <Button
