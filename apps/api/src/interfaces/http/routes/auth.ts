@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Container } from "../../../composition-root.js";
+import type { Locale } from "../../../domain/identity/user.entity.js";
 import { hashPassword } from "../../../infrastructure/security/password.js";
 import {
   getLoginRateLimitConfig,
@@ -110,13 +111,14 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
       fullName: z.string().trim().min(1).max(200).optional(),
       password: z.string().min(8).optional(),
       currentPassword: z.string().min(1).optional(),
+      preferredLocale: z.enum(["en", "id"]).optional(),
     })
     .strict()
     .refine((body) => body.currentPassword === undefined || body.password !== undefined, {
       message: "currentPassword is only valid together with a password change",
     })
-    .refine((body) => body.fullName !== undefined || body.password !== undefined, {
-      message: "Supply fullName or password",
+    .refine((body) => body.fullName !== undefined || body.password !== undefined || body.preferredLocale !== undefined, {
+      message: "Supply fullName, password, or preferredLocale",
     })
     .refine((body) => body.password === undefined || body.currentPassword !== undefined, {
       message: "currentPassword is required when changing password",
@@ -183,6 +185,7 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
       sessionId: actor.sessionId,
       fullName: user.fullName,
       email: user.email,
+      preferredLocale: user.preferredLocale,
       permissions: Array.from(effectivePermissions),
       scopeTypes,
       activeModuleCodes,
@@ -214,6 +217,7 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container) {
           fullName: body.fullName,
           passwordHash:
             body.password === undefined ? undefined : await hashPassword(body.password),
+          preferredLocale: body.preferredLocale,
         },
         body.currentPassword,
       );

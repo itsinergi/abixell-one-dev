@@ -33,6 +33,7 @@ function mapRow(row: any): User {
     deactivatedBy: row.deactivated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    preferredLocale: (row.preferred_locale ?? "id") as "en" | "id",
   };
 }
 
@@ -207,7 +208,11 @@ export class PgUserRepository implements UserRepository {
     actor: ActorContext,
     currentPassword?: string,
   ): Promise<User> {
-    if (input.fullName === undefined && input.passwordHash === undefined) {
+    if (
+      input.fullName === undefined &&
+      input.passwordHash === undefined &&
+      input.preferredLocale === undefined
+    ) {
       throw new ConflictError("No profile fields supplied");
     }
     if (input.email !== undefined) {
@@ -215,7 +220,7 @@ export class PgUserRepository implements UserRepository {
     }
     return inGovernedTransaction(this.pool, actor.tenantId, async (client) => {
       const target = await client.query(
-        `SELECT id, full_name, password_hash
+        `SELECT id, full_name, password_hash, preferred_locale
            FROM users
           WHERE id = $1
             AND tenant_id = $2
@@ -237,16 +242,18 @@ export class PgUserRepository implements UserRepository {
         `UPDATE users
             SET full_name = $1,
                 password_hash = COALESCE($2, password_hash),
-                updated_by = $3,
+                preferred_locale = COALESCE($3, preferred_locale),
+                updated_by = $4,
                 updated_at = now()
-          WHERE id = $3
-            AND tenant_id = $4
+          WHERE id = $4
+            AND tenant_id = $5
             AND deleted_at IS NULL
             AND status = 'active'
         RETURNING *`,
         [
           input.fullName ?? target.rows[0].full_name,
           input.passwordHash ?? null,
+          input.preferredLocale ?? null,
           actor.userId,
           actor.tenantId,
         ],
@@ -274,6 +281,7 @@ export class PgUserRepository implements UserRepository {
           changedFields: [
             ...(input.fullName !== undefined ? ["fullName"] : []),
             ...(input.passwordHash !== undefined ? ["password"] : []),
+            ...(input.preferredLocale !== undefined ? ["preferredLocale"] : []),
           ],
         },
       });

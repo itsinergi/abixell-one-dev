@@ -1,4 +1,5 @@
 import type {
+  Locale,
   UpdateUserProfileInput,
   UserRepository,
 } from "../../domain/identity/user.entity.js";
@@ -128,7 +129,7 @@ export class UserService {
    * overwritten (see PgUserRepository.updateOwnProfile). */
   async updateOwnProfile(
     actor: ActorContext,
-    input: { fullName?: string; passwordHash?: string },
+    input: { fullName?: string; passwordHash?: string; preferredLocale?: string },
     currentPassword?: string,
   ) {
     return this.repo.updateOwnProfile(input, actor, currentPassword);

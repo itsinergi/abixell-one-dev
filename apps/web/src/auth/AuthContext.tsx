@@ -20,6 +20,8 @@ interface Session {
   fullName?: string;
   /** User's email address, populated from GET /me. */
   email?: string;
+  /** User's preferred locale (en | id), populated from GET /me. */
+  preferredLocale?: string;
   /** Epic 1 (§4.1 B): the server-side session this login created. The
    * session row, not any client state, holds the active Role. */
   sessionId?: string;
