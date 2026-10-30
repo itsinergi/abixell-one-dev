@@ -391,25 +391,25 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     permissions: ["workforce.planning.read", "workforce.planning.manage", "workforce.planning.apply"],
   },
 
-  // --- Supply chain (module: supply_chain) ---------------------------------
+  // --- Warehouse management (module: warehouse_management) -----------------
   {
     path: "/items",
     name: "Items & Stock",
-    moduleCode: "supply_chain",
+    moduleCode: "warehouse_management",
     status: "di_menu",
     permissions: ["supply_chain.read"],
   },
   {
     path: "/suppliers",
     name: "Suppliers",
-    moduleCode: "supply_chain",
+    moduleCode: "procurement_management",
     status: "di_menu",
     permissions: ["supply_chain.read"],
   },
   {
     path: "/purchasing",
     name: "Purchasing",
-    moduleCode: "supply_chain",
+    moduleCode: "procurement_management",
     status: "di_menu",
     permissions: ["supply_chain.manage", "supply_chain.stock.manage"],
   },

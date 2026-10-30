@@ -260,9 +260,6 @@ function NavigationContent({
                             </svg>
                             <span className="truncate">{node.label}</span>
                           </span>
-                          <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-panel-3 px-1.5 py-0.5 text-[11px] font-semibold text-ink-dim">
-                            {node.pages.length}
-                          </span>
                         </button>
 
                         <div
