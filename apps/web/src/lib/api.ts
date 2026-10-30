@@ -1239,6 +1239,22 @@ export const api = {
     request<WorkOrder>(`/work-orders/${id}/complete`, { method: "POST", token, body: { notes } }),
   verifyWorkOrder: (token: string, id: string, notes: string | null) =>
     request<WorkOrder>(`/work-orders/${id}/verify`, { method: "POST", token, body: { notes } }),
+  recordServingLog: (token: string, workOrderId: string, body: CreateServingLogInput) =>
+    request<{ servingLog: WorkOrderServingLog }>(`/work-orders/${workOrderId}/serving`, {
+      method: "POST",
+      token,
+      body,
+    }),
+  getServingLog: (token: string, workOrderId: string) =>
+    request<{ servingLog: WorkOrderServingLog | null }>(`/work-orders/${workOrderId}/serving`, { token }),
+  updateServingLog: (token: string, workOrderId: string, body: UpdateServingLogInput) =>
+    request<{ servingLog: WorkOrderServingLog }>(`/work-orders/${workOrderId}/serving`, {
+      method: "PATCH",
+      token,
+      body,
+    }),
+  getMgmtDashboard: (token: string, period: string) =>
+    request<DashboardL2>(`/dashboard/management?period=${encodeURIComponent(period)}`, { token }),
 
   // --- Wave A3: Service Operations Advanced (PACK-001…004 / SO-ADV-002…005)
   servicePacks: (token: string) =>
@@ -6405,6 +6421,64 @@ export type WorkOrderDetail = {
   checklist: WorkOrderChecklistItem[];
   status: WorkOrderStatus | null;
   availableActions: { actionCode: string; name: string; toStepCode: string }[];
+};
+
+export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+
+export type WorkOrderServingLog = {
+  id: string;
+  tenantId: string;
+  workOrderId: string;
+  servingNumber: string;
+  servicePointId: string | null;
+  mealDate: string;
+  mealType: MealType;
+  openingTime: string;
+  closingTime: string | null;
+  receivedQty: string;
+  servedQty: string;
+  returnedQty: string;
+  wastedQty: string;
+  remainingQty: string;
+  servingSupervisorUserId: string | null;
+  notes: string | null;
+  recordedBy: string;
+  recordedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateServingLogInput = {
+  mealDate: string;
+  mealType: MealType;
+  openingTime: string;
+  closingTime?: string | null;
+  receivedQty: string;
+  servedQty: string;
+  returnedQty: string;
+  wastedQty: string;
+  servicePointId?: string | null;
+  servingSupervisorUserId?: string | null;
+  notes?: string | null;
+};
+
+export type UpdateServingLogInput = {
+  closingTime?: string | null;
+  servedQty?: string;
+  returnedQty?: string;
+  wastedQty?: string;
+  servingSupervisorUserId?: string | null;
+  notes?: string | null;
+};
+
+export type KPIValue = { metric: string; value: string; unit: string; dataPoints: number };
+
+export type DashboardL2 = {
+  period: string;
+  productionAchievement: KPIValue;
+  mealFulfillment: KPIValue;
+  foodWaste: KPIValue;
+  foodCostPerMeal: KPIValue;
 };
 
 export type WorkflowInstance = {

@@ -26,6 +26,7 @@ const MySurveyDetailPage = lazy(() => import("./pages/survey/MySurveyDetailPage"
 const PublicSurveyPage = lazy(() => import("./pages/survey/PublicSurveyPage").then((m) => ({ default: m.PublicSurveyPage })));
 const WorkOrderQueuePage = lazy(() => import("./modules/service-operations/WorkOrderQueuePage").then((m) => ({ default: m.WorkOrderQueuePage })));
 const WorkOrderDetailPage = lazy(() => import("./modules/service-operations/WorkOrderDetailPage").then((m) => ({ default: m.WorkOrderDetailPage })));
+const OpsDashboardPage = lazy(() => import("./modules/service-operations/ManagementDashboardPage").then((m) => ({ default: m.ManagementDashboardPage })));
 const MyWorkPage = lazy(() => import("./modules/service-operations/MyWorkPage").then((m) => ({ default: m.MyWorkPage })));
 const MyWorkDetailPage = lazy(() => import("./modules/service-operations/MyWorkDetailPage").then((m) => ({ default: m.MyWorkDetailPage })));
 const ServiceDefinitionsPage = lazy(() => import("./modules/service-operations/ServiceDefinitionsPage").then((m) => ({ default: m.ServiceDefinitionsPage })));
@@ -155,6 +156,7 @@ export default function App() {
           {/* Phase 2 — Service Operations & Work Management */}
           <Route path="work-orders" element={<WorkOrderQueuePage />} />
           <Route path="work-orders/:workOrderId" element={<WorkOrderDetailPage />} />
+<Route path="operations-dashboard" element={<OpsDashboardPage />} />
           <Route path="my-work" element={<MyWorkPage />} />
           <Route path="my-work/:workOrderId" element={<MyWorkDetailPage />} />
           <Route path="service-types" element={<ServiceDefinitionsPage />} />

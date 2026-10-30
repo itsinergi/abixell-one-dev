@@ -10,7 +10,15 @@ import { useT } from "../../i18n/LocaleProvider";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { api, ApiError, type WorkOrderDetail } from "../../lib/api";
+import {
+  api,
+  ApiError,
+  type CreateServingLogInput,
+  type MealType,
+  type UpdateServingLogInput,
+  type WorkOrderDetail,
+  type WorkOrderServingLog,
+} from "../../lib/api";
 import {
   Alert,
   Badge,
@@ -24,6 +32,8 @@ import {
   StatusPill,
   Textarea,
 } from "../../shell/components/ui";
+
+const MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner", "snack"];
 import { formatDate, formatDateShort, statusTone } from "../../shared/format";
 
 export function WorkOrderDetailPage() {
@@ -43,12 +53,40 @@ export function WorkOrderDetailPage() {
   const [dueAt, setDueAt] = useState("");
   const [verificationNotes, setVerificationNotes] = useState("");
 
+  const [servingLog, setServingLog] = useState<WorkOrderServingLog | null>(null);
+  const [servingForm, setServingForm] = useState<CreateServingLogInput>({
+    mealDate: "",
+    mealType: "lunch",
+    openingTime: "",
+    receivedQty: "0",
+    servedQty: "0",
+    returnedQty: "0",
+    wastedQty: "0",
+  });
+  const [servingUpdate, setServingUpdate] = useState<UpdateServingLogInput>({});
+
   const load = useCallback(async () => {
     if (!workOrderId) return;
     setLoading(true);
     setError(null);
     try {
-      setDetail(await api.workOrder(token, workOrderId));
+      const [wo, serving] = await Promise.all([
+        api.workOrder(token, workOrderId),
+        api.getServingLog(token, workOrderId).catch(() => null),
+      ]);
+      setDetail(wo);
+      const s = serving?.servingLog ?? null;
+      setServingLog(s);
+      if (s) {
+        setServingUpdate({
+          closingTime: s.closingTime ?? undefined,
+          servedQty: s.servedQty,
+          returnedQty: s.returnedQty,
+          wastedQty: s.wastedQty,
+          servingSupervisorUserId: s.servingSupervisorUserId ?? undefined,
+          notes: s.notes ?? undefined,
+        });
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("mo.wod.msg.couldNotLoadThisWorkOrder"));
     } finally {
@@ -208,6 +246,137 @@ export function WorkOrderDetailPage() {
             </Button>
           </div>
         </div>
+      </Card>
+
+      <Card>
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">{t("mo.wod.t.servingLog")}</h2>
+        {servingLog ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge>{servingLog.servingNumber}</Badge>
+              <Badge>{servingLog.mealDate}</Badge>
+              <Badge>{servingLog.mealType}</Badge>
+              <span className="text-slate-600">
+                {t("mo.wod.f.received")}: {servingLog.receivedQty} · {t("mo.wod.f.served")}: {servingLog.servedQty} ·{" "}
+                {t("mo.wod.f.returned")}: {servingLog.returnedQty} · {t("mo.wod.f.wasted")}: {servingLog.wastedQty} ·{" "}
+                {t("mo.wod.f.remaining")}: {servingLog.remainingQty}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label={t("mo.wod.f.served")}>
+                <Input
+                  value={servingUpdate.servedQty ?? ""}
+                  onChange={(e) => setServingUpdate((s) => ({ ...s, servedQty: e.target.value }))}
+                />
+              </Field>
+              <Field label={t("mo.wod.f.returned")}>
+                <Input
+                  value={servingUpdate.returnedQty ?? ""}
+                  onChange={(e) => setServingUpdate((s) => ({ ...s, returnedQty: e.target.value }))}
+                />
+              </Field>
+              <Field label={t("mo.wod.f.wasted")}>
+                <Input
+                  value={servingUpdate.wastedQty ?? ""}
+                  onChange={(e) => setServingUpdate((s) => ({ ...s, wastedQty: e.target.value }))}
+                />
+              </Field>
+              <Field label={t("mo.wod.f.servingSupervisor")}>
+                <Select
+                  value={servingUpdate.servingSupervisorUserId ?? ""}
+                  onChange={(e) => setServingUpdate((s) => ({ ...s, servingSupervisorUserId: e.target.value || null }))}
+                >
+                  <option value="">{t("mo.wod.p.selectUser")}</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <div className="flex items-end">
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    run(() => api.updateServingLog(token, workOrder.id, servingUpdate), t("mo.wod.msg.servingUpdated"))
+                  }
+                >
+                  {t("mo.wod.act.updateServing")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label={t("mo.wod.f.mealDate")}>
+              <Input
+                type="date"
+                value={servingForm.mealDate}
+                onChange={(e) => setServingForm((f) => ({ ...f, mealDate: e.target.value }))}
+              />
+            </Field>
+            <Field label={t("mo.wod.f.mealType")}>
+              <Select value={servingForm.mealType} onChange={(e) => setServingForm((f) => ({ ...f, mealType: e.target.value as MealType }))}>
+                {MEAL_TYPES.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t("mo.wod.f.openingTime")}>
+              <Input
+                type="datetime-local"
+                value={servingForm.openingTime}
+                onChange={(e) =>
+                  setServingForm((f) => ({ ...f, openingTime: e.target.value ? new Date(e.target.value).toISOString() : "" }))
+                }
+              />
+            </Field>
+            <Field label={t("mo.wod.f.received")}>
+              <Input value={servingForm.receivedQty} onChange={(e) => setServingForm((f) => ({ ...f, receivedQty: e.target.value }))} />
+            </Field>
+            <Field label={t("mo.wod.f.served")}>
+              <Input value={servingForm.servedQty} onChange={(e) => setServingForm((f) => ({ ...f, servedQty: e.target.value }))} />
+            </Field>
+            <Field label={t("mo.wod.f.returned")}>
+              <Input value={servingForm.returnedQty} onChange={(e) => setServingForm((f) => ({ ...f, returnedQty: e.target.value }))} />
+            </Field>
+            <Field label={t("mo.wod.f.wasted")}>
+              <Input value={servingForm.wastedQty} onChange={(e) => setServingForm((f) => ({ ...f, wastedQty: e.target.value }))} />
+            </Field>
+            <Field label={t("mo.wod.f.servingSupervisor")}>
+              <Select
+                value={servingForm.servingSupervisorUserId ?? ""}
+                onChange={(e) => setServingForm((f) => ({ ...f, servingSupervisorUserId: e.target.value || null }))}
+              >
+                <option value="">{t("mo.wod.p.selectUser")}</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="flex items-end">
+              <Button
+                disabled={busy || !servingForm.mealDate}
+                onClick={() =>
+                  run(
+                    () =>
+                      api.recordServingLog(token, workOrder.id, {
+                        ...servingForm,
+                        servingSupervisorUserId: servingForm.servingSupervisorUserId || null,
+                      }),
+                    t("mo.wod.msg.servingRecorded"),
+                  )
+                }
+              >
+                {t("mo.wod.act.recordServing")}
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {availableActions.length > 0 ? (
