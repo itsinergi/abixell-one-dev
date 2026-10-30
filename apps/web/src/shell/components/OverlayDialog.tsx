@@ -169,8 +169,9 @@ export function OverlayDialog({
       // after a nested dialog closes; it is no longer inert at this point and
       // owns the captured trigger again. Never steal focus from a dialog above.
       if (wasTopmost) {
-        capturedRestoreFocusRef.current?.focus();
+        const restoreTarget = capturedRestoreFocusRef.current;
         capturedRestoreFocusRef.current = null;
+        window.requestAnimationFrame(() => restoreTarget?.focus());
       }
     };
   }, [initialFocusRef, open, suppliedRestoreFocusRef]);
