@@ -332,6 +332,16 @@ export const NAV_SECTIONS: NavSection[] = [
     requiresInternal: true,
   },
   {
+    key: "operations-dashboard",
+    moduleCode: "service_operations",
+    group: "operations",
+    path: "/operations-dashboard",
+    label: "Operations Dashboard",
+    description: "L2 management KPIs — production achievement, meal fulfillment, food waste, cost per meal.",
+    requiresAnyOf: [PERMISSIONS.serviceOperationsRead],
+    requiresInternal: true,
+  },
+  {
     key: "my-work",
     moduleCode: "service_operations",
     group: "operations",
