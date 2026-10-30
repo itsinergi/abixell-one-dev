@@ -129,7 +129,7 @@ export class UserService {
    * overwritten (see PgUserRepository.updateOwnProfile). */
   async updateOwnProfile(
     actor: ActorContext,
-    input: { fullName?: string; passwordHash?: string; preferredLocale?: string },
+    input: { fullName?: string; passwordHash?: string; preferredLocale?: Locale },
     currentPassword?: string,
   ) {
     return this.repo.updateOwnProfile(input, actor, currentPassword);
