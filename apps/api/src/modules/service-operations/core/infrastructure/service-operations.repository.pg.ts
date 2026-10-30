@@ -682,7 +682,6 @@ export class PgServiceOperationsRepository implements ServiceOperationsRepositor
   async updateServingLog(
     id: string,
     input: UpdateServingLogInput,
-    updatedBy: string,
   ): Promise<WorkOrderServingLog | null> {
     const fields: string[] = ["updated_at = now()"];
     const values: unknown[] = [];
@@ -726,7 +725,6 @@ export class PgServiceOperationsRepository implements ServiceOperationsRepositor
   async markWorkOrderServingRecorded(
     id: string,
     servingSupervisorUserId: string | null,
-    updatedBy: string,
   ): Promise<WorkOrder | null> {
     const r = await this.pool.query(
       `UPDATE work_orders

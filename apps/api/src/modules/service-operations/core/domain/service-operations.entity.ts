@@ -526,13 +526,12 @@ export interface ServiceOperationsRepository {
   // Work Order serving log (SO-CORE-016)
   createServingLog(input: CreateServingLogInput): Promise<WorkOrderServingLog>;
   findServingLogByWorkOrder(workOrderId: string): Promise<WorkOrderServingLog | null>;
-  updateServingLog(id: string, input: UpdateServingLogInput, updatedBy: string): Promise<WorkOrderServingLog | null>;
+  updateServingLog(id: string, input: UpdateServingLogInput): Promise<WorkOrderServingLog | null>;
   /** Mark WO as serving-recorded: SET serving_recorded_at = now(). Guarded
    * so multiple serves on the same WO cannot happen. */
   markWorkOrderServingRecorded(
     id: string,
     servingSupervisorUserId: string | null,
-    updatedBy: string,
   ): Promise<WorkOrder | null>;
 
   // KPI aggregates (SO-CORE-017) — all 4 queries scoped to [periodStart, periodEnd).

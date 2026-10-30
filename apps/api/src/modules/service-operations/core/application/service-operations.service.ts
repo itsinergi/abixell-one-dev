@@ -26,6 +26,7 @@ import type {
   WorkOrderAcceptanceToken,
   WorkOrderChecklistItem,
   WorkOrderCostItem,
+  WorkOrderServingLog,
   WorkRequest,
   CustomerInvoice,
 } from "../domain/service-operations.entity.js";
@@ -1170,7 +1171,7 @@ export class ServiceOperationsService {
       servingSupervisorUserId?: string | null;
       notes?: string | null;
     },
-  ): Promise<{ servingLog: any; workOrder: WorkOrder }> {
+  ): Promise<{ servingLog: WorkOrderServingLog; workOrder: WorkOrder }> {
     await this.rbac.requirePermission(actor, "service_operations.manage");
     const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
 
@@ -1230,7 +1231,6 @@ export class ServiceOperationsService {
     const updated = await this.repo.markWorkOrderServingRecorded(
       workOrderId,
       input.servingSupervisorUserId ?? null,
-      actor.userId,
     );
 
     await this.audit.record({
@@ -1252,7 +1252,7 @@ export class ServiceOperationsService {
   }
 
   /** Retrieve serving log for a Work Order (read tier). */
-  async getServingLog(actor: ActorContext, workOrderId: string): Promise<any> {
+  async getServingLog(actor: ActorContext, workOrderId: string): Promise<WorkOrderServingLog> {
     await this.rbac.requirePermission(actor, "service_operations.read");
     this.requireInternalActor(actor);
     const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
@@ -1275,7 +1275,7 @@ export class ServiceOperationsService {
       servingSupervisorUserId?: string | null;
       notes?: string | null;
     },
-  ): Promise<any> {
+  ): Promise<WorkOrderServingLog> {
     await this.rbac.requirePermission(actor, "service_operations.manage");
     const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
     const servingLog = await this.repo.findServingLogByWorkOrder(workOrder.id);
@@ -1296,7 +1296,10 @@ export class ServiceOperationsService {
       }
     }
 
-    const updated = await this.repo.updateServingLog(servingLog.id, input, actor.userId);
+    const updated = await this.repo.updateServingLog(servingLog.id, input);
+    if (!updated) {
+      throw new ValidationError("No fields supplied to update");
+    }
 
     await this.audit.record({
       tenantId: actor.tenantId,
