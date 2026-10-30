@@ -20,7 +20,6 @@ describe("Frontend Module-Activated Navigation Capabilities", () => {
       "service_operations",
       "customer_commercial",
       "workforce",
-      "supply_chain",
       "warehouse_management",
       "procurement_management",
       "asset",
@@ -148,8 +147,8 @@ describe("Frontend Module-Activated Navigation Capabilities", () => {
       const financeNode = ecGroup.nodes.find((n) => n.type === "module" && n.moduleCode === "finance");
       assert.ok(financeNode, "Finance module node should be in Enterprise Core");
 
-      const scNode = ecGroup.nodes.find((n) => n.type === "module" && n.moduleCode === "supply_chain");
-      assert.equal(scNode, undefined, "Supply Chain module should NOT be visible when inactive");
+      const whNode = ecGroup.nodes.find((n) => n.type === "module" && n.moduleCode === "warehouse_management");
+      assert.equal(whNode, undefined, "Warehouse Management module should NOT be visible when inactive");
     });
 
     it("omits empty groups when no modules or top-level sections match", () => {
@@ -169,7 +168,7 @@ describe("Frontend Module-Activated Navigation Capabilities", () => {
       PERMISSIONS.adminConsoleRead,
       PERMISSIONS.configManage,
     ];
-    const activeCodes: ModuleCode[] = ["hse", "finance", "supply_chain", "warehouse_management", "procurement_management"];
+    const activeCodes: ModuleCode[] = ["hse", "finance", "warehouse_management", "procurement_management"];
     const fullTree = visibleNavTree(fullPermissions, ["tenant"], activeCodes);
 
     it("returns unchanged tree for empty or whitespace query", () => {

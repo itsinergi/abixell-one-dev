@@ -182,7 +182,6 @@ export type ModuleCode =
   | "service_operations"
   | "customer_commercial"
   | "workforce"
-  | "supply_chain"
   | "warehouse_management"
   | "procurement_management"
   | "asset"
@@ -198,7 +197,6 @@ export const MODULE_METADATA: Record<ModuleCode, { label: string; group: NavGrou
   service_operations: { label: "Service Operations", group: "operations" },
   customer_commercial: { label: "Customers & Commercial", group: "enterprise-core" },
   workforce: { label: "Workforce & HR", group: "enterprise-core" },
-  supply_chain: { label: "Supply Chain", group: "enterprise-core" },
   warehouse_management: { label: "Warehouse Management", group: "enterprise-core" },
   procurement_management: { label: "Procurement Management", group: "enterprise-core" },
   asset: { label: "Asset Management", group: "enterprise-core" },
@@ -496,7 +494,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "items",
-    moduleCode: "supply_chain",
+    moduleCode: "warehouse_management",
     group: "enterprise-core",
     path: "/items",
     label: "Items & Stock",
@@ -578,7 +576,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "suppliers",
-    moduleCode: "supply_chain",
+    moduleCode: "procurement_management",
     group: "enterprise-core",
     path: "/suppliers",
     label: "Suppliers",
@@ -588,7 +586,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "purchasing",
-    moduleCode: "supply_chain",
+    moduleCode: "procurement_management",
     group: "enterprise-core",
     path: "/purchasing",
     label: "Purchasing",

@@ -160,18 +160,17 @@ export const NAV_LABELS: Record<string, NavLabel> = {
     id: "Perencanaan Tenaga Kerja",
     descriptionId: "Bandingkan skenario jumlah dan biaya sebelum keputusan.",
   },
-  "nav-supply_chain": { en: "Supply Chain", id: "Rantai Pasok" },
-  "nav-supply_chain-items": {
+  "nav-warehouse_management-items": {
     en: "Items & Stock",
     id: "Barang & Stok",
     descriptionId: "Apa yang ada, berapa jumlahnya, dan apa yang bergerak.",
   },
-  "nav-supply_chain-suppliers": {
+  "nav-procurement_management-suppliers": {
     en: "Suppliers",
     id: "Pemasok",
     descriptionId: "Dari siapa Anda membeli.",
   },
-  "nav-supply_chain-purchasing": {
+  "nav-procurement_management-purchasing": {
     en: "Purchasing",
     id: "Pembelian",
     descriptionId: "Minta, pesan, dan terima kebutuhan tim Anda.",
