@@ -26,6 +26,7 @@ import type {
   WorkOrderAcceptanceToken,
   WorkOrderChecklistItem,
   WorkOrderCostItem,
+  WorkOrderServingLog,
   WorkRequest,
   CustomerInvoice,
 } from "../domain/service-operations.entity.js";
@@ -75,6 +76,7 @@ export const WORK_REQUEST_NUMBERING_CODE = "work_request";
 export const WORK_ORDER_NUMBERING_CODE = "work_order";
 export const WORK_ORDER_WORKFLOW_DEFINITION_CODE = "service_operations_work_order";
 export const CUSTOMER_INVOICE_NUMBERING_CODE = "customer_invoice";
+export const WORK_ORDER_SERVING_NUMBERING_CODE = "work_order_serving";
 /** PPN default rate (Indonesia PPN 11%). Per-invoice override allowed. */
 const DEFAULT_PPN_RATE = "0.11";
 
@@ -1146,6 +1148,169 @@ export class ServiceOperationsService {
     );
     if (value === null || value === undefined || value === "") return "0";
     return String(value);
+  }
+
+  // =========================================================================
+  // Work Order Serving Log (SO-CORE-016) — Last-mile meal tracking
+  // =========================================================================
+
+  /** Record a serving event: meals received, served, wasted, returned. */
+  async recordServingLog(
+    actor: ActorContext,
+    workOrderId: string,
+    input: {
+      mealDate: string;
+      mealType: "breakfast" | "lunch" | "dinner" | "snack";
+      openingTime: Date;
+      closingTime?: Date | null;
+      receivedQty: string;
+      servedQty: string;
+      returnedQty: string;
+      wastedQty: string;
+      servicePointId?: string | null;
+      servingSupervisorUserId?: string | null;
+      notes?: string | null;
+    },
+  ): Promise<{ servingLog: WorkOrderServingLog; workOrder: WorkOrder }> {
+    await this.rbac.requirePermission(actor, "service_operations.manage");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+
+    // Validate state: invoicing must have happened for serving to make sense.
+    if (!workOrder.customerAcceptedAt) {
+      throw new ConflictError("Serving can only be recorded on a customer-accepted Work Order");
+    }
+
+    // Validate quantities.
+    const qty = {
+      received: Number(input.receivedQty),
+      served: Number(input.servedQty),
+      returned: Number(input.returnedQty),
+      wasted: Number(input.wastedQty),
+    };
+    if (!(qty.received > 0)) {
+      throw new ValidationError("receivedQty must be greater than 0");
+    }
+    if (qty.served < 0 || qty.returned < 0 || qty.wasted < 0) {
+      throw new ValidationError("servedQty, returnedQty, wastedQty must be >= 0");
+    }
+    if (qty.served + qty.returned + qty.wasted > qty.received) {
+      throw new ValidationError("served + returned + wasted cannot exceed receivedQty");
+    }
+
+    // Generate serving number (idempotency: one serving log per WO).
+    const existingServing = await this.repo.findServingLogByWorkOrder(workOrderId);
+    if (existingServing) {
+      throw new ConflictError("A serving log has already been recorded for this Work Order");
+    }
+
+    const { number: servingNumber } = await this.configuration.generateNumberForTenant(
+      actor.tenantId,
+      WORK_ORDER_SERVING_NUMBERING_CODE,
+      actor.userId,
+    );
+
+    const servingLog = await this.repo.createServingLog({
+      tenantId: actor.tenantId,
+      workOrderId,
+      servingNumber,
+      mealDate: input.mealDate,
+      mealType: input.mealType,
+      openingTime: input.openingTime,
+      closingTime: input.closingTime ?? null,
+      receivedQty: input.receivedQty,
+      servedQty: input.servedQty,
+      returnedQty: input.returnedQty,
+      wastedQty: input.wastedQty,
+      servicePointId: input.servicePointId ?? null,
+      servingSupervisorUserId: input.servingSupervisorUserId ?? null,
+      notes: input.notes ?? null,
+      recordedBy: actor.userId,
+    });
+
+    // Mark the WO as serving-recorded.
+    const updated = await this.repo.markWorkOrderServingRecorded(
+      workOrderId,
+      input.servingSupervisorUserId ?? null,
+    );
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "work_order.serving_recorded",
+      entityType: "work_order_serving_log",
+      entityId: servingLog.id,
+      metadata: {
+        workOrderId,
+        servingNumber,
+        receivedQty: input.receivedQty,
+        servedQty: input.servedQty,
+        wastedQty: input.wastedQty,
+      },
+    });
+
+    return { servingLog, workOrder: updated! };
+  }
+
+  /** Retrieve serving log for a Work Order (read tier). */
+  async getServingLog(actor: ActorContext, workOrderId: string): Promise<WorkOrderServingLog> {
+    await this.rbac.requirePermission(actor, "service_operations.read");
+    this.requireInternalActor(actor);
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    const servingLog = await this.repo.findServingLogByWorkOrder(workOrder.id);
+    if (!servingLog) {
+      throw new NotFoundError("ServingLog", workOrderId);
+    }
+    return servingLog;
+  }
+
+  /** Update serving log (adjust closing time, quantities, supervisor). */
+  async updateServingLog(
+    actor: ActorContext,
+    workOrderId: string,
+    input: {
+      closingTime?: Date | null;
+      servedQty?: string;
+      returnedQty?: string;
+      wastedQty?: string;
+      servingSupervisorUserId?: string | null;
+      notes?: string | null;
+    },
+  ): Promise<WorkOrderServingLog> {
+    await this.rbac.requirePermission(actor, "service_operations.manage");
+    const workOrder = await this.getAuthorizedWorkOrder(actor, workOrderId);
+    const servingLog = await this.repo.findServingLogByWorkOrder(workOrder.id);
+    if (!servingLog) {
+      throw new NotFoundError("ServingLog", workOrderId);
+    }
+
+    // Re-validate quantities if any are supplied.
+    if (input.servedQty !== undefined || input.returnedQty !== undefined || input.wastedQty !== undefined) {
+      const qty = {
+        received: Number(servingLog.receivedQty),
+        served: input.servedQty !== undefined ? Number(input.servedQty) : Number(servingLog.servedQty),
+        returned: input.returnedQty !== undefined ? Number(input.returnedQty) : Number(servingLog.returnedQty),
+        wasted: input.wastedQty !== undefined ? Number(input.wastedQty) : Number(servingLog.wastedQty),
+      };
+      if (qty.served + qty.returned + qty.wasted > qty.received) {
+        throw new ValidationError("served + returned + wasted cannot exceed receivedQty");
+      }
+    }
+
+    const updated = await this.repo.updateServingLog(servingLog.id, input);
+    if (!updated) {
+      throw new ValidationError("No fields supplied to update");
+    }
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      actorUserId: actor.userId,
+      action: "work_order.serving_updated",
+      entityType: "work_order_serving_log",
+      entityId: servingLog.id,
+      metadata: { workOrderId, updates: Object.keys(input) },
+    });
+
+    return updated;
   }
 
   // --- Public (authless) token surface -------------------------------

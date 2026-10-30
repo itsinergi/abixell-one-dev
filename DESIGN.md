@@ -103,10 +103,17 @@ Diputuskan lewat pratinjau yang disetujui:
 
 ## 6. Copy
 
-Bahasa Indonesia untuk seluruh copy produk, istilah teknis tetap apa adanya
-(Window, Role, Permission). Label tombol menyatakan aksinya: "Simpan
-perubahan", bukan "OK". Pesan galat menyebut apa yang terjadi dan apa yang
-harus dilakukan, tanpa menyalahkan siapa pun.
+Dwibahasa EN/ID (toggle di shell, default ID). Setiap halaman WAJIB pakai
+`useT()` dari `src/i18n/LocaleProvider.tsx` — tidak ada string hardcode baru
+di JSX. Label navigasi lewat `navLabels.ts` (dictionary terpisah, kode
+nav-* dari server), string halaman lewat `en.ts`/`id.ts`. Istilah teknis
+tetap apa adanya di kedua bahasa (Window, Role, Permission). Label tombol
+menyatakan aksinya: "Simpan perubahan"/"Save changes", bukan "OK". Pesan
+galat menyebut apa yang terjadi dan apa yang harus dilakukan, tanpa
+menyalahkan siapa pun — diterjemahkan di kedua dictionary.
+
+Pilihan bahasa persisten ke `users.preferred_locale` (DB), bukan cuma
+localStorage — ikut user lintas device/browser.
 
 ## 7. Terbuka
 

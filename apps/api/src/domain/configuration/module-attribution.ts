@@ -299,6 +299,8 @@ export const API_SEGMENT_MODULES: Readonly<Record<string, ModuleCode>> = {
   "service-operations": "service_operations",
   "work-orders": "service_operations",
   "work-requests": "service_operations",
+  // SO-CORE-017 KPI dashboard — a service-operations management surface.
+  dashboard: "service_operations",
   // WP-MD-03 Catering vertical master — a service-operations vertical, not a
   // new module.
   catering: "service_operations",

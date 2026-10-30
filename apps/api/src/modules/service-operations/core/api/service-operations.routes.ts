@@ -75,6 +75,28 @@ const costItemSchema = z.object({
   costCenterId: z.string().uuid().nullable().optional(),
 });
 const finalizeCostsSchema = z.object({ legalEntityId: z.string().uuid() });
+const servingQtySchema = z.string().regex(/^\d{1,14}(\.\d{1,4})?$/);
+const servingLogSchema = z.object({
+  mealDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  mealType: z.enum(["breakfast", "lunch", "dinner", "snack"]),
+  openingTime: z.string().datetime(),
+  closingTime: z.string().datetime().nullable().optional(),
+  receivedQty: servingQtySchema,
+  servedQty: servingQtySchema,
+  returnedQty: servingQtySchema,
+  wastedQty: servingQtySchema,
+  servicePointId: z.string().uuid().nullable().optional(),
+  servingSupervisorUserId: z.string().uuid().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+const servingLogUpdateSchema = z.object({
+  closingTime: z.string().datetime().nullable().optional(),
+  servedQty: servingQtySchema.optional(),
+  returnedQty: servingQtySchema.optional(),
+  wastedQty: servingQtySchema.optional(),
+  servingSupervisorUserId: z.string().uuid().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
 const rateSchema = z.string().regex(/^0(\.\d{1,6})?$|^1(\.0{1,6})?$/);
 const createInvoiceSchema = z.object({
   legalEntityId: z.string().uuid(),
@@ -85,6 +107,7 @@ const createInvoiceSchema = z.object({
 
 export function registerServiceOperationsRoutes(app: FastifyInstance, container: Container) {
   const svc = () => container.serviceOperations;
+  const kpiSvc = () => container.kpi;
 
   // --- Service Definitions (SO-CORE-001 / SO-CORE-007) -----------------
 
@@ -274,5 +297,43 @@ export function registerServiceOperationsRoutes(app: FastifyInstance, container:
   app.get("/work-orders/:id/invoice", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
     return reply.send(await svc().getInvoice(request.actor!, id));
+  });
+
+  // --- Work Order Serving Log (SO-CORE-016) --------------------------------
+
+  app.post("/work-orders/:id/serving", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = servingLogSchema.parse(request.body);
+    const result = await svc().recordServingLog(request.actor!, id, {
+      ...body,
+      openingTime: new Date(body.openingTime),
+      closingTime: body.closingTime ? new Date(body.closingTime) : undefined,
+    });
+    return reply.status(201).send(result);
+  });
+
+  app.get("/work-orders/:id/serving", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    return reply.send(await svc().getServingLog(request.actor!, id));
+  });
+
+  app.patch("/work-orders/:id/serving", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = servingLogUpdateSchema.parse(request.body);
+    const result = await svc().updateServingLog(request.actor!, id, {
+      ...body,
+      closingTime: body.closingTime ? new Date(body.closingTime) : undefined,
+    });
+    return reply.send(result);
+  });
+
+  // --- KPI Dashboard (SO-CORE-017) — L2 Management, 4 core KPIs ----------
+
+  const dashboardQuerySchema = z.object({ period: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/) });
+
+  app.get("/dashboard/management", { preHandler: app.authenticate }, async (request, reply) => {
+    const { period } = dashboardQuerySchema.parse(request.query);
+    const actor = request.actor!;
+    return reply.send(await kpiSvc().getMgmtDashboard(actor, actor.tenantId, period));
   });
 }

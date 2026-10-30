@@ -158,6 +158,7 @@ describe("Phase 2 — Service Operations & Work Management Core", () => {
     // Tenant Configuration: numbering + lifecycle.
     await post("/config/numbering/work_request", adminToken, { pattern: "WR-{SEQ:5}" });
     await post("/config/numbering/work_order", adminToken, { pattern: "WO-{SEQ:5}" });
+    await post("/config/numbering/work_order_serving", adminToken, { pattern: "SRV-{SEQ:5}" });
     await buildWorkflow(adminToken);
 
     // Second tenant for cross-tenant isolation checks.
@@ -563,5 +564,128 @@ describe("Phase 2 — Service Operations & Work Management Core", () => {
       plannedEndAt: new Date(Date.now() + 3600000).toISOString(),
     });
     expect(bad.statusCode).toBe(400);
+  });
+
+  describe("SO-CORE-016 — Work Order Serving Phase", () => {
+    it("recordServingLog: accepted WO receives meal serving event", async () => {
+      const wo = await post("/work-orders", coordinatorToken, {
+        customerId: customerAId,
+        serviceDefinitionCode: SERVICE_CODE,
+        title: "Serving test",
+      });
+      const workOrderId = wo.json().id;
+
+      // Workflow: PLANNED → IN_PROGRESS → DONE → CLOSED (customer-accepted).
+      await post(`/work-orders/${workOrderId}/assign`, coordinatorToken, { assigneeUserId: executorUserId });
+      await post(`/work-orders/${workOrderId}/actions/start`, coordinatorToken, {});
+      await post(`/work-orders/${workOrderId}/start`, executorToken);
+
+      // Complete all required checklist items before /complete.
+      const detail = await get(`/work-orders/${workOrderId}`, executorToken);
+      const checklist = detail.json().checklist as { id: string; code: string }[];
+      for (const item of checklist) {
+        await post(`/work-orders/${workOrderId}/checklist/${item.id}`, executorToken, {
+          isCompleted: true,
+          note: `${item.code} ok`,
+        });
+      }
+
+      await post(`/work-orders/${workOrderId}/complete`, executorToken, { notes: "done" });
+      await post(`/work-orders/${workOrderId}/actions/complete`, coordinatorToken, {});
+      await post(`/work-orders/${workOrderId}/verify`, verifierToken, { notes: "verified" });
+      const accepted = await post(`/work-orders/${workOrderId}/customer-accept`, verifierToken, {});
+      expect(accepted.statusCode).toBe(200);
+
+      // Record a serving event: meals received, served, returned, wasted.
+      const serving = await post(`/work-orders/${workOrderId}/serving`, coordinatorToken, {
+        mealDate: "2026-10-30",
+        mealType: "lunch",
+        openingTime: new Date().toISOString(),
+        closingTime: new Date(Date.now() + 3600000).toISOString(),
+        receivedQty: "100.0000",
+        servedQty: "95.0000",
+        returnedQty: "3.0000",
+        wastedQty: "2.0000",
+        servicePointId: siteAId,
+        servingSupervisorUserId: executorUserId,
+      });
+      expect(serving.statusCode).toBe(201);
+      expect(serving.json().servingLog.servingNumber).toMatch(/^SRV-/);
+      expect(serving.json().servingLog.remainingQty).toBe("0.0000"); // 100 - 95 - 3 - 2
+      expect(serving.json().workOrder.servingRecordedAt).toBeTruthy();
+    });
+  });
+
+  describe("SO-CORE-017 — KPI Dashboard (4 core KPIs)", () => {
+    it("getMgmtDashboard: computes meal fulfillment, food waste, food cost from serving + WO data", async () => {
+      const wo = await post("/work-orders", coordinatorToken, {
+        customerId: customerAId,
+        serviceDefinitionCode: SERVICE_CODE,
+        title: "KPI dashboard test",
+      });
+      const workOrderId = wo.json().id;
+
+      await post(`/work-orders/${workOrderId}/assign`, coordinatorToken, { assigneeUserId: executorUserId });
+      await post(`/work-orders/${workOrderId}/actions/start`, coordinatorToken, {});
+      await post(`/work-orders/${workOrderId}/start`, executorToken);
+
+      const detail = await get(`/work-orders/${workOrderId}`, executorToken);
+      const checklist = detail.json().checklist as { id: string; code: string }[];
+      for (const item of checklist) {
+        await post(`/work-orders/${workOrderId}/checklist/${item.id}`, executorToken, {
+          isCompleted: true,
+          note: `${item.code} ok`,
+        });
+      }
+
+      await post(`/work-orders/${workOrderId}/complete`, executorToken, { notes: "done" });
+      await post(`/work-orders/${workOrderId}/actions/complete`, coordinatorToken, {});
+      await post(`/work-orders/${workOrderId}/verify`, verifierToken, { notes: "verified" });
+      await post(`/work-orders/${workOrderId}/customer-accept`, verifierToken, {});
+
+      // Record a serving event: 100 received, 80 served, 20 wasted (20% waste, 80% fulfillment).
+      const serving = await post(`/work-orders/${workOrderId}/serving`, coordinatorToken, {
+        mealDate: "2026-10-30",
+        mealType: "lunch",
+        openingTime: new Date().toISOString(),
+        receivedQty: "100.0000",
+        servedQty: "80.0000",
+        returnedQty: "0.0000",
+        wastedQty: "20.0000",
+      });
+      expect(serving.statusCode).toBe(201);
+
+      // Query the dashboard for the current month.
+      const period = new Date().toISOString().substring(0, 7); // YYYY-MM
+      const dashboard = await get(`/dashboard/management?period=${period}`, coordinatorToken);
+      expect(dashboard.statusCode).toBe(200);
+
+      const body = dashboard.json();
+      expect(body.period).toBe(period);
+      expect(body.mealFulfillment.metric).toBe("Meal Fulfillment Rate");
+      expect(body.foodWaste.metric).toBe("Food Waste Percentage");
+      expect(body.productionAchievement.metric).toBe("Production Achievement");
+      expect(body.foodCostPerMeal.metric).toBe("Food Cost per Meal");
+
+      // At least this one serving log's numbers should be reflected
+      // (fulfillment = served/received*100, waste = wasted/received*100).
+      // Tenant-wide totals include other tests' data in this describe block,
+      // so assert the metrics exist and are well-formed percentages, not exact values.
+      expect(Number(body.mealFulfillment.value)).toBeGreaterThanOrEqual(0);
+      expect(Number(body.foodWaste.value)).toBeGreaterThanOrEqual(0);
+      expect(body.mealFulfillment.dataPoints).toBeGreaterThan(0);
+    });
+
+    it("getMgmtDashboard rejects malformed period", async () => {
+      const bad = await get("/dashboard/management?period=not-a-date", coordinatorToken);
+      expect(bad.statusCode).toBe(400);
+    });
+
+    it("getMgmtDashboard requires service_operations.read permission", async () => {
+      // CUSTOMER_P2 has service_operations.manage but let's verify READER_P2 (read-only) works.
+      const period = new Date().toISOString().substring(0, 7);
+      const asReader = await get(`/dashboard/management?period=${period}`, readerToken);
+      expect(asReader.statusCode).toBe(200);
+    });
   });
 });

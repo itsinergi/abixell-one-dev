@@ -84,6 +84,7 @@ import { PgSurveyIntegrationRepository } from "./infrastructure/persistence/repo
 import { SurveyIntegrationService } from "./application/survey-integration/survey-integration.service.js";
 import { PgServiceOperationsRepository } from "./modules/service-operations/core/infrastructure/service-operations.repository.pg.js";
 import { ServiceOperationsService } from "./modules/service-operations/core/application/service-operations.service.js";
+import { KPIService } from "./modules/service-operations/core/application/kpi.service.js";
 import { PgWorkforceRepository } from "./modules/workforce/core/infrastructure/workforce.repository.pg.js";
 import { WorkforceService } from "./modules/workforce/core/application/workforce.service.js";
 import { PgWorkforceAdvancedRepository } from "./modules/workforce/advanced/infrastructure/workforce-advanced.repository.pg.js";
@@ -364,6 +365,7 @@ export function buildContainer() {
     eventBus,
     accountingEventPort,
   );
+  const kpi = new KPIService(serviceOperationsRepo, rbac);
 
   // Phase 3 — Workforce / HR Core. Built before DocumentService so its
   // `employee` Entity Authorization Resolver can close over
@@ -973,6 +975,7 @@ export function buildContainer() {
     surveyIntegration,
     serviceOperations,
     serviceOperationsAdvanced,
+    kpi,
     workforce,
     workforceAdvanced,
     supplyChain,
