@@ -259,6 +259,13 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     parentPath: "/work-orders",
   },
   {
+    path: "/operations-dashboard",
+    name: "Operations Dashboard",
+    moduleCode: "service_operations",
+    status: "di_menu",
+    permissions: ["service_operations.read"],
+  },
+  {
     path: "/my-work",
     name: "My Work",
     moduleCode: "service_operations",
