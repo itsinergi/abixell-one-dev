@@ -80,8 +80,7 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
 /** Icons for standalone pages hanging directly under a group. */
 const PAGE_ICONS: Record<string, LucideIcon> = {
   "nav-overview": LayoutDashboard,
-  "nav-administration": Settings,
-  "nav-admin-console": ShieldCheck,
+  "nav-settings": Settings,
 };
 
 /** Icons for pages nested inside a module folder. */

@@ -194,7 +194,7 @@ describe("Epic 2 Wave 1 — Application Dictionary & Metadata Engine", () => {
       for (const [field, value] of [
         ["registrationStatus", "di_menu"],
         ["requiredPermissions", ["config.manage"]],
-        ["parentPath", "/administration"],
+        ["parentPath", "/settings"],
       ] as const) {
         const response = await app.inject({
           method: "PATCH",
@@ -287,7 +287,7 @@ describe("Epic 2 Wave 1 — Application Dictionary & Metadata Engine", () => {
       expect(hseReport?.registration_status).toBe("tersembunyi");
       expect(hseReport?.required_permissions).toEqual(["hse.report", "hse.manage"]);
 
-      const adminComplaints = byCode.get("route:/administration/complaints");
+      const adminComplaints = byCode.get("route:/complaints/configuration");
       expect(adminComplaints?.required_permissions).toEqual(["complaint.configure"]);
 
       // Entry-flow routes render outside the shell and need no permission.

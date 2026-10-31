@@ -25,7 +25,7 @@ export function AdminRoleDefinitionPage() {
   const t = useT();
   const { roleCode } = useParams<{ roleCode: string }>();
 
-  const back = () => navigate("/admin?section=roles");
+  const back = () => navigate("/settings?tab=access");
 
   if (!permissions.includes(PERMISSIONS.adminConsoleRead)) {
     return (

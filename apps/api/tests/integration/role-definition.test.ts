@@ -570,7 +570,7 @@ describe("Epic 4 Wave 1 — Role definitions", () => {
       permissionCodes: ["config.read"],
       windows: [
         {
-          windowCode: "route:/admin",
+          windowCode: "route:/settings",
           isReadWrite: false,
           isActive: true,
           ignored: true,
