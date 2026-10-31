@@ -133,7 +133,7 @@ describe("Epic 3 Wave 2 — server-side menu filter", () => {
       // modules are the ones a customer has no business knowing about.
       expect(codes).not.toContain("nav-workforce");
       expect(codes).not.toContain("nav-finance");
-      expect(codes).not.toContain("nav-admin-console");
+      expect(codes).not.toContain("nav-settings");
       expect(codes).not.toContain("nav-enterprise-core");
 
       // And something did arrive, so an empty payload cannot pass as "clean".

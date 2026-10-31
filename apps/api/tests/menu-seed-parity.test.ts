@@ -238,13 +238,12 @@ describe("Epic 3 Wave 1 — menu catalogue parity", () => {
       .map((row) => `${row.code}: expected ${row.expected}, served ${row.actual}`);
     expect(wrong, wrong.join("\n")).toEqual([]);
 
-    // And the standalone set is exactly three, so a seed that dropped every
+    // And the standalone set is exactly two, so a seed that dropped every
     // module link at once could not pass by declaring everything standalone.
     const standalone = flatten(servedMenu).filter((node) => !node.isSummary && !node.moduleCode);
     expect(standalone.map((node) => node.code).sort()).toEqual([
-      "nav-admin-console",
-      "nav-administration",
       "nav-overview",
+      "nav-settings",
     ]);
   });
 

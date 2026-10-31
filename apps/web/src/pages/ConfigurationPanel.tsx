@@ -534,7 +534,7 @@ export function ConfigurationPanel({
               {detailModule.moduleCode === "customer_complaint" && (
                 <p className="mb-3 text-sm">
                   {t("configPanel.managedIn")}{" "}
-                  <Link className="underline" to="/administration/complaints">
+                  <Link className="underline" to="/complaints/configuration">
                     {t("configPanel.complaintConfig")}
                   </Link>
                   .

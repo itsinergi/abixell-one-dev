@@ -250,6 +250,51 @@ export function Select({
   );
 }
 
+/* ---------------------------------------------------------------- Toggle */
+
+/**
+ * Binary switch for a single on/off decision — the Settings page's idiom for
+ * yes/no configuration (module activation, feature flags, service toggles).
+ * A native checkbox keeps it keyboard- and screen-reader-accessible; the
+ * visual is a labelled switch. `checked` is controlled and `onChange` carries
+ * the next value, matching the rest of the form primitives.
+ */
+export function Toggle({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  /** Accessible name for the switch. */
+  label: string;
+}) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-ground disabled:opacity-50 ${
+          checked ? "border-accent bg-accent" : "border-line-strong bg-panel-3"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-[18px] w-[18px] rounded-full bg-panel shadow transition-transform ${
+            checked ? "translate-x-5" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+      <span className="text-sm text-ink-dim">{label}</span>
+    </label>
+  );
+}
+
 /* --------------------------------------------------------- DataTable (1C.3) */
 
 export interface Column<T> {

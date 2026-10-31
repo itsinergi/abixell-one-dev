@@ -175,7 +175,7 @@ export function ComplaintConfigPage() {
         <Alert tone="error">{error ?? t("complaintConfig.failedLoad")}</Alert>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => void load()}>{t("complaintConfig.retry")}</Button>
-          <Button variant="secondary" onClick={() => navigate("/administration")}>
+          <Button variant="secondary" onClick={() => navigate("/complaints")}>
             {t("complaintConfig.backToAdmin")}
           </Button>
         </div>
@@ -194,7 +194,7 @@ export function ComplaintConfigPage() {
         title={t("complaintConfig.title")}
         subtitle={t("complaintConfig.subtitle")}
         actions={
-          <Button variant="secondary" onClick={() => navigate("/administration")}>
+          <Button variant="secondary" onClick={() => navigate("/complaints")}>
             {t("complaintConfig.backToAdmin")}
           </Button>
         }

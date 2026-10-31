@@ -54,8 +54,7 @@
  * no activations. The failure modes are not alike. Module activity is one
  * tenant-wide state that only the platform route can repair. A Window lock is
  * per Role and removable by any other Role that holds the Window; exempting
- * `platform` here would make `route:/admin` and `route:/administration`
- * decorative for exactly the Roles most likely to be over-privileged. The
+ * `platform` here would make `route:/settings` decorative for exactly the Roles most likely to be over-privileged. The
  * self-lockout an administrator can still reach — locking their own Role's
  * Window — is a consequence of a decision they made and can see, not a hole.
  *
@@ -111,7 +110,7 @@ export interface WindowRule {
 export const WINDOW_RULES: WindowRule[] = [
   // --- customer_complaint --------------------------------------------------
   { method: "POST", apiPath: "/complaints", windowCode: "route:/complaints" },
-  { method: "*", apiPath: "/complaints/config", windowCode: "route:/administration/complaints" },
+  { method: "*", apiPath: "/complaints/config", windowCode: "route:/complaints/configuration" },
   { method: "*", apiPath: "/complaints/:id", windowCode: "route:/complaints/:complaintId" },
   { method: "*", apiPath: "/service-quality", windowCode: "route:/service-quality" },
 
@@ -366,30 +365,29 @@ export const WINDOW_RULES: WindowRule[] = [
   // Closable like any other module. An administrator who locks their own
   // Role's Window can no longer write through it, which is the decision they
   // recorded — see the header.
-  { method: "*", apiPath: "/admin", windowCode: "route:/admin" },
-  { method: "*", apiPath: "/app-metadata", windowCode: "route:/administration" },
+  { method: "*", apiPath: "/admin", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/app-metadata", windowCode: "route:/settings" },
   // Epic 6 Gelombang 1 — Business Partner canonical party model. Edited from
-  // the same `/administration` surface as identity and org structure.
-  { method: "*", apiPath: "/business-partners", windowCode: "route:/administration" },
-  { method: "*", apiPath: "/config", windowCode: "route:/administration" },
+  // the same `/settings` surface as identity and org structure.
+  { method: "*", apiPath: "/business-partners", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/config", windowCode: "route:/settings" },
   // WP-APR-03 / WP-APR-02 — SoD governance + central rule registry are
-  // platform configuration, edited from the same `/administration` surface.
-  { method: "*", apiPath: "/sod", windowCode: "route:/administration" },
-  { method: "*", apiPath: "/rule-registry", windowCode: "route:/administration" },
-  // Identity, org structure and tenancy are all edited from `/administration`
-  // (DashboardPage) and read from `/admin`; `/administration` owns them.
-  { method: "*", apiPath: "/legal-entities", windowCode: "route:/administration" },
-  { method: "*", apiPath: "/organization-units", windowCode: "route:/administration" },
+  // platform configuration, edited from the same `/settings` surface.
+  { method: "*", apiPath: "/sod", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/rule-registry", windowCode: "route:/settings" },
+  // Identity, org structure and tenancy are all edited from `/settings`.
+  { method: "*", apiPath: "/legal-entities", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/organization-units", windowCode: "route:/settings" },
   // Epic 5 Gelombang 2 — proposing a structure change, reading its
   // effective-dated history and tombstoning a unit are all raised from the same
-  // `/administration` organisation surface as the unit list itself. The review
+  // `/settings` organisation surface as the unit list itself. The review
   // queue lives on its own first segment, so it needs its own rule.
-  { method: "*", apiPath: "/organization-unit-change-requests", windowCode: "route:/administration" },
+  { method: "*", apiPath: "/organization-unit-change-requests", windowCode: "route:/settings" },
   // Epic 5 Gelombang 1 — the Department master is edited from the same
-  // `/administration` surface as the rest of the organisation structure.
-  { method: "*", apiPath: "/departments", windowCode: "route:/administration" },
-  { method: "*", apiPath: "/tenants", windowCode: "route:/admin" },
-  { method: "*", apiPath: "/users", windowCode: "route:/administration" },
+  // `/settings` surface as the rest of the organisation structure.
+  { method: "*", apiPath: "/departments", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/tenants", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/users", windowCode: "route:/settings" },
   { method: "*", apiPath: "/me", windowCode: "route:/profile" },
   // Epic 1 (§4.1 E): switching the session's active Role is authenticated
   // (`app.authenticate` resolves the actor, then the assignment must be one
@@ -407,17 +405,17 @@ export const WINDOW_RULES: WindowRule[] = [
   // `/config` and `/app-metadata`); the recipient's own inbox write is raised
   // from the My Notifications card. `/scheduler/jobs` is the Scheduler card and
   // `/integration/endpoints` the Integration Boundary card, both rendered by
-  // `SharedServicesPanel` inside `/administration`.
-  { method: "*", apiPath: "/integration/endpoints", windowCode: "route:/administration" },
-  { method: "*", apiPath: "/notifications/templates", windowCode: "route:/administration" },
-  { method: "*", apiPath: "/notifications/:id/read", windowCode: "route:/administration" },
-  { method: "*", apiPath: "/scheduler/jobs", windowCode: "route:/administration" },
+  // `SharedServicesPanel` inside `/settings`.
+  { method: "*", apiPath: "/integration/endpoints", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/notifications/templates", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/notifications/:id/read", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/scheduler/jobs", windowCode: "route:/settings" },
   // Workflow splits by who writes. Design-time definitions are a console
-  // surface — `AdminWorkflowsView` reads `/admin/workflows` — while every
+  // surface — `AdminWorkflowsView` reads `/settings/workflows` — while every
   // runtime write (raise, claim, act, sweep) is made from `WorkflowPanel`,
-  // which renders inside `/administration`.
-  { method: "*", apiPath: "/workflow/definitions", windowCode: "route:/admin" },
-  { method: "*", apiPath: "/workflow", windowCode: "route:/administration" },
+  // which renders inside `/settings`.
+  { method: "*", apiPath: "/workflow/definitions", windowCode: "route:/settings" },
+  { method: "*", apiPath: "/workflow", windowCode: "route:/settings" },
 ];
 
 /**

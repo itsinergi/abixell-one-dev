@@ -202,7 +202,7 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     permissions: ["service_quality.read", "service_quality.configure"],
   },
   {
-    path: "/administration/complaints",
+    path: "/complaints/configuration",
     name: "Complaint Configuration",
     moduleCode: "customer_complaint",
     status: "tersembunyi",
@@ -806,43 +806,49 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     note: "Generic drill-down list, reachable only from a dashboard card target.",
   },
 
-  // --- Platform administration (module: platform) --------------------------
+  // --- Settings (module: platform) ----------------------------------------
+  // One Settings surface consolidates the former Admin Console and Panel Admin.
+  // The entry permission is the union of the
+  // granular config.<category>.* codes and admin.console.read; each tab is
+  // gated further by its own permission.
   {
-    path: "/administration",
-    name: "Administration",
+    path: "/settings",
+    name: "Settings",
     moduleCode: "platform",
     status: "di_menu",
     permissions: [
       // Backward compat: existing roles with old monolithic code still grant access
       "config.manage",
       // Epic 15 Panel Admin: granular per-category permissions (Wave 1)
+      "config.module.read",
       "config.module.manage",
+      "config.platform.read",
       "config.platform.manage",
+      "config.org.read",
       "config.org.manage",
+      "config.system.read",
       "config.system.manage",
+      "config.user.read",
       "config.user.manage",
+      "config.workflow.read",
       "config.workflow.manage",
+      "config.notification.read",
       "config.notification.manage",
+      "config.document.read",
       "config.document.manage",
+      // Governance overview
+      "admin.console.read",
     ],
-    note: "Panel Admin shell (Epic 15 Wave 1). Permissions: any of the 8 granular config.<category>.manage codes, or the legacy config.manage (backward compat). See CORE-ROADMAP.md §4.15 Decision #7.",
+    note: "Single Settings surface (consolidated Admin Console + Panel Admin). Granular config.<category>.* gates each tab; admin.console.read gates the governance overview. See CORE-ROADMAP.md §4.15 Decision #7.",
   },
   {
-    path: "/admin",
-    name: "Admin Console",
-    moduleCode: "platform",
-    status: "di_menu",
-    permissions: ["admin.console.read"],
-    note: "Internal only; each console section carries its own permission server-side.",
-  },
-  {
-    path: "/admin/roles/:roleCode",
+    path: "/settings/roles/:roleCode",
     name: "Role Definition",
     moduleCode: "platform",
     status: "tersembunyi",
     permissions: ["admin.console.read"],
-    parentPath: "/admin",
-    note: "Epic 4 Wave 1 — reached from the Admin Console Roles section. Hidden because it is a drill-down, not a menu entry; it renders the same Window picker the console section shows, and the write path behind it is gated by `role_window_access` (step 11b).",
+    parentPath: "/settings",
+    note: "Epic 4 Wave 1 — reached from the Settings Users & Access tab. Hidden because it is a drill-down, not a menu entry; it renders the same Window picker the tab shows, and the write path behind it is gated by `role_window_access` (step 11b).",
   },
   // --- Entry flow (outside the shell) --------------------------------------
   // §4.3: these three are "didaftarkan sebagai alur masuk" — registered, not

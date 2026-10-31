@@ -175,7 +175,7 @@ export function AdminRolesView({
           </Button>
           {canRead && (
             <Link
-              to={`/admin/roles/${encodeURIComponent(role.code)}`}
+              to={`/settings/roles/${encodeURIComponent(role.code)}`}
               onClick={(event: MouseEvent<HTMLAnchorElement>) => event.stopPropagation()}
               className="inline-flex min-h-[44px] items-center justify-center rounded border border-line-strong bg-panel px-3 py-1.5 text-sm font-medium text-ink-dim hover:bg-panel-2 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent sm:min-h-[36px]"
             >
@@ -226,7 +226,7 @@ export function AdminRolesView({
             keyOf={(role) => role.code}
             mobileBreakpoint="md"
             onRowClick={
-              canRead ? (role) => navigate(`/admin/roles/${encodeURIComponent(role.code)}`) : undefined
+              canRead ? (role) => navigate(`/settings/roles/${encodeURIComponent(role.code)}`) : undefined
             }
             empty={
               <AdminEmpty
@@ -246,7 +246,7 @@ export function AdminRolesView({
         onCreated={(roleCode) => {
           setCreateOpen(false);
           void reload();
-          navigate(`/admin/roles/${encodeURIComponent(roleCode)}`);
+          navigate(`/settings/roles/${encodeURIComponent(roleCode)}`);
         }}
       />
 
@@ -259,7 +259,7 @@ export function AdminRolesView({
         onCreated={(roleCode) => {
           setCopySource(null);
           void reload();
-          navigate(`/admin/roles/${encodeURIComponent(roleCode)}`);
+          navigate(`/settings/roles/${encodeURIComponent(roleCode)}`);
         }}
       />
 

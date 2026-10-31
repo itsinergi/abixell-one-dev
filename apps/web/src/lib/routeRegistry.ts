@@ -126,7 +126,7 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     permissions: ["service_quality.read", "service_quality.configure"],
   },
   {
-    path: "/administration/complaints",
+    path: "/complaints/configuration",
     name: "Complaint Configuration",
     moduleCode: "customer_complaint",
     status: "tersembunyi",
@@ -650,40 +650,42 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     parentPath: "/dashboard",
   },
   {
-    path: "/administration",
-    name: "Administration",
+    path: "/settings",
+    name: "Settings",
     moduleCode: "platform",
     status: "di_menu",
     permissions: [
       "config.manage",
+      "config.module.read",
       "config.module.manage",
+      "config.platform.read",
       "config.platform.manage",
+      "config.org.read",
       "config.org.manage",
+      "config.system.read",
       "config.system.manage",
+      "config.user.read",
       "config.user.manage",
+      "config.workflow.read",
       "config.workflow.manage",
+      "config.notification.read",
       "config.notification.manage",
+      "config.document.read",
       "config.document.manage",
+      "admin.console.read",
     ],
   },
+  // Epic 4 Wave 1 — Role definition lives inside the Settings Users & Access
+  // tab. The tab list stays on `admin.console.read`; the definition screen
+  // itself is gated per-view (config.read to load, role.manage to save), so
+  // the route guard only needs to let console holders through.
   {
-    path: "/admin",
-    name: "Admin Console",
-    moduleCode: "platform",
-    status: "di_menu",
-    permissions: ["admin.console.read"],
-  },
-  // Epic 4 Wave 1 — Role definition lives inside the Roles section. The
-  // section list stays on `admin.console.read`; the definition screen itself
-  // is gated per-view (config.read to load, role.manage to save), so the
-  // route guard only needs to let console holders through.
-  {
-    path: "/admin/roles/:roleCode",
+    path: "/settings/roles/:roleCode",
     name: "Role Definition",
     moduleCode: "platform",
     status: "tersembunyi",
     permissions: ["admin.console.read"],
-    parentPath: "/admin",
+    parentPath: "/settings",
   },
   {
     path: "/login",

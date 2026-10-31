@@ -49,7 +49,7 @@ export function AdminSectionState({
         permission={requiredPermission}
         action={
           <Link
-            to="/admin"
+            to="/settings"
             className="inline-flex min-h-[44px] items-center justify-center rounded border border-line-strong bg-panel px-3 py-1.5 text-sm font-medium text-ink-dim hover:bg-panel-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent sm:min-h-[36px]"
           >
             {t("adminSection.backToOverview")}

@@ -9,7 +9,7 @@ import { useAuth } from "./auth/AuthContext";
 // Named exports are re-mapped to the default shape React.lazy expects.
 const RoleSiteSelectionPage = lazy(() => import("./pages/RoleSiteSelectionPage").then((m) => ({ default: m.RoleSiteSelectionPage })));
 const OverviewPage = lazy(() => import("./pages/OverviewPage").then((m) => ({ default: m.OverviewPage })));
-const PanelAdminPage = lazy(() => import("./pages/admin/panel/PanelAdminPage").then((m) => ({ default: m.PanelAdminPage })));
+const SettingsPage = lazy(() => import("./pages/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const ComplaintsListPage = lazy(() => import("./pages/complaints/ComplaintsListPage").then((m) => ({ default: m.ComplaintsListPage })));
 const ComplaintCreatePage = lazy(() => import("./pages/complaints/ComplaintCreatePage").then((m) => ({ default: m.ComplaintCreatePage })));
 const ComplaintDetailPage = lazy(() => import("./pages/complaints/ComplaintDetailPage").then((m) => ({ default: m.ComplaintDetailPage })));
@@ -84,7 +84,6 @@ const ProjectDeliveryAdvancedCostEVPage = lazy(() => import("./modules/project-d
 const ReportingInsightPage = lazy(() => import("./modules/reporting-insight/ReportingInsightPage").then((m) => ({ default: m.ReportingInsightPage })));
 const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const DrillDownListPage = lazy(() => import("./pages/dashboard/DrillDownListPage").then((m) => ({ default: m.DrillDownListPage })));
-const AdminConsolePage = lazy(() => import("./pages/admin/console/AdminConsolePage").then((m) => ({ default: m.AdminConsolePage })));
 const AdminRoleDefinitionPage = lazy(() => import("./pages/admin/console/AdminRoleDefinitionPage").then((m) => ({ default: m.AdminRoleDefinitionPage })));
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
 
@@ -149,8 +148,8 @@ export default function App() {
           <Route path="verification" element={<VerificationQueuePage />} />
           <Route path="verification/:complaintId" element={<VerificationDetailPage />} />
           <Route path="management" element={<ManagementDashboardPage />} />
-          <Route path="administration" element={<PanelAdminPage />} />
-          <Route path="administration/complaints" element={<ComplaintConfigPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="complaints/configuration" element={<ComplaintConfigPage />} />
           <Route path="surveys" element={<SurveyListPage />} />
           <Route path="surveys/:code" element={<SurveyDetailPage />} />
           <Route path="my-surveys" element={<MySurveysPage />} />
@@ -248,11 +247,10 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="drilldown" element={<DrillDownListPage />} />
           {/* Phase 11C — Business Admin Console (read-only) */}
-          <Route path="admin" element={<AdminConsolePage />} />
+          <Route path="settings/roles/:roleCode" element={<AdminRoleDefinitionPage />} />
           {/* Epic 4 Wave 1 — Role definition editor, reached from the Roles
               section. A distinct route so the definition survives a reload
               and can be linked to directly. */}
-          <Route path="admin/roles/:roleCode" element={<AdminRoleDefinitionPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

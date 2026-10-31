@@ -284,15 +284,10 @@ export const NAV_LABELS: Record<string, NavLabel> = {
     id: "Dasbor",
     descriptionId: "Ringkasan KPI lintas modul dengan penelusuran ke data per catatan.",
   },
-  "nav-administration": {
-    en: "Administration",
-    id: "Administrasi",
-    descriptionId: "Organisasi, pengguna, konfigurasi, dan layanan bersama.",
-  },
-  "nav-admin-console": {
-    en: "Admin Console",
-    id: "Konsol Admin",
-    descriptionId: "Ringkasan pengguna, peran, akses, modul, alur kerja, dan aktivitas.",
+  "nav-settings": {
+    en: "Settings",
+    id: "Pengaturan",
+    descriptionId: "Organisasi, pengguna, akses, konfigurasi, layanan bersama, cadangan, tampilan, dan dokumen.",
   },
 };
 

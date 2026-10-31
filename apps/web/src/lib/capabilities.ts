@@ -862,28 +862,37 @@ export const NAV_SECTIONS: NavSection[] = [
     requiresInternal: true,
   },
   {
-    key: "administration",
+    key: "settings",
     group: "governance",
-    path: "/administration",
-    label: "Administration",
-    description: "Organization, users, configuration, and shared services.",
-    requiresAnyOf: [PERMISSIONS.configManage],
-    requiresInternal: true,
-  },
-  {
-    key: "admin-console",
-    group: "governance",
-    path: "/admin",
-    label: "Admin Console",
-    // Phase 11C consolidated the administration areas here, and most of it is
-    // read only. Two things are not: governed user-role assignment changes
-    // (Phase 11F) and the tenant-name update, both behind their own
-    // permissions. Internal-only — an external Customer User has no business
-    // here even if the permission were somehow granted. The backend enforces
-    // both the entry permission and a per-section permission regardless.
+    path: "/settings",
+    label: "Settings",
+    // One Settings surface consolidates the former Admin Console and Panel
+    // Admin. The entry gate is the union of the granular config.<category>.*
+    // codes and admin.console.read; each tab is gated further by its own
+    // permission. Internal-only — an external Customer User has no business
+    // here even if a permission were somehow granted.
     description:
-      "An overview of users, roles, access, modules, workflows, and activity. Changes are limited to separately permissioned controls.",
-    requiresAnyOf: [PERMISSIONS.adminConsoleRead],
+      "Organization, users, access, configuration, shared services, backup, appearance, and documents.",
+    requiresAnyOf: [
+      PERMISSIONS.configManage,
+      PERMISSIONS.configModuleRead,
+      PERMISSIONS.configModuleManage,
+      PERMISSIONS.configPlatformRead,
+      PERMISSIONS.configPlatformManage,
+      PERMISSIONS.configOrgRead,
+      PERMISSIONS.configOrgManage,
+      PERMISSIONS.configSystemRead,
+      PERMISSIONS.configSystemManage,
+      PERMISSIONS.configUserRead,
+      PERMISSIONS.configUserManage,
+      PERMISSIONS.configWorkflowRead,
+      PERMISSIONS.configWorkflowManage,
+      PERMISSIONS.configNotificationRead,
+      PERMISSIONS.configNotificationManage,
+      PERMISSIONS.configDocumentRead,
+      PERMISSIONS.configDocumentManage,
+      PERMISSIONS.adminConsoleRead,
+    ],
     requiresInternal: true,
   },
 ];
