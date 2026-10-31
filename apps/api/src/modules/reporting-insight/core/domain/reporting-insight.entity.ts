@@ -55,16 +55,35 @@ export interface StandardReportResult {
   rows: ReportRow[];
 }
 
+/**
+ * Where a dashboard card navigates when clicked.
+ *
+ * `route` → an existing page that already lists the underlying records (e.g.
+ * `/customer-commercial`, `/finance/cashflow`). `list` → the generic drill-down
+ * page (`/drilldown?dataset=…&…`) backed by a filtered-list endpoint that
+ * resolves individual records.
+ */
+export type DrillTarget =
+  | { kind: "route"; path: string }
+  | { kind: "list"; path: string; params: Record<string, string> };
+
 export interface DashboardCard {
   label: string;
   value: string | number;
   tone?: "neutral" | "info" | "success" | "warning" | "danger";
+  /** Present only when the actor holds the permission to open the target. */
+  drillTarget?: DrillTarget;
 }
 
 export interface DashboardModule {
   moduleCode: ReportModuleCode;
   moduleName: string;
   cards: DashboardCard[];
+  /** Chart-ready rows for the module, present for in-scope modules. */
+  chart?: {
+    columns: ReportColumn[];
+    rows: ReportRow[];
+  };
 }
 
 export interface ExecutiveDashboard {

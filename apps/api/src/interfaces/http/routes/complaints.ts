@@ -107,6 +107,22 @@ export function registerComplaintRoutes(app: FastifyInstance, container: Contain
     return reply.send(result);
   });
 
+  // Wave 1 dynamic dashboard — complaint drill-down list. Gated on
+  // complaint.dashboard.read in the service; Data-Scope-aware.
+  const dashboardListQuerySchema = z.object({
+    status: z.enum(["open", "closed"]).optional(),
+    severity: z.string().min(1).optional(),
+    category: z.string().min(1).optional(),
+    customerId: z.string().uuid().optional(),
+    limit: z.coerce.number().int().positive().max(200).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  });
+  app.get("/complaints/dashboard-list", { preHandler: app.authenticate }, async (request, reply) => {
+    const q = dashboardListQuerySchema.parse(request.query);
+    const result = await container.complaint.listForDashboard(request.actor!, q);
+    return reply.send(result);
+  });
+
   // Checkpoint 1C.6 — Complaint Administration & Configuration (internal;
   // gated on complaint.configure in the service). Static paths — before `/:id`.
   const createRefItemSchema = z.object({

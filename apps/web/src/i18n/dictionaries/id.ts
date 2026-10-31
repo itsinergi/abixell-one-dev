@@ -4355,6 +4355,27 @@ export const id: Record<MessageKey, string> = {
   "ri.main.title.noScopedRows": "Tidak ada baris dalam lingkup",
   "ri.main.title.reportingOperationalInsight": "Pelaporan & Insight Operasional",
 
+  // ---- dashboard (dasbor dinamis terpadu)
+  "dashboard.title.dashboard": "Dasbor",
+  "dashboard.sub.summaryAcrossModules": "Ringkasan KPI lintas modul — klik kartu untuk menelusuri ke data per catatan.",
+  "dashboard.f.loadingDashboard": "Memuat dasbor…",
+  "dashboard.msg.failedToLoadDashboard": "Gagal memuat dasbor.",
+  "dashboard.title.noData": "Tidak ada data",
+  "dashboard.d.noActivatedModuleExposesData": "Tidak ada modul aktif yang menampilkan data dasbor untuk izin Anda.",
+  "dashboard.chart.projects": "Proyek",
+  "dashboard.chart.sites": "Situs",
+  "dashboard.chart.open": "Terbuka",
+  "dashboard.chart.closed": "Ditutup",
+  "dashboard.chart.completed": "Selesai",
+  "dashboard.chart.stockQuantity": "Kuantitas stok",
+  "drilldown.title.complaints": "Komplain",
+  "drilldown.title.workOrders": "Perintah Kerja",
+  "drilldown.title.financeTransactions": "Transaksi Keuangan",
+  "drilldown.title.surveys": "Penugasan Survei",
+  "drilldown.title.unknown": "Dataset tidak dikenal",
+  "drilldown.msg.unknownDataset": "Dataset yang diminta tidak dikenali.",
+  "drilldown.d.noRecords": "Tidak ada catatan yang cocok dengan filter saat ini.",
+
   // ---- mo.mwd (W7)
   "mo.mwd.f.attachEvidence": "Lampirkan bukti",
   "mo.mwd.f.completionNotes": "Catatan penyelesaian",

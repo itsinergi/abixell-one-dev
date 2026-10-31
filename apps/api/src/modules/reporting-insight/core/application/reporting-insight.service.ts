@@ -4,6 +4,7 @@ import type { ActorContext } from "../../../../domain/shared-kernel/audit-contex
 import type {
   DashboardCard,
   DashboardModule,
+  DrillTarget,
   ExecutiveDashboard,
   ReportDefinition,
   ReportingInsightRepository,
@@ -84,6 +85,55 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
 ];
 
 /**
+ * Drill targets per report summary key. A card only receives a `drillTarget`
+ * when the actor holds the mapped permission (checked against active
+ * permissions in `dashboard()`), so a card never advertises a destination the
+ * actor cannot open. `route` targets reuse existing list pages; `list` targets
+ * route to the generic `/drilldown` page.
+ */
+/** Modules that expose chart-ready rows on the dashboard. */
+const CHART_MODULES: ReadonlySet<string> = new Set([
+  "customer_commercial",
+  "customer_complaint",
+  "survey_assessment",
+  "service_operations",
+  "supply_chain",
+  "finance",
+]);
+
+const DRILL_TARGETS: Record<string, Record<string, { target: DrillTarget; permission: string | string[] }>> = {
+  customer_operational_overview: {
+    customers: { target: { kind: "route", path: "/customer-commercial" }, permission: "customer.read" },
+    projects: { target: { kind: "route", path: "/customer-commercial" }, permission: "customer.read" },
+    sites: { target: { kind: "route", path: "/customer-commercial" }, permission: "customer.read" },
+  },
+  supply_chain_stock_purchasing_summary: {
+    itemsWithStock: { target: { kind: "route", path: "/items" }, permission: "supply_chain.read" },
+    purchaseRequests: { target: { kind: "route", path: "/purchasing" }, permission: ["supply_chain.manage", "supply_chain.stock.manage"] },
+    purchaseOrders: { target: { kind: "route", path: "/purchasing" }, permission: ["supply_chain.manage", "supply_chain.stock.manage"] },
+  },
+  complaint_quality_summary: {
+    total: { target: { kind: "list", path: "/drilldown", params: { dataset: "complaints" } }, permission: "complaint.dashboard.read" },
+    open: { target: { kind: "list", path: "/drilldown", params: { dataset: "complaints", status: "open" } }, permission: "complaint.dashboard.read" },
+    closed: { target: { kind: "list", path: "/drilldown", params: { dataset: "complaints", status: "closed" } }, permission: "complaint.dashboard.read" },
+  },
+  finance_cashflow_summary: {
+    income: { target: { kind: "list", path: "/drilldown", params: { dataset: "finance-transactions", direction: "income" } }, permission: "finance.read" },
+    expense: { target: { kind: "list", path: "/drilldown", params: { dataset: "finance-transactions", direction: "expense" } }, permission: "finance.read" },
+    net: { target: { kind: "route", path: "/finance/cashflow" }, permission: "finance.read" },
+  },
+  work_order_summary: {
+    workOrders: { target: { kind: "list", path: "/drilldown", params: { dataset: "work-orders" } }, permission: "service_operations.read" },
+    open: { target: { kind: "list", path: "/drilldown", params: { dataset: "work-orders", status: "open" } }, permission: "service_operations.read" },
+    completed: { target: { kind: "list", path: "/drilldown", params: { dataset: "work-orders", status: "completed" } }, permission: "service_operations.read" },
+  },
+  survey_result_summary: {
+    assignments: { target: { kind: "list", path: "/drilldown", params: { dataset: "surveys" } }, permission: ["survey.manage", "survey.analytics.read"] },
+    submitted: { target: { kind: "list", path: "/drilldown", params: { dataset: "surveys", status: "submitted" } }, permission: ["survey.manage", "survey.analytics.read"] },
+  },
+};
+
+/**
  * Reporting & Operational Insight application service.
  *
  * Authorization is deliberately centralized here: callers need explicit
@@ -120,6 +170,7 @@ export class ReportingInsightService {
       requiredPermissionCodes,
     );
     const definitions = await this.listReports(actor);
+    const granted = await this.rbac.getActivePermissions(actor);
     const reports = await Promise.all(
       definitions.map((definition) =>
         this.runReport(definition, actor, requiredPermissionCodes),
@@ -130,7 +181,10 @@ export class ReportingInsightService {
       modules: reports.map((report) => ({
         moduleCode: report.moduleCode,
         moduleName: report.moduleName,
-        cards: cardsFromSummary(report.summary),
+        cards: cardsFromSummary(report.code, report.summary, granted),
+        ...(CHART_MODULES.has(report.moduleCode)
+          ? { chart: { columns: report.columns, rows: report.rows } }
+          : {}),
       } satisfies DashboardModule)),
     };
   }
@@ -240,12 +294,25 @@ export class ReportingInsightService {
   }
 }
 
-function cardsFromSummary(summary: Record<string, string | number>): DashboardCard[] {
-  return Object.entries(summary).map(([key, value]) => ({
-    label: humanize(key),
-    value,
-    tone: typeof value === "number" && value > 0 ? "info" : "neutral",
-  }));
+function cardsFromSummary(
+  reportCode: string,
+  summary: Record<string, string | number>,
+  granted: Set<string>,
+): DashboardCard[] {
+  const targets = DRILL_TARGETS[reportCode] ?? {};
+  return Object.entries(summary).map(([key, value]) => {
+    const mapping = targets[key];
+    const permitted = mapping && (Array.isArray(mapping.permission)
+      ? mapping.permission.some((p) => granted.has(p))
+      : granted.has(mapping.permission));
+    const drillTarget = permitted ? mapping.target : undefined;
+    return {
+      label: humanize(key),
+      value,
+      tone: typeof value === "number" && value > 0 ? "info" : "neutral",
+      ...(drillTarget ? { drillTarget } : {}),
+    };
+  });
 }
 
 function toCsv(report: StandardReportResult): string {

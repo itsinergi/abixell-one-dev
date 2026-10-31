@@ -347,6 +347,15 @@ export class PgSurveyRepository implements SurveyRepository {
     );
     return r.rows.map(toAssignment);
   }
+  async listAssignments(tenantId: string): Promise<SurveyAssignment[]> {
+    const r = await this.pool.query(
+      `SELECT * FROM survey_assignments
+        WHERE tenant_id=$1 AND status <> 'cancelled'
+        ORDER BY created_at DESC`,
+      [tenantId],
+    );
+    return r.rows.map(toAssignment);
+  }
   async finalizeSubmission(
     id: string,
     totalScore: number | null,

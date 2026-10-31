@@ -55,9 +55,13 @@ export const Button = forwardRef<
 export function Card({
   className = "",
   children,
-}: PropsWithChildren<{ className?: string }>) {
+  onClick,
+}: PropsWithChildren<{ className?: string; onClick?: () => void }>) {
   return (
-    <section className={`rounded border border-line bg-panel p-3 sm:p-4 lg:p-6 ${className}`}>
+    <section
+      className={`rounded border border-line bg-panel p-3 sm:p-4 lg:p-6 ${className}`}
+      onClick={onClick}
+    >
       {children}
     </section>
   );

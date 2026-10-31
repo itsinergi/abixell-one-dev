@@ -654,6 +654,13 @@ export class SurveyService {
     return { expired: assignments.length };
   }
 
+  /** Dashboard drill-down list of all assignments. Gated on manage OR
+   * analytics.read (either audience may open the survey drill-down). */
+  async listAssignmentsForDashboard(actor: ActorContext): Promise<SurveyAssignment[]> {
+    await this.rbac.requireAnyPermission(actor, ["survey.manage", "survey.analytics.read"]);
+    return this.repo.listAssignments(actor.tenantId);
+  }
+
   async getResult(actor: ActorContext, assignmentId: string) {
     await this.rbac.requirePermission(actor, "survey.results.read");
     const assignment = await this.repo.findAssignmentById(assignmentId);

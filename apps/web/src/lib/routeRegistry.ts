@@ -635,6 +635,21 @@ export const ROUTE_REGISTRY: RouteRegistryEntry[] = [
     permissions: ["reporting.read", "reporting.bi.manage", "reporting.predictive.read"],
   },
   {
+    path: "/dashboard",
+    name: "Dashboard",
+    moduleCode: "reporting_insight",
+    status: "di_menu",
+    permissions: ["reporting.read"],
+  },
+  {
+    path: "/drilldown",
+    name: "Drill-down",
+    moduleCode: "reporting_insight",
+    status: "tersembunyi",
+    permissions: ["reporting.read"],
+    parentPath: "/dashboard",
+  },
+  {
     path: "/administration",
     name: "Administration",
     moduleCode: "platform",

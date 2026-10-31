@@ -121,6 +121,31 @@ export interface OperationalQueueResult {
   total: number;
 }
 
+/** Wave 1 dynamic dashboard — complaint drill-down row (flat, dashboard-shaped). */
+export interface ComplaintDashboardListItem {
+  id: string;
+  complaintNumber: string;
+  customerName: string | null;
+  category: string;
+  severity: string;
+  status: string; // workflow instance status (in_progress / terminal)
+  createdAt: string;
+}
+
+export interface ComplaintDashboardListFilters {
+  status?: string;
+  severity?: string;
+  category?: string;
+  customerId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ComplaintDashboardListResult {
+  items: ComplaintDashboardListItem[];
+  total: number;
+}
+
 /** Checkpoint 1C.3 — operational (internal) detail. Unlike the customer-safe
  * ComplaintDetailView, the timeline here is role-appropriate: it retains
  * actor and workflow comments (section 11). Access is restricted to internal
@@ -352,6 +377,59 @@ export class ComplaintService {
    * operational data (full timeline, assignments) from leaking to customers
    * through the operational endpoints, independent of the frontend.
    */
+  /**
+   * Wave 1 dynamic dashboard — complaint drill-down list. Gated on
+   * `complaint.dashboard.read` (same permission as the Management Dashboard)
+   * and Data-Scope-aware. `status` maps to the Workflow instance status:
+   * "open" = `in_progress`, "closed" = any terminal state.
+   */
+  async listForDashboard(
+    actor: ActorContext,
+    filters: ComplaintDashboardListFilters,
+  ): Promise<ComplaintDashboardListResult> {
+    await this.rbac.requirePermission(actor, "complaint.dashboard.read");
+
+    const customers = await this.customers.listForTenant(actor);
+    const nameById = new Map(customers.map((c) => [c.id, c.name]));
+
+    const scopedCustomerIds = filters.customerId
+      ? customers.filter((customer) => customer.id === filters.customerId).map((customer) => customer.id)
+      : customers.map((customer) => customer.id);
+    const complaints = await this.repo.listByCustomers(scopedCustomerIds);
+
+    const statusRows = await this.workflow.getEntityStatuses(
+      actor,
+      complaints
+        .map((complaint) => complaint.workflowInstanceId)
+        .filter((id): id is string => id !== null),
+    );
+    const statusByInstanceId = new Map(statusRows.map((status) => [status.instanceId, status]));
+
+    let items: ComplaintDashboardListItem[] = complaints.map((complaint) => {
+      const s = complaint.workflowInstanceId ? statusByInstanceId.get(complaint.workflowInstanceId) : null;
+      return {
+        id: complaint.id,
+        complaintNumber: complaint.complaintNumber,
+        customerName: nameById.get(complaint.customerId) ?? null,
+        category: complaint.category,
+        severity: complaint.severity,
+        status: s?.instanceStatus ?? "unknown",
+        createdAt: complaint.createdAt.toISOString(),
+      };
+    });
+
+    if (filters.status === "open") items = items.filter((i) => i.status === "in_progress");
+    if (filters.status === "closed") items = items.filter((i) => i.status !== "in_progress");
+    if (filters.severity) items = items.filter((i) => i.severity === filters.severity);
+    if (filters.category) items = items.filter((i) => i.category === filters.category);
+
+    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const total = items.length;
+    const limit = filters.limit ?? 50;
+    const offset = filters.offset ?? 0;
+    return { items: items.slice(offset, offset + limit), total };
+  }
+
   private async requireInternalActor(actor: ActorContext): Promise<void> {
     const assignments = await this.rbac.getAssignments(actor.userId);
     const internal = assignments.some((a) => a.scopeType !== "customer");
