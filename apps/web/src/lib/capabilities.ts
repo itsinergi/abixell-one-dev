@@ -852,6 +852,16 @@ export const NAV_SECTIONS: NavSection[] = [
     requiresInternal: true,
   },
   {
+    key: "dashboard",
+    moduleCode: "reporting_insight",
+    group: "governance",
+    path: "/dashboard",
+    label: "Dashboard",
+    description: "Unified cross-module KPI overview with drill-down to records.",
+    requiresAnyOf: [PERMISSIONS.reportingRead],
+    requiresInternal: true,
+  },
+  {
     key: "administration",
     group: "governance",
     path: "/administration",

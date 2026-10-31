@@ -279,6 +279,11 @@ export const NAV_LABELS: Record<string, NavLabel> = {
     id: "Pelaporan",
     descriptionId: "Laporan aman-scope, BI terkelola, dan wawasan prediktif deterministik.",
   },
+  "nav-reporting_insight-dashboard": {
+    en: "Dashboard",
+    id: "Dasbor",
+    descriptionId: "Ringkasan KPI lintas modul dengan penelusuran ke data per catatan.",
+  },
   "nav-administration": {
     en: "Administration",
     id: "Administrasi",

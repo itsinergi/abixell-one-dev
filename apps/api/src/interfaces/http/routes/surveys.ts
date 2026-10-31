@@ -164,6 +164,12 @@ export function registerSurveyRoutes(app: FastifyInstance, container: Container)
     },
   );
 
+  // --- Dashboard drill-down: all assignments (manage OR analytics.read) -----
+  app.get("/survey-assignments", { preHandler: app.authenticate }, async (request, reply) => {
+    const list = await container.survey.listAssignmentsForDashboard(request.actor!);
+    return reply.send(list);
+  });
+
   // --- Respondent ----------------------------------------------------------
   app.get("/survey-assignments/my", { preHandler: app.authenticate }, async (request, reply) => {
     const list = await container.surveyResponse.listMyAssignments(request.actor!);

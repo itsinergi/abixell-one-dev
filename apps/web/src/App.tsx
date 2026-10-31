@@ -82,6 +82,8 @@ const ProjectDeliveryDetailPage = lazy(() => import("./modules/project-delivery/
 const ProjectDeliveryAdvancedPlanningPage = lazy(() => import("./modules/project-delivery/ProjectDeliveryAdvancedPlanningPage").then((m) => ({ default: m.ProjectDeliveryAdvancedPlanningPage })));
 const ProjectDeliveryAdvancedCostEVPage = lazy(() => import("./modules/project-delivery/ProjectDeliveryAdvancedCostEVPage").then((m) => ({ default: m.ProjectDeliveryAdvancedCostEVPage })));
 const ReportingInsightPage = lazy(() => import("./modules/reporting-insight/ReportingInsightPage").then((m) => ({ default: m.ReportingInsightPage })));
+const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
+const DrillDownListPage = lazy(() => import("./pages/dashboard/DrillDownListPage").then((m) => ({ default: m.DrillDownListPage })));
 const AdminConsolePage = lazy(() => import("./pages/admin/console/AdminConsolePage").then((m) => ({ default: m.AdminConsolePage })));
 const AdminRoleDefinitionPage = lazy(() => import("./pages/admin/console/AdminRoleDefinitionPage").then((m) => ({ default: m.AdminRoleDefinitionPage })));
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
@@ -243,6 +245,8 @@ export default function App() {
           <Route path="project-delivery/advanced/cost-ev" element={<ProjectDeliveryAdvancedCostEVPage />} />
           {/* Phase 9 — Reporting & Operational Insight */}
           <Route path="reporting" element={<ReportingInsightPage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="drilldown" element={<DrillDownListPage />} />
           {/* Phase 11C — Business Admin Console (read-only) */}
           <Route path="admin" element={<AdminConsolePage />} />
           {/* Epic 4 Wave 1 — Role definition editor, reached from the Roles

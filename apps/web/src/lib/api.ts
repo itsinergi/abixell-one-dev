@@ -930,6 +930,11 @@ export const api = {
     return request<DashboardResult>(`/complaints/dashboard${qs ? `?${qs}` : ""}`, { token });
   },
 
+  // Wave 1 dynamic dashboard — complaint drill-down list (gated on
+  // complaint.dashboard.read + Data Scope in the backend).
+  complaintDashboardList: (token: string, filters: { status?: "open" | "closed"; severity?: string; category?: string; customerId?: string; limit?: number; offset?: number } = {}) =>
+    request<ComplaintDashboardListResult>(`/complaints/dashboard-list${queryString(filters)}`, { token }),
+
   // Checkpoint 1C.6 — Complaint Administration (gated on complaint.configure).
   complaintConfig: (token: string) => request<ComplaintConfigView>("/complaints/config", { token }),
 
@@ -1057,6 +1062,9 @@ export const api = {
   ) => request<SurveyAssignment>("/survey-assignments", { method: "POST", token, body: payload }),
   surveyResult: (token: string, assignmentId: string) =>
     request<SurveyResultView>(`/survey-assignments/${assignmentId}/result`, { token }),
+
+  // Dashboard drill-down: all assignments (manage OR analytics.read).
+  surveyAssignments: (token: string) => request<SurveyAssignment[]>("/survey-assignments", { token }),
 
   // Respondent (survey.respond)
   mySurveyAssignments: (token: string) => request<MySurveyItem[]>("/survey-assignments/my", { token }),
@@ -1199,7 +1207,8 @@ export const api = {
   convertWorkRequest: (token: string, id: string, body: { title?: string; dueAt?: string | null }) =>
     request<WorkOrder>(`/work-requests/${id}/convert`, { method: "POST", token, body }),
 
-  workOrders: (token: string) => request<WorkOrderRow[]>("/work-orders", { token }),
+  workOrders: (token: string, query: { status?: "open" | "completed" } = {}) =>
+    request<WorkOrderRow[]>(`/work-orders${queryString(query)}`, { token }),
   myWorkOrders: (token: string) => request<WorkOrderRow[]>("/work-orders/my", { token }),
   workOrder: (token: string, id: string) => request<WorkOrderDetail>(`/work-orders/${id}`, { token }),
   createWorkOrder: (
@@ -3063,16 +3072,25 @@ export type StandardReportResult = {
   rows: ReportRow[];
 };
 
+export type DrillTarget =
+  | { kind: "route"; path: string }
+  | { kind: "list"; path: string; params: Record<string, string> };
+
 export type DashboardCard = {
   label: string;
   value: string | number;
   tone?: "neutral" | "info" | "success" | "warning" | "danger";
+  drillTarget?: DrillTarget;
 };
 
 export type DashboardModule = {
   moduleCode: ReportModuleCode;
   moduleName: string;
   cards: DashboardCard[];
+  chart?: {
+    columns: ReportColumn[];
+    rows: ReportRow[];
+  };
 };
 
 export type ExecutiveDashboard = {
@@ -6678,6 +6696,21 @@ export type Complaint = {
   workflowInstanceId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+// --- Wave 1 dynamic dashboard drill-down list ------------------------------
+export type ComplaintDashboardListItem = {
+  id: string;
+  complaintNumber: string;
+  customerName: string | null;
+  category: string;
+  severity: string;
+  status: string;
+  createdAt: string;
+};
+export type ComplaintDashboardListResult = {
+  items: ComplaintDashboardListItem[];
+  total: number;
 };
 
 /** Current lifecycle position, resolved from the Complaint's Workflow

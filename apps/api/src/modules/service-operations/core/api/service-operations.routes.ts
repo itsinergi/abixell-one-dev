@@ -179,8 +179,8 @@ export function registerServiceOperationsRoutes(app: FastifyInstance, container:
 
   /** Coordinator/supervisor queue (SO-CORE-013). */
   app.get("/work-orders", { preHandler: app.authenticate }, async (request, reply) => {
-    const query = request.query as { siteId?: string };
-    return reply.send(await svc().listWorkOrders(request.actor!, { siteId: query.siteId }));
+    const query = request.query as { siteId?: string; status?: "open" | "completed" };
+    return reply.send(await svc().listWorkOrders(request.actor!, { siteId: query.siteId, status: query.status }));
   });
 
   /** Field surface (SO-CORE-014) — declared before `/:id` so "my" is not

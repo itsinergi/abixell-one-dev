@@ -4378,6 +4378,27 @@ export const en = {
   "ri.main.title.noScopedRows": "No scoped rows",
   "ri.main.title.reportingOperationalInsight": "Reporting & Operational Insight",
 
+  // ---- dashboard (unified dynamic dashboard)
+  "dashboard.title.dashboard": "Dashboard",
+  "dashboard.sub.summaryAcrossModules": "Cross-module KPI summary — click a card to drill down to the underlying records.",
+  "dashboard.f.loadingDashboard": "Loading dashboard…",
+  "dashboard.msg.failedToLoadDashboard": "Could not load the dashboard.",
+  "dashboard.title.noData": "No data",
+  "dashboard.d.noActivatedModuleExposesData": "No activated module exposes dashboard data for your permissions.",
+  "dashboard.chart.projects": "Projects",
+  "dashboard.chart.sites": "Sites",
+  "dashboard.chart.open": "Open",
+  "dashboard.chart.closed": "Closed",
+  "dashboard.chart.completed": "Completed",
+  "dashboard.chart.stockQuantity": "Stock quantity",
+  "drilldown.title.complaints": "Complaints",
+  "drilldown.title.workOrders": "Work Orders",
+  "drilldown.title.financeTransactions": "Finance Transactions",
+  "drilldown.title.surveys": "Survey Assignments",
+  "drilldown.title.unknown": "Unknown dataset",
+  "drilldown.msg.unknownDataset": "The requested dataset is not recognised.",
+  "drilldown.d.noRecords": "No records match the current filter.",
+
   // ---- mo.mwd (W7)
   "mo.mwd.f.attachEvidence": "Attach evidence",
   "mo.mwd.f.completionNotes": "Completion notes",

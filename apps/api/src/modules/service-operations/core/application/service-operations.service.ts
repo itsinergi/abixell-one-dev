@@ -1376,12 +1376,16 @@ export class ServiceOperationsService {
    * Scope covers. */
   async listWorkOrders(
     actor: ActorContext,
-    filter: { siteId?: string } = {},
+    filter: { siteId?: string; status?: "open" | "completed" } = {},
   ): Promise<{ workOrder: WorkOrder; status: EntityWorkflowStatus | null }[]> {
     await this.rbac.requirePermission(actor, "service_operations.read");
     const customerIds = await this.customers.listScopedCustomerIds(actor);
     const orders = await this.repo.listWorkOrders(actor.tenantId, { customerIds, siteId: filter.siteId });
-    return this.withStatus(actor, orders);
+    const rows = await this.withStatus(actor, orders);
+    if (!filter.status) return rows;
+    // "open" → in_progress; "completed" → approved (workflow terminal state).
+    const want = filter.status === "open" ? "in_progress" : "approved";
+    return rows.filter((r) => r.status?.instanceStatus === want);
   }
 
   /** Field surface (SO-CORE-014): the work assigned to this actor. Reachable

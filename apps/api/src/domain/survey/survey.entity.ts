@@ -235,6 +235,8 @@ export interface SurveyRepository {
   }): Promise<SurveyAssignment>;
   findAssignmentById(id: string): Promise<SurveyAssignment | null>;
   listAssignmentsByRespondentUser(tenantId: string, userId: string): Promise<SurveyAssignment[]>;
+  /** All assignments for a tenant (dashboard drill-down list). */
+  listAssignments(tenantId: string): Promise<SurveyAssignment[]>;
   /** Guarded finalize: only succeeds if the assignment is still pending/
    * in_progress. Returns null if it was already submitted/cancelled/expired
    * (so submit is atomic and can never double-finalize). */
