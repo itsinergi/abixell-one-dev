@@ -42,6 +42,8 @@ export const en = {
   "shell.openNavigation": "Open navigation",
   "shell.closeNavigation": "Close navigation",
   "shell.filterNavigation": "Filter navigation",
+  "shell.collapseSidebar": "Collapse sidebar",
+  "shell.expandSidebar": "Expand sidebar",
   "shell.clearFilter": "Clear navigation filter",
   "shell.primaryNavigation": "Primary navigation",
   "shell.offline": "You are offline. Some actions may be unavailable until the connection returns.",

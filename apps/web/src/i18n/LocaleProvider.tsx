@@ -45,16 +45,18 @@ export function LocaleProvider({ children }: PropsWithChildren) {
   const auth = useAuth();
   const backendLocale = auth.session?.preferredLocale as Locale | undefined;
 
-  const [locale, setLocaleState] = useState<Locale>(() =>
-    readStoredLocale() ?? backendLocale ?? "id",
-  );
+  const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale() ?? "en");
 
-  // Sync with backend on mount (after auth loads)
+  // Seed from the backend once, after auth loads, and only when the user has
+  // no local choice yet. Deliberately does NOT depend on `locale`: otherwise a
+  // user switch would re-run this and the backend's (still-stale) value would
+  // fight and undo the choice. The readStoredLocale() guard makes the local
+  // choice authoritative once made.
   useEffect(() => {
-    if (!auth.initializing && backendLocale && backendLocale !== locale) {
-      setLocaleState(backendLocale);
-    }
-  }, [auth.initializing, backendLocale, locale]);
+    if (auth.initializing || !backendLocale) return;
+    if (readStoredLocale()) return;
+    setLocaleState(backendLocale);
+  }, [auth.initializing, backendLocale]);
 
   useEffect(() => {
     document.documentElement.setAttribute("lang", locale);
@@ -92,7 +94,7 @@ export function LocaleProvider({ children }: PropsWithChildren) {
  *  rendered in isolation without the provider. */
 export function useLocale() {
   const context = useContext(LocaleContext);
-  return context ?? { locale: "id" as Locale, setLocale: () => {} };
+  return context ?? { locale: "en" as Locale, setLocale: () => {} };
 }
 
 /** `t(key, params)` type: string params return a string (usable in attributes

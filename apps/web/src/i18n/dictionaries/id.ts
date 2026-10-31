@@ -45,6 +45,8 @@ export const id: Record<MessageKey, string> = {
   "shell.openNavigation": "Buka navigasi",
   "shell.closeNavigation": "Tutup navigasi",
   "shell.filterNavigation": "Saring navigasi",
+  "shell.collapseSidebar": "Ciutkan panel samping",
+  "shell.expandSidebar": "Perlebar panel samping",
   "shell.clearFilter": "Hapus saringan navigasi",
   "shell.primaryNavigation": "Navigasi utama",
   "shell.offline": "Anda sedang offline. Sebagian tindakan mungkin tidak tersedia sampai koneksi kembali.",

@@ -103,7 +103,7 @@ describe("WP-PRO-03: AP Payment Batch (Approved Invoice Payment)", () => {
     // Accounting period (open, covering today)
     const today = new Date();
     const periodFrom = new Date(today.getFullYear(), today.getMonth(), 1);
-    const periodTo = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const periodTo = new Date(today.getFullYear(), today.getMonth() + 2, 0);
     result = await pool.query(
       `INSERT INTO accounting_periods (tenant_id, legal_entity_id, fiscal_year_code, period_code, period_name, period_type, date_from, date_to, status)
        VALUES ($1, $2, 'FY2026', 'M01', 'January 2026', 'monthly', $3, $4, 'open') RETURNING id`,

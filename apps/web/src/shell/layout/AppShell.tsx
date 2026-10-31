@@ -46,6 +46,7 @@ import { UserMenu } from "../components/UserMenu";
 import { SwitchRoleDialog } from "../components/SwitchRoleDialog";
 import { useOnlineStatus } from "../useOnlineStatus";
 import { useLocale, useT } from "../../i18n/LocaleProvider";
+import { moduleIcon, pageIcon, childPageIcon } from "../navIcons";
 
 interface ShellContextValue {
   /** Raw permission codes from `GET /me`. */
@@ -91,15 +92,20 @@ export function useShell(): ShellContextValue {
 function NavRow({
   page,
   nested,
+  collapsed,
   onNavigate,
 }: {
   page: ServedNavPage;
   nested: boolean;
+  collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const base = nested
-    ? "flex min-h-[44px] flex-col justify-center rounded px-2.5 py-1.5 text-sm lg:min-h-[32px]"
-    : "flex min-h-[44px] flex-col justify-center rounded px-3 py-2 text-sm lg:min-h-[36px]";
+  const Icon = nested ? childPageIcon(page.code) : pageIcon(page.code);
+  const base = collapsed
+    ? "flex min-h-[44px] items-center justify-center rounded"
+    : nested
+      ? "flex min-h-[44px] items-center gap-2.5 rounded px-2.5 py-1.5 text-sm lg:min-h-[32px]"
+      : "flex min-h-[44px] items-center gap-2.5 rounded px-3 py-2 text-sm lg:min-h-[36px]";
 
   if (page.locked) {
     return (
@@ -107,10 +113,18 @@ function NavRow({
         className={`${base} cursor-not-allowed text-ink-faint`}
         aria-disabled="true"
         data-nav-locked={page.code}
+        title={collapsed ? page.label : undefined}
       >
-        <span className="truncate">{page.label}</span>
-        {page.lockedReason && (
-          <span className="text-[11px] leading-snug text-ink-faint">{page.lockedReason}</span>
+        {collapsed ? (
+          <Icon className="h-4 w-4 shrink-0" />
+        ) : (
+          <>
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">{page.label}</span>
+            {page.lockedReason && (
+              <span className="text-[11px] leading-snug text-ink-faint">{page.lockedReason}</span>
+            )}
+          </>
         )}
       </div>
     );
@@ -121,6 +135,7 @@ function NavRow({
       to={page.path}
       end={page.path === "/"}
       onClick={onNavigate}
+      title={collapsed ? page.label : undefined}
       className={({ isActive }: { isActive: boolean }) =>
         `${base} transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 ${
           isActive
@@ -129,7 +144,8 @@ function NavRow({
         }`
       }
     >
-      {page.label}
+      <Icon className="h-4 w-4 shrink-0" />
+      {!collapsed && <span className="min-w-0 flex-1 truncate">{page.label}</span>}
     </NavLink>
   );
 }
@@ -150,6 +166,8 @@ function NavigationContent({
   onQueryChange,
   expandedModules,
   onToggleModule,
+  collapsed,
+  onExpand,
   onNavigate,
   filterId,
 }: {
@@ -158,6 +176,8 @@ function NavigationContent({
   onQueryChange: (query: string) => void;
   expandedModules: Record<string, boolean>;
   onToggleModule: (moduleCode: string) => void;
+  collapsed: boolean;
+  onExpand?: () => void;
   onNavigate?: () => void;
   filterId: string;
 }) {
@@ -171,49 +191,53 @@ function NavigationContent({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-3 pb-3">
-        <label htmlFor={filterId} className="sr-only">
-          {t("shell.filterNavigation")}
-        </label>
-        <div className="relative">
-          <input
-            ref={filterInputRef}
-            id={filterId}
-            type="search"
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={t("shell.filterNavigation")}
-            autoComplete="off"
-            className="min-h-[44px] w-full rounded border border-line-strong bg-panel px-3 pr-9 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-2 focus:ring-accent-soft lg:min-h-[36px]"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => {
-                onQueryChange("");
-                filterInputRef.current?.focus();
-              }}
-              aria-label={t("shell.clearFilter")}
-              className="absolute inset-y-0 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r text-lg leading-none text-ink-faint hover:text-ink-dim focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent lg:min-h-[36px] lg:min-w-[36px]"
-            >
-              ×
-            </button>
-          )}
+      {!collapsed && (
+        <div className="px-3 pb-3">
+          <label htmlFor={filterId} className="sr-only">
+            {t("shell.filterNavigation")}
+          </label>
+          <div className="relative">
+            <input
+              ref={filterInputRef}
+              id={filterId}
+              type="search"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder={t("shell.filterNavigation")}
+              autoComplete="off"
+              className="min-h-[44px] w-full rounded border border-line-strong bg-panel px-3 pr-9 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-2 focus:ring-accent-soft lg:min-h-[36px]"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  onQueryChange("");
+                  filterInputRef.current?.focus();
+                }}
+                aria-label={t("shell.clearFilter")}
+                className="absolute inset-y-0 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r text-lg leading-none text-ink-faint hover:text-ink-dim focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent lg:min-h-[36px] lg:min-w-[36px]"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <nav aria-label={t("shell.primaryNavigation")} className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {filteredGroups.length > 0 ? (
-          <div className="space-y-5">
+          <div className={collapsed ? "space-y-3" : "space-y-5"}>
             {filteredGroups.map((group) => (
               <section key={group.key} aria-labelledby={`${filterId}-${group.key}`}>
-                <h2
-                  id={`${filterId}-${group.key}`}
-                  className="px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint"
-                  title={group.description}
-                >
-                  {group.label}
-                </h2>
+                {!collapsed && (
+                  <h2
+                    id={`${filterId}-${group.key}`}
+                    className="px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint"
+                    title={group.description}
+                  >
+                    {group.label}
+                  </h2>
+                )}
                 <div className="mt-1 space-y-1">
                   {group.nodes.map((node) => {
                     if (node.type === "page") {
@@ -222,6 +246,7 @@ function NavigationContent({
                           key={node.code}
                           page={node}
                           nested={false}
+                          collapsed={collapsed}
                           onNavigate={onNavigate}
                         />
                       );
@@ -232,6 +257,7 @@ function NavigationContent({
                     );
                     const triggerId = `${filterId}-module-${node.moduleCode}-trigger`;
                     const contentId = `${filterId}-module-${node.moduleCode}-content`;
+                    const ModuleIcon = moduleIcon(node.moduleCode);
 
                     return (
                       <div key={node.moduleCode} className="space-y-0.5">
@@ -240,33 +266,48 @@ function NavigationContent({
                           type="button"
                           aria-expanded={isExpanded}
                           aria-controls={contentId}
-                          onClick={() => onToggleModule(node.moduleCode)}
-                          className="flex min-h-[44px] w-full items-center justify-between rounded px-3 py-2 text-left text-sm font-medium text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 lg:min-h-[36px]"
+                          title={collapsed ? node.label : undefined}
+                          onClick={() => {
+                            if (collapsed) onExpand?.();
+                            onToggleModule(node.moduleCode);
+                          }}
+                          className={
+                            collapsed
+                              ? "flex min-h-[44px] w-full items-center justify-center rounded text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
+                              : "flex min-h-[44px] w-full items-center justify-between rounded px-3 py-2 text-left text-sm font-medium text-ink-dim hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 lg:min-h-[36px]"
+                          }
                         >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <svg
-                              aria-hidden="true"
-                              className={`h-4 w-4 shrink-0 transition-transform duration-150 ${
-                                isExpanded ? "rotate-90 text-ink-dim" : "text-ink-faint"
-                              }`}
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                            <span className="truncate">{node.label}</span>
-                          </span>
+                          {collapsed ? (
+                            <ModuleIcon className="h-4 w-4 shrink-0" />
+                          ) : (
+                            <>
+                              <span className="flex min-w-0 items-center gap-2">
+                                <ModuleIcon className="h-4 w-4 shrink-0 text-ink-faint" />
+                                <span className="truncate">{node.label}</span>
+                              </span>
+                              <svg
+                                aria-hidden="true"
+                                className={`h-4 w-4 shrink-0 transition-transform duration-150 ${
+                                  isExpanded ? "rotate-90 text-ink-dim" : "text-ink-faint"
+                                }`}
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            </>
+                          )}
                         </button>
 
                         <div
                           id={contentId}
                           role="region"
                           aria-labelledby={triggerId}
-                          hidden={!isExpanded}
+                          hidden={collapsed || !isExpanded}
                           className="ml-4 space-y-0.5 border-l border-line pl-2"
                         >
                           {node.pages.map((page) => (
@@ -274,6 +315,7 @@ function NavigationContent({
                               key={page.code}
                               page={page}
                               nested
+                              collapsed={collapsed}
                               onNavigate={onNavigate}
                             />
                           ))}
@@ -390,7 +432,21 @@ export function AppShell() {
   // The navigation the server sent for THIS caller (§4.3 step 7). Held as the
   // payload, not as a rendered tree: `groups` below is derived from it.
   const [menu, setMenu] = useState<MenuNode[]>([]);
-  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("sidebar-collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem("sidebar-modules");
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
   const [tenantName, setTenantName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | boolean | null>(null);
@@ -442,10 +498,26 @@ export function AppShell() {
 
   const closeMobileNavigation = useCallback(() => setMobileNavOpen(false), []);
   const toggleModule = useCallback((moduleCode: string) => {
-    setExpandedModules((prev) => ({
-      ...prev,
-      [moduleCode]: !prev[moduleCode],
-    }));
+    setExpandedModules((prev) => {
+      const next = { ...prev, [moduleCode]: !prev[moduleCode] };
+      try {
+        localStorage.setItem("sidebar-modules", JSON.stringify(next));
+      } catch {
+        // Intentional no-op: persist preferensi UI bersifat best-effort.
+      }
+      return next;
+    });
+  }, []);
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sidebar-collapsed", String(next));
+      } catch {
+        // Intentional no-op.
+      }
+      return next;
+    });
   }, []);
 
   useNavigationDrawer(
@@ -565,12 +637,75 @@ export function AppShell() {
       </a>
 
       {/* Persistent desktop navigation. */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-line bg-panel lg:flex lg:flex-col">
-        <div className="border-b border-line px-4 py-4">
-          <div className="truncate text-sm font-semibold text-ink" title={workspaceTitle}>
-            {workspaceTitle}
-          </div>
-          <div className="mt-1 text-xs text-ink-dim">{currentScopeSummary}</div>
+      <aside
+        className={`sticky top-0 hidden h-screen shrink-0 border-r border-line bg-panel lg:flex lg:flex-col ${
+          sidebarCollapsed ? "w-16" : "w-72"
+        }`}
+      >
+        <div
+          className={`flex items-center border-b border-line ${
+            sidebarCollapsed ? "justify-center px-2 py-3" : "justify-between px-4 py-4"
+          }`}
+        >
+          {sidebarCollapsed ? (
+            <>
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-on"
+                title={workspaceTitle}
+              >
+                {workspaceTitle.charAt(0).toUpperCase()}
+              </div>
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label={t("shell.expandSidebar")}
+                title={t("shell.expandSidebar")}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-ink-faint hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-ink" title={workspaceTitle}>
+                  {workspaceTitle}
+                </div>
+                <div className="mt-1 text-xs text-ink-dim">{currentScopeSummary}</div>
+              </div>
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label={t("shell.collapseSidebar")}
+                title={t("shell.collapseSidebar")}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-ink-faint hover:bg-panel-3 hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
         <NavigationContent
           groups={groups}
@@ -578,6 +713,8 @@ export function AppShell() {
           onQueryChange={setNavigationQuery}
           expandedModules={expandedModules}
           onToggleModule={toggleModule}
+          collapsed={sidebarCollapsed}
+          onExpand={() => setSidebarCollapsed(false)}
           filterId="desktop-navigation-filter"
         />
         <div className="border-t border-line p-3">
@@ -634,6 +771,7 @@ export function AppShell() {
                 onQueryChange={setNavigationQuery}
                 expandedModules={expandedModules}
                 onToggleModule={toggleModule}
+                collapsed={false}
                 onNavigate={closeMobileNavigation}
                 filterId="drawer-navigation-filter"
               />
@@ -687,14 +825,6 @@ export function AppShell() {
             <div className="hidden min-w-0 items-center gap-3 lg:flex">
               <LanguageSwitcher />
               <ThemeToggle />
-              <UserMenu
-                fullName={session?.fullName}
-                email={session?.email}
-                activeRoleName={session?.activeRoleName}
-                activeScopeName={session?.activeScopeName}
-                onSwitchRole={() => setSwitchRoleOpen(true)}
-                onSignOut={logout}
-              />
             </div>
           </header>
           {!online && (
